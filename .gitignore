@@ -7,3 +7,6 @@ coverage/
 .DS_Store
 playwright-report/
 test-results/
+
+# Claude Code project configuration is kept local rather than shared.
+.claude/

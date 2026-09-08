@@ -4,7 +4,10 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   plugins: [react()],
   test: {
+    // Integration tests are excluded here and run by vitest.integration.config.ts.
+    // They talk to a real database, so they must never be reachable from `npm test`.
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    exclude: ['**/node_modules/**', 'src/**/*.integration.test.ts'],
     environment: 'jsdom',
     setupFiles: ['src/test-setup.ts'],
 

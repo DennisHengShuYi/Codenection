@@ -30,6 +30,12 @@ const calls = {
   eq: [] as Array<[string, unknown]>,
   upsert: [] as unknown[],
   deleted: 0,
+  signIns: 0,
+}
+
+let signInResult: { data: { user: { id: string } | null }; error: { message: string } | null } = {
+  data: { user: { id: 'user-abc' } },
+  error: null,
 }
 
 let maybeSingleResult: StubResult = { data: null, error: null }
@@ -37,6 +43,12 @@ let writeResult: StubResult = { error: null }
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
+    auth: {
+      signInAnonymously: () => {
+        calls.signIns += 1
+        return Promise.resolve(signInResult)
+      },
+    },
     from(table: string) {
       calls.from.push(table)
       const builder = {
@@ -83,8 +95,10 @@ beforeEach(() => {
   calls.eq = []
   calls.upsert = []
   calls.deleted = 0
+  calls.signIns = 0
   maybeSingleResult = { data: null, error: null }
   writeResult = { error: null }
+  signInResult = { data: { user: { id: 'user-abc' } }, error: null }
 })
 
 describe('createSupabaseRepository', () => {
@@ -92,16 +106,46 @@ describe('createSupabaseRepository', () => {
     repo()
 
     // The client is imported lazily so it stays out of the main bundle; constructing the
-    // repository must therefore touch nothing.
+    // repository must therefore touch nothing, including signing in.
     expect(calls.from).toHaveLength(0)
+    expect(calls.signIns).toBe(0)
   })
 
-  it('reads the singleton row from the user_state table', async () => {
+  it('reads the row belonging to this user, not a shared one', async () => {
     await repo().loadWeek()
 
     expect(calls.from).toContain('user_state')
     expect(calls.select).toContain('week, settings')
-    expect(calls.eq).toContainEqual(['id', 'me'])
+    expect(calls.eq).toContainEqual(['id', 'user-abc'])
+  })
+
+  /**
+   * Every visitor gets their own row, keyed to an anonymous Supabase identity.
+   *
+   * The previous fixed 'me' key meant one shared row for everyone, and the anon key
+   * ships inside the browser bundle by design -- so any visitor to the deployed app
+   * could read and overwrite whatever was there. Fine for a demo with nothing in it and
+   * wrong the moment it holds a real student's fortnight.
+   */
+  it('signs in anonymously so the row belongs to someone', async () => {
+    await repo().loadWeek()
+
+    expect(calls.signIns).toBe(1)
+  })
+
+  it('signs in once and reuses the session', async () => {
+    const store = repo()
+    await store.loadWeek()
+    await store.loadSettings()
+    await store.saveWeek(week(3))
+
+    expect(calls.signIns).toBe(1)
+  })
+
+  it('throws when it cannot establish an identity', async () => {
+    signInResult = { data: { user: null }, error: { message: 'anonymous sign-ins are disabled' } }
+
+    await expect(repo().loadWeek()).rejects.toThrow(/anonymous sign-ins are disabled/)
   })
 
   it('returns null when no row exists yet', async () => {
@@ -146,18 +190,21 @@ describe('createSupabaseRepository', () => {
     await expect(repo().loadSettings()).rejects.toThrow(/JWT expired/)
   })
 
-  it('writes the week against the singleton id', async () => {
+  it('writes the week against the row belonging to this user', async () => {
     await repo().saveWeek(week(17))
 
     expect(calls.upsert).toHaveLength(1)
-    expect(calls.upsert[0]).toMatchObject({ id: 'me' })
+    expect(calls.upsert[0]).toMatchObject({ id: 'user-abc' })
   })
 
   it('writes settings without clobbering the week', async () => {
     await repo().saveSettings({ lowEnergyOverride: 'off' })
 
     // Only the settings column is sent, so saving a preference cannot wipe the schedule.
-    expect(calls.upsert[0]).toMatchObject({ id: 'me', settings: { lowEnergyOverride: 'off' } })
+    expect(calls.upsert[0]).toMatchObject({
+      id: 'user-abc',
+      settings: { lowEnergyOverride: 'off' },
+    })
     expect(calls.upsert[0]).not.toHaveProperty('week')
   })
 
@@ -167,11 +214,11 @@ describe('createSupabaseRepository', () => {
     await expect(repo().saveWeek(week(1))).rejects.toThrow(/could not save state/i)
   })
 
-  it('deletes the singleton row on clear', async () => {
+  it('deletes only the row belonging to this user on clear', async () => {
     await repo().clear()
 
     expect(calls.deleted).toBe(1)
-    expect(calls.eq).toContainEqual(['id', 'me'])
+    expect(calls.eq).toContainEqual(['id', 'user-abc'])
   })
 
   it('throws when clearing fails', async () => {

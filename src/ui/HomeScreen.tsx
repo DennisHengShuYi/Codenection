@@ -2,12 +2,18 @@ import { useMemo, useState } from 'react'
 import type { Repository } from '../data'
 import { DEFAULT_PARAMS, floorReserve, overallReserve, project } from '../engine'
 import { describeRebalance, makeRng, rebalance, toDayInputs } from '../optimizer'
+import { completeItem, deferItem } from '../domain/scheduleEdits'
 import { AccountBar } from './auth/AccountBar'
 import { PreviewBanner } from './auth/PreviewBanner'
 import { CapacityDial } from './dial/CapacityDial'
 import { domainBars } from './dial/domainBars'
 import { LowEnergyView } from './LowEnergyView'
 import { useLowEnergy } from './useLowEnergy'
+import { ObjectDetail } from './room/ObjectDetail'
+import { RoomComparison } from './room/RoomComparison'
+import { roomStateFor } from './room/roomState'
+import { useTidyUp } from './room/useTidyUp'
+import { useReducedMotion } from './useReducedMotion'
 import { useSchedule } from './useSchedule'
 
 /** §2.1's search takes its randomness as a parameter; a fixed seed keeps what the
@@ -31,6 +37,10 @@ export function HomeScreen({
   const { schedule, setSchedule } = useSchedule(repository)
   const [report, setReport] = useState<string | null>(null)
   const [working, setWorking] = useState(false)
+  const [selected, setSelected] = useState<string | null>(null)
+
+  const reducedMotion = useReducedMotion()
+  const { play } = useTidyUp(reducedMotion)
 
   const days = useMemo(() => (schedule ? toDayInputs(schedule) : []), [schedule])
   const projection = useMemo(
@@ -62,6 +72,8 @@ export function HomeScreen({
       const result = rebalance(current, DEFAULT_PARAMS, makeRng(SEED))
       setSchedule(result.schedule)
       setReport(describeRebalance(result, DEFAULT_PARAMS))
+      // §1.3's one tidy-up sequence: the visible payoff for a change just agreed to.
+      play()
     } finally {
       // In a finally so a solver that throws leaves the button usable rather than
       // stranding the screen in a working state it can never leave.
@@ -80,6 +92,7 @@ export function HomeScreen({
   }
 
   const capacity = overallReserve(schedule.start)
+  const room = roomStateFor(schedule.start, projection, schedule)
 
   if (lowEnergy) {
     return (
@@ -105,6 +118,40 @@ export function HomeScreen({
         <AccountBar email={email} onSignOut={onSignOut} />
       )}
 
+      {/* §1.1: the room is the surface; the dial sits in one corner as a compact
+          readout. §10: at phone width it stacks above rather than sitting beside. */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+        <div className="sm:flex-1">
+          <RoomComparison now={room} onSelect={setSelected} />
+        </div>
+        <div className="sm:w-40">
+          <CapacityDial
+            capacity={capacity}
+            bars={domainBars(schedule.start, projection, days)}
+            projection={projection}
+            compact
+          />
+        </div>
+      </div>
+
+      {selected !== null && (
+        <ObjectDetail
+          objectId={selected}
+          state={room}
+          onComplete={(id) => {
+            setSchedule(completeItem(schedule, id))
+            setSelected(null)
+          }}
+          onDefer={(id) => {
+            setSchedule(deferItem(schedule, id))
+            setSelected(null)
+          }}
+          onClose={() => setSelected(null)}
+        />
+      )}
+
+      {/* The full dial stays below the room, so the five domain bars and the spoken
+          summary from the glance layer are not lost. */}
       <CapacityDial
         capacity={capacity}
         bars={domainBars(schedule.start, projection, days)}

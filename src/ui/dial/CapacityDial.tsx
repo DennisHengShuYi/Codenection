@@ -42,7 +42,7 @@ export function CapacityDial({
         noise rather than access.
       */}
       <svg
-        data-testid="dial-gauge"
+        data-testid={compact ? 'dial-gauge-compact' : 'dial-gauge'}
         viewBox="0 0 200 115"
         className="w-full"
         aria-hidden="true"

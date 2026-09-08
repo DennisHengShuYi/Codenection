@@ -61,3 +61,20 @@ describe('App, signed in', () => {
     )
   })
 })
+
+describe('signing in', () => {
+  it('carries a preview week into the account and shows the room', async () => {
+    currentSession = null
+    const { unmount } = render(<App />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /look around/i })).toBeVisible(),
+    )
+    unmount()
+
+    // Back with a session, as it would be after a successful sign-in.
+    currentSession = { userId: 'u1', email: 'student@um.edu.my' }
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+  })
+})

@@ -44,6 +44,17 @@ describe('useTidyUp', () => {
     expect(screen.getByTestId('state')).toHaveTextContent('still')
   })
 
+  // Playing again mid-sequence restarts it rather than letting the first timer end the
+  // second one early -- two rebalances in quick succession should not cut the animation.
+  it('restarts rather than stacking when played twice', async () => {
+    render(<Probe reducedMotion={false} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'play' }))
+    await userEvent.click(screen.getByRole('button', { name: 'play' }))
+
+    expect(screen.getByTestId('state')).toHaveTextContent('tidying')
+  })
+
   // A sequence in flight must not set state on a component that has gone.
   it('cleans up when it goes away mid-sequence', async () => {
     const { unmount } = render(<Probe reducedMotion={false} />)

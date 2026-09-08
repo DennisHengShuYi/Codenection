@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # The npm dependency tree. Every update Dependabot opens arrives as a pull request, so
+  # it goes through the same required CI check as human work -- which is the point: an
+  # update that breaks the build blocks itself instead of landing quietly.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Let a release sit for a week before proposing it. A malicious or broken publish is
+    # usually caught and yanked within days; this repository does not need to be the one
+    # that finds out.
+    cooldown:
+      default-days: 7
+    # Grouped so a week's updates arrive as two reviewable pull requests rather than a
+    # dozen. Dev dependencies are separated from runtime ones because they carry different
+    # risk: a bad test-runner bump breaks CI, a bad runtime bump breaks users.
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
+      production-dependencies:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+    # Major versions stay ungrouped and arrive one per pull request -- they are the ones
+    # that need reading, not batching.
+    open-pull-requests-limit: 10
+
+  # The actions used by the workflows themselves. These are pinned by commit SHA in
+  # ci.yml, which means they cannot drift on their own -- and equally cannot pick up a
+  # security fix on their own. This is what moves those pins forward.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        update-types: ["minor", "patch"]

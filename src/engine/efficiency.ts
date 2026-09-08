@@ -15,6 +15,22 @@ export function overallReserve(reserves: Reserves): number {
 }
 
 /**
+ * The lowest of the four reserves.
+ *
+ * §2.1 states the principle for days -- "burnout is a floor problem", a fortnight that
+ * averages fine but bottoms out at 8 is still a crash -- and it holds just as strongly
+ * across reserve types. A student with mental at 0 and physical at 70 averages 35 and is
+ * in crisis; the mean would call them fine, which is the single-number failure §6.3
+ * exists to prevent.
+ *
+ * So the mean is the headline the dial shows (§1.2), and this is what the deficit
+ * crossing and the optimizer's objective are measured against.
+ */
+export function floorReserve(reserves: Reserves): number {
+  return Math.min(...LOAD_TYPES.map((type) => reserves[type]))
+}
+
+/**
  * §6.2, the mechanic that makes the model real: recovery efficiency falls as reserve
  * falls. At full reserve you get 100% of your rest back; at 20% reserve, 56%.
  *

@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import type { Repository } from '../data'
 import { DEFAULT_PARAMS, floorReserve, overallReserve, project } from '../engine'
 import { describeRebalance, makeRng, rebalance, toDayInputs } from '../optimizer'
+import { AccountBar } from './auth/AccountBar'
+import { PreviewBanner } from './auth/PreviewBanner'
 import { CapacityDial } from './dial/CapacityDial'
 import { domainBars } from './dial/domainBars'
 import { LowEnergyView } from './LowEnergyView'
@@ -12,7 +14,20 @@ import { useSchedule } from './useSchedule'
  *  student sees reproducible between renders rather than shifting under them. */
 const SEED = 20260908
 
-export function HomeScreen({ repository }: { repository: Repository }) {
+/** The auth props default so every existing HomeScreen test keeps working unchanged. If
+ *  a later change makes them required, those tests must be updated in the same change
+ *  rather than having the defaults quietly reintroduced. */
+export function HomeScreen({
+  repository,
+  email = null,
+  onSignOut = () => undefined,
+  onSignIn = () => undefined,
+}: {
+  repository: Repository
+  email?: string | null
+  onSignOut?: () => void
+  onSignIn?: () => void
+}) {
   const { schedule, setSchedule } = useSchedule(repository)
   const [report, setReport] = useState<string | null>(null)
   const [working, setWorking] = useState(false)
@@ -83,6 +98,12 @@ export function HomeScreen({ repository }: { repository: Repository }) {
         <h1 className="text-2xl font-semibold">Codenection</h1>
         <p className="text-sm opacity-70">Everything you are carrying, in one screen.</p>
       </header>
+
+      {email === null ? (
+        <PreviewBanner onSignIn={onSignIn} />
+      ) : (
+        <AccountBar email={email} onSignOut={onSignOut} />
+      )}
 
       <CapacityDial
         capacity={capacity}

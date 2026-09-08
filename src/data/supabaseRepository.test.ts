@@ -30,12 +30,6 @@ const calls = {
   eq: [] as Array<[string, unknown]>,
   upsert: [] as unknown[],
   deleted: 0,
-  signIns: 0,
-}
-
-let signInResult: { data: { user: { id: string } | null }; error: { message: string } | null } = {
-  data: { user: { id: 'user-abc' } },
-  error: null,
 }
 
 let maybeSingleResult: StubResult = { data: null, error: null }
@@ -43,12 +37,6 @@ let writeResult: StubResult = { error: null }
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
-    auth: {
-      signInAnonymously: () => {
-        calls.signIns += 1
-        return Promise.resolve(signInResult)
-      },
-    },
     from(table: string) {
       calls.from.push(table)
       const builder = {
@@ -87,7 +75,8 @@ const week = (mental: number): Schedule => ({
   sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
 })
 
-const repo = () => createSupabaseRepository('https://example.supabase.co', 'anon-key')
+const repo = (userId = 'user-abc') =>
+  createSupabaseRepository('https://example.supabase.co', 'anon-key', userId)
 
 beforeEach(() => {
   calls.from = []
@@ -95,10 +84,8 @@ beforeEach(() => {
   calls.eq = []
   calls.upsert = []
   calls.deleted = 0
-  calls.signIns = 0
   maybeSingleResult = { data: null, error: null }
   writeResult = { error: null }
-  signInResult = { data: { user: { id: 'user-abc' } }, error: null }
 })
 
 describe('createSupabaseRepository', () => {
@@ -106,9 +93,8 @@ describe('createSupabaseRepository', () => {
     repo()
 
     // The client is imported lazily so it stays out of the main bundle; constructing the
-    // repository must therefore touch nothing, including signing in.
+    // repository must therefore touch nothing.
     expect(calls.from).toHaveLength(0)
-    expect(calls.signIns).toBe(0)
   })
 
   it('reads the row belonging to this user, not a shared one', async () => {
@@ -119,33 +105,12 @@ describe('createSupabaseRepository', () => {
     expect(calls.eq).toContainEqual(['id', 'user-abc'])
   })
 
-  /**
-   * Every visitor gets their own row, keyed to an anonymous Supabase identity.
-   *
-   * The previous fixed 'me' key meant one shared row for everyone, and the anon key
-   * ships inside the browser bundle by design -- so any visitor to the deployed app
-   * could read and overwrite whatever was there. Fine for a demo with nothing in it and
-   * wrong the moment it holds a real student's fortnight.
-   */
-  it('signs in anonymously so the row belongs to someone', async () => {
-    await repo().loadWeek()
+  // Proves the id is genuinely used rather than hardcoded -- the assertion that would
+  // catch a fixed row id sneaking back in.
+  it('reads a different row for a different identity', async () => {
+    await repo('someone-else').loadWeek()
 
-    expect(calls.signIns).toBe(1)
-  })
-
-  it('signs in once and reuses the session', async () => {
-    const store = repo()
-    await store.loadWeek()
-    await store.loadSettings()
-    await store.saveWeek(week(3))
-
-    expect(calls.signIns).toBe(1)
-  })
-
-  it('throws when it cannot establish an identity', async () => {
-    signInResult = { data: { user: null }, error: { message: 'anonymous sign-ins are disabled' } }
-
-    await expect(repo().loadWeek()).rejects.toThrow(/anonymous sign-ins are disabled/)
+    expect(calls.eq).toContainEqual(['id', 'someone-else'])
   })
 
   it('returns null when no row exists yet', async () => {

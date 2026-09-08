@@ -20,8 +20,8 @@ import { createSupabaseRepository } from './supabaseRepository'
  * .claude/CLAUDE.md forbids. Three things make it safe here, and the guard below refuses
  * to run if the first of them does not hold:
  *
- * 1. **Every run signs in as a fresh anonymous user** and therefore owns a fresh row.
- *    The suite only ever touches the row keyed to that identity.
+ * 1. **Every run signs in as a dedicated throwaway account** and therefore owns only
+ *    that account's row. The suite never touches any other.
  * 2. **Row-level security enforces that**, rather than the client promising to behave.
  *    A real week saved under a different identity is unreachable from here.
  * 3. **Without migration 0002 applied**, the older `id = 'me'` policy rejects this
@@ -31,20 +31,25 @@ import { createSupabaseRepository } from './supabaseRepository'
  *
  *     npm run test:integration
  *
- * Skipped unless VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set, so it never runs
- * in CI (which has no secrets, by design) and never runs as part of `npm test`. It needs
- * anonymous sign-ins enabled: Authentication -> Providers -> Anonymous.
+ * Skipped unless the Supabase settings *and* INTEGRATION_TEST_EMAIL and
+ * INTEGRATION_TEST_PASSWORD are all set, so it never runs in CI (which has no secrets, by
+ * design) and never runs as part of `npm test`.
  *
- * ## One cost worth knowing
+ * That account must be a throwaway: the contract clears the store before every case, so
+ * whatever it owns is deleted.
  *
- * Each run leaves behind an anonymous auth user. They accumulate, and the anon key
- * cannot delete them -- clearing them out is a dashboard job if it ever matters.
  */
 
 // import.meta.env rather than process.env: Vite loads .env and exposes VITE_-prefixed
 // values there, which is where the credentials actually live for this run.
 const config = readDataConfig()
-const configured = config.supabaseUrl !== null && config.supabaseAnonKey !== null
+const email = process.env.INTEGRATION_TEST_EMAIL ?? ''
+const password = process.env.INTEGRATION_TEST_PASSWORD ?? ''
+
+const configured =
+  config.supabaseUrl !== null && config.supabaseAnonKey !== null && email !== '' && password !== ''
+
+let userId = ''
 
 const suite = configured ? describe : describe.skip
 
@@ -52,38 +57,37 @@ suite('supabaseRepository against a real project', () => {
   /**
    * The guard.
    *
-   * Before a single destructive contract case runs, prove this session is isolated: a
-   * real anonymous identity, and emphatically not the shared 'me' row that 0001 created.
-   * If that cannot be established the whole file fails here rather than reaching a
-   * `clear()` that might touch something that matters.
+   * Before a single destructive contract case runs, prove this session is a dedicated
+   * throwaway account and not something holding real data. If that cannot be established
+   * the whole file fails here rather than reaching a `clear()` that might matter.
    */
   beforeAll(async () => {
     const { createClient } = await import('@supabase/supabase-js')
     const client = createClient(config.supabaseUrl!, config.supabaseAnonKey!)
-    const { data, error } = await client.auth.signInAnonymously()
+    const { data, error } = await client.auth.signInWithPassword({ email, password })
 
     if (error) {
       throw new Error(
-        `Refusing to run: could not establish an isolated identity (${error.message}). ` +
-          'Enable anonymous sign-ins under Authentication -> Providers before running this.',
+        `Refusing to run: could not sign in as the test account (${error.message}). ` +
+          'Create a throwaway account and set INTEGRATION_TEST_EMAIL and ' +
+          'INTEGRATION_TEST_PASSWORD before running this.',
       )
     }
 
     const id = data.user?.id
-    if (!id || id === 'me') {
-      throw new Error('Refusing to run: no isolated anonymous identity, so nothing guarantees isolation.')
-    }
+    if (!id) throw new Error('Refusing to run: signed in but got no user id, so nothing guarantees isolation.')
+    userId = id
   })
 
   describeRepositoryContract('supabaseRepository', () =>
-    createSupabaseRepository(config.supabaseUrl!, config.supabaseAnonKey!),
+    createSupabaseRepository(config.supabaseUrl!, config.supabaseAnonKey!, userId),
   )
 })
 
 // Reported rather than silent, so a skipped run is never mistaken for a passing one.
 if (!configured) {
   describe('supabaseRepository against a real project', () => {
-    it.skip('skipped: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are not set', () => {
+    it.skip('skipped: Supabase settings or INTEGRATION_TEST_* credentials are not set', () => {
       // Intentionally empty.
     })
   })

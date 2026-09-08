@@ -1,25 +1,35 @@
 import { describe, expect, it } from 'vitest'
 import { createRepository } from './createRepository'
 
+const configured = { supabaseUrl: 'https://example.supabase.co', supabaseAnonKey: 'anon-key' }
+const nothing = { supabaseUrl: null, supabaseAnonKey: null }
+const session = { userId: 'user-1', email: 'a@b.com' }
+
 describe('createRepository', () => {
-  // The behaviour that keeps CI green without secrets and the demo alive without a
-  // network: an unconfigured environment is a supported state, not an error.
-  it('falls back to the local adapter when Supabase is not configured', () => {
-    const repo = createRepository({ supabaseUrl: null, supabaseAnonKey: null })
+  /**
+   * Signed out is a supported state, not a degraded one. §0 requires every screen to
+   * render something useful with zero user data, it is what CI runs in, and it is what
+   * keeps the app alive if the network dies on stage.
+   */
+  it('uses browser storage when nobody is signed in', () => {
+    const repo = createRepository(null, configured)
 
     expect(typeof repo.loadWeek).toBe('function')
     expect(typeof repo.saveWeek).toBe('function')
   })
 
-  // Shape only -- this connects to nothing. Exercising the Supabase adapter's actual
-  // reads and writes would need a real project, which this project's rules bar.
-  it('returns a repository when Supabase is configured', () => {
-    const repo = createRepository({
-      supabaseUrl: 'https://example.supabase.co',
-      supabaseAnonKey: 'anon-key',
-    })
+  it('uses browser storage when Supabase is not configured, even signed in', () => {
+    expect(typeof createRepository(session, nothing).loadWeek).toBe('function')
+  })
+
+  it('returns a working store when signed in and configured', () => {
+    const repo = createRepository(session, configured)
 
     expect(typeof repo.loadWeek).toBe('function')
     expect(typeof repo.clear).toBe('function')
+  })
+
+  it('returns a store with neither a session nor configuration', () => {
+    expect(typeof createRepository(null, nothing).loadWeek).toBe('function')
   })
 })

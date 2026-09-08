@@ -1,16 +1,32 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSession } from './useSession'
 
 const listeners: Array<(session: unknown) => void> = []
+let stored: unknown = null
 
 vi.mock('../../data', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  getSession: () => Promise.resolve(null),
+  getSession: () => Promise.resolve(stored),
   onSessionChange: (listener: (session: unknown) => void) => {
     listeners.push(listener)
     return () => undefined
   },
+  createLocalRepository: () => ({ kind: 'local' }),
+  createRepository: (session: unknown) => ({ kind: 'account', session }),
+}))
+
+const carryOverWeek = vi.fn()
+vi.mock('../../data/carryOver', () => ({
+  carryOverWeek: (from: unknown, to: unknown) => {
+    carryOverWeek(from, to)
+    return Promise.resolve()
+  },
+}))
+
+const scrub = vi.fn()
+vi.mock('./scrubAuthFragment', () => ({
+  scrubAuthFragmentFromUrl: () => scrub(),
 }))
 
 function Probe() {
@@ -19,6 +35,15 @@ function Probe() {
   if (loading) return <p>looking</p>
   return <p data-testid="who">{session ? session.email : 'nobody'}</p>
 }
+
+const signedInElsewhere = (session: unknown) => listeners.forEach((notify) => notify(session))
+
+beforeEach(() => {
+  listeners.length = 0
+  stored = null
+  carryOverWeek.mockReset()
+  scrub.mockReset()
+})
 
 describe('useSession', () => {
   it('reports nobody signed in once it has looked', async () => {
@@ -43,8 +68,87 @@ describe('useSession', () => {
     render(<Probe />)
     await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('nobody'))
 
-    listeners.forEach((notify) => notify({ userId: 'u1', email: 'a@b.com' }))
+    signedInElsewhere({ userId: 'u1', email: 'a@b.com' })
 
     await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('a@b.com'))
+  })
+})
+
+/**
+ * Coming back from Google. The redirect bypasses the sign-in screen entirely, so anything
+ * that used to happen in that screen's callback has to happen here instead or it does not
+ * happen at all.
+ */
+describe('useSession, when a session arrives by redirect', () => {
+  it('cleans the token out of the address', async () => {
+    render(<Probe />)
+    await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('nobody'))
+
+    signedInElsewhere({ userId: 'u1', email: 'a@b.com' })
+
+    await waitFor(() => expect(scrub).toHaveBeenCalled())
+  })
+
+  // Without this a student who built a week while looking around, then signed in with
+  // Google, would silently lose it -- the redirect never touches the screen that copies it.
+  it('carries the preview week into the account', async () => {
+    render(<Probe />)
+    await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('nobody'))
+
+    signedInElsewhere({ userId: 'u1', email: 'a@b.com' })
+
+    await waitFor(() => expect(carryOverWeek).toHaveBeenCalledOnce())
+    expect(carryOverWeek.mock.calls[0]?.[0]).toEqual({ kind: 'local' })
+  })
+
+  // Supabase reports the same session more than once in normal operation. Copying twice
+  // would put a preview over real data the second time.
+  it('does not carry the week over twice for the same account', async () => {
+    render(<Probe />)
+    await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('nobody'))
+
+    signedInElsewhere({ userId: 'u1', email: 'a@b.com' })
+    await waitFor(() => expect(carryOverWeek).toHaveBeenCalledOnce())
+    signedInElsewhere({ userId: 'u1', email: 'a@b.com' })
+
+    expect(carryOverWeek).toHaveBeenCalledOnce()
+  })
+
+  /**
+   * A session that was already there when the app opened is somebody returning, not
+   * somebody signing in. Copying then would overwrite the account's real week with
+   * whatever happened to be in browser storage, on every single load.
+   */
+  it('does not carry anything over for a session restored on opening', async () => {
+    stored = { userId: 'u1', email: 'a@b.com' }
+    render(<Probe />)
+
+    await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('a@b.com'))
+
+    expect(carryOverWeek).not.toHaveBeenCalled()
+    expect(scrub).not.toHaveBeenCalled()
+  })
+
+  it('does nothing on a sign-out', async () => {
+    render(<Probe />)
+    await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('nobody'))
+
+    signedInElsewhere(null)
+
+    expect(carryOverWeek).not.toHaveBeenCalled()
+    expect(scrub).not.toHaveBeenCalled()
+  })
+
+  // Signing out and back in as somebody else is a real sign-in, and their preview belongs
+  // to them.
+  it('carries over again for a different account', async () => {
+    render(<Probe />)
+    await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('nobody'))
+
+    signedInElsewhere({ userId: 'u1', email: 'a@b.com' })
+    await waitFor(() => expect(carryOverWeek).toHaveBeenCalledOnce())
+    signedInElsewhere({ userId: 'u2', email: 'c@d.com' })
+
+    await waitFor(() => expect(carryOverWeek).toHaveBeenCalledTimes(2))
   })
 })

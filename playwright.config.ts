@@ -46,7 +46,24 @@ export default defineConfig({
   webServer: {
     command: 'npm run build && npm run preview',
     url: BASE_URL,
-    env: { PORT: String(PORT) },
+    env: {
+      PORT: String(PORT),
+
+      // Blanked so the build cannot inline real Supabase credentials.
+      //
+      // `vite build` reads .env and inlines every VITE_-prefixed value into the bundle,
+      // so on a machine with credentials configured this suite would otherwise build an
+      // app pointed at a real project -- and then drive it. The rebalance test clicks a
+      // button that saves the week, so the browser suite would be writing to a real
+      // database on every run. .claude/CLAUDE.md forbids testing against production data
+      // or any path that can take an irreversible action.
+      //
+      // Set here rather than in a .env file because dotenv does not overwrite variables
+      // that already exist in the environment, so these win over anything in .env. The
+      // suite therefore always runs on browser storage, which is also what CI does.
+      VITE_SUPABASE_URL: '',
+      VITE_SUPABASE_ANON_KEY: '',
+    },
     // Never reuse: if something else is already on this port, that is a problem to be
     // told about, not to silently test against. Playwright fails with a clear message
     // instead of running the suite on a stranger's app.

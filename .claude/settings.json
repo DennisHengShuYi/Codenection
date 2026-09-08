@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:*)",
+      "Bash(curl -s http://127.0.0.1:*)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(npx vitest run)",
+      "Bash(awk *)",
+      "Bash(npm view *)",
+      "Bash(npm audit --json)",
+      "Bash(semgrep scan *)",
+      "Bash(tasklist *)",
+      "Bash(findstr *)",
+      "mcp__claude_ai_Notion__notion-fetch",
+      "mcp__claude_ai_Notion__notion-search"
+    ]
+  }
+}

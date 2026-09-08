@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "measure:dof": "vite-node scripts/degrees-of-freedom.ts"
   },
   "dependencies": {
     "react": "^19.2.8",

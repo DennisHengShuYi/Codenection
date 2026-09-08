@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS } from '../engine'
-import { isValid } from './constraints'
+import { isValid, violations } from './constraints'
 import { neighbours } from './neighbours'
 import { errandItem, makeSchedule, restItem, studyItem } from './testSupport'
 
@@ -93,6 +93,53 @@ describe('neighbours', () => {
 
     for (const move of neighbours(schedule, DEFAULT_PARAMS)) {
       expect(isValid(move.apply(schedule), DEFAULT_PARAMS)).toBe(true)
+    }
+  })
+
+  // A schedule can arrive already broken -- a student adds a clashing commitment, or an
+  // OCR import (§1.4) drops a class on top of existing work. Filtering candidates on
+  // "is the result valid" rejects every move in that state, because the pre-existing
+  // violation survives all of them. The app would then tell an over-committed student
+  // that their week is already the best arrangement, which is the worst possible answer
+  // for exactly the person it exists to help.
+  /**
+   * Two *independent* clashes, on different days. One move can clear at most one of
+   * them, so no single neighbour reaches a fully valid schedule -- which is the case
+   * that breaks a validity filter, and the case a single clash does not reproduce.
+   */
+  const doublyBroken = () =>
+    makeSchedule([
+      { ...studyItem('lecture-a', 1, 2), fixed: true, startHour: 9 },
+      { ...studyItem('clash-a', 1, 2), startHour: 10 },
+      { ...studyItem('lecture-b', 8, 2), fixed: true, startHour: 9 },
+      { ...studyItem('clash-b', 8, 2), startHour: 10 },
+    ])
+
+  it('still offers moves when the schedule arrives already invalid', () => {
+    const broken = doublyBroken()
+
+    expect(isValid(broken, DEFAULT_PARAMS)).toBe(false)
+    expect(violations(broken, DEFAULT_PARAMS)).toHaveLength(2)
+    expect(neighbours(broken, DEFAULT_PARAMS).length).toBeGreaterThan(0)
+  })
+
+  it('offers moves that reduce the damage even when none can fully repair it', () => {
+    const broken = doublyBroken()
+    const before = violations(broken, DEFAULT_PARAMS).length
+
+    const improving = neighbours(broken, DEFAULT_PARAMS).filter(
+      (move) => violations(move.apply(broken), DEFAULT_PARAMS).length < before,
+    )
+
+    expect(improving.length).toBeGreaterThan(0)
+  })
+
+  it('never offers a move that makes a broken schedule worse', () => {
+    const broken = doublyBroken()
+    const before = violations(broken, DEFAULT_PARAMS).length
+
+    for (const move of neighbours(broken, DEFAULT_PARAMS)) {
+      expect(violations(move.apply(broken), DEFAULT_PARAMS).length).toBeLessThanOrEqual(before)
     }
   })
 

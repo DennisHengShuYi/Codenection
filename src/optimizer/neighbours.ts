@@ -1,5 +1,5 @@
 import type { EngineParams } from '../engine'
-import { isValid } from './constraints'
+import { violations } from './constraints'
 import type { Move, Schedule, ScheduledItem } from './types'
 
 /** How far a single move may shift a task. Small on purpose: §2.2 observes that a
@@ -150,14 +150,29 @@ function reorderMoves(schedule: Schedule): Move[] {
 /**
  * §2.1's four neighbour kinds.
  *
- * Invalid results are filtered here rather than scored badly, so the search can never
- * walk through an illegal schedule on its way somewhere better.
+ * Candidates are filtered here rather than scored badly, so the search cannot walk
+ * through an illegal schedule on its way somewhere better.
+ *
+ * The filter is "no worse than where we started" rather than "valid", and the difference
+ * matters. From a valid schedule the two are identical: the baseline is zero violations,
+ * so only valid neighbours survive, and every hard constraint still holds absolutely.
+ *
+ * From an *invalid* one they diverge completely. Real schedules arrive broken -- a
+ * student accepts a clashing commitment, or an OCR import (§1.4) drops a class on top of
+ * existing work -- and with two independent clashes no single move can reach validity,
+ * so a strict validity filter rejects every candidate. The optimizer would then return
+ * nothing and the app would tell an over-committed student that their week is already
+ * the best arrangement of their commitments. That is the worst available answer for
+ * precisely the person the app exists to help, and it is what this filter prevents:
+ * the search can now walk a broken week back toward a legal one, one clash at a time.
  */
 export function neighbours(schedule: Schedule, params: EngineParams): Move[] {
+  const baseline = violations(schedule, params).length
+
   return [
     ...shiftMoves(schedule),
     ...batchMoves(schedule),
     ...restMoves(schedule),
     ...reorderMoves(schedule),
-  ].filter((move) => isValid(move.apply(schedule), params))
+  ].filter((move) => violations(move.apply(schedule), params).length <= baseline)
 }

@@ -20,6 +20,21 @@ test('the page renders', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Codenection')
 })
 
+// A declared icon that resolves. Without a rel="icon" link the browser falls back to
+// probing /favicon.ico, which this app does not serve -- a 404 on every page load, and
+// noise in the console that buries real errors. Asserted by declaration and by fetching
+// the href rather than by watching for a 404, because headless Chromium does not reliably
+// request a favicon at all, so a 404 watcher would pass whether or not the link existed.
+test('the page declares an icon that actually exists', async ({ page, request }) => {
+  await page.goto('/')
+
+  const href = await page.locator('link[rel~="icon"]').first().getAttribute('href')
+  expect(href).toBeTruthy()
+
+  const icon = await request.get(href as string)
+  expect(icon.status()).toBe(200)
+})
+
 // An unknown path serves the app shell rather than a 404, which is what a single-page
 // app needs: §11 requires a PWA installable to a home screen, and a deep link opened
 // from the installed icon has to reach the router rather than a dead end. The earlier

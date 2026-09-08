@@ -108,3 +108,36 @@ describe('undo', () => {
     expect(undo(rebalance(before, DEFAULT_PARAMS, makeRng(1)))).toEqual(before)
   })
 })
+
+describe('describeRebalance, naming what changed', () => {
+  const base = () => {
+    const schedule = pileUp()
+    return { schedule, before: schedule, evaluations: 1, worstBefore: 40, worstAfter: 48 }
+  }
+
+  const move = (kind: 'insertSocial' | 'insertRest' | 'batchErrands' | 'reorderWithinDay') => ({
+    kind,
+    itemId: 'x',
+    description: 'x',
+    apply: (s: typeof base extends never ? never : ReturnType<typeof base>['schedule']) => s,
+  })
+
+  // §5.2's move has its own wording, and it had never been exercised: a solve that made
+  // time to see someone would otherwise report nothing about it.
+  it('says when it made time to see someone', () => {
+    const result = { ...base(), moves: [move('insertSocial')] }
+
+    expect(describeRebalance(result, DEFAULT_PARAMS)).toMatch(/see someone/i)
+  })
+
+  it('names batched errands and reordering', () => {
+    const result = {
+      ...base(),
+      moves: [move('batchErrands'), move('reorderWithinDay')],
+    }
+    const text = describeRebalance(result, DEFAULT_PARAMS)
+
+    expect(text).toMatch(/batched/i)
+    expect(text).toMatch(/reordered/i)
+  })
+})

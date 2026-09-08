@@ -22,7 +22,7 @@ const days = (): DayInput[] =>
     checkedIn: true,
   }))
 
-const renderDial = (capacity: number, reserves: Reserves = healthy) => {
+const renderDial = (capacity: number, reserves: Reserves = healthy, compact = false) => {
   const projection = project(reserves, days(), DEFAULT_PARAMS)
 
   return render(
@@ -30,6 +30,7 @@ const renderDial = (capacity: number, reserves: Reserves = healthy) => {
       capacity={capacity}
       bars={domainBars(reserves, projection, days())}
       projection={projection}
+      compact={compact}
     />,
   )
 }
@@ -69,6 +70,18 @@ describe('CapacityDial', () => {
     renderDial(90)
 
     expect(screen.getByTestId('reserve-text-equivalent')).toHaveTextContent(/90% capacity/i)
+  })
+
+  /**
+   * §1.1: once the room is the surface, the dial sits in one corner as a compact
+   * readout. It carries its own test id so two dials on one page never collide.
+   */
+  it('drops the bars and the summary in its compact form', () => {
+    renderDial(90, healthy, true)
+
+    expect(screen.queryAllByRole('meter')).toHaveLength(0)
+    expect(screen.queryByTestId('reserve-text-equivalent')).toBeNull()
+    expect(screen.getByTestId('capacity-value-compact')).toHaveTextContent('90%')
   })
 
   // The completely drained student is precisely the one most likely to open the app.

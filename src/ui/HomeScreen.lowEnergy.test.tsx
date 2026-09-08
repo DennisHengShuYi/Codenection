@@ -55,6 +55,26 @@ describe('HomeScreen in low energy', () => {
     await waitFor(() => expect(screen.getAllByRole('meter')).toHaveLength(5))
   })
 
+  /**
+   * §1.5 gives the low-energy screen exactly one action, and it has to do something. An
+   * action that looked live and did nothing would be worse than not offering one.
+   */
+  it('the single action actually rebalances the week', async () => {
+    const repository = await renderDrained()
+    const before = JSON.stringify(await repository.loadWeek())
+
+    // findByRole rather than getByRole: the low-energy view appears only once the stored
+    // settings have resolved, which is a tick after the week does.
+    await userEvent.click(
+      await screen.findByRole('button', { name: /twenty minutes outside/i }),
+    )
+
+    await waitFor(
+      async () => expect(JSON.stringify(await repository.loadWeek())).not.toBe(before),
+      { timeout: 20_000 },
+    )
+  }, 30_000)
+
   it('remembers that choice, so it is not made again every visit', async () => {
     const repository = await renderDrained()
     await waitFor(() =>

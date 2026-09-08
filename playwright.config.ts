@@ -37,9 +37,14 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 
   // Playwright boots the server itself, so the test command is the same locally and in
-  // CI. Point this at the real dev server once the app has one.
+  // CI.
+  //
+  // Build-then-preview rather than `vite dev`: the suite should assert the artefact that
+  // actually ships. A dev server transforms modules on the fly and serves sourcemaps and
+  // an HMR client that production never sees, so a build-only failure -- a bad import
+  // that only tree-shaking surfaces, a missing asset -- would pass here and break live.
   webServer: {
-    command: 'node scripts/serve.mjs',
+    command: 'npm run build && npm run preview',
     url: BASE_URL,
     env: { PORT: String(PORT) },
     // Never reuse: if something else is already on this port, that is a problem to be

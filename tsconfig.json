@@ -1,11 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": [
-      "ES2023"
-    ],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "jsx": "react-jsx",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
@@ -17,6 +16,7 @@
     "src",
     "tests",
     "scripts",
+    "vite.config.ts",
     "vitest.config.ts",
     "playwright.config.ts"
   ]

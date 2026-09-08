@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { parseBrainDump, type ParsedItem } from '../../ai'
+import type { ParsedItem } from '../../ai'
 import { ItemChip } from './ItemChip'
 
 /**
@@ -22,6 +22,14 @@ export function PlannerScreen({
   async function onRead() {
     setReading(true)
     try {
+      /**
+       * Imported here rather than at the top of the file, for the same reason the Supabase
+       * client is: the parser pulls Zod in with it, and a static import put 86KB of
+       * schema-validation code into the bundle every student downloads before they have
+       * even seen the room. The planner is never the first screen, so the cost belongs on
+       * the tap that needs it.
+       */
+      const { parseBrainDump } = await import('../../ai')
       const outcome = await parseBrainDump(text)
       setItems([...outcome.items])
     } finally {

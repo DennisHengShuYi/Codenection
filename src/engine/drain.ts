@@ -34,7 +34,12 @@ const isSwitch = (activity: Activity): boolean =>
  * while draining more.
  */
 export function fragmentation(activities: readonly Activity[]): number {
-  return Math.max(0, activities.filter(isSwitch).length - 1)
+  let blocks = 0
+  for (const activity of activities) {
+    if (isSwitch(activity)) blocks += 1
+  }
+
+  return Math.max(0, blocks - 1)
 }
 
 /** Anticipatory stress is real (§6.4). The closer the nearest deadline, the more mental
@@ -93,9 +98,10 @@ export function drainForDay(
   // activity -- which is what makes a student who is not busy but is isolated show as
   // unwell, and it is the clearest evidence the model understands burnout rather than
   // doing bookkeeping on hours.
-  const socialHours = day.activities
-    .filter((activity) => activity.type === 'social')
-    .reduce((sum, activity) => sum + activity.hours, 0)
+  let socialHours = 0
+  for (const activity of day.activities) {
+    if (activity.type === 'social') socialHours += activity.hours
+  }
 
   if (socialHours < params.socialFloorHoursPerDay) {
     totals.social += params.isolationDrainPerDay

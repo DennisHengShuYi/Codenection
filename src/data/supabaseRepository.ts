@@ -2,11 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Schedule } from '../optimizer'
 import { DEFAULT_SETTINGS, type Repository, type StoredSettings } from './types'
 
-/** One row holding the whole week as JSON. Deliberately not normalised: the schedule's
- *  shape changes with every plan in this project, and a relational schema would have to
- *  change with it for no benefit while there is exactly one reader. */
+/** One row per student holding their whole week as JSON. Deliberately not normalised:
+ *  the schedule's shape changes with every plan in this project, and a relational schema
+ *  would have to change with it for no benefit while there is exactly one reader. */
 const TABLE = 'user_state'
-const SINGLETON_ID = 'me'
 
 export function createSupabaseRepository(url: string, anonKey: string): Repository {
   /**
@@ -29,15 +28,46 @@ export function createSupabaseRepository(url: string, anonKey: string): Reposito
     return clientPromise
   }
 
+  /**
+   * An anonymous identity, so each student's week lives in their own row.
+   *
+   * This is what makes row-level security mean anything here. The anon key ships inside
+   * the browser bundle by design -- it is meant to be public -- so a fixed row id would
+   * put every visitor on the same row, able to read and overwrite whatever was there.
+   * With a real `auth.uid()` the database itself enforces the boundary rather than the
+   * client promising to behave.
+   *
+   * Memoised: one sign-in per session, not one per call.
+   */
+  let sessionPromise: Promise<string> | null = null
+
+  const getUserId = (): Promise<string> => {
+    sessionPromise ??= getClient()
+      .then((client) => client.auth.signInAnonymously())
+      .then(({ data, error }) => {
+        if (error) throw new Error(`Could not sign in: ${error.message}`)
+        if (!data.user) throw new Error('Could not sign in: no user was returned')
+        return data.user.id
+      })
+      .catch((error: unknown) => {
+        // Cleared so a later call can retry rather than being stuck with a failure that
+        // may have been a one-off network blip.
+        sessionPromise = null
+        throw error
+      })
+
+    return sessionPromise
+  }
+
   async function readRow(): Promise<{
     week: Schedule | null
     settings: StoredSettings
   } | null> {
-    const client = await getClient()
+    const [client, userId] = await Promise.all([getClient(), getUserId()])
     const { data, error } = await client
       .from(TABLE)
       .select('week, settings')
-      .eq('id', SINGLETON_ID)
+      .eq('id', userId)
       .maybeSingle()
 
     // Thrown rather than swallowed into a null: a read failure and an empty store mean
@@ -53,8 +83,8 @@ export function createSupabaseRepository(url: string, anonKey: string): Reposito
   }
 
   async function writeRow(patch: Record<string, unknown>): Promise<void> {
-    const client = await getClient()
-    const { error } = await client.from(TABLE).upsert({ id: SINGLETON_ID, ...patch })
+    const [client, userId] = await Promise.all([getClient(), getUserId()])
+    const { error } = await client.from(TABLE).upsert({ id: userId, ...patch })
     if (error) throw new Error(`Could not save state: ${error.message}`)
   }
 
@@ -76,8 +106,8 @@ export function createSupabaseRepository(url: string, anonKey: string): Reposito
     },
 
     async clear() {
-      const client = await getClient()
-      const { error } = await client.from(TABLE).delete().eq('id', SINGLETON_ID)
+      const [client, userId] = await Promise.all([getClient(), getUserId()])
+      const { error } = await client.from(TABLE).delete().eq('id', userId)
       if (error) throw new Error(`Could not clear state: ${error.message}`)
     },
   }

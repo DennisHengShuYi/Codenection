@@ -21,13 +21,20 @@ const USEFUL_REST_HOURS = 3
 export function recoveryForDay(day: DayInput, params: EngineParams): Reserves {
   const sleepCredit = Math.max(0, day.sleepHours - SLEEP_BASELINE_HOURS)
 
-  const restHours = day.activities
-    .filter((activity) => activity.kind === 'rest')
-    .reduce((sum, activity) => sum + Math.min(activity.hours, USEFUL_REST_HOURS), 0)
+  // One pass rather than two filter-and-reduce chains. This runs 21 times per projection
+  // and the optimizer evaluates thousands of projections per solve, so the intermediate
+  // arrays those chains allocate are a measurable share of the search's runtime -- the
+  // one place in this codebase where that trade is worth making against readability.
+  let restHours = 0
+  let socialHours = 0
 
-  const socialHours = day.activities
-    .filter((activity) => activity.kind === 'socialRestorative')
-    .reduce((sum, activity) => sum + Math.min(activity.hours, USEFUL_REST_HOURS), 0)
+  for (const activity of day.activities) {
+    if (activity.kind === 'rest') {
+      restHours += Math.min(activity.hours, USEFUL_REST_HOURS)
+    } else if (activity.kind === 'socialRestorative') {
+      socialHours += Math.min(activity.hours, USEFUL_REST_HOURS)
+    }
+  }
 
   const out: Record<LoadType, number> = { mental: 0, physical: 0, social: 0, errands: 0 }
 

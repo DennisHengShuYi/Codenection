@@ -138,11 +138,12 @@ describe('rebalance', () => {
 
     const result = rebalance(makeSchedule([...fixtures, ...movable]), DEFAULT_PARAMS, makeRng(5))
 
-    // Measured at 6,967 for this fixture and seed. The bound leaves room for a small
-    // legitimate change and fails on anything that widens the search materially -- which
-    // is a decision worth making consciously rather than absorbing silently.
+    // Measured at 2,322 for this fixture and seed after the restart loop came out. The
+    // bound leaves room for a small legitimate change and fails on anything that widens
+    // the search materially -- a decision worth making consciously rather than absorbing
+    // silently.
     expect(result.evaluations).toBeGreaterThan(0)
-    expect(result.evaluations).toBeLessThan(8_000)
+    expect(result.evaluations).toBeLessThan(3_000)
   })
 
   it('counts every candidate it scored, so the budget above is measuring something', () => {

@@ -83,10 +83,33 @@ describe('askGroq', () => {
     expect(await askGroq('essay', 'test-key-not-real')).toBeNull()
   })
 
-  // A timeout or a dead network. §10 budgets the call rather than letting it hang.
   it('gives up when the network fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
 
     expect(await askGroq('essay', 'test-key-not-real')).toBeNull()
+  })
+
+  /**
+   * §10's third constraint: the call is time-boxed. A model that accepts the request and
+   * then never answers would otherwise hold the confirm screen open indefinitely, which is
+   * worse than no model at all -- the student cannot even fall back to typing.
+   */
+  it('gives up on a model that never answers, rather than hanging', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+          }),
+      ),
+    )
+
+    const pending = askGroq('essay', 'test-key-not-real')
+    await vi.advanceTimersByTimeAsync(8000)
+
+    expect(await pending).toBeNull()
+    vi.useRealTimers()
   })
 })

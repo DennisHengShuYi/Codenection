@@ -1,4 +1,14 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+
+/**
+ * Every browser test enters the way a judge would: no credentials are configured for
+ * this suite, so there is no account to sign into, and the signed-out preview is the
+ * only door.
+ */
+async function openApp(page: Page, path = '/') {
+  await page.goto(path)
+  await page.getByRole('button', { name: /look around/i }).click()
+}
 
 /**
  * The engine and solver, exercised in a real browser.
@@ -17,7 +27,7 @@ import { expect, test } from '@playwright/test'
 // than a fallback. Asserted here because an accessibility requirement nothing checks is
 // an accessibility requirement that quietly rots.
 test('states the numbers in words for a screen reader', async ({ page }) => {
-  await page.goto('/')
+  await openApp(page)
 
   const summary = page.getByTestId('reserve-text-equivalent')
   await expect(summary).toHaveText(/capacity/i)
@@ -27,14 +37,14 @@ test('states the numbers in words for a screen reader', async ({ page }) => {
 // The projection's deficit crossing reaches the screen through the text equivalent
 // rather than through a figure of its own, so this is where it is checked.
 test('says whether the fortnight crosses into deficit', async ({ page }) => {
-  await page.goto('/')
+  await openApp(page)
 
   await expect(page.getByTestId('reserve-text-equivalent')).toHaveText(/deficit/i)
 })
 
 // §2.1 puts the solver on the phone. This proves it runs there, on the shipped bundle.
 test('runs the rebalancer in the browser and reports what it changed', async ({ page }) => {
-  await page.goto('/')
+  await openApp(page)
 
   await page.getByTestId('rebalance').click()
 

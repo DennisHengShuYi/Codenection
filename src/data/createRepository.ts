@@ -1,29 +1,34 @@
 import { readDataConfig, type DataConfig } from './env'
 import { createFallbackRepository } from './fallbackRepository'
 import { createLocalRepository } from './localRepository'
+import type { Session } from './session'
 import { createSupabaseRepository } from './supabaseRepository'
 import type { Repository } from './types'
 
 /**
- * Chooses the store once, at startup.
+ * Chooses the store for whoever is signed in.
  *
- * An unconfigured environment is a supported state rather than an error: it is what CI
- * runs in, and §10's "nothing is called live on stage" instinct applies here too. An app
- * that still works with no backend cannot be broken by a bad network during judging.
+ * Signed out, or with no Supabase configured, the week lives in browser storage. That is
+ * a supported state rather than a degraded one: §0 requires every screen to render
+ * something useful with zero user data, it is what CI runs in, and §10's instinct that
+ * nothing should be called live on stage applies here too -- an app that still works with
+ * no backend cannot be broken by a bad network during judging.
+ *
+ * Signed in and configured, the week lives in Supabase under that account, still backed
+ * by browser storage so an unreachable database degrades rather than losing the week.
  */
-export function createRepository(config: DataConfig = readDataConfig()): Repository {
+export function createRepository(
+  session: Session | null,
+  config: DataConfig = readDataConfig(),
+): Repository {
   const local = createLocalRepository()
 
-  if (config.supabaseUrl !== null && config.supabaseAnonKey !== null) {
-    // Backed by browser storage rather than used alone. Configuring Supabase without
-    // applying the migration is an easy and invisible mistake -- it points the app at a
-    // table that does not exist, and persistence then vanishes silently, which is worse
-    // than the storage it replaced.
-    return createFallbackRepository(
-      createSupabaseRepository(config.supabaseUrl, config.supabaseAnonKey),
-      local,
-    )
+  if (session === null || config.supabaseUrl === null || config.supabaseAnonKey === null) {
+    return local
   }
 
-  return local
+  return createFallbackRepository(
+    createSupabaseRepository(config.supabaseUrl, config.supabaseAnonKey, session.userId),
+    local,
+  )
 }

@@ -2,13 +2,25 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Schedule } from '../optimizer'
 import { DEFAULT_SETTINGS, type Repository, type StoredSettings } from './types'
 
-/** One row holding the whole week as JSON. Deliberately not normalised: the schedule's
- *  shape changes with every plan in this project, and a relational schema would have to
- *  change with it for no benefit while there is exactly one reader. */
+/** One row per student holding their whole week as JSON. Deliberately not normalised:
+ *  the schedule's shape changes with every plan in this project, and a relational schema
+ *  would have to change with it for no benefit while there is exactly one reader. */
 const TABLE = 'user_state'
-const SINGLETON_ID = 'me'
 
-export function createSupabaseRepository(url: string, anonKey: string): Repository {
+/**
+ * The identity is passed in rather than discovered here.
+ *
+ * This repository's job is storage, not authentication. An earlier version signed itself
+ * in anonymously, which conflated the two -- and is also why the identity it produced
+ * could only ever live in the browser and die with it. `0002`'s policies key each row to
+ * `auth.uid()`, which is identical for a registered account, so nothing about the schema
+ * changes when the identity becomes a real one.
+ */
+export function createSupabaseRepository(
+  url: string,
+  anonKey: string,
+  userId: string,
+): Repository {
   /**
    * Loaded on first use rather than imported at the top of the file.
    *
@@ -37,7 +49,7 @@ export function createSupabaseRepository(url: string, anonKey: string): Reposito
     const { data, error } = await client
       .from(TABLE)
       .select('week, settings')
-      .eq('id', SINGLETON_ID)
+      .eq('id', userId)
       .maybeSingle()
 
     // Thrown rather than swallowed into a null: a read failure and an empty store mean
@@ -54,7 +66,7 @@ export function createSupabaseRepository(url: string, anonKey: string): Reposito
 
   async function writeRow(patch: Record<string, unknown>): Promise<void> {
     const client = await getClient()
-    const { error } = await client.from(TABLE).upsert({ id: SINGLETON_ID, ...patch })
+    const { error } = await client.from(TABLE).upsert({ id: userId, ...patch })
     if (error) throw new Error(`Could not save state: ${error.message}`)
   }
 
@@ -77,7 +89,7 @@ export function createSupabaseRepository(url: string, anonKey: string): Reposito
 
     async clear() {
       const client = await getClient()
-      const { error } = await client.from(TABLE).delete().eq('id', SINGLETON_ID)
+      const { error } = await client.from(TABLE).delete().eq('id', userId)
       if (error) throw new Error(`Could not clear state: ${error.message}`)
     },
   }

@@ -39,6 +39,7 @@ describe('describeRebalance', () => {
       schedule,
       before: schedule,
       moves: [],
+      evaluations: 1,
       worstBefore: 41,
       worstAfter: 41,
     }

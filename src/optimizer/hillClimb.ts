@@ -27,9 +27,10 @@ function climb(
   start: Schedule,
   params: EngineParams,
   rng: Rng,
-): { schedule: Schedule; moves: Move[] } {
+): { schedule: Schedule; moves: Move[]; evaluations: number } {
   let current = start
   let currentScore = score(current, params)
+  let evaluations = 1
   const taken: Move[] = []
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration += 1) {
@@ -43,6 +44,7 @@ function climb(
     for (let i = 0; i < options.length; i += 1) {
       const candidate = options[(i + offset) % options.length]!
       const candidateScore = score(candidate.result, params)
+      evaluations += 1
 
       if (candidateScore > bestScore + EPSILON) {
         best = candidate
@@ -57,7 +59,7 @@ function climb(
     taken.push(best.move)
   }
 
-  return { schedule: current, moves: taken }
+  return { schedule: current, moves: taken, evaluations }
 }
 
 /**
@@ -78,10 +80,12 @@ export function rebalance(
   let best = schedule
   let bestScore = score(schedule, params)
   let bestMoves: Move[] = []
+  let evaluations = 1
 
   for (let restart = 0; restart < RESTARTS; restart += 1) {
     const attempt = climb(schedule, params, rng)
     const attemptScore = score(attempt.schedule, params)
+    evaluations += attempt.evaluations + 1
 
     if (attemptScore > bestScore + EPSILON) {
       best = attempt.schedule
@@ -94,6 +98,7 @@ export function rebalance(
     schedule: best,
     before: schedule,
     moves: bestMoves,
+    evaluations,
     worstBefore: worstOf(schedule, params),
     worstAfter: worstOf(best, params),
   }

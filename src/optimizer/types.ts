@@ -45,6 +45,16 @@ export interface Move {
 
 export interface RebalanceResult {
   readonly schedule: Schedule
+  /**
+   * How many candidate schedules the search scored.
+   *
+   * The honest unit for §2.1's performance budget. Wall-clock time depends on whose
+   * machine is measuring -- a CI runner is several times slower than a laptop -- so a
+   * millisecond assertion either flakes or gets quietly raised until it means nothing.
+   * This number is identical on every machine for a given schedule and seed, so a test
+   * against it catches an algorithmic regression and nothing else.
+   */
+  readonly evaluations: number
   /** The schedule this started from, so §2.1's one-tap undo is exact rather than
    *  reconstructed. */
   readonly before: Schedule

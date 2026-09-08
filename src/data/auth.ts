@@ -25,8 +25,33 @@ function getClient(): Promise<SupabaseClient> {
   return clientPromise
 }
 
-const toSession = (user: Pick<User, 'id' | 'email'> | null | undefined): Session | null =>
-  user ? { userId: user.id, email: user.email ?? '' } : null
+/** Blank and non-string metadata are both treated as absent. An empty name would render as
+ *  a gap where a name should be, which reads as a bug rather than as an account without
+ *  one. */
+const text = (value: unknown): string | undefined => {
+  const trimmed = typeof value === 'string' ? value.trim() : ''
+  return trimmed === '' ? undefined : trimmed
+}
+
+type AuthUser = Pick<User, 'id' | 'email'> & { user_metadata?: Record<string, unknown> }
+
+/**
+ * The single place a Session is built, so whatever it reads here is what every route in
+ * gets -- email and password, Google, or a session restored on a later visit.
+ *
+ * Two keys are checked for each of the name and the picture. Supabase normalises most
+ * providers into `full_name` and `avatar_url`, but `name` and `picture` are the raw OAuth
+ * claims some send instead, and assuming one is how an avatar silently disappears.
+ */
+const toSession = (user: AuthUser | null | undefined): Session | null =>
+  user
+    ? {
+        userId: user.id,
+        email: user.email ?? '',
+        name: text(user.user_metadata?.full_name) ?? text(user.user_metadata?.name),
+        avatarUrl: text(user.user_metadata?.avatar_url) ?? text(user.user_metadata?.picture),
+      }
+    : null
 
 /** Checked before the round trip, so an obvious mistake is answered instantly rather than
  *  after a network wait. */
@@ -76,6 +101,41 @@ export async function signIn(email: string, password: string): Promise<AuthOutco
 
   const session = toSession(data.user)
   return session ? { ok: true, session } : { ok: false, message: 'Could not sign in.' }
+}
+
+/**
+ * Starts a Google sign-in.
+ *
+ * There is no session to return: on success the browser leaves for Google's consent page
+ * and the student comes back through the redirect, where `onSessionChange` picks the new
+ * session up. So this reports only whether the hand-off began.
+ *
+ * A missing configuration rejects rather than returning a failure, exactly as `signIn` and
+ * `register` do -- that is a build without a backend, not something a student did wrong,
+ * and the screen hides the button entirely in that state.
+ */
+export async function signInWithGoogle(): Promise<{ ok: true } | { ok: false; message: string }> {
+  const client = await getClient()
+
+  try {
+    const { error } = await client.auth.signInWithOAuth({
+      provider: 'google',
+      // Read from wherever the app is actually running. Hard-coding it would send a phone
+      // that started the sign-in back to a laptop's development server.
+      options: { redirectTo: `${window.location.origin}/` },
+    })
+
+    if (error) return { ok: false, message: explainAuthError(error.message) }
+
+    return { ok: true }
+  } catch {
+    // A thrown error here must not escape into the screen as an unhandled rejection: the
+    // button would spin forever with nothing said about why.
+    return {
+      ok: false,
+      message: 'Could not reach Google sign-in. Check your connection and try again.',
+    }
+  }
 }
 
 export async function signOut(): Promise<void> {

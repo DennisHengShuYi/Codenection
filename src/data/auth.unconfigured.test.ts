@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { getSession, onSessionChange, register, signIn } from './auth'
+import { getSession, onSessionChange, register, signIn, signInWithGoogle } from './auth'
 
 /**
  * What the auth module does when Supabase is not configured at all.
@@ -23,6 +23,14 @@ describe('auth with no Supabase configured', () => {
 
   it('rejects signing in', async () => {
     await expect(signIn('a@b.com', 'longenough')).rejects.toThrow(/not configured/i)
+  })
+
+  // Refused the same way as the two above rather than returning a failure outcome: a
+  // missing backend is a build problem, not something the student did wrong. The screen
+  // hides the Google button entirely in this state, so nothing reaches this in practice --
+  // this test exists so that stays true if the button's condition ever changes.
+  it('rejects a Google sign-in, since there is nowhere to sign in with', async () => {
+    await expect(signInWithGoogle()).rejects.toThrow(/not configured/i)
   })
 
   // Subscribing must be safe to call unconditionally -- the app does it on every mount,

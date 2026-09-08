@@ -15,6 +15,7 @@ const SEED = 20260908
 export function HomeScreen({ repository }: { repository: Repository }) {
   const { schedule, setSchedule } = useSchedule(repository)
   const [report, setReport] = useState<string | null>(null)
+  const [working, setWorking] = useState(false)
 
   const days = useMemo(() => (schedule ? toDayInputs(schedule) : []), [schedule])
   const projection = useMemo(
@@ -25,12 +26,32 @@ export function HomeScreen({ repository }: { repository: Repository }) {
   const floor = schedule ? floorReserve(schedule.start) : 100
   const { active: lowEnergy, setOverride } = useLowEnergy(repository, floor)
 
-  function onRebalance(current = schedule) {
-    if (!current) return
+  /**
+   * The solve takes over a second on a laptop and several on phone-class hardware --
+   * §2.1's 100ms budget is not met yet, and closing that gap needs incremental scoring
+   * rather than tuning. Until then this screen has to be honest about the wait instead of
+   * looking broken.
+   *
+   * The yield is what makes that work rather than merely intended: setting state does not
+   * paint on its own, and the solver holds the main thread for its whole run, so without
+   * handing control back to the browser first React never renders the working state and
+   * the student taps a button that appears dead.
+   */
+  async function onRebalance(current = schedule) {
+    if (!current || working) return
 
-    const result = rebalance(current, DEFAULT_PARAMS, makeRng(SEED))
-    setSchedule(result.schedule)
-    setReport(describeRebalance(result, DEFAULT_PARAMS))
+    setWorking(true)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    try {
+      const result = rebalance(current, DEFAULT_PARAMS, makeRng(SEED))
+      setSchedule(result.schedule)
+      setReport(describeRebalance(result, DEFAULT_PARAMS))
+    } finally {
+      // In a finally so a solver that throws leaves the button usable rather than
+      // stranding the screen in a working state it can never leave.
+      setWorking(false)
+    }
   }
 
   if (!schedule || !projection) {
@@ -50,7 +71,7 @@ export function HomeScreen({ repository }: { repository: Repository }) {
       <LowEnergyView
         capacity={capacity}
         action="Take twenty minutes outside"
-        onAction={() => onRebalance(schedule)}
+        onAction={() => void onRebalance(schedule)}
         onExit={() => setOverride('off')}
       />
     )
@@ -74,11 +95,12 @@ export function HomeScreen({ repository }: { repository: Repository }) {
       <section className="flex flex-col gap-3">
         <button
           type="button"
-          onClick={() => onRebalance(schedule)}
+          onClick={() => void onRebalance(schedule)}
+          disabled={working}
           data-testid="rebalance"
-          className="w-full rounded-lg bg-slate-900 px-4 py-3 text-base font-medium text-white sm:w-auto"
+          className="w-full rounded-lg bg-slate-900 px-4 py-3 text-base font-medium text-white disabled:opacity-60 sm:w-auto"
         >
-          Rebalance my fortnight
+          {working ? 'Working out a better week…' : 'Rebalance my fortnight'}
         </button>
 
         {report !== null && (

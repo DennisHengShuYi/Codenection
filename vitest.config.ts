@@ -31,6 +31,9 @@ export default defineConfig({
       // real -- so it gets the same lock as the two above.
       INTEGRATION_TEST_EMAIL: '',
       INTEGRATION_TEST_PASSWORD: '',
+      // The planner opened a third door -- a key that costs money per call. Same lock: the
+      // suite must never be able to reach a live model or spend anything.
+      GROQ_API_KEY: '',
     },
     coverage: {
       provider: 'v8',

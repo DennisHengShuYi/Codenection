@@ -5,10 +5,22 @@ import { DEFAULT_SETTINGS, type Repository, type StoredSettings } from './types'
 const WEEK_KEY = 'week'
 const SETTINGS_KEY = 'settings'
 
-export function createLocalRepository(): Repository {
-  // A named store rather than the default one, so clearing this app's data cannot
+/**
+ * @param databaseName Which IndexedDB database to use. Defaults to the app's own.
+ *
+ * Nameable so two genuinely separate stores can exist at once, which the preview
+ * carry-over needs to be testable: with a single fixed name a "from" and a "to" store
+ * would be the same store, and moving a week between them would be a no-op that quietly
+ * looked like success.
+ *
+ * The *database* is what varies, not the object store inside it. IndexedDB creates its
+ * object stores when the database is first opened, so asking for a second store name in
+ * an existing database fails rather than creating one.
+ */
+export function createLocalRepository(databaseName = 'codenection'): Repository {
+  // A named database rather than the default one, so clearing this app's data cannot
   // disturb anything else the origin happens to keep in IndexedDB.
-  const store = createStore('codenection', 'state')
+  const store = createStore(databaseName, 'state')
 
   return {
     async loadWeek() {

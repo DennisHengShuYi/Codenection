@@ -27,6 +27,10 @@ export default defineConfig({
     env: {
       VITE_SUPABASE_URL: '',
       VITE_SUPABASE_ANON_KEY: '',
+      // Accounts opened a second door to a real project -- a test that signs in for
+      // real -- so it gets the same lock as the two above.
+      INTEGRATION_TEST_EMAIL: '',
+      INTEGRATION_TEST_PASSWORD: '',
     },
     coverage: {
       provider: 'v8',

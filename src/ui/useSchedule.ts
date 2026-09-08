@@ -21,9 +21,17 @@ export function useSchedule(repo: Repository): {
     // then is a leak and, in tests, a warning that looks like a real failure.
     let cancelled = false
 
-    void repo.loadWeek().then((saved) => {
-      if (!cancelled) setLocal(saved ?? umCrunchWeek())
-    })
+    repo
+      .loadWeek()
+      // Unreachable storage falls back to the seed rather than leaving the screen
+      // waiting. The local adapter essentially never rejects, but the Supabase one
+      // throws on every error path, so without this a student with a bad network would
+      // stare at the loading sentence forever. The seeded week is worse than their real
+      // data and far better than a screen that never resolves.
+      .catch(() => null)
+      .then((saved) => {
+        if (!cancelled) setLocal(saved ?? umCrunchWeek())
+      })
 
     return () => {
       cancelled = true
@@ -32,9 +40,10 @@ export function useSchedule(repo: Repository): {
 
   function setSchedule(next: Schedule) {
     setLocal(next)
-    // Fire and forget: a failed write must not block the screen the student is looking
-    // at, and the next change will try again.
-    void repo.saveWeek(next)
+    // Fire and forget, but explicitly caught: a failed write must not block the screen
+    // the student is looking at, and an uncaught rejection here would surface as a
+    // console error on a screen that is otherwise working fine. The next change retries.
+    repo.saveWeek(next).catch(() => undefined)
   }
 
   return { schedule, setSchedule }

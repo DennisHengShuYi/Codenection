@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Schedule } from '../optimizer'
 import { DEFAULT_SETTINGS, type Repository, type StoredSettings } from './types'
 
@@ -9,12 +9,31 @@ const TABLE = 'user_state'
 const SINGLETON_ID = 'me'
 
 export function createSupabaseRepository(url: string, anonKey: string): Repository {
-  const client = createClient(url, anonKey)
+  /**
+   * Loaded on first use rather than imported at the top of the file.
+   *
+   * The client is around 220KB of JavaScript, and a static import puts it in the main
+   * bundle for *every* visitor -- including the demo, which runs on browser storage and
+   * never touches Supabase at all. §11 asks for something a student installs on a phone,
+   * so doubling the download for a path most sessions never take is the wrong trade.
+   *
+   * Memoised, so a session that does use Supabase pays the import once rather than per
+   * call.
+   */
+  let clientPromise: Promise<SupabaseClient> | null = null
+
+  const getClient = (): Promise<SupabaseClient> => {
+    clientPromise ??= import('@supabase/supabase-js').then((module) =>
+      module.createClient(url, anonKey),
+    )
+    return clientPromise
+  }
 
   async function readRow(): Promise<{
     week: Schedule | null
     settings: StoredSettings
   } | null> {
+    const client = await getClient()
     const { data, error } = await client
       .from(TABLE)
       .select('week, settings')
@@ -34,6 +53,7 @@ export function createSupabaseRepository(url: string, anonKey: string): Reposito
   }
 
   async function writeRow(patch: Record<string, unknown>): Promise<void> {
+    const client = await getClient()
     const { error } = await client.from(TABLE).upsert({ id: SINGLETON_ID, ...patch })
     if (error) throw new Error(`Could not save state: ${error.message}`)
   }
@@ -56,6 +76,7 @@ export function createSupabaseRepository(url: string, anonKey: string): Reposito
     },
 
     async clear() {
+      const client = await getClient()
       const { error } = await client.from(TABLE).delete().eq('id', SINGLETON_ID)
       if (error) throw new Error(`Could not clear state: ${error.message}`)
     },

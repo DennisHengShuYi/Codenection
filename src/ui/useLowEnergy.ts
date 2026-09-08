@@ -16,9 +16,15 @@ export function useLowEnergy(
   useEffect(() => {
     let cancelled = false
 
-    void repo.loadSettings().then((saved) => {
-      if (!cancelled) setSettings(saved)
-    })
+    repo
+      .loadSettings()
+      // Unreachable storage keeps the defaults rather than rejecting. §1.5's mode should
+      // fall back to being inferred from the reserve, not disappear because a preference
+      // could not be fetched.
+      .catch(() => DEFAULT_SETTINGS)
+      .then((saved) => {
+        if (!cancelled) setSettings(saved)
+      })
 
     return () => {
       cancelled = true
@@ -28,7 +34,9 @@ export function useLowEnergy(
   function setOverride(override: StoredSettings['lowEnergyOverride']) {
     const next = { ...settings, lowEnergyOverride: override }
     setSettings(next)
-    void repo.saveSettings(next)
+    // Applied on screen whether or not it persists: a student switching the mode off
+    // should see it turn off, even if the preference cannot be saved for next time.
+    repo.saveSettings(next).catch(() => undefined)
   }
 
   return { active: shouldUseLowEnergy(floorReserve, settings.lowEnergyOverride), setOverride }

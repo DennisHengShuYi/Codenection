@@ -7,6 +7,12 @@
          the lower half of the viewport, which is exactly where the home indicator sits. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Codenection</title>
+
+    <!-- §11: installable to a real phone's home screen. theme-color paints the browser
+         chrome to match, so an installed app does not open with a white bar above it. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0f172a" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
   </head>
   <body>
     <div id="root"></div>

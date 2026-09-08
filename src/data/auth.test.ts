@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getSession, onSessionChange, register, signIn, signOut } from './auth'
+import { getSession, onSessionChange, register, signIn, signInWithGoogle, signOut } from './auth'
 
 const stub = {
   signUpResult: {} as Record<string, unknown>,
   signInResult: {} as Record<string, unknown>,
   sessionResult: {} as Record<string, unknown>,
+  oauthResult: {} as Record<string, unknown>,
+  /** Nothing navigates in a test. What is recorded is the argument, so the assertions can
+   *  ask whether the right provider and the right return address were requested. */
+  oauthCalls: [] as Array<Record<string, unknown>>,
+  oauthThrows: false,
   signOuts: 0,
   listeners: [] as Array<(event: string, session: unknown) => void>,
 }
@@ -19,6 +24,11 @@ vi.mock('@supabase/supabase-js', () => ({
         return Promise.resolve({ error: null })
       },
       getSession: () => Promise.resolve(stub.sessionResult),
+      signInWithOAuth: (options: Record<string, unknown>) => {
+        stub.oauthCalls.push(options)
+        if (stub.oauthThrows) return Promise.reject(new Error('network down'))
+        return Promise.resolve(stub.oauthResult)
+      },
       onAuthStateChange: (listener: (event: string, session: unknown) => void) => {
         stub.listeners.push(listener)
         return { data: { subscription: { unsubscribe: () => undefined } } }
@@ -43,6 +53,9 @@ beforeEach(() => {
   stub.signUpResult = { data: { user, session: { user } }, error: null }
   stub.signInResult = { data: { user, session: { user } }, error: null }
   stub.sessionResult = { data: { session: null }, error: null }
+  stub.oauthResult = { data: { provider: 'google', url: 'https://accounts.google.com/...' }, error: null }
+  stub.oauthCalls = []
+  stub.oauthThrows = false
   stub.signOuts = 0
   stub.listeners = []
 })
@@ -121,6 +134,118 @@ describe('signIn', () => {
     const result = await signIn('a@b.com', 'longenough')
 
     expect(result.ok === false && result.message).toMatch(/confirm/i)
+  })
+})
+
+describe('signInWithGoogle', () => {
+  it('asks Supabase for Google, and reports that the hand-off started', async () => {
+    const result = await signInWithGoogle()
+
+    expect(result).toEqual({ ok: true })
+    expect(stub.oauthCalls).toHaveLength(1)
+    expect(stub.oauthCalls[0]?.provider).toBe('google')
+  })
+
+  /**
+   * The return address is read from wherever the app is actually running. Hard-coding it
+   * would send a phone that started the sign-in back to a laptop's development server --
+   * the student would approve at Google and land nowhere.
+   */
+  it('sends the student back to the address they started from', async () => {
+    await signInWithGoogle()
+
+    const options = stub.oauthCalls[0]?.options as { redirectTo?: string }
+    expect(options.redirectTo).toBe(window.location.origin + '/')
+  })
+
+  it('reports a refusal in words a student can act on', async () => {
+    stub.oauthResult = { data: {}, error: { message: 'Invalid login credentials' } }
+
+    const result = await signInWithGoogle()
+
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.message).toMatch(/email or password/i)
+  })
+
+  // A thrown error must not escape into the screen as an unhandled rejection: the button
+  // would spin forever with nothing said about why.
+  it('reports a failure rather than throwing when the call itself blows up', async () => {
+    stub.oauthThrows = true
+
+    const result = await signInWithGoogle()
+
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.message.length).toBeGreaterThan(0)
+  })
+})
+
+/**
+ * `toSession` is the single place a Session is built, so what it reads is what every route
+ * in gets. These drive it through signIn, which is the shortest way to reach it.
+ */
+describe('the session that is built from a signed-in user', () => {
+  it('carries the name and picture Google supplies', async () => {
+    stub.signInResult = {
+      data: {
+        user: {
+          ...user,
+          user_metadata: { full_name: 'Ada Lovelace', avatar_url: 'https://pic/ada.jpg' },
+        },
+      },
+      error: null,
+    }
+
+    const result = await signIn('a@b.com', 'longenough')
+
+    expect(result.ok === true && result.session).toEqual({
+      userId: 'user-1',
+      email: 'a@b.com',
+      name: 'Ada Lovelace',
+      avatarUrl: 'https://pic/ada.jpg',
+    })
+  })
+
+  // Providers disagree on the key. Supabase normalises most into avatar_url, but the raw
+  // OAuth claim is `picture`, and assuming one is how an avatar silently disappears.
+  it('finds the picture under the raw provider claim too', async () => {
+    stub.signInResult = {
+      data: { user: { ...user, user_metadata: { picture: 'https://pic/raw.jpg' } } },
+      error: null,
+    }
+
+    const result = await signIn('a@b.com', 'longenough')
+
+    expect(result.ok === true && result.session.avatarUrl).toBe('https://pic/raw.jpg')
+  })
+
+  it('leaves an email and password account without a name or picture', async () => {
+    const result = await signIn('a@b.com', 'longenough')
+
+    expect(result.ok === true && result.session.name).toBeUndefined()
+    expect(result.ok === true && result.session.avatarUrl).toBeUndefined()
+    expect(result.ok === true && result.session.email).toBe('a@b.com')
+  })
+
+  // An empty string would render as a blank space where a name should be, which reads as
+  // a bug rather than as an account without a name.
+  it('treats empty metadata as having no name or picture', async () => {
+    stub.signInResult = {
+      data: { user: { ...user, user_metadata: { full_name: '', avatar_url: '' } } },
+      error: null,
+    }
+
+    const result = await signIn('a@b.com', 'longenough')
+
+    expect(result.ok === true && result.session.name).toBeUndefined()
+    expect(result.ok === true && result.session.avatarUrl).toBeUndefined()
+  })
+
+  it('still falls back to an empty address when there is no email', async () => {
+    stub.signInResult = { data: { user: { id: 'user-1' } }, error: null }
+
+    const result = await signIn('a@b.com', 'longenough')
+
+    expect(result.ok === true && result.session.email).toBe('')
   })
 })
 

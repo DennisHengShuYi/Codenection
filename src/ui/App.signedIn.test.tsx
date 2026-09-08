@@ -15,15 +15,33 @@ let currentSession: { userId: string; email: string } | null = {
   email: 'student@um.edu.my',
 }
 
+const signIn = vi.fn()
+/** Captured so a test can fire the SIGNED_IN that Supabase really does emit after a
+ *  successful sign-in -- which is what would carry the preview week across a second time
+ *  if the app and the hook each did the copying. */
+const listeners: Array<(session: unknown) => void> = []
+
 vi.mock('../data', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return {
     ...actual,
     getSession: () => Promise.resolve(currentSession),
-    onSessionChange: () => () => undefined,
+    onSessionChange: (listener: (session: unknown) => void) => {
+      listeners.push(listener)
+      return () => undefined
+    },
     signOut: () => signOut(),
+    signIn: (email: string, password: string) => signIn(email, password),
   }
 })
+
+const carryOverWeek = vi.fn()
+vi.mock('../data/carryOver', () => ({
+  carryOverWeek: (from: unknown, to: unknown) => {
+    carryOverWeek(from, to)
+    return Promise.resolve()
+  },
+}))
 
 describe('App, signed in', () => {
   it('goes straight to the week rather than asking for a sign-in', async () => {
@@ -59,6 +77,35 @@ describe('App, signed in', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /^sign in$/i })).toBeVisible(),
     )
+  })
+})
+
+describe('signing in through the form', () => {
+  /**
+   * The copying used to live in the sign-in screen's callback. It now lives in the session
+   * hook, so that a Google redirect -- which never touches that screen -- gets it too. The
+   * risk that creates is the opposite one: the form path going through both and copying
+   * twice, which would put a preview over real data on the second pass.
+   */
+  it('carries the preview week across exactly once, even though Supabase also announces the sign-in', async () => {
+    currentSession = null
+    carryOverWeek.mockReset()
+    listeners.length = 0
+    signIn.mockResolvedValue({ ok: true, session: { userId: 'u1', email: 'student@um.edu.my' } })
+
+    render(<App />)
+    await waitFor(() => expect(screen.getByLabelText(/email/i)).toBeVisible())
+
+    await userEvent.type(screen.getByLabelText(/email/i), 'student@um.edu.my')
+    await userEvent.type(screen.getByLabelText(/password/i), 'longenough')
+    await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
+
+    await waitFor(() => expect(carryOverWeek).toHaveBeenCalledOnce())
+
+    // What Supabase does a moment later, every time.
+    listeners.forEach((notify) => notify({ userId: 'u1', email: 'student@um.edu.my' }))
+
+    expect(carryOverWeek).toHaveBeenCalledOnce()
   })
 })
 

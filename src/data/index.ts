@@ -1,4 +1,4 @@
-export { getSession, onSessionChange, register, signIn, signOut } from './auth'
+export { getSession, onSessionChange, register, signIn, signInWithGoogle, signOut } from './auth'
 export { MIN_PASSWORD_LENGTH, type AuthOutcome, type Session } from './session'
 export { DEFAULT_SETTINGS, type Repository, type StoredSettings } from './types'
 export { readDataConfig, type DataConfig } from './env'

@@ -1,6 +1,11 @@
 export interface Session {
   readonly userId: string
   readonly email: string
+  /** Both optional, and absent for every email and password account. Optional rather than
+   *  nullable so an account created before this existed is still a valid session, and so
+   *  the display can ask "is there one?" rather than "is it null or empty?". */
+  readonly name?: string
+  readonly avatarUrl?: string
 }
 
 export type AuthOutcome =

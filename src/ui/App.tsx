@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react'
-import { createLocalRepository, createRepository, signOut } from '../data'
-import { carryOverWeek } from '../data/carryOver'
+import { createRepository, signOut } from '../data'
 import { SignInScreen } from './auth/SignInScreen'
 import { useSession } from './auth/useSession'
 import { HomeScreen } from './HomeScreen'
 
 export function App() {
-  const { session, loading, setSession } = useSession()
+  const { session, loading, setSession, signedIn } = useSession()
   const [browsing, setBrowsing] = useState(false)
 
   const repository = useMemo(() => createRepository(session), [session])
@@ -24,23 +23,13 @@ export function App() {
   if (session === null && !browsing) {
     return (
       <SignInScreen
-        onSignedIn={(next) => {
-          // Carry the preview across before the screen changes, so a week built while
-          // looking around is not lost to the order they happened to do things in.
-          //
-          // The target is a fallback repository, so its read can answer from browser
-          // storage -- the very place the preview lives. That is benign in every case:
-          // with Supabase reachable and the account new it reads null and the carry-over
-          // runs, which is the case that matters; with Supabase unreachable, or not
-          // configured at all, it reads the preview back and skips, and the week is
-          // already exactly where it would have been copied to.
-          //
-          // Not awaited before the session changes: a slow copy must not hold somebody
-          // on the sign-in screen after they have successfully signed in.
-          void carryOverWeek(createLocalRepository(), createRepository(next)).finally(() =>
-            setSession(next),
-          )
-        }}
+        // Handed to the session hook rather than carrying the preview across here.
+        // A Google sign-in comes back through a redirect that never touches this screen,
+        // so anything done in this callback would simply not happen for it -- and the hook
+        // is the one place every sign-in passes through, whichever door it used. It also
+        // means the copy happens once: Supabase announces the sign-in a moment later, and
+        // doing it in both places would put a preview over real data on the second pass.
+        onSignedIn={signedIn}
         onSkip={() => setBrowsing(true)}
       />
     )
@@ -49,7 +38,7 @@ export function App() {
   return (
     <HomeScreen
       repository={repository}
-      email={session?.email ?? null}
+      session={session}
       onSignOut={() => {
         void signOut().finally(() => {
           setSession(null)

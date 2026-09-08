@@ -35,6 +35,27 @@ test('the page declares an icon that actually exists', async ({ page, request })
   expect(icon.status()).toBe(200)
 })
 
+/**
+ * The sign-in screen in the state this suite, CI, and the demo all build: no Supabase.
+ *
+ * The approved test plan asked the opposite of this -- that the Google button be visible
+ * at 390px. That is not testable here, and deliberately so: playwright.config.ts blanks
+ * VITE_SUPABASE_URL so the build cannot be pointed at a real project, because the
+ * rebalance test writes and .claude/CLAUDE.md forbids a test touching production data.
+ * Weakening that guard to see a button is the wrong trade, so this asserts the rule the
+ * button actually follows instead -- no door that cannot open -- in the real bundle.
+ */
+test('offers no Google button in a build with no backend to sign in with', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+
+  await expect(page.getByRole('button', { name: /google/i })).toHaveCount(0)
+
+  // The two doors that must still be there, at the width the app is built for.
+  await expect(page.getByRole('button', { name: /^sign in$/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /look around/i })).toBeVisible()
+})
+
 // An unknown path serves the app shell rather than a 404, which is what a single-page
 // app needs: §11 requires a PWA installable to a home screen, and a deep link opened
 // from the installed icon has to reach the router rather than a dead end. The earlier

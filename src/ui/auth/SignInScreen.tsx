@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { register, signIn, type Session } from '../../data'
+import { readDataConfig, register, signIn, signInWithGoogle, type Session } from '../../data'
+import { GoogleMark } from './GoogleMark'
 
 export function SignInScreen({
   onSignedIn,
@@ -13,6 +14,27 @@ export function SignInScreen({
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  // A build with no Supabase runs entirely on browser storage, so there is nothing to sign
+  // in with. Offering the button there would be a door that cannot open.
+  const canUseGoogle = readDataConfig().supabaseUrl !== null
+
+  async function onGoogle() {
+    if (busy) return
+
+    setBusy(true)
+    setError(null)
+
+    const result = await signInWithGoogle()
+
+    // Deliberately no `finally`. On success the browser is on its way to Google's consent
+    // page, and releasing the form would let a student start a second sign-in into a
+    // screen that is already navigating away. Only a failure gives the form back.
+    if (!result.ok) {
+      setError(result.message)
+      setBusy(false)
+    }
+  }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -83,6 +105,28 @@ export function SignInScreen({
           {creating ? 'Create account' : 'Sign in'}
         </button>
       </form>
+
+      {canUseGoogle && (
+        <div className="flex flex-col gap-3">
+          {/* aria-hidden: the divider is a visual separator, and "or" read aloud between
+              two buttons tells a screen reader user nothing they cannot already tell. */}
+          <div aria-hidden="true" className="flex items-center gap-3 text-xs opacity-60">
+            <span className="h-px flex-1 bg-slate-300" />
+            or
+            <span className="h-px flex-1 bg-slate-300" />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void onGoogle()}
+            disabled={busy}
+            className="flex w-full items-center justify-center gap-3 rounded-lg border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-900 disabled:opacity-60"
+          >
+            <GoogleMark />
+            Continue with Google
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-col gap-2 text-sm">
         <button type="button" onClick={() => setCreating(!creating)} className="underline">

@@ -16,14 +16,26 @@ updates:
     # dozen. Dev dependencies are separated from runtime ones because they carry different
     # risk: a bad test-runner bump breaks CI, a bad runtime bump breaks users.
     groups:
+      # vitest and its coverage plugin pin each other exactly -- @vitest/coverage-v8@X
+      # declares a peer dependency on vitest@X. A pull request that moves one without the
+      # other cannot even install: `npm ci` fails on ERESOLVE before a single test runs.
+      # Listed first so it wins over the groups below, and covering majors on purpose --
+      # for this pair, two separate pull requests are not two reviewable changes, they are
+      # two halves of one change that only works whole.
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+        update-types: ["major", "minor", "patch"]
       dev-dependencies:
         dependency-type: "development"
         update-types: ["minor", "patch"]
       production-dependencies:
         dependency-type: "production"
         update-types: ["minor", "patch"]
-    # Major versions stay ungrouped and arrive one per pull request -- they are the ones
-    # that need reading, not batching.
+    # Every other major version stays ungrouped and arrives one per pull request -- those
+    # are the ones that need reading, not batching. The vitest group above is the single
+    # exception, for the peer-dependency reason given there.
     open-pull-requests-limit: 10
 
   # The actions used by the workflows themselves. These are pinned by commit SHA in

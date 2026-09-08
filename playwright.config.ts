@@ -63,6 +63,12 @@ export default defineConfig({
       // suite therefore always runs on browser storage, which is also what CI does.
       VITE_SUPABASE_URL: '',
       VITE_SUPABASE_ANON_KEY: '',
+
+      // `npm run preview` serves the built static app and never serves /api, so the model
+      // path is already unreachable here. Blanked anyway: it costs nothing, it says what
+      // the suite is entitled to, and it survives someone later swapping preview for a
+      // server that does route /api.
+      GROQ_API_KEY: '',
     },
     // Never reuse: if something else is already on this port, that is a problem to be
     // told about, not to silently test against. Playwright fails with a clear message

@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react'
 import type { Repository, Session } from '../data'
 import { DEFAULT_PARAMS, floorReserve, overallReserve, project } from '../engine'
 import { describeRebalance, makeRng, rebalance, toDayInputs } from '../optimizer'
+import { addItems } from '../domain/addItems'
 import { completeItem, deferItem } from '../domain/scheduleEdits'
+import { PlannerScreen } from './planner/PlannerScreen'
 import { AccountBar } from './auth/AccountBar'
 import { PreviewBanner } from './auth/PreviewBanner'
 import { CapacityDial } from './dial/CapacityDial'
@@ -38,6 +40,7 @@ export function HomeScreen({
   const [report, setReport] = useState<string | null>(null)
   const [working, setWorking] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
+  const [planning, setPlanning] = useState(false)
 
   const reducedMotion = useReducedMotion()
   const { play } = useTidyUp(reducedMotion)
@@ -88,6 +91,20 @@ export function HomeScreen({
       <main className="mx-auto max-w-screen-md p-4">
         <p>Working out where you are…</p>
       </main>
+    )
+  }
+
+  // Ahead of the low-energy branch: a student who opened the planner asked for it, and
+  // replacing it with the reduced view would drop what they had already typed.
+  if (planning) {
+    return (
+      <PlannerScreen
+        onAccept={(items) => {
+          setSchedule(addItems(schedule, items))
+          setPlanning(false)
+        }}
+        onCancel={() => setPlanning(false)}
+      />
     )
   }
 
@@ -161,6 +178,17 @@ export function HomeScreen({
       {/* §0: primary actions in the lower half of the viewport on mobile, reachable
           one-handed. Full-width at phone size, shrinking to its content above it. */}
       <section className="flex flex-col gap-3">
+        {/* §3.1: the way in. Without it the rest of the app can only rearrange a week the
+            app invented for the student rather than one they actually have. */}
+        <button
+          type="button"
+          onClick={() => setPlanning(true)}
+          data-testid="open-planner"
+          className="w-full rounded-lg border border-slate-400 px-4 py-3 text-base sm:w-auto"
+        >
+          Tell me what you are carrying
+        </button>
+
         <button
           type="button"
           onClick={() => void onRebalance(schedule)}

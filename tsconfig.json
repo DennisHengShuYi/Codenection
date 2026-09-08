@@ -14,6 +14,10 @@
   },
   "include": [
     "src",
+    // The serverless endpoint. Outside src/ so the browser bundle cannot reach it, but it
+    // is still typechecked -- it is the one file holding a credential, and shipping it
+    // unchecked would be the worst place in the project to save a second.
+    "api",
     "tests",
     "scripts",
     "vite.config.ts",

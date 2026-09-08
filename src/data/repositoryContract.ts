@@ -1,0 +1,78 @@
+import { beforeEach, describe, expect, it } from 'vitest'
+import { HORIZON_DAYS } from '../engine'
+import type { Schedule } from '../optimizer'
+import { DEFAULT_SETTINGS, type Repository } from './types'
+
+const week = (mental: number): Schedule => ({
+  items: [],
+  start: { mental, physical: 60, social: 50, errands: 70 },
+  horizonDays: HORIZON_DAYS,
+  sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+})
+
+/**
+ * The suite every adapter runs.
+ *
+ * Written once and shared because the Supabase adapter cannot be exercised in CI --
+ * there are no credentials there by design, and this project's rules forbid testing
+ * against a real project's data. A shared contract is therefore the only thing stopping
+ * the two implementations quietly meaning different things.
+ */
+export function describeRepositoryContract(name: string, make: () => Repository): void {
+  describe(`${name} (repository contract)`, () => {
+    let repo: Repository
+
+    // A fresh store, emptied before each test. Sharing one across the file would let one
+    // test's leftovers decide another test's result.
+    beforeEach(async () => {
+      repo = make()
+      await repo.clear()
+    })
+
+    // §0's no-cold-start rule reaches this far down: a first-run read has to be an
+    // absence the caller can handle, never a throw.
+    it('returns null for a week that was never saved', async () => {
+      expect(await repo.loadWeek()).toBeNull()
+    })
+
+    it('returns what was saved', async () => {
+      await repo.saveWeek(week(42))
+
+      expect((await repo.loadWeek())?.start.mental).toBe(42)
+    })
+
+    it('replaces the week rather than accumulating', async () => {
+      await repo.saveWeek(week(42))
+      await repo.saveWeek(week(17))
+
+      expect((await repo.loadWeek())?.start.mental).toBe(17)
+    })
+
+    it('falls back to default settings before any are saved', async () => {
+      expect(await repo.loadSettings()).toEqual(DEFAULT_SETTINGS)
+    })
+
+    it('returns saved settings', async () => {
+      await repo.saveSettings({ lowEnergyOverride: 'on' })
+
+      expect((await repo.loadSettings()).lowEnergyOverride).toBe('on')
+    })
+
+    it('forgets everything after clear', async () => {
+      await repo.saveWeek(week(42))
+      await repo.saveSettings({ lowEnergyOverride: 'off' })
+
+      await repo.clear()
+
+      expect(await repo.loadWeek()).toBeNull()
+      expect(await repo.loadSettings()).toEqual(DEFAULT_SETTINGS)
+    })
+
+    it('round-trips a week without losing its shape', async () => {
+      const original = week(55)
+      await repo.saveWeek(original)
+
+      expect(await repo.loadWeek()).toEqual(original)
+    })
+  })
+}

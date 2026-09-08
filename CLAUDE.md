@@ -37,6 +37,13 @@ status section is worse than none, because it gets trusted.>
 Setup: <the exact steps from a fresh clone to a running app, including which env vars must be
 filled in and which ones have failure modes that look like bugs in your own code.>
 
+Every pull request must pass the CI check before it can merge, and **any change to behaviour
+updates the test files in the same change** — new behaviour gets new tests, changed behaviour
+gets its existing tests rewritten, removed behaviour gets its tests deleted, and a bug fix gets
+a failing regression test first. A green build on stale tests proves only that the code still
+does what it used to. Never make a check pass by weakening a test or disabling a step. The full
+rule is in `.claude/CLAUDE.md`.
+
 ## Stack at a glance
 
 <Languages, frameworks, and the shape of the system in two or three sentences: which piece owns

@@ -1,0 +1,67 @@
+# The check every pull request must pass before it can merge.
+#
+# Runs on pull requests (the gate itself) and on pushes to main (so the default branch
+# is always known-good, not just known-good at review time). Feature-branch pushes are
+# deliberately not built: the pull request already covers them, and building both doubles
+# the minutes for the same answer.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: ["main"]
+
+# Least privilege for the automatic GITHUB_TOKEN. This workflow only reads the repository
+# and uploads an artifact (which needs no repo write), so nothing here has any use for the
+# write scopes a repository's default setting may otherwise hand it. Stated explicitly
+# rather than inherited, for the same reason the actions below are pinned by SHA: a
+# workflow's blast radius should be a property of the workflow, not of a repository
+# setting someone can change without touching this file.
+permissions:
+  contents: read
+
+# A second push to the same pull request cancels the first run rather than queueing behind
+# it -- the older run's answer is about code nobody is merging any more. Runs on main are
+# keyed separately and never cancel each other.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # The job name is what branch protection requires by name. Renaming this job breaks the
+  # protection rule silently -- the required check simply never reports, and pull requests
+  # block forever. Rename in both places or neither.
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    steps:
+      # Actions are pinned to a full commit SHA rather than a tag. A tag is mutable: it can
+      # be repointed at new code by whoever owns the action, which would run that new code
+      # here with this repository's token. A SHA cannot be repointed.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` rather than `npm install`: it installs exactly what package-lock.json
+      # pins and fails if the lockfile and package.json disagree, so CI cannot quietly
+      # test a different dependency tree than the one committed.
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests, with coverage
+        run: npm run test:coverage
+
+      # Kept even when the run fails -- a failed run is exactly when the report is worth
+      # reading.
+      - name: Keep the coverage report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7

@@ -12,6 +12,9 @@
          chrome to match, so an installed app does not open with a white bar above it. -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#0f172a" />
+    <!-- Without this the browser probes /favicon.ico, which is not served: a 404 on every
+         page load. The manifest icons cover the installed app; this one covers the tab. -->
+    <link rel="icon" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
   </head>
   <body>

@@ -4,11 +4,12 @@ import { isValid } from './constraints'
 import { rebalance } from './hillClimb'
 import { score } from './objective'
 import { makeRng } from './rng'
-import { makeSchedule, restItem, studyItem } from './testSupport'
+import { makeSchedule, restItem, socialBaseline, studyItem } from './testSupport'
 
 /** Three pieces of assessed work stacked on one day, all with slack to move into. */
 const pileUp = () =>
   makeSchedule([
+    ...socialBaseline(),
     { ...studyItem('essay', 2, 4), deadlineDay: 10 },
     { ...studyItem('lab', 2, 3), deadlineDay: 12 },
     { ...studyItem('reading', 2, 2), deadlineDay: 14 },
@@ -102,18 +103,39 @@ describe('rebalance', () => {
     expect(isValid(after.schedule, DEFAULT_PARAMS)).toBe(true)
   })
 
-  // §2.1 budgets the whole solve at under 100ms on a phone. A CI runner is not a phone,
-  // so this asserts an order of magnitude rather than the target itself: a regression
-  // past a second means the search has stopped being interactive.
-  it('completes a realistic solve in well under a second', () => {
-    const items = Array.from({ length: 25 }, (_, i) => ({
+  /**
+   * §2.1 budgets the whole solve at under 100ms on a phone, client-side, no backend call.
+   *
+   * Sized at a realistic full schedule -- 50 items is roughly what three weeks of
+   * lectures, labs, shifts, assessed work and errands comes to -- because the earlier
+   * 25-item version of this test passed comfortably while the real thing took over three
+   * seconds. A benchmark that only exercises half the load is a benchmark that hides the
+   * problem it exists to catch.
+   *
+   * **§2.1's 100ms budget is not met yet, and this bound does not pretend otherwise.**
+   * A full solve measures around 410ms on a development laptop, down from 3131ms before
+   * the projection, grouping and candidate-reuse work. Closing the remaining gap needs
+   * incremental scoring -- recomputing only the days a move actually touches instead of
+   * re-running the whole horizon per candidate -- which is a design change rather than a
+   * tuning pass. Adding the fifth move kind (inserting social contact) widened the
+   * neighbourhood again, to roughly 900ms. The bound here is a regression guard with
+   * enough headroom not to flake on a loaded CI runner, not a claim that §2.1 is met.
+   */
+  it('completes a full realistic solve fast enough to stay interactive', () => {
+    const fixtures = Array.from({ length: 25 }, (_, i) => ({
+      ...studyItem(`fixed${i}`, i % 21, 2),
+      fixed: true,
+      startHour: 9,
+    }))
+    const movable = Array.from({ length: 25 }, (_, i) => ({
       ...studyItem(`t${i}`, i % 14, 1.5),
+      startHour: 14,
       deadlineDay: 14 + (i % 7),
     }))
 
     const started = performance.now()
-    rebalance(makeSchedule(items), DEFAULT_PARAMS, makeRng(5))
+    rebalance(makeSchedule([...fixtures, ...movable]), DEFAULT_PARAMS, makeRng(5))
 
-    expect(performance.now() - started).toBeLessThan(1000)
+    expect(performance.now() - started).toBeLessThan(1600)
   })
 })

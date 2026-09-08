@@ -9,6 +9,8 @@ const DAY_SHIFTS = [-2, -1, 1, 2]
 
 const REST_HOURS = 2
 const REST_START_HOUR = 20
+const SOCIAL_HOURS = 2
+const SOCIAL_START_HOUR = 18
 
 const replace = (schedule: Schedule, id: string, next: ScheduledItem): Schedule => ({
   ...schedule,
@@ -115,6 +117,55 @@ function restMoves(schedule: Schedule): Move[] {
 }
 
 /**
+ * §5.2: "Social low prescribes a person."
+ *
+ * The counterpart to rest insertion, and the model makes it necessary rather than nice:
+ * social reserve drains from isolation (§1.2) and is refilled only by contact, so without
+ * this move the solver can watch a student's social reserve fall to zero across the whole
+ * horizon with nothing in its vocabulary to do about it. Rest insertion cannot substitute
+ * -- that is precisely the "prescribe an early night for loneliness" answer §5.2 rules out.
+ *
+ * Left movable rather than protected: seeing people is an offer, not an obligation, and
+ * §1.3's gamification rule is explicit that the app must not manufacture obligations.
+ */
+function socialMoves(schedule: Schedule): Move[] {
+  const moves: Move[] = []
+
+  for (let day = 0; day < schedule.horizonDays; day += 1) {
+    if (schedule.items.some((item) => item.dayIndex === day && item.type === 'social')) continue
+
+    const id = `social-${day}`
+
+    moves.push({
+      kind: 'insertSocial',
+      itemId: id,
+      description: `Made time to see someone on day ${day}`,
+      apply: (s) => ({
+        ...s,
+        items: [
+          ...s.items,
+          {
+            id,
+            title: 'Seeing someone',
+            type: 'social',
+            kind: 'socialRestorative',
+            hours: SOCIAL_HOURS,
+            intensity: 1,
+            dayIndex: day,
+            startHour: SOCIAL_START_HOUR,
+            fixed: false,
+            deadlineDay: null,
+            protectedRest: false,
+          },
+        ],
+      }),
+    })
+  }
+
+  return moves
+}
+
+/**
  * §6.6: sequencing is a lever.
  *
  * Even when the days are fixed, the order within a day is usually free -- and because
@@ -166,13 +217,33 @@ function reorderMoves(schedule: Schedule): Move[] {
  * precisely the person the app exists to help, and it is what this filter prevents:
  * the search can now walk a broken week back toward a legal one, one clash at a time.
  */
-export function neighbours(schedule: Schedule, params: EngineParams): Move[] {
+export interface Candidate {
+  readonly move: Move
+  /** The schedule the move produces. Carried rather than recomputed: generating it is
+   *  how the move was validated in the first place, and the search would otherwise
+   *  rebuild every candidate a second time to score it -- a full copy of the item list,
+   *  for every candidate, on every iteration. */
+  readonly result: Schedule
+}
+
+export function candidates(schedule: Schedule, params: EngineParams): Candidate[] {
   const baseline = violations(schedule, params).length
 
-  return [
+  const out: Candidate[] = []
+  for (const move of [
     ...shiftMoves(schedule),
     ...batchMoves(schedule),
     ...restMoves(schedule),
+    ...socialMoves(schedule),
     ...reorderMoves(schedule),
-  ].filter((move) => violations(move.apply(schedule), params).length <= baseline)
+  ]) {
+    const result = move.apply(schedule)
+    if (violations(result, params).length <= baseline) out.push({ move, result })
+  }
+
+  return out
+}
+
+export function neighbours(schedule: Schedule, params: EngineParams): Move[] {
+  return candidates(schedule, params).map((candidate) => candidate.move)
 }

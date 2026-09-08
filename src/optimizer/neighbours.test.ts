@@ -152,10 +152,13 @@ describe('neighbours', () => {
     expect(JSON.stringify(schedule)).toBe(before)
   })
 
-  it('offers nothing but rest insertion on an empty schedule', () => {
+  // Nothing to move or reorder, so the only things on offer are the two the solver can
+  // add from nothing: rest, and time with other people.
+  it('offers only the things it can add on an empty schedule', () => {
     const moves = neighbours(makeSchedule([]), DEFAULT_PARAMS)
 
-    expect(moves.every((m) => m.kind === 'insertRest')).toBe(true)
+    expect(moves.length).toBeGreaterThan(0)
+    expect(moves.every((m) => m.kind === 'insertRest' || m.kind === 'insertSocial')).toBe(true)
   })
 
   it('describes every move in plain language', () => {

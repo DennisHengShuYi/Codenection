@@ -1,4 +1,4 @@
-import { project, type EngineParams } from '../engine'
+import { summarise, type EngineParams } from '../engine'
 import { toDayInputs } from './objective'
 import type { MoveKind, RebalanceResult, Schedule } from './types'
 
@@ -37,12 +37,12 @@ function describeGain(result: RebalanceResult, params: EngineParams): string {
     return `Your worst day goes from ${before} to ${after}.`
   }
 
-  const daysBefore = project(
+  const daysBefore = summarise(
     result.before.start,
     toDayInputs(result.before),
     params,
   ).deficitDays
-  const daysAfter = project(
+  const daysAfter = summarise(
     result.schedule.start,
     toDayInputs(result.schedule),
     params,
@@ -62,7 +62,7 @@ export function describeRebalance(result: RebalanceResult, params: EngineParams)
     // is the wrong register for someone whose fortnight is underwater. Same finding,
     // opposite meaning: nothing left to move is good news for a healthy week and bad
     // news for an overloaded one, so the two get different sentences.
-    const deficitDays = project(
+    const deficitDays = summarise(
       result.schedule.start,
       toDayInputs(result.schedule),
       params,
@@ -82,11 +82,13 @@ export function describeRebalance(result: RebalanceResult, params: EngineParams)
   const moved = counts.get('shiftDay') ?? 0
   const batched = counts.get('batchErrands') ?? 0
   const rested = counts.get('insertRest') ?? 0
+  const social = counts.get('insertSocial') ?? 0
   const reordered = counts.get('reorderWithinDay') ?? 0
 
   if (moved > 0) parts.push(`moved ${plural(moved, 'thing')}`)
   if (batched > 0) parts.push(`batched ${plural(batched, 'errand')}`)
   if (rested > 0) parts.push(`added ${plural(rested, 'rest block')}`)
+  if (social > 0) parts.push(`made time to see someone on ${plural(social, 'day')}`)
   if (reordered > 0) parts.push(`reordered ${plural(reordered, 'block')} within its day`)
 
   return `I ${joinParts(parts)}. ${describeGain(result, params)}`

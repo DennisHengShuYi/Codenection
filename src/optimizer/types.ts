@@ -27,7 +27,12 @@ export interface Schedule {
   readonly sleepByDay: readonly number[]
 }
 
-export type MoveKind = 'shiftDay' | 'batchErrands' | 'insertRest' | 'reorderWithinDay'
+export type MoveKind =
+  | 'shiftDay'
+  | 'batchErrands'
+  | 'insertRest'
+  | 'insertSocial'
+  | 'reorderWithinDay'
 
 export interface Move {
   readonly kind: MoveKind

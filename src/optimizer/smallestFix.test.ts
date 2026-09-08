@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS } from '../engine'
 import { smallestFixes } from './smallestFix'
-import { makeSchedule, restItem, studyItem } from './testSupport'
+import { makeSchedule, restItem, socialBaseline, studyItem } from './testSupport'
 
 const pileUp = () =>
   makeSchedule([
+    ...socialBaseline(),
     { ...studyItem('essay', 2, 4), deadlineDay: 10 },
     { ...studyItem('lab', 2, 3), deadlineDay: 12 },
     { ...studyItem('reading', 2, 2), deadlineDay: 14 },
@@ -64,20 +65,43 @@ describe('smallestFixes', () => {
     }
   })
 
-  // An empty week is not a healthy one. Social reserve drains from isolation (§1.2), so
-  // there is still something worth doing -- and the app saying "nothing to fix" to a
-  // student with an empty, lonely fortnight would be exactly wrong.
-  it('suggests rest even on an empty week, because isolation still drains', () => {
+  /**
+   * An empty week is not a healthy one, and what it needs is specifically *not* rest.
+   *
+   * Social reserve drains from isolation (§1.2) and only contact refills it (§5.2), so on
+   * an empty fortnight the one thing that moves the floor is seeing someone. An earlier
+   * version of the model let rest cover this, which is exactly the "prescribe an early
+   * night for loneliness" answer §5.2 rules out.
+   */
+  it('prescribes seeing someone on an empty week, not rest', () => {
     const fixes = smallestFixes(makeSchedule([]), DEFAULT_PARAMS)
 
     expect(fixes.length).toBeGreaterThan(0)
-    expect(fixes.every((fix) => fix.move.kind === 'insertRest')).toBe(true)
+    expect(fixes.every((fix) => fix.move.kind === 'insertSocial')).toBe(true)
   })
 
   it('returns nothing when every day is already protected and nothing can move', () => {
-    const saturated = makeSchedule(
-      Array.from({ length: 21 }, (_, day) => restItem(`rest-${day}`, day, 20)),
-    )
+    // Rest *and* company on every day: with both of the solver's add-from-nothing moves
+    // already taken and everything else protected, there is genuinely nothing left.
+    const saturated = makeSchedule([
+      ...Array.from({ length: 21 }, (_, day) => restItem(`rest-${day}`, day, 20)),
+      ...socialBaseline(),
+      ...Array.from({ length: 21 }, (_, day) => day)
+        .filter((day) => day % 7 !== 2 && day % 7 !== 5)
+        .map((day) => ({
+          id: `extra-social-${day}`,
+          title: 'Seeing people',
+          type: 'social' as const,
+          kind: 'socialRestorative' as const,
+          hours: 2,
+          intensity: 1,
+          dayIndex: day,
+          startHour: 18,
+          fixed: true,
+          deadlineDay: null,
+          protectedRest: true,
+        })),
+    ])
 
     expect(smallestFixes(saturated, DEFAULT_PARAMS)).toEqual([])
   })

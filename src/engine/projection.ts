@@ -95,14 +95,10 @@ function runBand(
  * validated. What the app does validate is the 48-hour claim (§8.1), which resolves
  * whether or not the student intervenes.
  */
-export function project(
-  start: Reserves,
-  days: readonly DayInput[],
-  params: EngineParams,
-): Projection {
-  const [optimisticBias, centralBias, pessimisticBias] = BAND_BIASES
+/** Everything about a projection except the three bands themselves. */
+export type ProjectionSummary = Omit<Projection, 'central' | 'optimistic' | 'pessimistic'>
 
-  const central = runBand(start, days, params, centralBias)
+function summariseBand(start: Reserves, central: readonly Reserves[]): ProjectionSummary {
   const overalls = central.map(overallReserve)
   const floors = central.map(floorReserve)
 
@@ -111,19 +107,45 @@ export function project(
   const firstDeficitIndex = floors.findIndex((value) => value < DEFICIT_THRESHOLD)
 
   return {
-    central,
-    optimistic: runBand(start, days, params, optimisticBias),
-    pessimistic: runBand(start, days, params, pessimisticBias),
     // With no schedule there is nothing to project, so the worst the horizon holds is
     // simply where the student is now. §0 requires every screen to render something
     // useful with zero user data, and that starts here.
     worstOverall: overalls.length === 0 ? overallReserve(start) : Math.min(...overalls),
     worstFloor: floors.length === 0 ? floorReserve(start) : Math.min(...floors),
     deficitDays: floors.filter((value) => value < DEFICIT_THRESHOLD).length,
-    deficitArea: floors.reduce(
-      (sum, value) => sum + Math.max(0, DEFICIT_THRESHOLD - value),
-      0,
-    ),
+    deficitArea: floors.reduce((sum, value) => sum + Math.max(0, DEFICIT_THRESHOLD - value), 0),
     firstDeficitDay: firstDeficitIndex === -1 ? null : firstDeficitIndex,
+  }
+}
+
+/**
+ * The central band's numbers only.
+ *
+ * This is what the optimizer scores against, and it is the reason the split exists: the
+ * search evaluates a schedule thousands of times per solve, and computing the optimistic
+ * and pessimistic bands each time is two thirds of the work thrown away. The bands are
+ * for showing a person; the summary is for deciding.
+ */
+export function summarise(
+  start: Reserves,
+  days: readonly DayInput[],
+  params: EngineParams,
+): ProjectionSummary {
+  return summariseBand(start, runBand(start, days, params, BAND_BIASES[1]))
+}
+
+export function project(
+  start: Reserves,
+  days: readonly DayInput[],
+  params: EngineParams,
+): Projection {
+  const [optimisticBias, centralBias, pessimisticBias] = BAND_BIASES
+  const central = runBand(start, days, params, centralBias)
+
+  return {
+    ...summariseBand(start, central),
+    central,
+    optimistic: runBand(start, days, params, optimisticBias),
+    pessimistic: runBand(start, days, params, pessimisticBias),
   }
 }

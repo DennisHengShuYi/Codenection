@@ -66,6 +66,10 @@ export interface EngineParams {
   readonly kSleep: Reserves
   /** Reserve points returned per hour of scheduled rest. */
   readonly kRest: Reserves
+  /** Reserve points returned per hour of restorative social contact. Separate from
+   *  kSleep and kRest because §5.2 prescribes a person, not an early night: sleep and
+   *  rest must not be able to refill this reserve, and contact must. */
+  readonly kSocialContact: number
   /** Learned per type from planned-vs-actual (§2.4's Reality Check). 1 means unbiased;
    *  1.7 means this student underestimates that type by 70%. */
   readonly estimateBias: Reserves

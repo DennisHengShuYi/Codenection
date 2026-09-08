@@ -1,4 +1,4 @@
-import { project, type EngineParams } from '../engine'
+import { summarise, type EngineParams } from '../engine'
 import { neighbours } from './neighbours'
 import { toDayInputs } from './objective'
 import type { Move, Schedule } from './types'
@@ -24,7 +24,7 @@ interface Measured {
 }
 
 const measure = (schedule: Schedule, params: EngineParams): Measured => {
-  const projection = project(schedule.start, toDayInputs(schedule), params)
+  const projection = summarise(schedule.start, toDayInputs(schedule), params)
   return {
     worstFloor: projection.worstFloor,
     deficitDays: projection.deficitDays,

@@ -1,5 +1,5 @@
-import { project, type EngineParams } from '../engine'
-import { neighbours } from './neighbours'
+import { summarise, type EngineParams } from '../engine'
+import { candidates, type Candidate } from './neighbours'
 import { score, toDayInputs } from './objective'
 import type { Rng } from './rng'
 import type { Move, RebalanceResult, Schedule } from './types'
@@ -13,7 +13,7 @@ const RESTARTS = 3
 const EPSILON = 1e-9
 
 const worstOf = (schedule: Schedule, params: EngineParams): number =>
-  project(schedule.start, toDayInputs(schedule), params).worstFloor
+  summarise(schedule.start, toDayInputs(schedule), params).worstFloor
 
 /**
  * One climb: take the best neighbour while one improves, up to the iteration cap.
@@ -33,28 +33,28 @@ function climb(
   const taken: Move[] = []
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration += 1) {
-    const options = neighbours(current, params)
+    const options = candidates(current, params)
     if (options.length === 0) break
 
     const offset = Math.floor(rng() * options.length)
-    let best: Move | null = null
+    let best: Candidate | null = null
     let bestScore = currentScore
 
     for (let i = 0; i < options.length; i += 1) {
-      const move = options[(i + offset) % options.length]!
-      const candidateScore = score(move.apply(current), params)
+      const candidate = options[(i + offset) % options.length]!
+      const candidateScore = score(candidate.result, params)
 
       if (candidateScore > bestScore + EPSILON) {
-        best = move
+        best = candidate
         bestScore = candidateScore
       }
     }
 
     if (!best) break
 
-    current = best.apply(current)
+    current = best.result
     currentScore = bestScore
-    taken.push(best)
+    taken.push(best.move)
   }
 
   return { schedule: current, moves: taken }

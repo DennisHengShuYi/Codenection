@@ -35,7 +35,7 @@ export function recoveryForDay(day: DayInput, params: EngineParams): Reserves {
     out[type] = sleepCredit * params.kSleep[type] + restHours * params.kRest[type]
   }
 
-  out.social += socialHours * params.kRest.social
+  out.social += socialHours * params.kSocialContact
 
   return out
 }

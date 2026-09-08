@@ -73,6 +73,34 @@ describe('recoveryForDay', () => {
     expect(recoveryForDay(day({ activities: [friend] }), DEFAULT_PARAMS).social)
       .toBeGreaterThan(recoveryForDay(day(), DEFAULT_PARAMS).social)
   })
+
+  /**
+   * §5.2: "Social low prescribes a person." §1.2: low social load is a warning, not a
+   * good score.
+   *
+   * Sleep must therefore not refill the social reserve. If it does, an isolated student
+   * recovers by sleeping, the app's prescription for loneliness becomes an early night,
+   * and the isolation signal the engine was built to surface quietly disappears.
+   */
+  it('does not let sleep refill the social reserve', () => {
+    const wellSlept = recoveryForDay(day({ sleepHours: 9 }), DEFAULT_PARAMS)
+
+    expect(wellSlept.mental).toBeGreaterThan(0)
+    expect(wellSlept.social).toBe(0)
+  })
+
+  it('recovers the social reserve only from seeing people', () => {
+    const friend: Activity = {
+      kind: 'socialRestorative',
+      type: 'social',
+      hours: 2,
+      intensity: 1,
+      startHour: 18,
+    }
+
+    expect(recoveryForDay(day({ activities: [friend] }), DEFAULT_PARAMS).social)
+      .toBeGreaterThan(0)
+  })
 })
 
 describe('applyCoupling', () => {

@@ -34,25 +34,39 @@ export function violations(schedule: Schedule, params: EngineParams): string[] {
     }
   }
 
-  for (let i = 0; i < schedule.items.length; i += 1) {
-    for (let j = i + 1; j < schedule.items.length; j += 1) {
-      const a = schedule.items[i]!
-      const b = schedule.items[j]!
-      if (!overlaps(a, b)) continue
+  // Bucketed by day before the pairwise comparison. Two blocks can only overlap if they
+  // share a day, so comparing every item against every other is quadratic in the whole
+  // schedule to answer a question that is quadratic in a single day. On a real
+  // three-week schedule that is the difference between ~1,300 comparisons and ~60 -- and
+  // this function runs for every candidate the search considers, thousands of times per
+  // solve, so it is squarely on the path §2.1 budgets at under 100ms.
+  const byDay = new Map<number, ScheduledItem[]>()
+  for (const item of schedule.items) {
+    const bucket = byDay.get(item.dayIndex)
+    if (bucket) bucket.push(item)
+    else byDay.set(item.dayIndex, [item])
+  }
 
-      if (a.protectedRest || b.protectedRest) {
-        found.push(`${a.title} and ${b.title} overlap protected rest`)
-      } else if (a.fixed || b.fixed) {
-        found.push(`${a.title} and ${b.title} overlap a fixed block`)
+  for (const items of byDay.values()) {
+    for (let i = 0; i < items.length; i += 1) {
+      for (let j = i + 1; j < items.length; j += 1) {
+        const a = items[i]!
+        const b = items[j]!
+        if (!overlaps(a, b)) continue
+
+        if (a.protectedRest || b.protectedRest) {
+          found.push(`${a.title} and ${b.title} overlap protected rest`)
+        } else if (a.fixed || b.fixed) {
+          found.push(`${a.title} and ${b.title} overlap a fixed block`)
+        }
       }
     }
   }
 
   // §2.1: daily hours capped so the solver cannot solve a week with a 14-hour Sunday.
-  for (let day = 0; day < schedule.horizonDays; day += 1) {
-    const hours = schedule.items
-      .filter((item) => item.dayIndex === day && isWork(item))
-      .reduce((sum, item) => sum + item.hours, 0)
+  for (const [day, items] of byDay) {
+    let hours = 0
+    for (const item of items) if (isWork(item)) hours += item.hours
 
     if (hours > params.dailyHoursCap) {
       found.push(`day ${day} exceeds the daily hours cap`)

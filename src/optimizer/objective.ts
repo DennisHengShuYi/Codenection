@@ -1,5 +1,5 @@
-import { project, type DayInput, type EngineParams } from '../engine'
-import type { Schedule } from './types'
+import { summarise, type DayInput, type EngineParams } from '../engine'
+import type { Schedule, ScheduledItem } from './types'
 
 /** §2.1's two penalty weights. They live here rather than in the engine's params: they
  *  are properties of how we score a schedule, not of how a student's reserves behave,
@@ -30,15 +30,59 @@ const isWork = (kind: string): boolean => kind !== 'rest' && kind !== 'sleep'
  * reserves; this function is the only place the two vocabularies meet, which is what
  * keeps either one replaceable without touching the other.
  */
-export function toDayInputs(schedule: Schedule): DayInput[] {
-  return Array.from({ length: schedule.horizonDays }, (_, dayIndex) => {
-    const onThisDay = schedule.items.filter((item) => item.dayIndex === dayIndex)
+/** One pass over the items instead of one pass per day. The search calls this for every
+ *  candidate it scores, so filtering the whole schedule 21 times over is 21x the work to
+ *  answer a question a single grouping pass answers. */
+function groupByDay(schedule: Schedule): ScheduledItem[][] {
+  const byDay: ScheduledItem[][] = Array.from({ length: schedule.horizonDays }, () => [])
 
-    // Only deadlines still ahead of this day create anticipatory stress. A deadline
-    // already passed is either met or moot, and either way it has stopped weighing.
-    const pending = schedule.items
-      .map((item) => item.deadlineDay)
-      .filter((day): day is number => day !== null && day >= dayIndex)
+  for (const item of schedule.items) {
+    byDay[item.dayIndex]?.push(item)
+  }
+
+  return byDay
+}
+
+/**
+ * The nearest deadline at or after each day.
+ *
+ * One backward sweep: walking from the end, the nearest deadline for a day is either one
+ * falling on that day or whatever the following day already found. Only deadlines still
+ * ahead create anticipatory stress -- one already passed is either met or moot, and
+ * either way it has stopped weighing.
+ */
+function nearestDeadlineByDay(schedule: Schedule): (number | null)[] {
+  const deadlines = new Set<number>()
+  for (const item of schedule.items) {
+    if (item.deadlineDay !== null) deadlines.add(item.deadlineDay)
+  }
+
+  const out: (number | null)[] = Array.from({ length: schedule.horizonDays }, () => null)
+  let nearest: number | null = null
+
+  for (let day = schedule.horizonDays - 1; day >= 0; day -= 1) {
+    if (deadlines.has(day)) nearest = day
+    out[day] = nearest
+  }
+
+  return out
+}
+
+export function toDayInputs(schedule: Schedule): DayInput[] {
+  return dayInputsFrom(schedule, groupByDay(schedule))
+}
+
+function dayInputsFrom(
+  schedule: Schedule,
+  byDay: readonly ScheduledItem[][],
+): DayInput[] {
+  const nearestDeadline = nearestDeadlineByDay(schedule)
+
+  return byDay.map((onThisDay, dayIndex) => {
+    let workingBlocks = 0
+    for (const item of onThisDay) if (isWork(item.kind)) workingBlocks += 1
+
+    const deadline = nearestDeadline[dayIndex] ?? null
 
     return {
       dayIndex,
@@ -52,21 +96,20 @@ export function toDayInputs(schedule: Schedule): DayInput[] {
       sleepHours: schedule.sleepByDay[dayIndex] ?? 7,
       // Each distinct working block is treated as a venue; back-to-back commitments in
       // one place are the exception rather than the rule for a student crossing campus.
-      venueChanges: Math.max(0, onThisDay.filter((item) => isWork(item.kind)).length - 1),
-      daysToNearestDeadline: pending.length === 0 ? null : Math.min(...pending) - dayIndex,
+      venueChanges: Math.max(0, workingBlocks - 1),
+      daysToNearestDeadline: deadline === null ? null : deadline - dayIndex,
       checkedIn: true,
     }
   })
 }
 
-function totalFragmentation(schedule: Schedule): number {
+function fragmentationOf(byDay: readonly ScheduledItem[][]): number {
   let total = 0
 
-  for (let day = 0; day < schedule.horizonDays; day += 1) {
-    const working = schedule.items.filter(
-      (item) => item.dayIndex === day && isWork(item.kind),
-    )
-    total += Math.max(0, working.length - 1)
+  for (const onThisDay of byDay) {
+    let working = 0
+    for (const item of onThisDay) if (isWork(item.kind)) working += 1
+    total += Math.max(0, working - 1)
   }
 
   return total
@@ -89,12 +132,15 @@ function totalFragmentation(schedule: Schedule): number {
  * failure §6.3 exists to prevent.
  */
 export function score(schedule: Schedule, params: EngineParams): number {
-  const projection = project(schedule.start, toDayInputs(schedule), params)
+  // Grouped once and shared. The search calls this for every candidate on every
+  // iteration, so a second pass over the same items to count fragmentation is pure waste.
+  const byDay = groupByDay(schedule)
+  const projection = summarise(schedule.start, dayInputsFrom(schedule, byDay), params)
 
   return (
     projection.worstFloor -
     DEFICIT_DAY_WEIGHT * projection.deficitDays -
-    FRAGMENTATION_WEIGHT * totalFragmentation(schedule) -
+    FRAGMENTATION_WEIGHT * fragmentationOf(byDay) -
     DEFICIT_AREA_WEIGHT * projection.deficitArea
   )
 }

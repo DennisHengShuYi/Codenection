@@ -44,15 +44,25 @@ export const DEFAULT_PARAMS: EngineParams = {
   // ordering is what stops a day of laundry reading like a day of exam revision.
   typeIntensity: { mental: 1.0, physical: 0.8, social: 0.6, errands: 0.5 },
 
-  kSleep: { mental: 6.0, physical: 7.0, social: 2.0, errands: 2.0 },
-  kRest: { mental: 4.0, physical: 3.0, social: 3.0, errands: 2.0 },
+  // Sleep returns nothing to the social reserve, and that zero is load-bearing rather
+  // than a rounding-down. §5.2 prescribes *a person* when social reserve is low, and
+  // §1.2 requires low social load to read as a warning. A non-zero coefficient here lets
+  // an isolated student recover by sleeping -- measured at 20 to 65 over a fortnight of
+  // seeing nobody -- which makes the app's answer to loneliness an early night and
+  // quietly erases the isolation signal the engine exists to surface.
+  kSleep: { mental: 6.0, physical: 7.0, social: 0, errands: 2.0 },
+  kRest: { mental: 4.0, physical: 3.0, social: 0, errands: 2.0 },
+  kSocialContact: 4.0,
 
   // Starts unbiased and is learned per type from planned-vs-actual (§2.4). The user is
   // never asked for this and need not know the parameter exists (§7.5).
   estimateBias: uniform(1),
 
   socialFloorHoursPerDay: 0.5,
-  isolationDrainPerDay: 4,
+  // The rate is a population prior, to be calibrated per user like every other (§7).
+  // What is structural, and not a tuning knob, is the direction: social reserve falls
+  // with isolation and is refilled only by contact.
+  isolationDrainPerDay: 1.5,
 
   contextSwitchPenalty: 1.5,
   deadlineProximityWeight: 6,

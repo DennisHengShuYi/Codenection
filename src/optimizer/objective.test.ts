@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS, project } from '../engine'
 import { score, toDayInputs } from './objective'
-import { makeSchedule, restItem, studyItem } from './testSupport'
+import { makeSchedule, restItem, socialBaseline, studyItem } from './testSupport'
 
 describe('toDayInputs', () => {
   it('produces one day per horizon day, even where nothing is scheduled', () => {
@@ -33,8 +33,16 @@ describe('score', () => {
   // §2.1: maximise the minimum reserve, not the total and not the evenness. A fortnight
   // that averages fine but bottoms out at 8 is still a crash.
   it('prefers the schedule with the higher worst day, not the higher average', () => {
-    const even = makeSchedule(Array.from({ length: 7 }, (_, d) => studyItem(`e${d}`, d, 2)))
-    const spiky = makeSchedule([studyItem('s0', 0, 9)])
+    // Same total hours, spread differently. Heavy enough that workload rather than
+    // social contact is what sets the floor -- a light fixture measures loneliness.
+    const even = makeSchedule([
+      ...socialBaseline(),
+      ...Array.from({ length: 14 }, (_, d) => studyItem(`e${d}`, d, 5)),
+    ])
+    const spiky = makeSchedule([
+      ...socialBaseline(),
+      ...Array.from({ length: 7 }, (_, d) => studyItem(`s${d}`, d, 10)),
+    ])
 
     expect(score(even, DEFAULT_PARAMS)).toBeGreaterThan(score(spiky, DEFAULT_PARAMS))
   })
@@ -54,16 +62,24 @@ describe('score', () => {
   })
 
   it('penalises every day spent below the deficit threshold', () => {
-    const light = makeSchedule([studyItem('l', 0, 1)])
-    const crushing = makeSchedule(Array.from({ length: 14 }, (_, d) => studyItem(`c${d}`, d, 9)))
+    const light = makeSchedule([...socialBaseline(), studyItem('l', 0, 1)])
+    const crushing = makeSchedule([
+      ...socialBaseline(),
+      ...Array.from({ length: 14 }, (_, d) => studyItem(`c${d}`, d, 9)),
+    ])
 
     expect(score(crushing, DEFAULT_PARAMS)).toBeLessThan(score(light, DEFAULT_PARAMS))
   })
 
   it('rewards adding a rest block to a heavy week', () => {
-    const heavy = Array.from({ length: 7 }, (_, d) => studyItem(`h${d}`, d, 5))
-    const without = makeSchedule(heavy)
-    const withRest = makeSchedule([...heavy, restItem('rest', 3, 20)])
+    // Sleeping badly on purpose. At seven hours a night the sleep credit outweighs even
+    // an eight-hour study day, so the reserve rises and a rest block has nothing to fix.
+    const heavy = [
+      ...socialBaseline(),
+      ...Array.from({ length: 14 }, (_, d) => studyItem(`h${d}`, d, 8)),
+    ]
+    const without = makeSchedule(heavy, 5)
+    const withRest = makeSchedule([...heavy, restItem('rest', 3, 20)], 5)
 
     expect(score(withRest, DEFAULT_PARAMS)).toBeGreaterThan(score(without, DEFAULT_PARAMS))
   })
@@ -111,10 +127,11 @@ describe('score', () => {
   // the floor -- otherwise the solver could trade a genuinely higher worst day for a
   // flatter but lower week, which is the outcome §2.1's min() exists to forbid.
   it('never lets the tiebreaker outrank a real gain in the floor', () => {
-    const higherFloor = makeSchedule([studyItem('a', 0, 2)])
-    const lowerFloorFlatter = makeSchedule(
-      Array.from({ length: 20 }, (_, d) => studyItem(`f${d}`, d, 6)),
-    )
+    const higherFloor = makeSchedule([...socialBaseline(), studyItem('a', 0, 2)])
+    const lowerFloorFlatter = makeSchedule([
+      ...socialBaseline(),
+      ...Array.from({ length: 20 }, (_, d) => studyItem(`f${d}`, d, 6)),
+    ])
 
     expect(score(higherFloor, DEFAULT_PARAMS)).toBeGreaterThan(
       score(lowerFloorFlatter, DEFAULT_PARAMS),

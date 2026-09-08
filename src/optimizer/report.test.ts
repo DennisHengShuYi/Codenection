@@ -4,10 +4,11 @@ import { rebalance } from './hillClimb'
 import { describeRebalance, undo } from './report'
 import { makeRng } from './rng'
 import type { RebalanceResult } from './types'
-import { makeSchedule, studyItem } from './testSupport'
+import { makeSchedule, socialBaseline, studyItem } from './testSupport'
 
 const pileUp = () =>
   makeSchedule([
+    ...socialBaseline(),
     { ...studyItem('essay', 2, 4), deadlineDay: 10 },
     { ...studyItem('lab', 2, 3), deadlineDay: 12 },
   ])

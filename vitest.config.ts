@@ -34,24 +34,23 @@ export default defineConfig({
       exclude: ['src/**/*.{test,spec}.{ts,tsx}', 'src/main.tsx', 'src/test-setup.ts'],
 
       /**
-       * The initial floor, set just under what the suite reaches today (94.9 / 86.4 /
-       * 93.6 / 95.8) so ordinary changes are not blocked by rounding while a real drop
-       * fails the build.
+       * Set just under what the suite reaches today (98.1 / 92.2 / 98.0 / 98.8) so
+       * ordinary changes are not blocked by rounding while a real drop fails the build.
        *
        * .claude/CLAUDE.md: these only ever go up. Lowering one to accommodate untested
        * new code defeats the point -- if a change cannot meet the line, the answer is a
        * test, not a smaller number.
        *
-       * What keeps this from being higher is supabaseRepository.ts at ~56%, counted here
-       * rather than excluded. It cannot be exercised without credentials, and hiding it
-       * would make the number flatter and less true. Point the repository contract suite
-       * at a disposable project and this floor should rise.
+       * Raised from 94/86/93/95 once the Supabase adapter gained tests against a stubbed
+       * client. That closed the gap which had been holding the floor down; what those
+       * tests still do not prove is that the adapter works against a real Supabase, which
+       * needs the contract suite pointed at a disposable project.
        */
       thresholds: {
-        statements: 94,
-        branches: 86,
-        functions: 93,
-        lines: 95,
+        statements: 97,
+        branches: 91,
+        functions: 97,
+        lines: 98,
       },
     },
   },

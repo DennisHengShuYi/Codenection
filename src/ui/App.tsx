@@ -38,7 +38,7 @@ export function App() {
   return (
     <HomeScreen
       repository={repository}
-      email={session?.email ?? null}
+      session={session}
       onSignOut={() => {
         void signOut().finally(() => {
           setSession(null)

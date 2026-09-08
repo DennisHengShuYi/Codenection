@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { Repository } from '../data'
+import type { Repository, Session } from '../data'
 import { DEFAULT_PARAMS, floorReserve, overallReserve, project } from '../engine'
 import { describeRebalance, makeRng, rebalance, toDayInputs } from '../optimizer'
 import { completeItem, deferItem } from '../domain/scheduleEdits'
@@ -25,12 +25,12 @@ const SEED = 20260908
  *  rather than having the defaults quietly reintroduced. */
 export function HomeScreen({
   repository,
-  email = null,
+  session = null,
   onSignOut = () => undefined,
   onSignIn = () => undefined,
 }: {
   repository: Repository
-  email?: string | null
+  session?: Session | null
   onSignOut?: () => void
   onSignIn?: () => void
 }) {
@@ -112,10 +112,10 @@ export function HomeScreen({
         <p className="text-sm opacity-70">Everything you are carrying, in one screen.</p>
       </header>
 
-      {email === null ? (
+      {session === null ? (
         <PreviewBanner onSignIn={onSignIn} />
       ) : (
-        <AccountBar email={email} onSignOut={onSignOut} />
+        <AccountBar session={session} onSignOut={onSignOut} />
       )}
 
       {/* §1.1: the room is the surface; the dial sits in one corner as a compact

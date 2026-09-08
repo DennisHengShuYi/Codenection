@@ -1,3 +1,5 @@
+import { project, type EngineParams } from '../engine'
+import { toDayInputs } from './objective'
 import type { MoveKind, RebalanceResult, Schedule } from './types'
 
 const round = (value: number): number => Math.round(value)
@@ -19,9 +21,56 @@ const plural = (count: number, word: string): string =>
  * claim the app cannot support to the person who has to live with the week. Where the
  * search found nothing, this says so plainly rather than dressing up a no-op.
  */
-export function describeRebalance(result: RebalanceResult): string {
+/**
+ * What the change bought, in the terms that are still true.
+ *
+ * Normally that is the worst day. But once a student has bottomed out the floor is
+ * pinned at zero and stays there whatever the solver does, so "your worst day goes from
+ * 0 to 0" is both useless and faintly insulting to the person it is shown to. Days out
+ * of deficit still move, so that is what gets said instead.
+ */
+function describeGain(result: RebalanceResult, params: EngineParams): string {
+  const before = round(result.worstBefore)
+  const after = round(result.worstAfter)
+
+  if (after > before) {
+    return `Your worst day goes from ${before} to ${after}.`
+  }
+
+  const daysBefore = project(
+    result.before.start,
+    toDayInputs(result.before),
+    params,
+  ).deficitDays
+  const daysAfter = project(
+    result.schedule.start,
+    toDayInputs(result.schedule),
+    params,
+  ).deficitDays
+
+  if (daysAfter < daysBefore) {
+    const saved = daysBefore - daysAfter
+    return `That is ${plural(saved, 'day')} less underwater, though this fortnight is still beyond what rearranging can fix.`
+  }
+
+  return 'This fortnight is beyond what rearranging can fix. Something needs to come out of it.'
+}
+
+export function describeRebalance(result: RebalanceResult, params: EngineParams): string {
   if (result.moves.length === 0) {
-    return 'Nothing worth moving. This is already the best arrangement of these commitments.'
+    // "Already the best arrangement" is true but reads as reassurance, and reassurance
+    // is the wrong register for someone whose fortnight is underwater. Same finding,
+    // opposite meaning: nothing left to move is good news for a healthy week and bad
+    // news for an overloaded one, so the two get different sentences.
+    const deficitDays = project(
+      result.schedule.start,
+      toDayInputs(result.schedule),
+      params,
+    ).deficitDays
+
+    return deficitDays > 0
+      ? 'There is nothing left to move. This fortnight is beyond what rearranging can fix — something needs to come out of it.'
+      : 'Nothing worth moving. This is already the best arrangement of these commitments.'
   }
 
   const counts = new Map<MoveKind, number>()
@@ -40,10 +89,7 @@ export function describeRebalance(result: RebalanceResult): string {
   if (rested > 0) parts.push(`added ${plural(rested, 'rest block')}`)
   if (reordered > 0) parts.push(`reordered ${plural(reordered, 'block')} within its day`)
 
-  return (
-    `I ${joinParts(parts)}. ` +
-    `Your worst day goes from ${round(result.worstBefore)} to ${round(result.worstAfter)}.`
-  )
+  return `I ${joinParts(parts)}. ${describeGain(result, params)}`
 }
 
 /** §2.1: one tap to undo all of it. Exact rather than reconstructed, because the result

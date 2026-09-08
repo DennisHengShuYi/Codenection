@@ -53,11 +53,17 @@ export function restItem(id: string, dayIndex: number, startHour: number): Sched
   }
 }
 
-export function makeSchedule(items: readonly ScheduledItem[]): Schedule {
+/** Seven hours is enough that sleep recovery cancels the isolation drain, which keeps
+ *  most fixtures out of deficit and makes them about the thing they are testing. Pass a
+ *  lower figure to build a fortnight that actually crashes. */
+export function makeSchedule(
+  items: readonly ScheduledItem[],
+  sleepHours = 7,
+): Schedule {
   return {
     items,
     start: HEALTHY,
     horizonDays: HORIZON_DAYS,
-    sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+    sleepByDay: Array.from({ length: HORIZON_DAYS }, () => sleepHours),
   }
 }

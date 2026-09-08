@@ -86,6 +86,32 @@ describe('project', () => {
     expect(result.firstDeficitDay).not.toBeNull()
   })
 
+  // The floor saturates at zero, so on a crushing schedule every candidate week looks
+  // identical to min(). Deficit area -- how far below the threshold, summed over days --
+  // keeps varying, which is what leaves the optimizer a gradient when a student is
+  // already in crisis. Without it the app can only say "0 to 0" to the person who most
+  // needs an answer.
+  it('measures how far below the threshold the fortnight falls, not just whether it does', () => {
+    const sustainable = project(healthy, horizon(light), DEFAULT_PARAMS)
+    const crushing = project(healthy, horizon(heavy), DEFAULT_PARAMS)
+
+    expect(sustainable.deficitArea).toBe(0)
+    expect(crushing.deficitArea).toBeGreaterThan(0)
+  })
+
+  it('still separates two fortnights whose floors have both bottomed out', () => {
+    const bad = project(healthy, horizon(heavy), DEFAULT_PARAMS)
+    const worse = project(
+      { mental: 30, physical: 30, social: 30, errands: 30 },
+      horizon(heavy),
+      DEFAULT_PARAMS,
+    )
+
+    expect(bad.worstFloor).toBe(0)
+    expect(worse.worstFloor).toBe(0)
+    expect(worse.deficitArea).toBeGreaterThan(bad.deficitArea)
+  })
+
   it('never reports a floor above the headline mean', () => {
     const result = project(healthy, horizon(heavy), DEFAULT_PARAMS)
 

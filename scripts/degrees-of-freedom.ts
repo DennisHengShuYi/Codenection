@@ -38,7 +38,10 @@ const say = (text = '') => lines.push(text)
 interface Measured {
   readonly name: string
   readonly movesTaken: number
-  readonly gain: number
+  readonly floorGain: number
+  /** Days lifted out of deficit. The measure that still varies once the floor has
+   *  saturated at zero, which is the state a struggling student is actually in. */
+  readonly daysRecovered: number
   readonly shiftMovesTaken: number
 }
 
@@ -74,7 +77,11 @@ function measure(name: string, schedule: Schedule): Measured {
   say(`| Starting floor reserve | ${floorReserve(schedule.start).toFixed(1)} |`)
   say(`| Worst floor before | ${before.worstFloor.toFixed(1)} |`)
   say(`| Worst floor after | ${result.worstAfter.toFixed(1)} |`)
+  const after = project(result.schedule.start, toDayInputs(result.schedule), params)
   say(`| Deficit days before | ${before.deficitDays} |`)
+  say(`| Deficit days after | ${after.deficitDays} |`)
+  say(`| Deficit area before | ${before.deficitArea.toFixed(0)} |`)
+  say(`| Deficit area after | ${after.deficitArea.toFixed(0)} |`)
   say(`| First deficit crossing | ${before.firstDeficitDay ?? 'none'} |`)
   say(`| Moves the search took | ${result.moves.length} |`)
   for (const [kind, count] of [...takenByKind].sort()) {
@@ -83,7 +90,7 @@ function measure(name: string, schedule: Schedule): Measured {
   say()
   say(`What the app would say:`)
   say()
-  say(`> ${describeRebalance(result)}`)
+  say(`> ${describeRebalance(result, DEFAULT_PARAMS)}`)
   say()
   say('Smallest fixes (§2.2):')
   say()
@@ -91,9 +98,13 @@ function measure(name: string, schedule: Schedule): Measured {
     say('- none found')
   } else {
     for (const fix of fixes) {
-      say(
-        `- ${fix.move.description}: worst day ${fix.worstBefore.toFixed(1)} → ${fix.worstAfter.toFixed(1)}`,
-      )
+      // Report whichever measure actually moved. Printing "worst day 0.0 -> 0.0" for a
+      // student in deficit is the exact uninformative line this measurement exposed.
+      const effect =
+        fix.worstAfter > fix.worstBefore
+          ? `worst day ${fix.worstBefore.toFixed(1)} → ${fix.worstAfter.toFixed(1)}`
+          : `days underwater ${fix.deficitDaysBefore} → ${fix.deficitDaysAfter}`
+      say(`- ${fix.move.description}: ${effect}`)
     }
   }
   say()
@@ -101,7 +112,8 @@ function measure(name: string, schedule: Schedule): Measured {
   return {
     name,
     movesTaken: result.moves.length,
-    gain: result.worstAfter - result.worstBefore,
+    floorGain: result.worstAfter - result.worstBefore,
+    daysRecovered: before.deficitDays - after.deficitDays,
     shiftMovesTaken: takenByKind.get('shiftDay') ?? 0,
   }
 }
@@ -118,7 +130,9 @@ say('## Verdict')
 say()
 
 const reschedulingMatters = crunch.shiftMovesTaken > 0
-const worthwhileGain = crunch.gain >= 5
+// Counted on whichever measure was available to move: a fortnight already at the floor
+// cannot gain reserve points, but it can gain days out of deficit.
+const worthwhileGain = crunch.floorGain >= 5 || crunch.daysRecovered >= 3
 
 if (crunch.movesTaken <= 1) {
   say(
@@ -145,9 +159,11 @@ if (crunch.movesTaken <= 1) {
 
 say()
 say(
-  `Ordinary week: ${ordinary.movesTaken} moves, ${ordinary.gain.toFixed(1)} points. ` +
-    `Crunch week: ${crunch.movesTaken} moves, ${crunch.gain.toFixed(1)} points, ` +
-    `${crunch.shiftMovesTaken} of them rescheduling work.`,
+  `Ordinary week: ${ordinary.movesTaken} moves, ${ordinary.floorGain.toFixed(1)} reserve ` +
+    `points, ${ordinary.daysRecovered} days out of deficit. ` +
+    `Crunch week: ${crunch.movesTaken} moves, ${crunch.floorGain.toFixed(1)} reserve points, ` +
+    `${crunch.daysRecovered} days out of deficit, ` +
+    `${crunch.shiftMovesTaken} moves rescheduling work.`,
 )
 
 console.log(lines.join('\n'))

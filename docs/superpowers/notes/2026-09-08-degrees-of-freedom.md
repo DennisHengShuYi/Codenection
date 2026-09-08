@@ -19,6 +19,9 @@ Measured on a realistic UM final-year fortnight, before any rebalance UI exists.
 | Worst floor before | 41.7 |
 | Worst floor after | 48.0 |
 | Deficit days before | 0 |
+| Deficit days after | 0 |
+| Deficit area before | 0 |
+| Deficit area after | 0 |
 | First deficit crossing | none |
 | Moves the search took | 2 |
 | &nbsp;&nbsp;taken: `insertRest` | 1 |
@@ -50,21 +53,28 @@ Smallest fixes (§2.2):
 | Worst floor before | 0.0 |
 | Worst floor after | 0.0 |
 | Deficit days before | 21 |
+| Deficit days after | 14 |
+| Deficit area before | 505 |
+| Deficit area after | 279 |
 | First deficit crossing | 0 |
-| Moves the search took | 4 |
-| &nbsp;&nbsp;taken: `insertRest` | 3 |
-| &nbsp;&nbsp;taken: `shiftDay` | 1 |
+| Moves the search took | 33 |
+| &nbsp;&nbsp;taken: `batchErrands` | 3 |
+| &nbsp;&nbsp;taken: `insertRest` | 11 |
+| &nbsp;&nbsp;taken: `reorderWithinDay` | 3 |
+| &nbsp;&nbsp;taken: `shiftDay` | 16 |
 
 What the app would say:
 
-> I moved 1 thing and added 3 rest blocks. Your worst day goes from 0 to 0.
+> I moved 16 things, batched 3 errands, added 11 rest blocks and reordered 3 blocks within its day. That is 7 days less underwater, though this fortnight is still beyond what rearranging can fix.
 
 Smallest fixes (§2.2):
 
-- none found
+- Added a rest block on day 0: days underwater 21 → 19
+- Added a rest block on day 1: days underwater 21 → 20
+- Moved Dinner with housemates 2 days earlier: days underwater 21 → 20
 
 ## Verdict
 
-**Legal moves are plentiful but the gain is thin.** Worth building, not worth headlining. Lead Focus 2 with the smallest fix.
+**The optimizer has real freedom where it matters.** It moves work in the crunch fortnight and gains materially. The full rebalance can headline Focus 2.
 
-Ordinary week: 2 moves, 6.3 points. Crunch week: 4 moves, 0.0 points, 1 of them rescheduling work.
+Ordinary week: 2 moves, 6.3 reserve points, 0 days out of deficit. Crunch week: 33 moves, 0.0 reserve points, 7 days out of deficit, 16 moves rescheduling work.

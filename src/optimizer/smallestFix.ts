@@ -7,14 +7,30 @@ export interface Fix {
   readonly move: Move
   readonly worstBefore: number
   readonly worstAfter: number
+  /** Improvement in the reserve floor. Zero when the student is already bottomed out --
+   *  which is why it is not what the fixes are ranked by. */
   readonly gain: number
+  readonly deficitDaysBefore: number
+  readonly deficitDaysAfter: number
 }
 
 /** §2.2: "single move, top three by effect". */
 const DEFAULT_LIMIT = 3
 
-const worstOf = (schedule: Schedule, params: EngineParams): number =>
-  project(schedule.start, toDayInputs(schedule), params).worstFloor
+interface Measured {
+  readonly worstFloor: number
+  readonly deficitDays: number
+  readonly deficitArea: number
+}
+
+const measure = (schedule: Schedule, params: EngineParams): Measured => {
+  const projection = project(schedule.start, toDayInputs(schedule), params)
+  return {
+    worstFloor: projection.worstFloor,
+    deficitDays: projection.deficitDays,
+    deficitArea: projection.deficitArea,
+  }
+}
 
 /**
  * §2.2's smallest-fix search: the same machinery as the full rebalance, but one move,
@@ -32,14 +48,36 @@ export function smallestFixes(
   params: EngineParams,
   limit: number = DEFAULT_LIMIT,
 ): Fix[] {
-  const worstBefore = worstOf(schedule, params)
+  const before = measure(schedule, params)
+
+  /**
+   * Ranked by how much better the fortnight actually gets, not by floor gain alone.
+   *
+   * Floor gain is zero for a student who has already bottomed out, so ranking on it
+   * returned *nothing* for exactly the person §2.2 is written for. Days out of deficit
+   * come first because that is the improvement a student can feel, then depth, and floor
+   * gain breaks the remaining ties.
+   */
+  const improvement = (after: Measured): number =>
+    (before.deficitDays - after.deficitDays) * 10 +
+    (before.deficitArea - after.deficitArea) * 0.1 +
+    (after.worstFloor - before.worstFloor)
 
   return neighbours(schedule, params)
     .map((move) => {
-      const worstAfter = worstOf(move.apply(schedule), params)
-      return { move, worstBefore, worstAfter, gain: worstAfter - worstBefore }
+      const after = measure(move.apply(schedule), params)
+      return {
+        move,
+        worstBefore: before.worstFloor,
+        worstAfter: after.worstFloor,
+        gain: after.worstFloor - before.worstFloor,
+        deficitDaysBefore: before.deficitDays,
+        deficitDaysAfter: after.deficitDays,
+        rank: improvement(after),
+      }
     })
-    .filter((fix) => fix.gain > 1e-9)
-    .sort((a, b) => b.gain - a.gain)
+    .filter((fix) => fix.rank > 1e-9)
+    .sort((a, b) => b.rank - a.rank)
     .slice(0, limit)
+    .map(({ rank: _rank, ...fix }) => fix)
 }

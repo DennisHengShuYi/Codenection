@@ -28,11 +28,33 @@ describe('smallestFixes', () => {
     }
   })
 
-  it('only ever returns single moves that genuinely improve the floor', () => {
+  it('only ever returns single moves that genuinely improve the fortnight', () => {
     for (const fix of smallestFixes(pileUp(), DEFAULT_PARAMS)) {
-      expect(fix.worstAfter).toBeGreaterThan(fix.worstBefore)
-      expect(fix.gain).toBeGreaterThan(0)
+      const better =
+        fix.worstAfter > fix.worstBefore || fix.deficitDaysAfter < fix.deficitDaysBefore
+      expect(better).toBe(true)
     }
+  })
+
+  /**
+   * The case that made this worth changing.
+   *
+   * A student already at the floor gains nothing measurable in `worstFloor` from any
+   * single move, so ranking on floor gain returned an empty list for exactly the person
+   * §2.2 is written for -- and the app's answer to someone in crisis became silence.
+   * Ranking on days out of deficit keeps the advice coming.
+   */
+  it('still finds fixes for a student who has already bottomed out', () => {
+    const crisis = makeSchedule(
+      Array.from({ length: 21 }, (_, d) => studyItem(`c${d}`, d, 9)),
+      5,
+    )
+
+    const fixes = smallestFixes(crisis, DEFAULT_PARAMS)
+
+    expect(fixes.length).toBeGreaterThan(0)
+    expect(fixes[0]!.worstBefore).toBe(0)
+    expect(fixes[0]!.deficitDaysAfter).toBeLessThan(fixes[0]!.deficitDaysBefore)
   })
 
   it('reports the before and after a student can read', () => {

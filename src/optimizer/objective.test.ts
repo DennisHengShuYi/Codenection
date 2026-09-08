@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_PARAMS } from '../engine'
+import { DEFAULT_PARAMS, project } from '../engine'
 import { score, toDayInputs } from './objective'
 import { makeSchedule, restItem, studyItem } from './testSupport'
 
@@ -72,5 +72,52 @@ describe('score', () => {
   // empty week, or the very first rebalance a new user triggers throws.
   it('scores an empty schedule without throwing', () => {
     expect(Number.isFinite(score(makeSchedule([]), DEFAULT_PARAMS))).toBe(true)
+  })
+
+  /**
+   * The tiebreaker, tested at the one point where it is the only thing that can decide.
+   *
+   * These two fortnights are identical on every other term -- both bottom out at a floor
+   * of zero, both spend 17 days in deficit, both have one block a day so neither is
+   * fragmented. Only the depth differs. Without the area term the objective scores them
+   * exactly the same, the search goes blind, and the app tells a student in crisis that
+   * their worst day goes "from 0 to 0".
+   *
+   * The preconditions are asserted rather than assumed, so if the model shifts and these
+   * stop being a genuine tie, this fails loudly instead of passing for the wrong reason.
+   */
+  it('separates two crushed fortnights that tie on every other term', () => {
+    const nine = makeSchedule(
+      Array.from({ length: 21 }, (_, d) => studyItem(`n${d}`, d, 9)),
+      5,
+    )
+    const ten = makeSchedule(
+      Array.from({ length: 21 }, (_, d) => studyItem(`t${d}`, d, 10)),
+      5,
+    )
+
+    const nineProjection = project(nine.start, toDayInputs(nine), DEFAULT_PARAMS)
+    const tenProjection = project(ten.start, toDayInputs(ten), DEFAULT_PARAMS)
+
+    expect(nineProjection.worstFloor).toBe(tenProjection.worstFloor)
+    expect(nineProjection.deficitDays).toBe(tenProjection.deficitDays)
+    expect(nineProjection.deficitArea).toBeLessThan(tenProjection.deficitArea)
+
+    expect(score(nine, DEFAULT_PARAMS)).toBeGreaterThan(score(ten, DEFAULT_PARAMS))
+  })
+
+  // §2.1 states min(reserve) as the objective, and it stays the objective. The area term
+  // is weighted small enough that it can only break ties, never outrank a real gain in
+  // the floor -- otherwise the solver could trade a genuinely higher worst day for a
+  // flatter but lower week, which is the outcome §2.1's min() exists to forbid.
+  it('never lets the tiebreaker outrank a real gain in the floor', () => {
+    const higherFloor = makeSchedule([studyItem('a', 0, 2)])
+    const lowerFloorFlatter = makeSchedule(
+      Array.from({ length: 20 }, (_, d) => studyItem(`f${d}`, d, 6)),
+    )
+
+    expect(score(higherFloor, DEFAULT_PARAMS)).toBeGreaterThan(
+      score(lowerFloorFlatter, DEFAULT_PARAMS),
+    )
   })
 })

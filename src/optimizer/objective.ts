@@ -7,6 +7,18 @@ import type { Schedule } from './types'
 export const DEFICIT_DAY_WEIGHT = 0.3
 export const FRAGMENTATION_WEIGHT = 0.1
 
+/**
+ * Deliberately tiny, because this is a tiebreaker and not a fourth objective.
+ *
+ * Deficit area runs to several hundred on a bad fortnight, so at this weight it
+ * contributes well under a point -- less than any real gain in the floor and less than a
+ * single deficit day. The ordering stays exactly as §2.1 states it: floor first, then
+ * deficit days, then fragmentation, and only then depth. If this were large enough to
+ * outrank the floor, the solver could trade a genuinely higher worst day for a flatter
+ * but lower week, which is the outcome §2.1's min() exists to forbid.
+ */
+export const DEFICIT_AREA_WEIGHT = 0.001
+
 /** Rest and sleep are recovery, not load, and must not count against the daily cap or
  *  the fragmentation penalty. */
 const isWork = (kind: string): boolean => kind !== 'rest' && kind !== 'sleep'
@@ -82,6 +94,7 @@ export function score(schedule: Schedule, params: EngineParams): number {
   return (
     projection.worstFloor -
     DEFICIT_DAY_WEIGHT * projection.deficitDays -
-    FRAGMENTATION_WEIGHT * totalFragmentation(schedule)
+    FRAGMENTATION_WEIGHT * totalFragmentation(schedule) -
+    DEFICIT_AREA_WEIGHT * projection.deficitArea
   )
 }

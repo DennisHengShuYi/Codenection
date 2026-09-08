@@ -23,6 +23,20 @@ export interface Projection {
    */
   readonly worstFloor: number
   readonly deficitDays: number
+  /**
+   * How far below the deficit threshold the floor falls, summed over the horizon.
+   *
+   * `worstFloor` saturates: once any reserve bottoms out on any day it reads zero, and
+   * every candidate schedule looks identical to a `min()`. That is exactly the state a
+   * student in genuine crisis is in -- so without this the optimizer has no gradient
+   * left, smallest-fix search finds nothing to rank, and the app tells the person who
+   * most needs an answer that their worst day goes "from 0 to 0".
+   *
+   * Deficit area keeps varying below that saturation point, so the search can still tell
+   * a bad fortnight from a worse one and the app can say something true and useful:
+   * still short, but fewer days underwater.
+   */
+  readonly deficitArea: number
   /** The "deficit crossing" the product copy refers to, or null if the horizon holds. */
   readonly firstDeficitDay: number | null
 }
@@ -106,6 +120,10 @@ export function project(
     worstOverall: overalls.length === 0 ? overallReserve(start) : Math.min(...overalls),
     worstFloor: floors.length === 0 ? floorReserve(start) : Math.min(...floors),
     deficitDays: floors.filter((value) => value < DEFICIT_THRESHOLD).length,
+    deficitArea: floors.reduce(
+      (sum, value) => sum + Math.max(0, DEFICIT_THRESHOLD - value),
+      0,
+    ),
     firstDeficitDay: firstDeficitIndex === -1 ? null : firstDeficitIndex,
   }
 }

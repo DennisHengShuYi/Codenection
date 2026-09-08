@@ -17,6 +17,7 @@
     "measure:dof": "vite-node scripts/degrees-of-freedom.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "idb-keyval": "^6.3.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

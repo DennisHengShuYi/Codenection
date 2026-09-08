@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { registerServiceWorker } from './pwa/registerServiceWorker'
 import { App } from './ui/App'
 import './styles.css'
 
@@ -14,3 +15,7 @@ createRoot(root).render(
     <App />
   </StrictMode>,
 )
+
+// After the render, and deliberately not awaited: installability is a bonus, and the app
+// must not wait on it to show a student their week.
+void registerServiceWorker()

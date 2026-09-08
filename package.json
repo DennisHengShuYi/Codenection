@@ -14,9 +14,12 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "measure:dof": "vite-node scripts/degrees-of-freedom.ts"
+    "measure:dof": "vite-node scripts/degrees-of-freedom.ts",
+    "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "idb-keyval": "^6.3.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "zod": "^4.5.4"
@@ -33,6 +36,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "@vitest/coverage-v8": "^4.1.11",
     "autoprefixer": "^10.5.5",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.28",
     "tailwindcss": "^4.3.3",

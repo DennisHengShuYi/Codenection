@@ -30,6 +30,10 @@ export const MAX_INPUT_LENGTH = 2000
  *  week. */
 export const MAX_ITEMS = 25
 
+/** A request, not a document -- shorter than the planner's brain dump, because this is
+ *  one message somebody sent you. */
+export const MAX_REQUEST_LENGTH = 1000
+
 export const DEFAULT_EFFORT_HOURS = 1
 
 /**

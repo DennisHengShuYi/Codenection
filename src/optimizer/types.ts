@@ -20,11 +20,53 @@ export interface ScheduledItem {
   readonly protectedRest: boolean
 }
 
+/**
+ * §5.2's failed-recovery log: what was tried, and whether it actually helped.
+ *
+ * Declared here alongside `Commitment` because it is state the week carries. Nothing in
+ * `src/engine` or `src/optimizer` reads it.
+ */
+export interface RecoveryAttempt {
+  readonly kind: ActivityKind
+  readonly helped: boolean
+}
+
+/** §2.3's provisional yes: an acceptance and the date by which it has to prove itself. */
+export interface Commitment {
+  readonly id: string
+  readonly title: string
+  /** Day index by which the reserve has to be able to hold it, or it lapses. */
+  readonly reviewDay: number
+  /** The scheduled item this acceptance created, so a lapse can name the right one. */
+  readonly itemId: string
+}
+
 export interface Schedule {
   readonly items: readonly ScheduledItem[]
   readonly start: Reserves
   readonly horizonDays: number
   readonly sleepByDay: readonly number[]
+  /**
+   * Provisional acceptances and their review dates (§2.3).
+   *
+   * Carried inside the week rather than in a storage concept of its own, so no migration is
+   * needed and neither adapter changes -- the record genuinely is part of the week, and it
+   * is persisted by the same `saveWeek` that already runs.
+   *
+   * Optional because weeks saved before this feature have no such field and must keep
+   * loading. Nothing in `src/engine` or `src/optimizer` reads it: it is state the week
+   * carries, not an input to the model.
+   */
+  readonly commitments?: readonly Commitment[]
+  /**
+   * What recovery was tried and whether it helped (§5.2).
+   *
+   * Carried inside the week for the same reason `commitments` is: no migration, no adapter
+   * change, and it is genuinely part of the week. Optional because weeks saved before this
+   * have no such field and must keep loading. Nothing in `src/engine` or `src/optimizer`
+   * reads it.
+   */
+  readonly recoveryLog?: readonly RecoveryAttempt[]
 }
 
 export type MoveKind =

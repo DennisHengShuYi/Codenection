@@ -1,21 +1,34 @@
-import { MAX_INPUT_LENGTH, microStartFrom, microStartPrompt, parseBrainDump } from '../ai'
+import { MAX_IMAGE_BYTES, MAX_INPUT_LENGTH, parseBrainDump, type ParsedItem } from '../ai'
 import { blocksOnDay } from '../domain/dayBlocks'
-import { prescribeRest } from '../domain/prescribe'
+import { firstAction } from '../domain/microStart'
+import { prescribe } from '../domain/prescribe'
 import type { Schedule } from '../optimizer'
+import { tooLongToTranscribe } from './audio'
 import { resolveConfirmation, summarise, type PendingDump } from './brainDump'
 import {
+  askReply,
+  askUnavailableReply,
+  askUnreadableReply,
   blockAnsweredReply,
   blocksReply,
   discardedReply,
   helpReply,
   linkedReply,
   microStartReply,
+  needRequestReply,
   needTaskReply,
   noGapReply,
+  taskNotFoundReply,
+  nothingUnderstoodReply,
+  photoTooBigReply,
+  photoUnavailableReply,
+  photoUnreadableReply,
   notLinkedReply,
   restBookedReply,
   restReply,
   tooLongReply,
+  transcriptionUnavailableReply,
+  voiceTooLongReply,
   unhandledReply,
   yesterdayUnavailableReply,
   type Reply,
@@ -32,6 +45,34 @@ import type { Intent } from './update'
  */
 export interface ChatServices {
   readonly askModel?: (prompt: string) => Promise<string | null>
+  /**
+   * Reads a request, prices it against the week, and drafts the three replies.
+   *
+   * One service rather than three, because §2.3's answer is all of it or none: a cost with
+   * no drafts is a number to worry about with nothing to do, and drafts with no cost are
+   * three sentences about a decision nobody has been helped to make. `api/telegram.ts`
+   * composes readRequest, priceRequest and draftReplies behind it -- all three from #26,
+   * unchanged.
+   *
+   * Null means the request could not be read, which is said plainly rather than priced as
+   * something invented.
+   */
+  /** Fetches the image from Telegram and runs the app's own reader over it. Null when it
+   *  could not be read at all. */
+  readonly readPhotoFile?: (fileId: string) => Promise<readonly ParsedItem[] | null>
+  /** Fetches the audio from Telegram and transcribes it. Null when transcription failed. */
+  readonly transcribe?: (fileId: string) => Promise<string | null>
+  readonly priceAsk?: (
+    text: string,
+    week: Schedule,
+  ) => Promise<{
+    cost: {
+      firstDeficitDayBefore: number | null
+      firstDeficitDayAfter: number | null
+      eveningsEquivalent: number
+    }
+    drafts: readonly { tone: 'decline' | 'defer' | 'accept'; text: string }[]
+  } | null>
 }
 
 /** Day 0 is today. The schedule carries no date anchor, so this is the only day the model
@@ -72,6 +113,25 @@ export interface ChatStore {
 
 /** Distinct per dump so a button can only ever answer the parse it was attached to. */
 const newDumpId = (): string => crypto.randomUUID()
+
+/**
+ * Stores a parse as pending and offers it, whichever door it came through.
+ *
+ * Typing, speaking and photographing all end here, because §3.2's rule does not care how
+ * the items were read: they are proposals until the student approves them.
+ */
+async function offerParse(
+  store: ChatStore,
+  accountId: string,
+  items: readonly ParsedItem[],
+): Promise<Reply> {
+  if (items.length === 0) return nothingUnderstoodReply()
+
+  const dumpId = newDumpId()
+  await store.savePending(accountId, { id: dumpId, items, answeredAt: null })
+
+  return summarise(dumpId, { items, source: 'model' })
+}
 
 /**
  * Decides what happens for one intent, and what to say back.
@@ -123,25 +183,41 @@ export async function handleIntent(
 
       case 'rest': {
         const week = await store.loadWeek(accountId)
-        const prescription = prescribeRest(week, week.start, TODAY)
+        const prescription = prescribe(week)
 
+        // Null covers both "nothing is low enough to need this" and "there is no room",
+        // which prescribe() deliberately does not distinguish -- either way there is one
+        // honest answer and it is not a suggestion.
         return prescription === null ? noGapReply() : restReply(prescription)
       }
 
       case 'stuck': {
         if (intent.argument === '') return needTaskReply()
 
-        // With no model configured this still answers, from the rule. §4.1 is useless if it
-        // only works when a key happens to be set.
-        const reply = services.askModel
-          ? await services.askModel(microStartPrompt(intent.argument)).catch(() => null)
-          : null
+        const week = await store.loadWeek(accountId)
 
-        return microStartReply(microStartFrom(intent.argument, reply).action)
+        // Matched against a real block rather than answered from the words alone. §4.1's
+        // first move depends on what kind of work it is -- opening a document is the right
+        // move for an essay and the wrong one for a run -- and only the schedule knows.
+        const wanted = intent.argument.toLowerCase()
+        const item = week.items.find((block) => block.title.toLowerCase().includes(wanted))
+
+        if (item === undefined) return taskNotFoundReply()
+
+        return microStartReply(firstAction(item))
       }
 
-      case 'ask':
-        return unhandledReply()
+      case 'ask': {
+        if (intent.argument === '') return needRequestReply()
+        if (!services.priceAsk) return askUnavailableReply()
+
+        const week = await store.loadWeek(accountId)
+        const priced = await services.priceAsk(intent.argument, week).catch(() => null)
+
+        // Nothing is ever written here. §2.3 prices a request; agreeing to it is a separate
+        // act the student takes in their own words, in their own messaging app.
+        return priced === null ? askUnreadableReply() : askReply(priced.cost, priced.drafts)
+      }
     }
   }
 
@@ -162,7 +238,7 @@ export async function handleIntent(
     // Re-derived rather than carried in the button: the prescription is deterministic for a
     // given week and reserves, and a button carrying its own payload could be replayed with
     // a different one.
-    const prescription = prescribeRest(week, week.start, TODAY)
+    const prescription = prescribe(week)
     if (prescription === null) return noGapReply()
 
     await store.saveWeek(accountId, {
@@ -170,14 +246,14 @@ export async function handleIntent(
       items: [
         ...week.items,
         {
-          id: `rest-${intent.startHour}-${now}`,
+          id: `${prescription.id}-${now}`,
           title: prescription.title,
           type: prescription.type,
           kind: prescription.kind,
           hours: prescription.hours,
           intensity: 1,
-          dayIndex: TODAY,
-          startHour: intent.startHour,
+          dayIndex: prescription.dayIndex,
+          startHour: prescription.startHour,
           // §5.1: fixed and protected. Rest the optimizer can move to fit work in is not
           // protected at all, and this is the app's most important design decision.
           fixed: true,
@@ -190,22 +266,43 @@ export async function handleIntent(
     return restBookedReply()
   }
 
-  if (intent.kind === 'photo' || intent.kind === 'voice') {
-    // Wired in api/telegram.ts, which is the only place that can fetch a file from Telegram.
-    return unhandledReply()
+  if (intent.kind === 'photo') {
+    // The app's own limit, enforced before the model is called so an oversized image cannot
+    // cost a request. §1.4 is the same rule in the app.
+    if (intent.bytes > MAX_IMAGE_BYTES) return photoTooBigReply()
+
+    // Unlike the planner, reading an image genuinely needs the model -- there is no rule
+    // that reads a timetable. §1.4 says so plainly rather than pretending otherwise.
+    if (!services.readPhotoFile) return photoUnavailableReply()
+
+    const items = await services.readPhotoFile(intent.fileId).catch(() => null)
+    if (items === null) return photoUnreadableReply()
+
+    return offerParse(store, accountId, items)
+  }
+
+  if (intent.kind === 'voice') {
+    // Refused before transcription, so a long recording cannot cost a request.
+    if (tooLongToTranscribe(intent.seconds)) return voiceTooLongReply()
+
+    if (!services.transcribe) return transcriptionUnavailableReply()
+
+    const text = await services.transcribe(intent.fileId).catch(() => null)
+    if (text === null) return transcriptionUnavailableReply()
+
+    // From here it is the ordinary brain dump, with the same limits: voice is a way of
+    // typing, not a second kind of input.
+    if (text.trim() === '') return nothingUnderstoodReply()
+    if (text.length > MAX_INPUT_LENGTH) return tooLongReply()
+
+    return offerParse(store, accountId, (await parseBrainDump(text)).items)
   }
 
   if (intent.kind === 'plan') {
     // Refused before the model is called, so an oversized message cannot cost a request.
     if (intent.text.length > MAX_INPUT_LENGTH) return tooLongReply()
 
-    const outcome = await parseBrainDump(intent.text)
-    const dumpId = newDumpId()
-
-    // Stored, not applied. §3.2: parsed items are proposals until the student approves.
-    await store.savePending(accountId, { id: dumpId, items: outcome.items, answeredAt: null })
-
-    return summarise(dumpId, outcome)
+    return offerParse(store, accountId, (await parseBrainDump(intent.text)).items)
   }
 
   const pending = await store.findPending(accountId, intent.dumpId)

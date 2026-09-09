@@ -1,100 +1,100 @@
-import type { ActivityKind, LoadType, Reserves } from '../engine'
-import type { Schedule } from '../optimizer'
-import { blocksOnDay } from './dayBlocks'
+import { LOAD_TYPES, type ActivityKind, type LoadType, type Reserves } from '../engine'
+import type { RecoveryAttempt, Schedule } from '../optimizer'
 
-/**
- * §5.2's prescription: one option, matched to the depleted type, sized to a real gap.
- *
- * Everything here is pure. What it produces is a description of a rest block, not a
- * scheduled one -- adding it to the week is the caller's job, and only after the student
- * has agreed.
- */
+/** Below the comfortable band, but above §1.5's low-energy threshold of 20 -- so advice
+ *  arrives before the reduced view takes over, rather than after. */
+const PRESCRIBE_BELOW = 40
+
+/** Under half an hour there is nothing worth scheduling, and suggesting one is noise. */
+const MIN_GAP_HOURS = 0.5
+
+/** `USEFUL_REST_HOURS`. Past this the engine credits nothing, so a longer suggestion would
+ *  promise recovery the model refuses to pay out. */
+const MAX_BLOCK_HOURS = 3
+
+/** Used when a day is empty and there is no gap to measure. */
+const DEFAULT_GAP_HOURS = 1
+
+/** Waking hours in a day, once sleep is set aside. */
+const WAKING_HOURS = 16
+
 export interface Prescription {
+  readonly id: string
   readonly type: LoadType
   readonly kind: ActivityKind
   readonly title: string
-  readonly startHour: number
   readonly hours: number
-  /** Always true. §5.1 calls structurally protected recovery the most important design
-   *  decision in the app: rest the optimizer can move to fit work in is not protected. */
-  readonly protectedRest: true
-}
-
-/** §5.1: recovery has a ceiling as well as a floor. Past a point the returns go flat and
- *  then negative, so an empty day must not produce an absurd suggestion. */
-export const MAX_REST_HOURS = 2
-
-/** Below this there is not enough of a gap for anything to be worth starting. */
-const MIN_REST_HOURS = 0.5
-
-/** The hours a suggestion may fall in. Prescribing a walk at 3am helps nobody. */
-const DAY_START = 8
-const DAY_END = 22
-
-/**
- * Only the three reserves recovery actually serves.
- *
- * Errands is a load type but not something rest repairs -- a low errands reserve means
- * chores are piling up, and the answer to that is not a walk. So it never decides the
- * prescription, even when it is the lowest number on the screen.
- */
-const RECOVERABLE: readonly LoadType[] = ['mental', 'physical', 'social']
-
-/** §5.2's matching, and the reason this is a table rather than a sentence: social low
- *  prescribes a person, physical low prescribes movement, and mental low prescribes actual
- *  downtime rather than a different screen. */
-const FOR_TYPE: Readonly<Record<string, { kind: ActivityKind; title: string }>> = {
-  social: { kind: 'socialRestorative', title: 'Message one person you like and see them' },
-  physical: { kind: 'lightExercise', title: 'A walk outside' },
-  mental: { kind: 'rest', title: 'Lie down away from a screen' },
-}
-
-/** The first gap long enough to be worth taking, within waking hours. */
-function findGap(schedule: Schedule, dayIndex: number): { startHour: number; hours: number } | null {
-  const blocks = blocksOnDay(schedule, dayIndex)
-
-  let cursor = DAY_START
-
-  for (const block of blocks) {
-    const free = block.startHour - cursor
-    if (free >= MIN_REST_HOURS) return { startHour: cursor, hours: free }
-
-    cursor = Math.max(cursor, block.startHour + block.hours)
-  }
-
-  const free = DAY_END - cursor
-  return free >= MIN_REST_HOURS ? { startHour: cursor, hours: free } : null
+  readonly dayIndex: number
+  readonly startHour: number
 }
 
 /**
- * One thing to do, or nothing.
+ * §5.2's matching, stated once.
  *
- * Null when the day has no room. Said plainly by the caller rather than dressed up as a
- * suggestion that cannot be taken -- offering rest into a day with no gap is how an app
- * starts feeling like it is not listening.
+ * Social low prescribes a person, physical low prescribes movement, mental low prescribes
+ * actual downtime -- explicitly not a different screen. The engine already refuses to let
+ * sleep cure loneliness; this is that same conviction pointed at the advice rather than the
+ * maths.
+ *
+ * Errands is absent on purpose. A depleted errands reserve is already answered by the room's
+ * clutter boxes, which let a student clear one and see it leave the week -- and telling
+ * somebody who is flat to do a chore is advice nobody follows.
  */
-export function prescribeRest(
+const ADVICE: Partial<Record<LoadType, { kind: ActivityKind; title: string }>> = {
+  social: { kind: 'socialRestorative', title: 'Message someone you like and see them' },
+  physical: { kind: 'lightExercise', title: 'Get outside and walk' },
+  mental: { kind: 'rest', title: 'Stop and do nothing — no screen' },
+}
+
+/** Hours left on a day once everything scheduled on it is accounted for. */
+export function freeGapOn(schedule: Schedule, dayIndex: number): number {
+  const busy = schedule.items
+    .filter((item) => item.dayIndex === dayIndex)
+    .reduce((total, item) => total + item.hours, 0)
+
+  return Math.max(0, WAKING_HOURS - busy)
+}
+
+const lowestOf = (reserves: Reserves): LoadType =>
+  LOAD_TYPES.reduce((lowest, type) => (reserves[type] < reserves[lowest] ? type : lowest))
+
+/**
+ * One thing to do, matched to what is actually empty.
+ *
+ * Returns a single prescription or nothing at all -- never a list. §5.2 is blunt that a
+ * depleted person cannot choose from a menu and that every extra option lowers the odds of
+ * any action, so the shape of this return type is the feature rather than a convention.
+ *
+ * Only day 0 is considered, because the engine is pure and has no calendar -- day 0 is "now"
+ * everywhere else in the model too. A student whose today is full gets no suggestion even if
+ * tomorrow is open; widening that would mean inventing a notion of "soon" the model does not
+ * have.
+ */
+export function prescribe(
   schedule: Schedule,
-  reserves: Reserves,
-  dayIndex: number,
+  log: readonly RecoveryAttempt[] = [],
 ): Prescription | null {
-  const gap = findGap(schedule, dayIndex)
-  if (gap === null) return null
+  const type = lowestOf(schedule.start)
+  if (schedule.start[type] >= PRESCRIBE_BELOW) return null
 
-  const lowest = RECOVERABLE.reduce((worst, type) =>
-    reserves[type] < reserves[worst] ? type : worst,
-  )
+  const advice = ADVICE[type]
+  if (!advice) return null
 
-  const shape = FOR_TYPE[lowest]
-  if (shape === undefined) return null
+  // §5.2's last line: what did not work stops being suggested.
+  if (log.some((attempt) => attempt.kind === advice.kind && !attempt.helped)) return null
+
+  const free = freeGapOn(schedule, 0)
+  const gap = Math.min(free === 0 ? 0 : Math.max(free, DEFAULT_GAP_HOURS), MAX_BLOCK_HOURS)
+  if (gap < MIN_GAP_HOURS) return null
 
   return {
-    type: lowest,
-    kind: shape.kind,
-    title: shape.title,
-    startHour: gap.startHour,
-    // Capped: a long gap is an opportunity, not an instruction to rest for six hours.
-    hours: Math.min(gap.hours, MAX_REST_HOURS),
-    protectedRest: true,
+    id: `prescription-${advice.kind}`,
+    type,
+    kind: advice.kind,
+    title: advice.title,
+    hours: Math.round(gap * 2) / 2,
+    dayIndex: 0,
+    // Late afternoon: a gap a student plausibly still has, rather than first thing.
+    startHour: 16,
   }
 }

@@ -154,8 +154,14 @@ export const noGapReply = (): Reply => ({
   text: 'There is no gap left today to put anything in. Worth looking at tomorrow instead.',
 })
 
-export const microStartReply = (action: string): Reply => ({
-  text: action,
+/** §4.1: one action and a time box, and nothing else. No encouragement, no asking why --
+ *  somebody using this has already told you they are stuck. */
+export const microStartReply = (start: { action: string; minutes: number }): Reply => ({
+  text: `${start.action} ${start.minutes} minutes.`,
+})
+
+export const taskNotFoundReply = (): Reply => ({
+  text: 'I cannot find that in your week. Send /today to see what is there.',
 })
 
 export const needTaskReply = (): Reply => ({
@@ -167,29 +173,44 @@ export const needRequestReply = (): Reply => ({
 })
 
 export function askReply(
-  cost: { givenUp: readonly string[]; deficitMovesTo: number | null },
-  drafts: { soft: string; defer: string; accept: string },
+  cost: {
+    firstDeficitDayBefore: number | null
+    firstDeficitDayAfter: number | null
+    eveningsEquivalent: number
+  },
+  drafts: readonly { tone: 'decline' | 'defer' | 'accept'; text: string }[],
 ): Reply {
-  const given = cost.givenUp.length === 0 ? 'nothing you had planned' : cost.givenUp.join(' and ')
+  const evenings =
+    cost.eveningsEquivalent <= 0
+      ? 'almost nothing you had planned'
+      : cost.eveningsEquivalent === 1
+        ? 'about one evening'
+        : `about ${cost.eveningsEquivalent} evenings`
 
-  const crossing =
-    cost.deficitMovesTo === null
-      ? []
-      : ['', `It also moves your first bad day to day ${cost.deficitMovesTo}.`]
+  // Only named when it actually moved. Telling somebody their first bad day is unchanged is
+  // noise; telling them it moved when it did not would be a lie the whole feature rests on.
+  const moved =
+    cost.firstDeficitDayAfter !== null &&
+    cost.firstDeficitDayAfter !== cost.firstDeficitDayBefore
+      ? ['', `It moves your first bad day to day ${cost.firstDeficitDayAfter}.`]
+      : []
+
+  const byTone = (tone: 'decline' | 'defer' | 'accept'): string =>
+    drafts.find((draft) => draft.tone === tone)?.text ?? ''
 
   return {
     // §2.3: never "this takes 6 hours". Always what it costs in what gets given up.
     text: [
-      `Saying yes costs you ${given}.`,
-      ...crossing,
+      `Saying yes costs you ${evenings}.`,
+      ...moved,
       '',
       'Three ways to answer — copy whichever fits:',
       '',
-      `No: ${drafts.soft}`,
+      `No: ${byTone('decline')}`,
       '',
-      `Later: ${drafts.defer}`,
+      `Later: ${byTone('defer')}`,
       '',
-      `Yes: ${drafts.accept}`,
+      `Yes: ${byTone('accept')}`,
     ].join('\n'),
     // Deliberately no buttons. §2.3: the app does the work of declining and the student
     // keeps the decision, so there must be nothing here that sends anything to anybody.
@@ -222,4 +243,24 @@ export const yesterdayUnavailableReply = (): Reply => ({
 
 export const restBookedReply = (): Reply => ({
   text: 'In. Nothing will be scheduled over it.',
+})
+
+/** Said plainly rather than priced as something invented: a cost derived from a request
+ *  nobody understood is a number with nothing behind it. */
+export const askUnreadableReply = (): Reply => ({
+  text: 'I could not work out what was being asked there. Try it in the words they used, like "can you cover my shift on Saturday".',
+})
+
+export const askUnavailableReply = (): Reply => ({
+  text: 'I cannot price a request right now. The app can, on the request box screen.',
+})
+
+export const photoTooBigReply = (): Reply => ({
+  text: 'That image is larger than I can read. Send a smaller one, or type what is on it.',
+})
+
+/** §1.4's own stance: photo import has no fallback, because reading an image needs the
+ *  model. Said plainly rather than pretending otherwise. */
+export const photoUnavailableReply = (): Reply => ({
+  text: 'I cannot read images right now. Type what is on it and I will read that the same way.',
 })

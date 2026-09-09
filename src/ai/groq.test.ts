@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { askGroq } from './groq'
+import { askGroq, transcribeAudio } from './groq'
 
 /**
  * Added beyond the approved test plan, which had listed this function as a deliberate gap.
@@ -111,5 +111,61 @@ describe('askGroq', () => {
 
     expect(await pending).toBeNull()
     vi.useRealTimers()
+  })
+})
+
+/**
+ * The transcription half, tested for the same two reasons as `askGroq` above: it is the
+ * other place in `src/` that spends a credential, and leaving it uncovered pulls the
+ * project below its coverage floor -- which .claude/CLAUDE.md answers with tests rather
+ * than a lower number.
+ *
+ * The key is a fake string and the network is stubbed, so nothing reaches Groq and no
+ * request is spent.
+ */
+describe('transcribeAudio', () => {
+  const audio = () => new Blob(['not really audio'], { type: 'audio/ogg' })
+
+  it('returns what came back, trimmed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve('  essay due friday  ') }),
+    )
+
+    expect(await transcribeAudio(audio(), 'test-key-not-real')).toBe('essay due friday')
+  })
+
+  // The key travels in the Authorization header and nowhere else -- not in the URL, where
+  // it would end up in logs and referrers.
+  it('sends the key in the header and not in the address', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve('hi') })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await transcribeAudio(audio(), 'test-key-not-real')
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).not.toContain('test-key-not-real')
+    expect((init.headers as Record<string, string>).authorization).toContain('test-key-not-real')
+  })
+
+  it('answers null when the service refuses', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, text: () => Promise.resolve('') }))
+
+    expect(await transcribeAudio(audio(), 'test-key-not-real')).toBeNull()
+  })
+
+  // Silence is not an empty brain dump. Null lets the caller say "I heard nothing" rather
+  // than offering an empty list to confirm.
+  it('answers null for silence', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve('   ') }))
+
+    expect(await transcribeAudio(audio(), 'test-key-not-real')).toBeNull()
+  })
+
+  // A network failure must not escape into the endpoint: the student is told to type it.
+  it('answers null rather than throwing when the call fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+
+    expect(await transcribeAudio(audio(), 'test-key-not-real')).toBeNull()
   })
 })

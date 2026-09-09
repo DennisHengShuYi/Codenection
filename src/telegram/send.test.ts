@@ -242,7 +242,7 @@ describe('restReply', () => {
 
 describe('microStartReply', () => {
   it('gives the one action and nothing else', () => {
-    const reply = microStartReply('Open the document and write the title.')
+    const reply = microStartReply({ action: 'Open the document and write the title.', minutes: 8 })
 
     expect(reply.text).toContain('Open the document')
     expect(reply.buttons).toBeUndefined()
@@ -254,27 +254,62 @@ describe('microStartReply', () => {
 })
 
 describe('askReply', () => {
-  const cost = { givenUp: ['two gym sessions', 'one evening out'], deficitMovesTo: 14 }
-  const drafts = { soft: 'No, sorry.', defer: 'Not this week — how about the 20th?', accept: 'Yes, but I will drop the gym.' }
+  const cost = {
+    firstDeficitDayBefore: 21,
+    firstDeficitDayAfter: 14,
+    floorBefore: 40,
+    floorAfter: 22,
+    deepestDrop: 8.7,
+    capacityAfter: 106,
+    eveningsEquivalent: 3,
+    absorbable: false,
+  }
+
+  const drafts = [
+    { tone: 'decline' as const, text: 'I cannot take this on this week.' },
+    { tone: 'defer' as const, text: 'Not this week — could it wait until the 20th?' },
+    { tone: 'accept' as const, text: 'Yes, but I will drop the gym to do it.' },
+  ]
 
   // §2.3: never "this takes 6 hours". Always what it costs in what gets given up.
   it('prices it in what gets given up, not in hours', () => {
     const text = askReply(cost, drafts).text
 
-    expect(text).toContain('two gym sessions')
-    expect(text).not.toMatch(/\d+\s*hours?\b/i)
+    expect(text).toMatch(/evening/i)
+    expect(text).not.toMatch(/\d+(\.\d+)?\s*hours?/i)
   })
 
-  it('names the deficit moving when it moves', () => {
+  it('names the deficit crossing moving, and where it moves to', () => {
     expect(askReply(cost, drafts).text).toContain('14')
+  })
+
+  it('does not invent a crossing that did not move', () => {
+    const unchanged = { ...cost, firstDeficitDayBefore: null, firstDeficitDayAfter: null }
+
+    expect(askReply(unchanged, drafts).text).not.toMatch(/first bad day/i)
   })
 
   it('offers all three tones', () => {
     const text = askReply(cost, drafts).text
 
-    expect(text).toContain('No, sorry.')
-    expect(text).toContain('how about the 20th?')
+    expect(text).toContain('cannot take this on')
+    expect(text).toContain('until the 20th')
     expect(text).toContain('drop the gym')
+  })
+
+  /**
+   * Real line breaks, not the two characters backslash-n.
+   *
+   * An escaping slip produced exactly that and every substring assertion still passed,
+   * because `toContain` cannot tell a separator from a literal. The student would have seen
+   * "
+" printed between every line.
+   */
+  it('separates the drafts with actual line breaks', () => {
+    const text = askReply(cost, drafts).text
+
+    expect(text.split(String.fromCharCode(10)).length).toBeGreaterThan(3)
+    expect(text).not.toContain(String.fromCharCode(92) + 'n')
   })
 
   /**
@@ -291,5 +326,42 @@ describe('askReply', () => {
 
   it('asks what the request was when nothing followed the command', () => {
     expect(needRequestReply().text.length).toBeGreaterThan(0)
+  })
+})
+
+describe('the wording at its edges', () => {
+  it('labels yesterday as yesterday, not as today', () => {
+    const reply = blocksReply('yesterday', [{ id: 'b1', title: 'Shift', startHour: 17 }])
+
+    expect(reply.text).toMatch(/yesterday/i)
+  })
+
+  // A request that costs no evenings still has to read as a sentence rather than "about 0".
+  it('reads sensibly when the request costs almost nothing', () => {
+    const text = askReply(
+      { firstDeficitDayBefore: null, firstDeficitDayAfter: null, eveningsEquivalent: 0 },
+      [{ tone: 'decline', text: 'No.' }],
+    ).text
+
+    expect(text).not.toMatch(/about 0/)
+  })
+
+  it('reads sensibly for exactly one evening', () => {
+    const text = askReply(
+      { firstDeficitDayBefore: null, firstDeficitDayAfter: null, eveningsEquivalent: 1 },
+      [{ tone: 'decline', text: 'No.' }],
+    ).text
+
+    expect(text).toMatch(/one evening/i)
+  })
+
+  // A drafter that returned fewer than three tones must not leave "undefined" in the reply.
+  it('leaves a gap rather than the word undefined when a tone is missing', () => {
+    const text = askReply(
+      { firstDeficitDayBefore: null, firstDeficitDayAfter: null, eveningsEquivalent: 2 },
+      [{ tone: 'decline', text: 'No.' }],
+    ).text
+
+    expect(text).not.toMatch(/undefined/)
   })
 })

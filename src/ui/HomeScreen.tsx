@@ -3,9 +3,22 @@ import type { Repository, Session } from '../data'
 import { DEFAULT_PARAMS, floorReserve, overallReserve, project } from '../engine'
 import { describeRebalance, makeRng, rebalance, toDayInputs } from '../optimizer'
 import { addItems } from '../domain/addItems'
+import { accept, lapsed } from '../domain/commitments'
+import { freeGapOn, prescribe } from '../domain/prescribe'
+import { attemptsIn, recordAttempt } from '../domain/recoveryLog'
+import { firstAction, type MicroStart } from '../domain/microStart'
+import { scheduleRecovery } from '../domain/scheduleRecovery'
+import { MicroStartCard } from './microStart/MicroStartCard'
+import { AccuracyNote } from './validation/AccuracyNote'
+import { BlockConfirm } from './calibration/BlockConfirm'
+import { CalibrationScreen } from './calibration/CalibrationScreen'
+import { useCalibration } from './calibration/useCalibration'
 import { completeItem, deferItem } from '../domain/scheduleEdits'
 import { PhotoImportScreen } from './planner/PhotoImportScreen'
 import { PlannerScreen } from './planner/PlannerScreen'
+import { Prescription } from './recovery/Prescription'
+import { LapsedNotice } from './request/LapsedNotice'
+import { RequestBoxScreen } from './request/RequestBoxScreen'
 import { AccountBar } from './auth/AccountBar'
 import { LinkTelegram } from './settings/LinkTelegram'
 import { PreviewBanner } from './auth/PreviewBanner'
@@ -44,6 +57,11 @@ export function HomeScreen({
   const [selected, setSelected] = useState<string | null>(null)
   const [planning, setPlanning] = useState(false)
   const [photographing, setPhotographing] = useState(false)
+  const [requesting, setRequesting] = useState(false)
+  const [calibrating, setCalibrating] = useState(false)
+  const [confirmDismissed, setConfirmDismissed] = useState(false)
+  const [microStart, setMicroStart] = useState<MicroStart | null>(null)
+  const [dismissedLapses, setDismissedLapses] = useState(false)
 
   const reducedMotion = useReducedMotion()
   const { play } = useTidyUp(reducedMotion)
@@ -56,6 +74,7 @@ export function HomeScreen({
 
   const floor = schedule ? floorReserve(schedule.start) : 100
   const { active: lowEnergy, setOverride } = useLowEnergy(repository, floor)
+  const { profile, setProfile } = useCalibration(repository)
 
   /**
    * The solve takes over a second on a laptop and several on phone-class hardware --
@@ -125,6 +144,36 @@ export function HomeScreen({
     )
   }
 
+  // §7.7: calibration is never a gate, so it is a screen you choose to open and can leave at
+  // any point -- not something standing between the student and the room.
+  if (calibrating) {
+    return (
+      <CalibrationScreen
+        profile={profile}
+        onChange={setProfile}
+        onDone={() => setCalibrating(false)}
+      />
+    )
+  }
+
+  // Same again for the request box, and the same reason: the low-energy view would discard
+  // the request they had already pasted.
+  if (requesting) {
+    return (
+      <RequestBoxScreen
+        schedule={schedule}
+        onAccept={(item) => {
+          // Today is 0 because the engine is pure and has no calendar; day 0 is "now"
+          // everywhere else in the model. A real clock is its own change, not one to
+          // smuggle in here.
+          setSchedule(accept(schedule, item, 0))
+          setRequesting(false)
+        }}
+        onCancel={() => setRequesting(false)}
+      />
+    )
+  }
+
   const capacity = overallReserve(schedule.start)
   const room = roomStateFor(schedule.start, projection, schedule)
 
@@ -157,6 +206,70 @@ export function HomeScreen({
         </>
       )}
 
+      {/* §2.3: a provisional yes that the reserve can no longer hold has already lapsed by
+          the time this appears. Above the room, because it is the one thing on this screen
+          that needs an answer rather than a glance. */}
+      {!dismissedLapses && (
+        <LapsedNotice
+          commitments={lapsed(schedule, 0, DEFAULT_PARAMS)}
+          onDismiss={() => setDismissedLapses(true)}
+        />
+      )}
+
+      {/* §4.1: one concrete first action, from either trigger. */}
+      <MicroStartCard
+        microStart={microStart}
+        onStarted={() => setMicroStart(null)}
+        onDismiss={() => setMicroStart(null)}
+      />
+
+      {/* §7.9: the highest value-per-effort input in the app -- one prompt, two taps,
+          feeding Reality Check, the carryover matrix and the Micro-Start trigger. */}
+      {!confirmDismissed && (
+        <BlockConfirm
+          block={
+            schedule.items.find(
+              (item) => item.dayIndex === 0 && !profile.confirmedItemIds.includes(item.id),
+            ) ?? null
+          }
+          onAnswer={(happened, difficulty) => {
+            const block = schedule.items.find(
+              (item) => item.dayIndex === 0 && !profile.confirmedItemIds.includes(item.id),
+            )
+            if (!block) return
+
+            // "Partly" is counted as half the planned time actually happening, and "no" as
+            // none of it. Both feed §2.4 as real data rather than being discarded -- §7.9 is
+            // explicit that a student who did not do the thing is the one whose data is most
+            // needed.
+            const done = happened === 'yes' ? 1 : happened === 'partly' ? 0.5 : 0
+            const overrun = difficulty === 'harder' ? 1.5 : difficulty === 'easier' ? 0.75 : 1
+
+            setProfile({
+              ...profile,
+              confirmedItemIds: [...profile.confirmedItemIds, block.id],
+              confirmations: [
+                ...profile.confirmations,
+                {
+                  type: block.type,
+                  plannedHours: block.hours,
+                  actualHours: block.hours * done * overrun,
+                },
+              ],
+            })
+          }}
+          onDismiss={() => setConfirmDismissed(true)}
+        />
+      )}
+
+      {/* §5.2: one thing to do, beside the room rather than instead of it -- replacing the
+          room with advice would take away the thing the student came to look at. */}
+      <Prescription
+        prescription={prescribe(schedule, attemptsIn(schedule))}
+        onAccept={(suggestion) => setSchedule(scheduleRecovery(schedule, suggestion))}
+        onDismiss={(suggestion) => setSchedule(recordAttempt(schedule, suggestion.kind, false))}
+      />
+
       {/* §1.1: the room is the surface; the dial sits in one corner as a compact
           readout. §10: at phone width it stacks above rather than sitting beside. */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -185,6 +298,25 @@ export function HomeScreen({
             setSchedule(deferItem(schedule, id))
             setSelected(null)
           }}
+          gapHours={freeGapOn(schedule, 0)}
+          onCantStart={(id) => {
+            const item = schedule.items.find((candidate) => candidate.id === id)
+            if (item) setMicroStart(firstAction(item))
+            setSelected(null)
+          }}
+          onChooseOuting={(outing) => {
+            setSchedule(
+              scheduleRecovery(schedule, {
+                title: outing.title,
+                type: 'physical',
+                kind: 'lightExercise',
+                hours: outing.hours,
+                dayIndex: 0,
+                startHour: 16,
+              }),
+            )
+            setSelected(null)
+          }}
           onClose={() => setSelected(null)}
         />
       )}
@@ -196,6 +328,10 @@ export function HomeScreen({
         bars={domainBars(schedule.start, projection, days)}
         projection={projection}
       />
+
+      {/* §8.1's scored number and §8.2's disclaimer, directly under the projection they
+          are about -- §8.2 requires this in the product copy, not only in the pitch. */}
+      <AccuracyNote predictions={profile.predictions} />
 
       {/* §0: primary actions in the lower half of the viewport on mobile, reachable
           one-handed. Full-width at phone size, shrinking to its content above it. */}
@@ -211,8 +347,28 @@ export function HomeScreen({
           Photograph a brief or a planner page
         </button>
 
-        {/* §3.1: the other way in. Without these two the rest of the app can only rearrange
-            a week it invented for the student rather than one they actually have. */}
+        {/* §7.6: the payoff screen, and the way into calibration. Never a gate (§7.7). */}
+        <button
+          type="button"
+          onClick={() => setCalibrating(true)}
+          data-testid="open-calibration"
+          className="w-full rounded-lg border border-slate-400 px-4 py-3 text-base sm:w-auto"
+        >
+          Tune it to you
+        </button>
+
+        {/* §2.3: for work someone else is trying to hand you. */}
+        <button
+          type="button"
+          onClick={() => setRequesting(true)}
+          data-testid="open-request"
+          className="w-full rounded-lg border border-slate-400 px-4 py-3 text-base sm:w-auto"
+        >
+          Someone asked me for something
+        </button>
+
+        {/* §3.1: the third way in. Without these the rest of the app can only rearrange a
+            week it invented for the student rather than one they actually have. */}
         <button
           type="button"
           onClick={() => setPlanning(true)}

@@ -1,4 +1,10 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { transcribeAudio } from '../src/ai/groq'
+import { readPhoto } from '../src/ai/readPhoto'
+import { readRequest } from '../src/ai/readRequest'
+import { draftReplies } from '../src/ai/drafts'
+import { DEFAULT_PARAMS } from '../src/engine'
+import { priceRequest } from '../src/domain/requestCost'
 import { HORIZON_DAYS } from '../src/engine'
 import type { Schedule } from '../src/optimizer'
 import type { PendingDump } from '../src/telegram/brainDump'
@@ -144,6 +150,23 @@ function createStore(client: SupabaseClient): ChatStore {
   }
 }
 
+/**
+ * Turns a Telegram file reference into the bytes behind it.
+ *
+ * Two calls: getFile gives a path, and the path is fetched from a second host. The bot
+ * token appears in the download URL, which is why this lives here and nowhere else.
+ */
+async function fetchTelegramFile(botToken: string, fileId: string): Promise<Blob | null> {
+  const lookup = await fetch(`${TELEGRAM_API}/bot${botToken}/getFile?file_id=${encodeURIComponent(fileId)}`)
+  const described = (await lookup.json()) as { ok: boolean; result?: { file_path?: string } }
+
+  const path = described.result?.file_path
+  if (!described.ok || path === undefined) return null
+
+  const file = await fetch(`${TELEGRAM_API}/file/bot${botToken}/${path}`)
+  return file.ok ? await file.blob() : null
+}
+
 async function say(botToken: string, chatId: number, reply: Reply): Promise<void> {
   await fetch(`${TELEGRAM_API}/bot${botToken}/sendMessage`, {
     method: 'POST',
@@ -192,7 +215,49 @@ export default async function handler(request: Request): Promise<Response> {
       auth: { persistSession: false, autoRefreshToken: false },
     })
 
-    const reply = await handleIntent(intent, createStore(client), Date.now())
+    const groqKey = process.env.GROQ_API_KEY
+    const botToken = config.botToken as string
+
+    /**
+     * The model-backed calls, assembled here because this is the only file that may read a
+     * credential. Each is left undefined when its key is absent, which the flows treat as
+     * an ordinary state rather than an error -- and which is exactly CI and the demo.
+     */
+    const services = groqKey
+      ? {
+          readPhotoFile: async (fileId: string) => {
+            const blob = await fetchTelegramFile(botToken, fileId)
+            if (blob === null) return null
+
+            const outcome = await readPhoto(
+              new File([blob], 'photo.jpg', { type: blob.type || 'image/jpeg' }),
+            )
+
+            // Only the items cross into the flow. Whether the read succeeded is answered by
+            // null, so the chat never has to know PhotoOutcome's shape.
+            return outcome.ok ? outcome.items : null
+          },
+
+          transcribe: async (fileId: string) => {
+            const blob = await fetchTelegramFile(botToken, fileId)
+            return blob === null ? null : transcribeAudio(blob, groqKey)
+          },
+
+          // One service rather than three: §2.3's answer is all of it or none. A cost with
+          // no drafts is a number to worry about with nothing to do.
+          priceAsk: async (text: string, week: Parameters<typeof priceRequest>[0]) => {
+            const item = await readRequest(text)
+            if (item === null) return null
+
+            const cost = priceRequest(week, item, DEFAULT_PARAMS)
+            const { drafts } = await draftReplies(item, cost)
+
+            return { cost, drafts }
+          },
+        }
+      : {}
+
+    const reply = await handleIntent(intent, createStore(client), Date.now(), services)
 
     if (reply !== null && intent.chatId !== null) {
       await say(config.botToken as string, intent.chatId, reply)

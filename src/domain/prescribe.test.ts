@@ -1,160 +1,144 @@
 import { describe, expect, it } from 'vitest'
-import { HORIZON_DAYS, type Reserves } from '../engine'
+import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
-import { MAX_REST_HOURS, prescribeRest } from './prescribe'
+import { freeGapOn, prescribe } from './prescribe'
 
-const block = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
-  id: 'b1',
+const item = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
+  id: 'a',
   title: 'Study',
   type: 'mental',
   kind: 'studyBlock',
   hours: 2,
   intensity: 1,
   dayIndex: 0,
-  startHour: 9,
-  fixed: true,
+  startHour: 10,
+  fixed: false,
   deadlineDay: null,
   protectedRest: false,
   ...over,
 })
 
-const week = (items: readonly ScheduledItem[]): Schedule => ({
-  items,
+const week = (over: Partial<Schedule> = {}): Schedule => ({
+  items: [],
   start: { mental: 70, physical: 70, social: 70, errands: 70 },
   horizonDays: HORIZON_DAYS,
   sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
-})
-
-const reserves = (over: Partial<Reserves> = {}): Reserves => ({
-  mental: 70,
-  physical: 70,
-  social: 70,
-  errands: 70,
   ...over,
 })
 
-/** A day with nothing on it, so a gap is always available unless a test says otherwise. */
-const emptyDay = week([])
+const low = (type: 'mental' | 'physical' | 'social') => ({
+  mental: type === 'mental' ? 15 : 70,
+  physical: type === 'physical' ? 15 : 70,
+  social: type === 'social' ? 15 : 70,
+  errands: 70,
+})
 
-describe('prescribeRest, choosing what to prescribe', () => {
-  // §5.2: matched to the depleted type, not to whatever is convenient.
-  it('prescribes a person when social is lowest', () => {
-    const result = prescribeRest(emptyDay, reserves({ social: 20 }), 0)
-
-    expect(result?.type).toBe('social')
-    expect(result?.kind).toBe('socialRestorative')
+describe('freeGapOn', () => {
+  it('reports a usable gap when the day is empty', () => {
+    expect(freeGapOn(week(), 0)).toBeGreaterThan(0)
   })
 
-  it('prescribes movement when physical is lowest', () => {
-    const result = prescribeRest(emptyDay, reserves({ physical: 20 }), 0)
+  it('shrinks as the day fills up', () => {
+    const busy = week({ items: [item({ hours: 6 }), item({ id: 'b', hours: 6, startHour: 16 })] })
 
-    expect(result?.type).toBe('physical')
-    expect(result?.kind).toBe('lightExercise')
+    expect(freeGapOn(busy, 0)).toBeLessThan(freeGapOn(week(), 0))
   })
 
-  // §5.2 is explicit that mental low means actual downtime, not a different screen.
-  it('prescribes downtime when mental is lowest', () => {
-    const result = prescribeRest(emptyDay, reserves({ mental: 20 }), 0)
-
-    expect(result?.type).toBe('mental')
-    expect(result?.kind).toBe('rest')
-  })
-
-  /**
-   * §1.2: most trackers would count low social load as healthy, and flagging it instead is
-   * what proves the model understands burnout rather than summing hours. The same has to be
-   * true of what it prescribes.
-   */
-  it('treats low social as a deficit rather than as being unbothered', () => {
-    const result = prescribeRest(emptyDay, reserves({ social: 14, mental: 80, physical: 80 }), 0)
-
-    expect(result?.type).toBe('social')
-  })
-
-  // Errands is a load type but not something rest repairs, so it never decides the
-  // prescription -- the lowest of the three that recovery actually serves does.
-  it('never prescribes for errands, even when errands is lowest', () => {
-    const result = prescribeRest(emptyDay, reserves({ errands: 5, mental: 30 }), 0)
-
-    expect(result?.type).toBe('mental')
+  it('never reports a negative gap on an overfull day', () => {
+    expect(freeGapOn(week({ items: [item({ hours: 30 })] }), 0)).toBeGreaterThanOrEqual(0)
   })
 })
 
-describe('prescribeRest, fitting it into the day', () => {
-  it('fits the suggestion into a real gap', () => {
-    // Solid from the start of the day until 15:00, so the only room is after it. The block
-    // starts at 8 rather than 9 on purpose: an earlier start would leave 08:00-09:00 free,
-    // and finding *that* gap would be correct behaviour rather than the bug this asserts
-    // against -- which is what the first version of this test got wrong.
-    const day = week([block({ startHour: 8, hours: 7 })])
-
-    const result = prescribeRest(day, reserves({ mental: 20 }), 0)
-
-    expect(result?.startHour).toBeGreaterThanOrEqual(15)
-  })
-
-  it('offers nothing when the day has no gap at all', () => {
-    const solid = week([block({ startHour: 8, hours: 14 })])
-
-    expect(prescribeRest(solid, reserves({ mental: 20 }), 0)).toBeNull()
+describe('prescribe', () => {
+  /**
+   * Silence is a real answer. Advice offered to someone who is fine is advice ignored when
+   * they are not.
+   */
+  it('says nothing when nothing is low', () => {
+    expect(prescribe(week())).toBeNull()
   })
 
   /**
-   * §5.1: recovery has a ceiling as well as a floor. Past a point the returns go flat and
-   * then negative, so an empty day must not produce an absurd twelve-hour suggestion.
+   * §5.2's matching, which is the point of the unit. The engine already refuses to let sleep
+   * cure loneliness; this is that same conviction pointed at the advice instead of the maths.
    */
-  it('does not suggest more rest than is useful, however long the gap', () => {
-    const result = prescribeRest(emptyDay, reserves({ mental: 20 }), 0)
+  it('prescribes a person when social is low', () => {
+    const out = prescribe(week({ start: low('social') }))
 
-    expect(result?.hours).toBeLessThanOrEqual(MAX_REST_HOURS)
+    expect(out?.type).toBe('social')
+    expect(out?.kind).toBe('socialRestorative')
+    expect(out?.title).toMatch(/someone|person|friend/i)
   })
 
-  it('does not offer a gap too short to be worth taking', () => {
-    // Ten minutes free between two long blocks, and nothing else all day.
-    const day = week([
-      block({ startHour: 8, hours: 6 }),
-      block({ id: 'b2', startHour: 14.2, hours: 8 }),
-    ])
+  it('prescribes movement when physical is low', () => {
+    const out = prescribe(week({ start: low('physical') }))
 
-    expect(prescribeRest(day, reserves({ mental: 20 }), 0)).toBeNull()
+    expect(out?.type).toBe('physical')
+    expect(out?.title).toMatch(/walk|move|outside/i)
   })
 
-  it('only considers the day it was asked about', () => {
-    const day = week([block({ dayIndex: 1, startHour: 8, hours: 14 })])
+  /**
+   * §5.2: "actual downtime, not a different screen". An app suggesting more app is the exact
+   * failure this guards against.
+   *
+   * The check is for a suggestion to *use* something, rather than for the word "screen" at
+   * all -- the first version of this test failed on the copy "no screen", which is the
+   * advice being asked for rather than a violation of it. A regex that cannot tell "avoid a
+   * screen" from "look at a screen" is not testing the thing it claims to.
+   */
+  it('prescribes real downtime when mental is low, not another screen', () => {
+    const out = prescribe(week({ start: low('mental') }))
 
-    // Day 1 is full; day 0 is empty, so asking about day 0 still finds room.
-    expect(prescribeRest(day, reserves({ mental: 20 }), 0)).not.toBeNull()
-  })
-})
-
-describe('prescribeRest, what it produces', () => {
-  // §5.2: one option only. A depleted person cannot choose from a menu, and every extra
-  // option lowers the odds of any action at all.
-  it('is one suggestion, not a list', () => {
-    const result = prescribeRest(emptyDay, reserves({ mental: 20 }), 0)
-
-    expect(Array.isArray(result)).toBe(false)
-    expect(result).not.toBeNull()
-  })
-
-  it('names something concrete enough to actually do', () => {
-    const result = prescribeRest(emptyDay, reserves({ physical: 20 }), 0)
-
-    expect((result?.title.length ?? 0)).toBeGreaterThan(3)
+    expect(out?.type).toBe('mental')
+    expect(out?.kind).toBe('rest')
+    expect(out?.title).not.toMatch(/watch|browse|scroll|open the app|check your/i)
   })
 
-  // §5.1's most important design decision: recovery is structurally protected, so what is
-  // scheduled has to be protected rest rather than an ordinary block the optimizer may move.
-  it('is protected rest, which the optimizer may not move', () => {
-    const result = prescribeRest(emptyDay, reserves({ mental: 20 }), 0)
-
-    expect(result?.protectedRest).toBe(true)
+  // The positive half: it does not merely avoid suggesting a screen, it says to put it down.
+  it('tells a depleted student to get off the screen rather than leaving it ambiguous', () => {
+    expect(prescribe(week({ start: low('mental') }))?.title).toMatch(/no screen|off.*screen/i)
   })
 
-  it('gives the same answer for the same day and reserves', () => {
-    const first = prescribeRest(emptyDay, reserves({ mental: 20 }), 0)
-    const second = prescribeRest(emptyDay, reserves({ mental: 20 }), 0)
+  it('answers the lowest reserve when more than one is low', () => {
+    expect(prescribe(week({ start: { mental: 12, physical: 18, social: 19, errands: 70 } }))?.type).toBe(
+      'mental',
+    )
+  })
 
-    expect(second).toEqual(first)
+  /**
+   * §5.2: one option only. Asserted even though the return type already forbids a list --
+   * the type is the guarantee, this test is what explains why it is shaped that way.
+   */
+  it('returns exactly one thing, never a list', () => {
+    const out = prescribe(week({ start: low('social') }))
+
+    expect(Array.isArray(out)).toBe(false)
+    expect(out).not.toBeNull()
+  })
+
+  it('sizes the suggestion to the gap that actually exists', () => {
+    const roomy = prescribe(week({ start: low('physical') }))
+    const packed = prescribe(week({ start: low('physical'), items: [item({ hours: 14 })] }))
+
+    expect(packed?.hours).toBeLessThanOrEqual(roomy?.hours ?? 0)
+  })
+
+  /**
+   * Past three hours `recoveryForDay` credits nothing, so a longer block would promise
+   * recovery the model refuses to pay out.
+   */
+  it('never suggests a block longer than the engine will credit', () => {
+    expect(prescribe(week({ start: low('mental') }))?.hours).toBeLessThanOrEqual(3)
+  })
+
+  it('says nothing when there is no real gap to put it in', () => {
+    expect(prescribe(week({ start: low('mental'), items: [item({ hours: 24 })] }))).toBeNull()
+  })
+
+  it('places it on a real day within the horizon', () => {
+    const out = prescribe(week({ start: low('social') }))
+
+    expect(out?.dayIndex).toBeGreaterThanOrEqual(0)
+    expect(out?.dayIndex).toBeLessThan(HORIZON_DAYS)
   })
 })

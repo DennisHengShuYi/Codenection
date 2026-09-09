@@ -214,3 +214,35 @@ describe('readUpdate, answering a block or a prescription', () => {
     ).toBe('unhandled')
   })
 })
+
+describe('readUpdate, edges that only malformed input reaches', () => {
+  // Telegram always sends file_size, but nothing about this endpoint is under our control.
+  it('reads a photo size that reports no byte count', () => {
+    const intent = readUpdate({ message: { chat, photo: [{ file_id: 'p' }] } })
+
+    expect(intent).toEqual({ kind: 'photo', chatId: 4242, fileId: 'p', bytes: 0 })
+  })
+
+  it('skips a photo size with no file id at all', () => {
+    const intent = readUpdate({
+      message: { chat, photo: [{ file_size: 10 }, { file_id: 'real', file_size: 5 }] },
+    })
+
+    expect(intent).toEqual({ kind: 'photo', chatId: 4242, fileId: 'real', bytes: 5 })
+  })
+
+  it('reads a voice note that reports no duration or size', () => {
+    const intent = readUpdate({ message: { chat, voice: { file_id: 'v' } } })
+
+    expect(intent).toEqual({ kind: 'voice', chatId: 4242, fileId: 'v', seconds: 0, bytes: 0 })
+  })
+
+  // A button press whose message carries no chat cannot be answered, so it is not acted on.
+  it('ignores a button press with no chat behind it', () => {
+    expect(readUpdate({ callback_query: { data: 'confirm:d1' } }).kind).toBe('unhandled')
+  })
+
+  it('ignores a button press carrying no data', () => {
+    expect(readUpdate({ callback_query: { message: { chat } } }).kind).toBe('unhandled')
+  })
+})

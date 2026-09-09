@@ -1,0 +1,90 @@
+import { describe, expect, it } from 'vitest'
+import { HORIZON_DAYS } from '../engine'
+import type { Schedule, ScheduledItem } from '../optimizer'
+import { blocksOnDay } from './dayBlocks'
+
+const block = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
+  id: 'b1',
+  title: 'Study',
+  type: 'mental',
+  kind: 'studyBlock',
+  hours: 2,
+  intensity: 1,
+  dayIndex: 0,
+  startHour: 9,
+  fixed: false,
+  deadlineDay: null,
+  protectedRest: false,
+  ...over,
+})
+
+const week = (items: readonly ScheduledItem[]): Schedule => ({
+  items,
+  start: { mental: 70, physical: 70, social: 70, errands: 70 },
+  horizonDays: HORIZON_DAYS,
+  sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+})
+
+describe('blocksOnDay', () => {
+  it('returns only the blocks for that day', () => {
+    const schedule = week([
+      block({ id: 'today', dayIndex: 3 }),
+      block({ id: 'tomorrow', dayIndex: 4 }),
+    ])
+
+    expect(blocksOnDay(schedule, 3).map((entry) => entry.id)).toEqual(['today'])
+  })
+
+  // Asked about in the order they happen: a check-in that jumped around the day would be
+  // harder to answer than the day was to live.
+  it('returns them in the order they happen', () => {
+    const schedule = week([
+      block({ id: 'evening', startHour: 19 }),
+      block({ id: 'morning', startHour: 8 }),
+      block({ id: 'afternoon', startHour: 14 }),
+    ])
+
+    expect(blocksOnDay(schedule, 0).map((entry) => entry.id)).toEqual([
+      'morning',
+      'afternoon',
+      'evening',
+    ])
+  })
+
+  // Answered as "nothing scheduled" rather than as an error: an empty day is an ordinary
+  // day, and often a good one.
+  it('returns nothing for a day with nothing on it', () => {
+    expect(blocksOnDay(week([block({ dayIndex: 1 })]), 5)).toEqual([])
+  })
+
+  it('returns nothing for a day outside the horizon, rather than throwing', () => {
+    const schedule = week([block()])
+
+    expect(() => blocksOnDay(schedule, 999)).not.toThrow()
+    expect(blocksOnDay(schedule, 999)).toEqual([])
+    expect(blocksOnDay(schedule, -1)).toEqual([])
+  })
+
+  /**
+   * §5.1 makes rest a scheduled object with weight rather than a notification, so it is
+   * part of the day like anything else -- and whether protected rest actually happened is
+   * exactly what §5.2's failed-recovery logging needs to know.
+   */
+  it('includes protected rest alongside ordinary blocks', () => {
+    const schedule = week([
+      block({ id: 'study', startHour: 9 }),
+      block({ id: 'rest', startHour: 17, protectedRest: true, kind: 'rest' }),
+    ])
+
+    expect(blocksOnDay(schedule, 0).map((entry) => entry.id)).toEqual(['study', 'rest'])
+  })
+
+  it('does not change the schedule it was given', () => {
+    const items = [block({ startHour: 19 }), block({ startHour: 8 })]
+    const schedule = week(items)
+
+    blocksOnDay(schedule, 0)
+
+    expect(schedule.items[0]?.startHour).toBe(19)
+  })
+})

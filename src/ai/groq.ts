@@ -67,3 +67,51 @@ export async function askGroq(text: string, apiKey: string): Promise<ParsedItem[
     clearTimeout(timeout)
   }
 }
+
+/** Groq's Whisper endpoint. A different URL from the chat one above, and the only other
+ *  place this key is spent. */
+const GROQ_TRANSCRIBE_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
+
+/** Longer than the chat timeout: a voice note is uploaded before it is read, and the upload
+ *  is the slow part on a phone connection. */
+const TRANSCRIBE_TIMEOUT_MS = 30_000
+
+/**
+ * A voice note as text.
+ *
+ * §3.1 already wants voice as an accessibility win; in a chat app it is simply how a thought
+ * gets sent. What comes back goes into exactly the same parser typing does -- voice is a way
+ * of typing, not a second kind of input.
+ *
+ * Null on any failure, never a throw: the caller answers "type it instead", which is a
+ * working app rather than a broken one.
+ */
+export async function transcribeAudio(audio: Blob, apiKey: string): Promise<string | null> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), TRANSCRIBE_TIMEOUT_MS)
+
+  try {
+    const form = new FormData()
+    form.append('file', audio, 'note.ogg')
+    form.append('model', 'whisper-large-v3-turbo')
+    // Asking for plain text rather than JSON: there is one field wanted and no reason to
+    // parse a document to reach it.
+    form.append('response_format', 'text')
+
+    const response = await fetch(GROQ_TRANSCRIBE_URL, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${apiKey}` },
+      body: form,
+      signal: controller.signal,
+    })
+
+    if (!response.ok) return null
+
+    const text = (await response.text()).trim()
+    return text === '' ? null : text
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
+}

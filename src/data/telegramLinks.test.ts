@@ -126,3 +126,22 @@ describe('hasTelegramLink', () => {
     expect(await hasTelegramLink()).toBe(false)
   })
 })
+
+describe('when the call itself fails', () => {
+  // None of these may throw into the UI: the panel shows a message and stays usable.
+  it('reports a thrown failure when unlinking', async () => {
+    stub.result = { get error(): never {
+      throw new Error('network down')
+    } }
+
+    expect((await unlinkTelegram()).ok).toBe(false)
+  })
+
+  it('answers no rather than throwing when the link check fails', async () => {
+    stub.result = { get data(): never {
+      throw new Error('network down')
+    } }
+
+    expect(await hasTelegramLink()).toBe(false)
+  })
+})

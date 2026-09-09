@@ -284,6 +284,65 @@ prices it and drafts the reply before you commit.
 All three keep their existing behaviour, including: never import silently, low-confidence rows
 flagged, the two-room comparison, the three drafted replies, and no send button.
 
+### How a typed event becomes numbers
+
+Nothing decides an event's drain, recovery or efficiency directly. An event is classified on
+three axes and the engine derives all three numbers from them:
+
+| Axis | Values | Decides |
+|---|---|---|
+| `type` | 4 — mental · physical · social · errands | which reserve it spends |
+| `kind` | 8 — hardExercise · lightExercise · studyBlock · socialDraining · socialRestorative · errands · rest · sleep | **whether it drains or recovers**, and what residue it leaves for the hours after it |
+| `intensity` | 0–2 | how hard, within its kind |
+
+**`kind` is the load-bearing one**, and the parse has never produced it. The Groq prompt asks
+for `{title, type, hours, deadlineDay, hard}`, and `addItems` then invents a kind from a fixed
+four-row table: `mental→studyBlock`, `physical→lightExercise`, `social→socialDraining`,
+`errands→errands`, with `intensity` hardcoded to 1.
+
+Four consequences, all live today:
+
+- **Half the engine is unreachable from typing.** `hardExercise`, `socialRestorative`, `rest`
+  and `sleep` cannot be produced by free text or by a photo. `hardExercise` is reachable from
+  **nowhere in the app** — its row in `CROSS_EFFECT` can never fire.
+- **The gym bug.** *"gym, 2 hours"* → `physical` → `lightExercise`, whose cross-effect is
+  `mental +0.10`. The engine believes a two-hour gym session *improves* the next study block.
+  `hardExercise` is `mental −0.25`. A study block after training costs roughly 25% more than
+  projected, and the optimizer will happily schedule exactly that.
+- **Typing "rest" produces work.** No text can reach kind `rest`. *"Nap for an hour"* becomes
+  `lightExercise` and **drains** rather than recovers.
+- **`intensity` is a dead axis.** A skim-read and a final exam are both 1.
+
+**The fix: the parse carries `kind`.**
+
+1. The Groq prompt and `replySchema` gain a `kind` field, validated against the engine's own
+   `ActivityKind` union so a hallucinated value is rejected at the boundary rather than
+   corrupting every projection downstream.
+2. `addItems` reads `item.kind` instead of consulting `KIND_FOR`.
+3. The rules fallback derives kind from the signal words **it already has** — its physical list
+   is `gym · run · walk · swim · football · training · exercise · yoga`, which already separates
+   the hard from the light. It also gains a small `rest` signal set (`nap · rest · break ·
+   downtime`), which is what fixes the third bullet offline.
+4. `ItemChip` lets a student correct the kind before accepting, as it already does the type.
+
+This matters more than it looks: `GROQ_API_KEY` is blanked in `vitest.config.ts` and `vite dev`
+does not serve `/api` at all, so **the rules fallback is the path the whole test suite and the
+entire local dev loop actually exercise.** Fixing only the model path would leave the gym bug
+everywhere except production.
+
+**Defaults follow the doctrine `addItems` already states** — that crediting recovery which never
+happened reports a student as fine while they sink, whereas under-crediting only errs toward
+caution. So an unclassifiable physical block defaults to `hardExercise`, not `lightExercise`,
+and social stays pessimistic at `socialDraining` exactly as it does today.
+
+**`intensity` stays at 1 and is not asked for.** `kind` already encodes "how hard" more usefully
+than a 0–2 figure a student would guess at, and a field nobody sets is how the calibration
+subsystem got the way it did.
+
+**Kind `rest` is not the `protectedRest` flag.** `addItems` must keep refusing to set `fixed` or
+`protectedRest` on anything from a parse — §5.1's guarantee rests on it. A movable rest block
+the optimizer may still shuffle is a different thing and is safe.
+
 ---
 
 ## 7. Recovery, simplified

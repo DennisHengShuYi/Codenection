@@ -2426,6 +2426,178 @@ git commit -m "feat: make RoomShell a router and the room screen"
 > the full code. Before starting any Phase 2 task, **read the existing test file it modifies**
 > — it is the specification for the style and coverage expected.
 
+## Task 14a: The parse carries `kind`
+
+§6, "How a typed event becomes numbers". Do this **before** Task 14 — it changes the data those
+screens carry.
+
+Today the parse produces `{title, type, hours, deadlineDay, hard}` and `addItems` invents a kind
+from a four-row table. That makes `hardExercise`, `socialRestorative`, `rest` and `sleep`
+unreachable from any text, and it makes the engine believe a two-hour gym session **improves**
+the next study block (`lightExercise` is `mental +0.10`; `hardExercise` is `−0.25`).
+
+**Files:**
+- Modify: `src/ai/types.ts` — `ParsedItem` gains `kind: ActivityKind`
+- Modify: `src/ai/schema.ts`, `schema.test.ts` — `replySchema` gains `kind`
+- Modify: `src/ai/groq.ts`, `groq.test.ts` — the prompt asks for it
+- Modify: `src/ai/fallbackParser.ts`, `fallbackParser.test.ts` — derive kind from the signal words
+- Modify: `src/domain/addItems.ts`, `addItems.test.ts` — read `item.kind`, delete `KIND_FOR`
+- Modify: `src/ui/planner/ItemChip.tsx`, `ItemChip.test.tsx` — let a student correct the kind
+
+**Interfaces:**
+- Produces: `ParsedItem.kind: ActivityKind`. Every producer of a `ParsedItem` must set it —
+  `parseModelReply`, `parseWithRules`, and every test fixture that builds one by hand.
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// src/ai/fallbackParser.test.ts
+it('tells hard training from a walk, using signal words it already has', () => {
+  expect(parseWithRules('gym')[0]?.kind).toBe('hardExercise')
+  expect(parseWithRules('walk')[0]?.kind).toBe('lightExercise')
+})
+
+it('lets a student type rest and get rest, rather than a study block', () => {
+  const [nap] = parseWithRules('nap for an hour')
+
+  expect(nap?.kind).toBe('rest')
+})
+
+it('defaults unrecognised physical work to the dearer kind', () => {
+  // addItems' own doctrine: crediting recovery that never happened reports a student as
+  // fine while they sink; under-crediting only errs toward caution.
+  expect(parseWithRules('badminton')[0]?.kind).toBe('hardExercise')
+})
+
+it('keeps social pessimistic, because a parse cannot tell a friend from a group project', () => {
+  expect(parseWithRules('coffee with sarah')[0]?.kind).toBe('socialDraining')
+})
+```
+
+```ts
+// src/ai/schema.test.ts
+it('rejects a kind the engine does not have', () => {
+  const reply = {
+    items: [{ title: 'gym', type: 'physical', kind: 'crossfit', hours: 2, deadlineDay: null, hard: false }],
+  }
+
+  expect(parseModelReply(reply)).toBeNull()
+})
+
+it('keeps a kind the engine does have', () => {
+  const reply = {
+    items: [{ title: 'gym', type: 'physical', kind: 'hardExercise', hours: 2, deadlineDay: null, hard: false }],
+  }
+
+  expect(parseModelReply(reply)?.[0]?.kind).toBe('hardExercise')
+})
+```
+
+```ts
+// src/domain/addItems.test.ts
+it('carries the parsed kind through rather than deriving one from the type', () => {
+  const week = addItems(emptyWeek(), [parsed({ type: 'physical', kind: 'hardExercise' })])
+
+  expect(week.items[0]?.kind).toBe('hardExercise')
+})
+
+it('still refuses to let a parse pin anything, whatever kind it claims', () => {
+  const week = addItems(emptyWeek(), [parsed({ type: 'mental', kind: 'rest' })])
+
+  // Kind `rest` is not the protectedRest flag. §5.1's guarantee is that nothing from a
+  // parse may be immovable -- a movable rest block is a different thing and is safe.
+  expect(week.items[0]?.fixed).toBe(false)
+  expect(week.items[0]?.protectedRest).toBe(false)
+})
+```
+
+- [ ] **Step 2: Run them and watch them fail**
+
+Run: `npx vitest run src/ai src/domain/addItems.test.ts`
+Expected: FAIL — `kind` is not a property of `ParsedItem`.
+
+- [ ] **Step 3: Add `kind` to the type and the schema**
+
+`src/ai/types.ts`: add `readonly kind: ActivityKind` to `ParsedItem`, importing `ActivityKind`
+from `../engine`.
+
+`src/ai/schema.ts`: add to `replySchema`'s item object, using the engine's own union rather than
+a copy that could drift:
+
+```ts
+kind: z.enum(ACTIVITY_KINDS),
+```
+
+`ACTIVITY_KINDS` does not exist yet — `src/engine/types.ts` declares `ActivityKind` as a bare
+union. Add the runtime array beside it and derive the type from it, exactly as `LOAD_TYPES`
+already does:
+
+```ts
+export const ACTIVITY_KINDS = [
+  'hardExercise', 'lightExercise', 'studyBlock', 'socialDraining',
+  'socialRestorative', 'errands', 'rest', 'sleep',
+] as const
+
+export type ActivityKind = (typeof ACTIVITY_KINDS)[number]
+```
+
+Export it from `src/engine/index.ts`. Nothing else changes — the union's members are identical.
+
+- [ ] **Step 4: Ask the model for it**
+
+`src/ai/groq.ts`, add to `SYSTEM_PROMPT`:
+
+```ts
+'kind is one of: hardExercise, lightExercise, studyBlock, socialDraining, socialRestorative, errands, rest, sleep.',
+'Choose kind by what the activity actually is, not by its type: a gym session is hardExercise, a walk is lightExercise, a nap is rest.',
+'When unsure about physical work choose hardExercise, and for anything social choose socialDraining.',
+```
+
+The last line is the doctrine made explicit to the model: over-crediting recovery reports a
+student as fine while they sink; under-crediting only errs toward caution.
+
+- [ ] **Step 5: Derive kind in the rules fallback**
+
+Split the existing `SIGNALS` physical row rather than adding a new list — the words are already
+separated by hardness:
+
+```ts
+// hard:  gym · run · swim · football · training · exercise
+// light: walk · yoga
+```
+
+Add a `rest` signal set (`nap`, `rest`, `break`, `downtime`) mapping to `type: 'mental'`,
+`kind: 'rest'`. Defaults per type when no word matches: `mental→studyBlock`,
+`physical→hardExercise`, `social→socialDraining`, `errands→errands`.
+
+- [ ] **Step 6: Read the kind in `addItems`**
+
+Delete `KIND_FOR` entirely and use `item.kind`. Leave `fixed: false` and `protectedRest: false`
+and their comment untouched — that guarantee is unrelated to this change and must not move.
+
+- [ ] **Step 7: Show it on the chip**
+
+`ItemChip` already lets the type be corrected. Add the kind the same way, labelled in student
+words rather than camelCase: **Hard exercise · Light exercise · Study · Seeing people (draining)
+· Seeing people (restorative) · Life admin · Rest · Sleep**.
+
+- [ ] **Step 8: Run everything**
+
+Run: `npm test`
+Expected: every hand-built `ParsedItem` fixture across the suite now fails to typecheck. Add
+`kind` to each — do not widen the type to make them pass.
+
+Run: `npm run typecheck`
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add src/ai src/engine src/domain/addItems.ts src/domain/addItems.test.ts src/ui/planner/ItemChip.tsx src/ui/planner/ItemChip.test.tsx
+git commit -m "fix: let the parse say what an activity actually is"
+```
+
+---
+
 ## Task 14: `AddSheet`, and the three input screens on `kit/`
 
 §6. Photo, text and request are the same shape — something arrives, you confirm what it is, it becomes blocks. The request path is the one that prices it first.

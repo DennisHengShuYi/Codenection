@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS, HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
+import { anchorTo } from './calendar'
 import {
   accuracyLine,
   meanAbsoluteError,
   predictEnergy,
+  predictionsAfter,
   recordPrediction,
   resolvePrediction,
   type EnergyPrediction,
@@ -19,7 +21,13 @@ const week = (over: Partial<Schedule> = {}): Schedule => ({
 })
 
 const resolved = (pairs: ReadonlyArray<[number, number]>): EnergyPrediction[] =>
-  pairs.map(([predicted, reported], index) => ({ forDay: index, predicted, reported }))
+  pairs.map(([predicted, reported], index) => ({
+    forDate: `2026-09-${String(10 + index).padStart(2, '0')}`,
+    predicted,
+    reported,
+  }))
+
+const at = (iso: string) => new Date(`${iso}T09:00:00Z`)
 
 describe('predictEnergy', () => {
   /**
@@ -54,40 +62,40 @@ describe('predictEnergy', () => {
 
 describe('recordPrediction', () => {
   it('keeps the prediction unresolved until it is reported on', () => {
-    const kept = recordPrediction([], 2, 64)
+    const kept = recordPrediction([], '2026-09-11', 64)
 
     expect(kept).toHaveLength(1)
     expect(kept[0]?.reported).toBeNull()
   })
 
   it('keeps predictions already made', () => {
-    expect(recordPrediction(recordPrediction([], 2, 64), 3, 61)).toHaveLength(2)
+    expect(recordPrediction(recordPrediction([], '2026-09-11', 64), '2026-09-12', 61)).toHaveLength(2)
   })
 
   it('does not record the same day twice', () => {
-    expect(recordPrediction(recordPrediction([], 2, 64), 2, 70)).toHaveLength(1)
+    expect(recordPrediction(recordPrediction([], '2026-09-11', 64), '2026-09-11', 70)).toHaveLength(1)
   })
 })
 
 describe('resolvePrediction', () => {
   it('attaches what the student actually reported', () => {
-    const out = resolvePrediction(recordPrediction([], 2, 64), 2, 58)
+    const out = resolvePrediction(recordPrediction([], '2026-09-11', 64), '2026-09-11', 58)
 
     expect(out[0]?.reported).toBe(58)
   })
 
   it('leaves an unknown day alone', () => {
-    const before = recordPrediction([], 2, 64)
+    const before = recordPrediction([], '2026-09-11', 64)
 
-    expect(resolvePrediction(before, 9, 58)).toEqual(before)
+    expect(resolvePrediction(before, '2026-12-25', 58)).toEqual(before)
   })
 
   // A resolved prediction is a scored one. Rewriting it later would let the number be
   // improved after the fact, which is the opposite of a falsifiable claim.
   it('never re-resolves one that has already been scored', () => {
-    const once = resolvePrediction(recordPrediction([], 2, 64), 2, 58)
+    const once = resolvePrediction(recordPrediction([], '2026-09-11', 64), '2026-09-11', 58)
 
-    expect(resolvePrediction(once, 2, 90)[0]?.reported).toBe(58)
+    expect(resolvePrediction(once, '2026-09-11', 90)[0]?.reported).toBe(58)
   })
 })
 
@@ -99,7 +107,7 @@ describe('meanAbsoluteError', () => {
    */
   it('is unknown rather than zero when nothing has resolved', () => {
     expect(meanAbsoluteError([])).toBeNull()
-    expect(meanAbsoluteError(recordPrediction([], 2, 64))).toBeNull()
+    expect(meanAbsoluteError(recordPrediction([], '2026-09-11', 64))).toBeNull()
   })
 
   it('is zero for a perfect prediction', () => {
@@ -117,7 +125,7 @@ describe('meanAbsoluteError', () => {
   })
 
   it('ignores predictions still waiting to be reported on', () => {
-    const mixed = [...resolved([[70, 60]]), { forDay: 5, predicted: 40, reported: null }]
+    const mixed = [...resolved([[70, 60]]), { forDate: '2026-09-20', predicted: 40, reported: null }]
 
     expect(meanAbsoluteError(mixed)).toBe(10)
   })
@@ -135,5 +143,60 @@ describe('accuracyLine', () => {
 
   it('says how many it is based on, so the number can be judged', () => {
     expect(accuracyLine(resolved([[70, 60], [65, 60]]))).toMatch(/2/)
+  })
+})
+
+/**
+ * The entry point that was missing, and the reason §8.1 sat inert: a prediction has to be
+ * about a real day or it can never be checked against anything.
+ */
+describe('predictionsAfter', () => {
+  const anchored = () => anchorTo(week(), at('2026-09-09'))
+
+  it('makes a prediction about the day two days out', () => {
+    const out = predictionsAfter([], anchored(), DEFAULT_PARAMS, at('2026-09-09'))
+
+    expect(out).toHaveLength(1)
+    expect(out[0]?.forDate).toBe('2026-09-11')
+  })
+
+  it('does not predict the same day twice across sessions', () => {
+    const once = predictionsAfter([], anchored(), DEFAULT_PARAMS, at('2026-09-09'))
+
+    expect(predictionsAfter(once, anchored(), DEFAULT_PARAMS, at('2026-09-09'))).toHaveLength(1)
+  })
+
+  it('makes a new prediction on a new day', () => {
+    const once = predictionsAfter([], anchored(), DEFAULT_PARAMS, at('2026-09-09'))
+
+    expect(predictionsAfter(once, anchored(), DEFAULT_PARAMS, at('2026-09-10'))).toHaveLength(2)
+  })
+
+  /**
+   * An unanchored week has no real dates, so there is no honest claim to make. Recording one
+   * anyway would produce rows that look like predictions and could never resolve -- exactly
+   * the theatre §8 exists to avoid.
+   */
+  it('records nothing for a week with no date anchor', () => {
+    expect(predictionsAfter([], week(), DEFAULT_PARAMS, at('2026-09-09'))).toEqual([])
+  })
+
+  it('records nothing once the fortnight is behind them', () => {
+    expect(predictionsAfter([], anchored(), DEFAULT_PARAMS, at('2026-12-01'))).toEqual([])
+  })
+
+  it('records nothing when two days out is past the horizon', () => {
+    const nearlyOver = anchorTo(week(), at('2026-09-09'))
+
+    // Day 20 is the last in the horizon, so day 22 has no projection to read.
+    expect(predictionsAfter([], nearlyOver, DEFAULT_PARAMS, at('2026-09-29'))).toEqual([])
+  })
+
+  it('leaves predictions already made untouched', () => {
+    const existing = resolved([[70, 60]])
+
+    expect(predictionsAfter(existing, anchored(), DEFAULT_PARAMS, at('2026-09-09'))[0]).toEqual(
+      existing[0],
+    )
   })
 })

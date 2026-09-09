@@ -231,7 +231,6 @@ Expected: FAIL — cannot resolve `./requestCost`.
 import type { ParsedItem } from '../ai'
 import {
   DEFICIT_THRESHOLD,
-  FULL_RESERVE,
   overallReserve,
   project,
   type EngineParams,
@@ -336,8 +335,9 @@ export function priceRequest(
 }
 ```
 
-> If `overallReserve` already returns a percentage, drop the `/ FULL_RESERVE * 100`. Check
-> its signature in `src/engine/efficiency.ts` before writing this line rather than assuming.
+> `overallReserve` was checked, not assumed: it returns an equal-weighted mean on the same
+> 0–100 scale as `FULL_RESERVE`, so it is rounded and used directly. See risk 1 below for
+> why this is reserve rather than the load percentage §2.3's wording implies.
 
 - [ ] **Step 4: Run and commit**
 

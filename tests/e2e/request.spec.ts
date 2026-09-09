@@ -10,7 +10,7 @@ import { expect, test, type Page } from '@playwright/test'
 async function openRequest(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: /look around/i }).click()
-  await page.getByTestId('open-request').click()
+  await page.getByTestId('object-phone').click()
 }
 
 async function priceIt(page: Page) {

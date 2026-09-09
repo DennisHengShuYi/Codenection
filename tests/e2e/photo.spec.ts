@@ -16,7 +16,8 @@ const JPEG_HEADER = Buffer.from([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x43, 0x00, 0x08]
 async function openPhoto(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: /look around/i }).click()
-  await page.getByTestId('open-photo').click()
+  await page.getByTestId('object-desk').click()
+  await page.getByTestId('desk-photograph').click()
 }
 
 async function choosePhoto(page: Page) {

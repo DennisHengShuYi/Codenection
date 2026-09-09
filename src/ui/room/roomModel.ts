@@ -53,6 +53,23 @@ export function roomModel({ schedule, profile, today }: RoomModelInput): RoomMod
   const state = roomStateFor(schedule.start, projection, schedule)
 
   const prescription = prescribe(schedule, attemptsIn(schedule))
+
+  /**
+   * Which object a prescription belongs to.
+   *
+   * §5.2 matches the advice to the depleted type, so the *furniture* has to match it too --
+   * otherwise a social prescription marks nothing and the student is told to see somebody by
+   * an app that shows them nowhere to do it. Rest is the bed, movement is the door, and
+   * seeing people is the phone, because that is where reaching somebody starts.
+   */
+  const prescribedOn =
+    prescription === null
+      ? null
+      : prescription.kind === 'rest'
+        ? 'bed'
+        : prescription.kind === 'socialRestorative'
+          ? 'phone'
+          : 'door'
   const lapsedNow = lapsed(schedule, today, params)
 
   const unconfirmed = schedule.items.find(
@@ -79,7 +96,7 @@ export function roomModel({ schedule, profile, today }: RoomModelInput): RoomMod
             id,
             label,
             reading: state.doorLit ? 'lit' : 'quiet',
-            attention: state.doorLit,
+            attention: state.doorLit || prescribedOn === 'door',
           },
         ]
       case 'papers':
@@ -97,7 +114,7 @@ export function roomModel({ schedule, profile, today }: RoomModelInput): RoomMod
             id,
             label,
             reading: `${Math.round(state.sleepDebt * 10) / 10}h owed`,
-            attention: prescription?.kind === 'rest',
+            attention: prescribedOn === 'bed',
           },
         ]
       case 'phone':
@@ -106,7 +123,7 @@ export function roomModel({ schedule, profile, today }: RoomModelInput): RoomMod
             id,
             label,
             reading: lapsedNow.length > 0 ? `${lapsedNow.length} lapsed` : 'nothing waiting',
-            attention: lapsedNow.length > 0,
+            attention: lapsedNow.length > 0 || prescribedOn === 'phone',
           },
         ]
       case 'character':

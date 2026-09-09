@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
-import { HomeScreen } from './HomeScreen'
+import { RoomShell } from './room/RoomShell'
 
 /**
  * Photo import wired into the screen, rather than the components in isolation.
@@ -46,24 +46,28 @@ const renderHome = async () => {
   await repository.clear()
   await repository.saveWeek(emptyWeek())
 
-  render(<HomeScreen repository={repository} />)
-  await waitFor(() => expect(screen.getByTestId('open-photo')).toBeVisible())
+  render(<RoomShell repository={repository} />)
+  await waitFor(() => expect(screen.getByTestId('object-desk')).toBeVisible())
 
   return repository
 }
 
-describe('HomeScreen with photo import', () => {
+describe('RoomShell with photo import', () => {
   it('offers photographing something as a second way in', async () => {
     await renderHome()
 
-    expect(screen.getByTestId('open-photo')).toBeVisible()
+    // §1.4's camera lives on the desk, named first because it ranks above typing.
+    await userEvent.click(screen.getByTestId('object-desk'))
+    expect(screen.getByTestId('desk-photograph')).toBeVisible()
   })
 
   it('comes back without changing anything when cancelled', async () => {
     const repository = await renderHome()
 
-    await userEvent.click(screen.getByTestId('open-photo'))
+    await userEvent.click(screen.getByTestId('object-desk'))
+    await userEvent.click(screen.getByTestId('desk-photograph'))
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    await userEvent.click(screen.getByTestId('zoom-back'))
 
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
     expect((await repository.loadWeek())?.items).toHaveLength(0)
@@ -73,7 +77,8 @@ describe('HomeScreen with photo import', () => {
   it('accepted items from a photo reach the saved week', async () => {
     const repository = await renderHome()
 
-    await userEvent.click(screen.getByTestId('open-photo'))
+    await userEvent.click(screen.getByTestId('object-desk'))
+    await userEvent.click(screen.getByTestId('desk-photograph'))
     await userEvent.upload(
       screen.getByTestId('photo-input'),
       new File([new Uint8Array(64)], 'brief.jpg', { type: 'image/jpeg' }),
@@ -87,10 +92,17 @@ describe('HomeScreen with photo import', () => {
   })
 
   // Both input paths sit together, so neither is buried behind the other.
+  /**
+   * Both ways in live on the desk, and neither is chosen for the student. §1.4 ranks the
+   * camera above typing, so it is named first -- but the typing path has to stay reachable,
+   * because it is the one that works with no key configured.
+   */
   it('keeps the typing path alongside the camera', async () => {
     await renderHome()
 
-    expect(screen.getByTestId('open-planner')).toBeVisible()
-    expect(screen.getByTestId('open-photo')).toBeVisible()
+    await userEvent.click(screen.getByTestId('object-desk'))
+
+    expect(screen.getByTestId('desk-photograph')).toBeVisible()
+    expect(screen.getByTestId('desk-type')).toBeVisible()
   })
 })

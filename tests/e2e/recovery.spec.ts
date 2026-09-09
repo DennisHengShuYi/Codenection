@@ -19,7 +19,7 @@ async function openApp(page: Page) {
 test('the door explains itself when it is not the answer', async ({ page }) => {
   await openApp(page)
 
-  await page.getByTestId('room-door').click()
+  await page.getByTestId('object-door').click()
 
   // Lit or quiet, tapping the door always says something rather than opening an empty box.
   const panel = page.getByTestId('door-panel')
@@ -31,10 +31,10 @@ test('the door explains itself when it is not the answer', async ({ page }) => {
 test('a lit door offers somewhere to go rather than a sentence', async ({ page }) => {
   await openApp(page)
 
-  const lit = await page.getByTestId('room-door').getAttribute('data-lit')
+  const lit = await page.getByTestId('object-door').getAttribute('data-attention')
   test.skip(lit !== 'true', 'the seeded week is not depleted enough to light the door')
 
-  await page.getByTestId('room-door').click()
+  await page.getByTestId('object-door').click()
 
   await expect(page.getByTestId('door-panel')).toBeVisible()
   await expect(page.getByTestId(/^outing-/).first()).toBeVisible()
@@ -46,7 +46,7 @@ for (const width of [320, 390, 768, 1280]) {
     await page.setViewportSize({ width, height: 800 })
     await openApp(page)
 
-    await page.getByTestId('room-door').click()
+    await page.getByTestId('object-door').click()
 
     const overflows = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

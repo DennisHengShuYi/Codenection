@@ -11,7 +11,8 @@ import { expect, test, type Page } from '@playwright/test'
 async function openPlanner(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: /look around/i }).click()
-  await page.getByTestId('open-planner').click()
+  await page.getByTestId('object-desk').click()
+  await page.getByTestId('desk-type').click()
 }
 
 test('turns a brain dump into a week', async ({ page }) => {

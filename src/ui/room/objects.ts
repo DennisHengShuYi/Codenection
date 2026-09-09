@@ -20,6 +20,7 @@ export type Opens =
   | 'energyCheckIn'
   | 'accuracy'
   | 'rebalance'
+  | 'capacity'
 
 export type ClutterId = `clutter-${string}`
 
@@ -89,10 +90,11 @@ const META: Record<Exclude<ObjectId, ClutterId> | typeof CLUTTER_PLACEHOLDER, Om
   mirror: { label: 'How I work', opens: 'aboutYou' },
   ceiling: { label: 'Everything at once', opens: 'rebalance' },
   window: { label: 'The next three weeks', opens: 'accuracy' },
-  // State only. Tapping states the reading rather than doing nothing, because silence is
-  // what teaches somebody to stop tapping.
+  // The plant reports its reading and nothing more. Tapping states the number rather than
+  // doing nothing, because silence is what teaches somebody to stop tapping.
   plant: { label: 'Sleep and movement', opens: null },
-  light: { label: 'Where my reserve is', opens: null },
+  // The light already means the reserve, so §1.2's dial lives behind it.
+  light: { label: 'Where my reserve is', opens: 'capacity' },
 }
 
 export function metaFor(id: ObjectId): ObjectMeta {

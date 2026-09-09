@@ -17,7 +17,9 @@ describe('the room objects', () => {
   it('opens something for every object except the two that only report', () => {
     for (const id of OBJECT_ORDER) {
       const { opens } = metaFor(id)
-      if (id === 'plant' || id === 'light') expect(opens, id).toBeNull()
+      // Only the plant reports and nothing more. The light carries §1.2's dial, because it
+      // already means the reserve.
+      if (id === 'plant') expect(opens, id).toBeNull()
       else expect(opens, id).not.toBeNull()
     }
   })

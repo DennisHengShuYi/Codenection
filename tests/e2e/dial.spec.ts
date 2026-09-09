@@ -21,6 +21,8 @@ for (const width of [320, 390, 768, 1280]) {
     await page.setViewportSize({ width, height: 800 })
     await openApp(page)
 
+    // §1.2's dial lives behind the light now, which already means the reserve.
+    await page.getByTestId('object-light').click()
     await expect(page.getByTestId('capacity-value')).toBeVisible()
     await expect(page.getByTestId('dial-gauge')).toBeVisible()
 
@@ -35,6 +37,7 @@ for (const width of [320, 390, 768, 1280]) {
 test('shows five domain bars, each against its own ceiling', async ({ page }) => {
   await openApp(page)
 
+  await page.getByTestId('object-light').click()
   await expect(page.getByRole('meter')).toHaveCount(5)
 })
 
@@ -43,9 +46,12 @@ test('shows five domain bars, each against its own ceiling', async ({ page }) =>
 test('keeps the week after a reload', async ({ page }) => {
   await openApp(page)
 
+  await page.getByTestId('object-ceiling').click()
   await page.getByTestId('rebalance').click()
   await expect(page.getByTestId('rebalance-report')).toBeVisible()
 
+  await page.getByTestId('zoom-back').click()
+  await page.getByTestId('object-light').click()
   const after = await page.getByTestId('capacity-value').textContent()
 
   // Re-entering through the preview, because choosing to look around is not remembered
@@ -54,6 +60,7 @@ test('keeps the week after a reload', async ({ page }) => {
   // week itself survives in browser storage.
   await page.reload()
   await page.getByRole('button', { name: /look around/i }).click()
+  await page.getByTestId('object-light').click()
 
   await expect(page.getByTestId('capacity-value')).toHaveText(after ?? '')
 })

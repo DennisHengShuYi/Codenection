@@ -30,6 +30,10 @@ const calls = {
   eq: [] as Array<[string, unknown]>,
   upsert: [] as unknown[],
   deleted: 0,
+  /** How many Supabase clients were constructed. One per browser is the whole point: a
+   *  second client on the same storage key announces itself to the first, which is what
+   *  drove the render loop. */
+  clients: 0,
 }
 
 let maybeSingleResult: StubResult = { data: null, error: null }
@@ -37,6 +41,7 @@ let writeResult: StubResult = { error: null }
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
+    __constructed: (calls.clients += 1),
     from(table: string) {
       calls.from.push(table)
       const builder = {
@@ -190,5 +195,40 @@ describe('createSupabaseRepository', () => {
     writeResult = { error: { message: 'permission denied' } }
 
     await expect(repo().clear()).rejects.toThrow(/could not clear state/i)
+  })
+})
+
+/**
+ * One client per project, however many repositories ask for one.
+ *
+ * The bug this guards against took the whole app down. `createRepository` runs inside a
+ * `useMemo` keyed on the session, so a new session object produced a new repository. With
+ * the client memoised inside each repository rather than across them, that meant a new
+ * Supabase client per render. A second client on the same storage key announces itself to
+ * the first, which arrives as an auth change, which builds a fresh session object, which
+ * makes another repository -- until the browser runs out of sockets and every request
+ * fails with ERR_INSUFFICIENT_RESOURCES.
+ *
+ * The browser tells you when this is broken: "Multiple GoTrueClient instances detected in
+ * the same browser context."
+ */
+describe('the Supabase client', () => {
+  it('is built once, however many repositories are created for the same project', async () => {
+    await repo('user-abc').loadWeek()
+    await repo('user-abc').loadWeek()
+    await repo('someone-else').loadWeek()
+
+    expect(calls.clients).toBe(1)
+  })
+
+  // Written as "does not increase" rather than "is zero" because the client is shared for
+  // the life of the module: by the time this runs another test has legitimately built it,
+  // and asserting zero would only be testing the order the tests happen to run in.
+  it('is not built merely by creating a repository', () => {
+    const before = calls.clients
+
+    repo('user-abc')
+
+    expect(calls.clients).toBe(before)
   })
 })

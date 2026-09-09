@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { useRef } from 'react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSession } from './useSession'
 
@@ -150,5 +151,56 @@ describe('useSession, when a session arrives by redirect', () => {
     signedInElsewhere({ userId: 'u2', email: 'c@d.com' })
 
     await waitFor(() => expect(carryOverWeek).toHaveBeenCalledTimes(2))
+  })
+})
+
+/**
+ * Session identity, which is load-bearing well outside this hook.
+ *
+ * App builds the repository in a `useMemo` keyed on the session, so a new session *object*
+ * -- even one describing exactly the same account -- rebuilds the repository and reloads
+ * the week. Supabase announces the same session repeatedly in normal operation (token
+ * refreshes, a second tab, a client being constructed), so handing a fresh object to React
+ * each time is what turns routine chatter into a render loop.
+ */
+describe('useSession, when the same account is announced again', () => {
+  function IdentityProbe() {
+    const { session, loading } = useSession()
+    const seen = useRef(new Set<unknown>())
+
+    if (session !== null) seen.current.add(session)
+    if (loading) return <p>looking</p>
+
+    return <p data-testid="identities">{seen.current.size}</p>
+  }
+
+  it('keeps the same session object rather than replacing it', async () => {
+    render(<IdentityProbe />)
+    await waitFor(() => expect(screen.getByTestId('identities')).toBeVisible())
+
+    // act, not waitFor: waitFor passes the moment the condition already holds, so it would
+    // report success before React had even processed the second announcement -- proving
+    // nothing. act flushes it, so the assertion sees the settled result.
+    await act(async () => signedInElsewhere({ userId: 'u1', email: 'a@b.com' }))
+    expect(screen.getByTestId('identities')).toHaveTextContent('1')
+
+    // The same account, reported again as a brand-new object -- exactly what Supabase does.
+    await act(async () => signedInElsewhere({ userId: 'u1', email: 'a@b.com' }))
+
+    expect(screen.getByTestId('identities')).toHaveTextContent('1')
+  })
+
+  it('does replace it when something about the account actually changed', async () => {
+    render(<IdentityProbe />)
+    await waitFor(() => expect(screen.getByTestId('identities')).toBeVisible())
+
+    await act(async () => signedInElsewhere({ userId: 'u1', email: 'a@b.com' }))
+    expect(screen.getByTestId('identities')).toHaveTextContent('1')
+
+    await act(async () =>
+      signedInElsewhere({ userId: 'u1', email: 'a@b.com', name: 'Ada Lovelace' }),
+    )
+
+    expect(screen.getByTestId('identities')).toHaveTextContent('2')
   })
 })

@@ -31,3 +31,24 @@ export const MAX_INPUT_LENGTH = 2000
 export const MAX_ITEMS = 25
 
 export const DEFAULT_EFFORT_HOURS = 1
+
+/**
+ * Groq's limit for a base64 image payload. Enforced in the browser as well as at the
+ * endpoint, so an oversized photo is refused before it is uploaded on a student's mobile
+ * data rather than after.
+ */
+export const MAX_IMAGE_BYTES = 4 * 1024 * 1024
+
+/** What a phone camera actually produces. HEIC is here because iPhones default to it, and
+ *  leaving it out would refuse the most common camera in the room. */
+export const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] as const
+
+/**
+ * What came back from a photo, or why nothing did.
+ *
+ * A photograph has no honest rule-based fallback the way text does, so "why not" is a
+ * first-class outcome here rather than an error to be caught somewhere else.
+ */
+export type PhotoOutcome =
+  | { readonly ok: true; readonly items: readonly ParsedItem[] }
+  | { readonly ok: false; readonly reason: string }

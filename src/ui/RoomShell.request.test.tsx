@@ -65,8 +65,8 @@ describe('RoomShell with the request box', () => {
     // behind another, which is what this test has always been about.
     expect(screen.getByTestId('object-desk')).toBeVisible()
     expect(screen.getByTestId('object-phone')).toBeVisible()
-    expect(screen.getByTestId('row-desk')).toBeVisible()
-    expect(screen.getByTestId('row-phone')).toBeVisible()
+    expect(screen.getByTestId('button-desk')).toBeVisible()
+    expect(screen.getByTestId('button-phone')).toBeVisible()
   })
 
   it('comes back without changing anything when cancelled', async () => {

@@ -40,7 +40,7 @@ describe('RoomSidebar', () => {
   it('states the whole room in words', () => {
     setup(week({ start: { mental: 8, physical: 8, social: 8, errands: 8 } }))
 
-    expect(screen.getByTestId('room-text-equivalent').textContent?.length).toBeGreaterThan(20)
+    expect(screen.getByTestId('words-text-equivalent').textContent?.length).toBeGreaterThan(20)
   })
 
   it('lists every object as something you can act on', () => {

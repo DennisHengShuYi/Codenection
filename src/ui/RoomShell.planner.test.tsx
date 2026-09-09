@@ -48,7 +48,7 @@ describe('RoomShell with the planner', () => {
     // Asserted through the surface a student actually meets: a named control in the room,
     // and the same one in the sidebar.
     expect(screen.getByTestId('object-desk')).toHaveAccessibleName(/plan my week/i)
-    expect(screen.getByTestId('row-desk')).toBeVisible()
+    expect(screen.getByTestId('button-desk')).toBeVisible()
   })
 
   it('opens the planner and can come back without changing anything', async () => {

@@ -64,6 +64,15 @@ export interface EngineParams {
   readonly typeIntensity: Reserves
   /** Reserve points returned per hour of sleep above the baseline. */
   readonly kSleep: Reserves
+  /**
+   * Hours of sleep that count as breaking even for this student.
+   *
+   * A parameter rather than a constant because §7.3 says the painter's measured baseline
+   * sets it: seven hours is a gain for somebody who normally gets six and a deficit for
+   * somebody who normally gets nine, and scoring both against one number would tell one of
+   * them something false about their own week.
+   */
+  readonly sleepBaselineHours: number
   /** Reserve points returned per hour of scheduled rest. */
   readonly kRest: Reserves
   /** Reserve points returned per hour of restorative social contact. Separate from

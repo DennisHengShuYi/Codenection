@@ -5,7 +5,11 @@
 // worth that risk.
 //
 // Bump CACHE when the shell changes; the old one is deleted on activate.
-const CACHE = 'codenection-v1'
+// v2 evicts every v1 cache on activate. That eviction is not cosmetic: v1 was written by a
+// worker that cached the shell first and stored cross-origin and error responses, so an
+// existing v1 cache can hold an index.html naming deleted bundles. Renaming is the only way
+// to be rid of it on a browser that already has one.
+const CACHE = 'codenection-v2'
 const SHELL = ['/', '/index.html']
 
 self.addEventListener('install', (event) => {
@@ -43,6 +47,37 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
   if (url.origin !== self.location.origin) return
 
+  // Navigations are network-first, and must stay that way. index.html names the hashed
+  // asset files the build produced, and every build produces different names -- so a shell
+  // served from the cache after a deploy points at bundles that no longer exist, and the
+  // app loads to a blank page with a 404 for a file nobody can find. The cache is the
+  // offline fallback here, never the first answer.
+  //
+  // The fresh copy is stored under /index.html rather than the visited URL, so the whole
+  // single-page app keeps one shell entry instead of one per deep link a user happens to
+  // open.
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok && response.type === 'basic') {
+            const copy = response.clone()
+            void caches
+              .open(CACHE)
+              .then((cache) => cache.put('/index.html', copy))
+              .catch(() => undefined)
+          }
+          return response
+        })
+        // Offline: the last shell we saw is better than the browser's error page.
+        .catch(() => caches.match('/index.html')),
+    )
+    return
+  }
+
+  // Everything else stays cache-first. Vite fingerprints asset filenames with a content
+  // hash, so a cached asset can never be stale -- if its content changes, its URL changes
+  // and this lookup misses.
   event.respondWith(
     caches.match(event.request).then(
       (cached) =>

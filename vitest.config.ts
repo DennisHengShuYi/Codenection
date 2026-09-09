@@ -9,6 +9,22 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['**/node_modules/**', 'src/**/*.integration.test.ts'],
     environment: 'jsdom',
+
+    /**
+     * Above Testing Library's asyncUtilTimeout, which src/test-setup.ts sets to 5000.
+     *
+     * They were both 5000, and that is not a slow test -- it is a test that can never pass
+     * slowly. A `waitFor` that legitimately needed four and a half seconds under a loaded
+     * machine would have the whole test killed at five, at exactly the moment the wait was
+     * about to succeed, and the reported failure was "element not found" rather than
+     * anything about time. It flaked three times before the cause was obvious.
+     *
+     * The screens that need this wait on a dynamic `import()` rather than a render, and the
+     * first test to reach one also pays for Vite transforming the chunk. Raised rather than
+     * the waits being shortened: the thing being waited for is genuinely slower than a
+     * render.
+     */
+    testTimeout: 15_000,
     setupFiles: ['src/test-setup.ts'],
 
     /**

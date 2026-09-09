@@ -56,6 +56,9 @@ export const DEFAULT_PARAMS: EngineParams = {
 
   // Starts unbiased and is learned per type from planned-vs-actual (§2.4). The user is
   // never asked for this and need not know the parameter exists (§7.5).
+  sleepBaselineHours: SLEEP_BASELINE_HOURS,
+  // §2.4's slot, and it stays 1 here on purpose: an uncalibrated student has no measured
+  // bias, and inventing one would distort every projection they ever see.
   estimateBias: uniform(1),
 
   socialFloorHoursPerDay: 0.5,

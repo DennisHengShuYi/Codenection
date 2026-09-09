@@ -9,6 +9,7 @@ export function PreviewBanner({ onSignIn }: { onSignIn: () => void }) {
   return (
     <div
       role="status"
+      data-testid="preview-banner"
       className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-100 px-3 py-2 text-sm"
     >
       <span>You are looking at a preview. This week is not being saved.</span>

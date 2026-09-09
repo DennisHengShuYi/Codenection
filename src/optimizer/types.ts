@@ -20,6 +20,17 @@ export interface ScheduledItem {
   readonly protectedRest: boolean
 }
 
+/**
+ * §5.2's failed-recovery log: what was tried, and whether it actually helped.
+ *
+ * Declared here alongside `Commitment` because it is state the week carries. Nothing in
+ * `src/engine` or `src/optimizer` reads it.
+ */
+export interface RecoveryAttempt {
+  readonly kind: ActivityKind
+  readonly helped: boolean
+}
+
 /** §2.3's provisional yes: an acceptance and the date by which it has to prove itself. */
 export interface Commitment {
   readonly id: string
@@ -47,6 +58,15 @@ export interface Schedule {
    * carries, not an input to the model.
    */
   readonly commitments?: readonly Commitment[]
+  /**
+   * What recovery was tried and whether it helped (§5.2).
+   *
+   * Carried inside the week for the same reason `commitments` is: no migration, no adapter
+   * change, and it is genuinely part of the week. Optional because weeks saved before this
+   * have no such field and must keep loading. Nothing in `src/engine` or `src/optimizer`
+   * reads it.
+   */
+  readonly recoveryLog?: readonly RecoveryAttempt[]
 }
 
 export type MoveKind =

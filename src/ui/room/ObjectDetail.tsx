@@ -1,3 +1,5 @@
+import type { Outing } from '../../domain/outings'
+import { DoorPanel } from '../recovery/DoorPanel'
 import type { RoomState } from './roomState'
 
 const percent = (value: number): string => `${Math.round(value * 100)}%`
@@ -31,16 +33,30 @@ function describeObject(objectId: string, state: RoomState): string | null {
 export function ObjectDetail({
   objectId,
   state,
+  gapHours = 0,
   onComplete,
   onDefer,
+  onChooseOuting,
   onClose,
 }: {
   objectId: string
   state: RoomState
+  /** Hours free today, used to filter what the lit door can offer. */
+  gapHours?: number
   onComplete: (id: string) => void
   onDefer: (id: string) => void
+  onChooseOuting?: (outing: Outing) => void
   onClose: () => void
 }) {
+  /**
+   * §5.3: the lit door opens somewhere to go rather than a sentence about going. The quiet
+   * door is left exactly as it was -- a door that is not the answer should still explain
+   * itself, and replacing that with an empty list would be worse than the sentence.
+   */
+  if (objectId === 'door' && state.doorLit && onChooseOuting) {
+    return <DoorPanel gapHours={gapHours} onChoose={onChooseOuting} onClose={onClose} />
+  }
+
   const box = state.clutter.find((item) => item.id === objectId)
   const description = box
     ? `${box.title}, sitting on day ${box.dayIndex}.`

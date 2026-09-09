@@ -7,6 +7,9 @@ import { accept, lapsed } from '../domain/commitments'
 import { freeGapOn, prescribe } from '../domain/prescribe'
 import { attemptsIn, recordAttempt } from '../domain/recoveryLog'
 import { scheduleRecovery } from '../domain/scheduleRecovery'
+import { BlockConfirm } from './calibration/BlockConfirm'
+import { CalibrationScreen } from './calibration/CalibrationScreen'
+import { useCalibration } from './calibration/useCalibration'
 import { completeItem, deferItem } from '../domain/scheduleEdits'
 import { PhotoImportScreen } from './planner/PhotoImportScreen'
 import { PlannerScreen } from './planner/PlannerScreen'
@@ -51,6 +54,8 @@ export function HomeScreen({
   const [planning, setPlanning] = useState(false)
   const [photographing, setPhotographing] = useState(false)
   const [requesting, setRequesting] = useState(false)
+  const [calibrating, setCalibrating] = useState(false)
+  const [confirmDismissed, setConfirmDismissed] = useState(false)
   const [dismissedLapses, setDismissedLapses] = useState(false)
 
   const reducedMotion = useReducedMotion()
@@ -64,6 +69,7 @@ export function HomeScreen({
 
   const floor = schedule ? floorReserve(schedule.start) : 100
   const { active: lowEnergy, setOverride } = useLowEnergy(repository, floor)
+  const { profile, setProfile } = useCalibration(repository)
 
   /**
    * The solve takes over a second on a laptop and several on phone-class hardware --
@@ -133,6 +139,18 @@ export function HomeScreen({
     )
   }
 
+  // §7.7: calibration is never a gate, so it is a screen you choose to open and can leave at
+  // any point -- not something standing between the student and the room.
+  if (calibrating) {
+    return (
+      <CalibrationScreen
+        profile={profile}
+        onChange={setProfile}
+        onDone={() => setCalibrating(false)}
+      />
+    )
+  }
+
   // Same again for the request box, and the same reason: the low-energy view would discard
   // the request they had already pasted.
   if (requesting) {
@@ -185,6 +203,45 @@ export function HomeScreen({
         <LapsedNotice
           commitments={lapsed(schedule, 0, DEFAULT_PARAMS)}
           onDismiss={() => setDismissedLapses(true)}
+        />
+      )}
+
+      {/* §7.9: the highest value-per-effort input in the app -- one prompt, two taps,
+          feeding Reality Check, the carryover matrix and the Micro-Start trigger. */}
+      {!confirmDismissed && (
+        <BlockConfirm
+          block={
+            schedule.items.find(
+              (item) => item.dayIndex === 0 && !profile.confirmedItemIds.includes(item.id),
+            ) ?? null
+          }
+          onAnswer={(happened, difficulty) => {
+            const block = schedule.items.find(
+              (item) => item.dayIndex === 0 && !profile.confirmedItemIds.includes(item.id),
+            )
+            if (!block) return
+
+            // "Partly" is counted as half the planned time actually happening, and "no" as
+            // none of it. Both feed §2.4 as real data rather than being discarded -- §7.9 is
+            // explicit that a student who did not do the thing is the one whose data is most
+            // needed.
+            const done = happened === 'yes' ? 1 : happened === 'partly' ? 0.5 : 0
+            const overrun = difficulty === 'harder' ? 1.5 : difficulty === 'easier' ? 0.75 : 1
+
+            setProfile({
+              ...profile,
+              confirmedItemIds: [...profile.confirmedItemIds, block.id],
+              confirmations: [
+                ...profile.confirmations,
+                {
+                  type: block.type,
+                  plannedHours: block.hours,
+                  actualHours: block.hours * done * overrun,
+                },
+              ],
+            })
+          }}
+          onDismiss={() => setConfirmDismissed(true)}
         />
       )}
 
@@ -262,6 +319,16 @@ export function HomeScreen({
           className="w-full rounded-lg border border-slate-400 px-4 py-3 text-base sm:w-auto"
         >
           Photograph a brief or a planner page
+        </button>
+
+        {/* §7.6: the payoff screen, and the way into calibration. Never a gate (§7.7). */}
+        <button
+          type="button"
+          onClick={() => setCalibrating(true)}
+          data-testid="open-calibration"
+          className="w-full rounded-lg border border-slate-400 px-4 py-3 text-base sm:w-auto"
+        >
+          Tune it to you
         </button>
 
         {/* §2.3: for work someone else is trying to hand you. */}

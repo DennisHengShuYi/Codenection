@@ -1870,6 +1870,323 @@ git commit -m "feat: add the block sheet"
 
 ---
 
+## Task 8b: The block log
+
+§8b. A durable per-day record of what was scheduled and what became of it. Nothing renders it.
+Three defects share one missing piece — a record both writers can reach and something can read —
+and this is that piece. **Do it before Task 9**, which writes to it.
+
+**Files:**
+- Create: `src/domain/blockLog.ts`, `src/domain/blockLog.test.ts`
+- Create: `supabase/migrations/0005_block_log.sql`
+- Modify: `src/data/types.ts` — `Repository` gains two methods
+- Modify: `src/data/localRepository.ts`, `src/data/supabaseRepository.ts`
+- Modify: `src/data/repositoryContract.ts` — the shared suite both adapters must pass
+- Modify: `src/data/fallbackRepository.ts`
+
+**Interfaces:**
+- Produces:
+
+```ts
+export type BlockAnswer = 'didnt' | 'less' | 'right' | 'longer'
+export const ANSWER_FACTOR: Record<BlockAnswer, number>
+
+export interface BlockRecord {
+  readonly blockId: string
+  readonly type: LoadType
+  readonly plannedHours: number
+  readonly dayIndex: number
+  readonly answer: BlockAnswer
+  readonly answeredAt: number
+}
+
+export function outcomesFrom(log: readonly BlockRecord[]): readonly BlockOutcome[]
+export function answeredIds(log: readonly BlockRecord[]): readonly string[]
+export function checkedInDays(
+  log: readonly BlockRecord[],
+  today: number,
+  horizonDays: number,
+): readonly boolean[]
+
+// Repository
+loadBlockLog(): Promise<readonly BlockRecord[]>
+recordBlockAnswer(record: BlockRecord): Promise<void>
+```
+
+> `ANSWER_FACTOR` and `BlockAnswer` move here from Task 9's `todayCard.ts` — this is now their
+> home, and `todayCard.ts` imports them. Task 8's ordering note is satisfied by this task.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+import { describe, expect, it } from 'vitest'
+import { ANSWER_FACTOR, answeredIds, checkedInDays, outcomesFrom, type BlockRecord } from './blockLog'
+
+const record = (over: Partial<BlockRecord> = {}): BlockRecord => ({
+  blockId: 'essay',
+  type: 'mental',
+  plannedHours: 3,
+  dayIndex: 2,
+  answer: 'right',
+  answeredAt: 1_757_000_000_000,
+  ...over,
+})
+
+describe('outcomesFrom', () => {
+  it('turns each answer into planned hours times its factor', () => {
+    const log = [
+      record({ blockId: 'a', answer: 'didnt' }),
+      record({ blockId: 'b', answer: 'longer' }),
+    ]
+
+    expect(outcomesFrom(log).map((outcome) => outcome.actualHours)).toEqual([
+      0,
+      3 * ANSWER_FACTOR.longer,
+    ])
+  })
+
+  it('keeps what was planned, which is half of what Reality Check compares', () => {
+    expect(outcomesFrom([record()])[0]).toEqual({
+      type: 'mental',
+      plannedHours: 3,
+      actualHours: 3,
+    })
+  })
+})
+
+describe('answeredIds', () => {
+  it('lists every block already asked about, so none is asked twice', () => {
+    expect(answeredIds([record({ blockId: 'a' }), record({ blockId: 'b' })])).toEqual(['a', 'b'])
+  })
+})
+
+describe('checkedInDays', () => {
+  it('counts a past day with an answer as checked in', () => {
+    expect(checkedInDays([record({ dayIndex: 1 })], 3, 5)[1]).toBe(true)
+  })
+
+  it('counts a past day with no answer as silence, which is what §6.5 wants to see', () => {
+    expect(checkedInDays([record({ dayIndex: 1 })], 3, 5)[2]).toBe(false)
+  })
+
+  it('treats every day still ahead as checked in', () => {
+    // The trap: a future day has nothing to check in about. Marking the horizon as missed
+    // compounds to 1 + 0.08 x 21 = 2.68x pessimism on every projection, permanently.
+    const days = checkedInDays([], 3, 21)
+
+    expect(days.slice(4).every(Boolean)).toBe(true)
+  })
+
+  it('treats today as checked in until the day is over', () => {
+    expect(checkedInDays([], 3, 5)[3]).toBe(true)
+  })
+
+  it('returns one entry per day of the horizon', () => {
+    expect(checkedInDays([], 3, 21)).toHaveLength(21)
+  })
+})
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `npx vitest run src/domain/blockLog.test.ts`
+Expected: FAIL — cannot resolve `./blockLog`.
+
+- [ ] **Step 3: Implement the pure module**
+
+```ts
+import type { BlockOutcome } from './calibration'
+import type { LoadType } from '../engine'
+
+/**
+ * §8b: what was scheduled, and what became of it.
+ *
+ * Written by the today card and by the Telegram bot; read by `paramsFor` and by
+ * `toDayInputs`; rendered by nothing. It exists because three separate defects shared one
+ * missing piece -- a durable record of block outcomes that both writers could reach and
+ * something could actually read.
+ *
+ * The record carries `type` and `plannedHours` itself rather than looking them up, because a
+ * week is persisted as one jsonb blob and there are no rows for `blockId` to join against.
+ * That is precisely why the existing `block_answers` table can be read by nothing: it stores
+ * the answer alone, which is not enough to compute an outcome.
+ */
+export type BlockAnswer = 'didnt' | 'less' | 'right' | 'longer'
+
+/**
+ * One four-way answer replaces `yes/partly/no` x `harder/same/easier`.
+ *
+ * Those were two different questions multiplied together as though they were one axis:
+ * completion and duration. Reality Check consumes only duration. The commonest study
+ * outcome -- three hours sat down, half the essay done -- recorded as `partly` and told the
+ * app the student works less than they do. It is `longer`: the essay is bigger than three
+ * hours.
+ */
+export const ANSWER_FACTOR: Record<BlockAnswer, number> = {
+  didnt: 0,
+  less: 0.75,
+  right: 1,
+  longer: 1.5,
+}
+
+export interface BlockRecord {
+  readonly blockId: string
+  readonly type: LoadType
+  readonly plannedHours: number
+  readonly dayIndex: number
+  readonly answer: BlockAnswer
+  readonly answeredAt: number
+}
+
+export function outcomesFrom(log: readonly BlockRecord[]): readonly BlockOutcome[] {
+  return log.map((entry) => ({
+    type: entry.type,
+    plannedHours: entry.plannedHours,
+    actualHours: Math.round(entry.plannedHours * ANSWER_FACTOR[entry.answer] * 100) / 100,
+  }))
+}
+
+export function answeredIds(log: readonly BlockRecord[]): readonly string[] {
+  return log.map((entry) => entry.blockId)
+}
+
+/**
+ * §6.5's signal, at last.
+ *
+ * A past day carrying no answer is a day the student went quiet, and non-check-in
+ * correlates with bad weeks -- so a model that gets more worried is behaving correctly.
+ *
+ * Days still ahead are `true`, and that is not a convenience. A future day has nothing to
+ * check in about; marking the horizon as missed compounds to 1 + 0.08 x 21 = 2.68x
+ * pessimism on every projection, permanently, which is catastrophically wrong rather than
+ * appropriately cautious. Today counts as checked in too: the day is not over.
+ */
+export function checkedInDays(
+  log: readonly BlockRecord[],
+  today: number,
+  horizonDays: number,
+): readonly boolean[] {
+  const answered = new Set(log.map((entry) => entry.dayIndex))
+
+  return Array.from({ length: horizonDays }, (_, day) => day >= today || answered.has(day))
+}
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `npx vitest run src/domain/blockLog.test.ts`
+Expected: PASS, 8 tests.
+
+- [ ] **Step 5: Extend the repository contract**
+
+Add to `src/data/repositoryContract.ts`, inside `describeRepositoryContract` so **both** adapters
+must satisfy it:
+
+```ts
+it('starts with an empty block log', async () => {
+  expect(await repo.loadBlockLog()).toEqual([])
+})
+
+it('reads back what it recorded', async () => {
+  await repo.recordBlockAnswer(record())
+
+  expect(await repo.loadBlockLog()).toHaveLength(1)
+})
+
+it('corrects a repeated answer rather than stacking a second one', async () => {
+  await repo.recordBlockAnswer(record({ answer: 'right' }))
+  await repo.recordBlockAnswer(record({ answer: 'longer' }))
+
+  const log = await repo.loadBlockLog()
+  expect(log).toHaveLength(1)
+  expect(log[0]?.answer).toBe('longer')
+})
+
+it('forgets the log on clear, like everything else', async () => {
+  await repo.recordBlockAnswer(record())
+  await repo.clear()
+
+  expect(await repo.loadBlockLog()).toEqual([])
+})
+```
+
+- [ ] **Step 6: Implement both adapters and the fallback**
+
+`localRepository` stores the log under its own IndexedDB key, upserting on `blockId`.
+`supabaseRepository` reads and writes `block_answers`, mapping snake_case columns to the record.
+`fallbackRepository` delegates exactly as it does for weeks.
+
+**The signed-out path is the reason this sits behind the repository at all.** Putting the log in
+Supabase alone would silently stop Reality Check working for anyone without an account, which is
+a supported way to use this app.
+
+- [ ] **Step 7: Write migration 0005**
+
+```sql
+-- §8b: make block_answers readable, and make it carry enough to compute an outcome.
+--
+-- NOT APPLIED AUTOMATICALLY. Apply it the way 0002, 0003 and 0004 were applied.
+--
+-- 0004 stored an answer and nothing else, which is why nothing could read it: a week lives
+-- in a jsonb column, so `block_id` has nothing to join against and the type and planned
+-- hours Reality Check compares were nowhere to be found.
+
+alter table public.block_answers
+  add column if not exists load_type text,
+  add column if not exists planned_hours numeric,
+  add column if not exists day_index integer;
+
+-- 0004 allowed yes/no/partly, which answers "did you do it". Reality Check asks "how long
+-- did it take", and the two were being multiplied together as though they were one axis.
+-- Existing rows stay valid and keep their old meaning; nothing reads them yet, so there is
+-- nothing to migrate.
+alter table public.block_answers
+  drop constraint if exists block_answers_answer_check;
+
+alter table public.block_answers
+  add constraint block_answers_answer_check
+  check (answer in ('yes', 'no', 'partly', 'didnt', 'less', 'right', 'longer'));
+
+-- 0004 enabled RLS with no policies at all, on the reasoning that nothing read the table
+-- and granting access would widen the surface for nothing. Something reads it now, so it
+-- gets the same auth.uid() policies 0002 established for user_state.
+create policy "read own answers"
+  on public.block_answers for select
+  using (auth.uid() = account_id);
+
+create policy "insert own answers"
+  on public.block_answers for insert
+  with check (auth.uid() = account_id);
+
+create policy "update own answers"
+  on public.block_answers for update
+  using (auth.uid() = account_id)
+  with check (auth.uid() = account_id);
+```
+
+- [ ] **Step 8: Point `paramsFor` and `toDayInputs` at the log**
+
+`paramsFor(profile)` becomes `paramsFor(outcomes: readonly BlockOutcome[])` — every caller
+already has the log in hand or can be passed it. `toDayInputs(schedule)` gains an optional
+second argument `checkedIn?: readonly boolean[]`, defaulting to all-true so the optimizer's
+thousands of internal calls are unchanged and only the app's own projection passes real data.
+
+Add a test asserting a silent past day makes the projection more pessimistic than the same
+week with that day answered.
+
+- [ ] **Step 9: Run everything**
+
+Run: `npm test && npm run typecheck`
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add src/domain/blockLog.ts src/domain/blockLog.test.ts src/data supabase/migrations/0005_block_log.sql src/domain/engineParams.ts src/optimizer/objective.ts
+git commit -m "feat: record what became of each block, and let three dead mechanisms read it"
+```
+
+---
+
 ## Task 9: `todayCard` — which block to ask about, and what the answers mean
 
 §8. Pure.
@@ -1880,12 +2197,14 @@ git commit -m "feat: add the block sheet"
 **Interfaces:**
 - Produces:
 
+> **Changed by Task 8b:** `BlockAnswer` and `ANSWER_FACTOR` now live in `src/domain/blockLog.ts`
+> and are imported here, not redefined. `outcomeFor` is likewise replaced by `outcomesFrom` in
+> that module — drop it from this task. `blockToAsk` takes the log's `answeredIds` instead of
+> `profile.confirmedItemIds`, which no longer exists.
+
 ```ts
 export type SleepBucket = 'under5' | 'six' | 'seven' | 'eightPlus'
 export const SLEEP_HOURS: Record<SleepBucket, number>
-
-export type BlockAnswer = 'didnt' | 'less' | 'right' | 'longer'
-export const ANSWER_FACTOR: Record<BlockAnswer, number>
 
 export function blockToAsk(input: {
   readonly schedule: Schedule
@@ -2692,6 +3011,39 @@ The first fails because `lowestOf` returns errands, `ADVICE['errands']` is undef
 - [ ] **Step 3: Delete and shrink.**
 - [ ] **Step 4: Run the suite and check coverage.** Deleting tested code can *raise* coverage; if it drops, something newly-uncovered is being reached.
 - [ ] **Step 5: Commit** — `refactor: delete the calibration nothing read`
+
+---
+
+## Task 17b: Join the Telegram loop to the block log
+
+§8b②. The bot already asks the right question and writes the answer; it writes it in the old
+vocabulary and without the columns that make it readable. Until this lands, answering on your
+phone still teaches the app nothing.
+
+**Files:**
+- Modify: `api/telegram.ts` — `recordBlockAnswer` writes the four-answer vocabulary and the three
+  new columns
+- Modify: `src/telegram/handle.ts`, `handle.test.ts` — the `blockAnswer` intent carries them
+- Modify: `src/telegram/commands.ts`, `commands.test.ts` — `/yesterday`'s buttons
+- Modify: `src/telegram/update.ts`, `update.test.ts` — parsing the callback payload
+
+- [ ] **Step 1: Write the failing test** in `src/telegram/handle.test.ts` — answering a block
+  produces a record carrying `type`, `plannedHours` and `dayIndex` taken from the week the bot
+  already loaded, and the answer is one of the four.
+- [ ] **Step 2: Run it and watch it fail.**
+- [ ] **Step 3: Change `/yesterday`'s buttons** to **Didn't happen · Took less · About right ·
+  Took longer**, matching the today card exactly. A student who answers in both places must not
+  meet two different questions.
+- [ ] **Step 4: Widen the callback payload** so the bot sends the block's type, planned hours and
+  day index back with the answer — it has the week in hand when it builds the buttons, and the
+  callback is the only place that information survives the round trip.
+- [ ] **Step 5: Thread it through `api/telegram.ts`'s `recordBlockAnswer`.** Keep the upsert on
+  `(account_id, block_id)`: a second press must correct the first rather than add a row.
+- [ ] **Step 6: Verify the join.** Add a test that a record written by the bot's shape produces
+  the same `BlockOutcome` as one written by the today card. This is the assertion that the two
+  loops have actually met — everything else in this task is plumbing toward it.
+- [ ] **Step 7: Run the suite.** `npm test`
+- [ ] **Step 8: Commit** — `feat: let answering on your phone reach the engine`
 
 ---
 

@@ -489,6 +489,106 @@ engine starts correcting estimates — is reached as fast as possible despite as
 
 ---
 
+## 8b. The block log
+
+A per-day record of what was scheduled and what became of it. **Nothing renders it.** It is
+written by the today card and by the Telegram bot, read by the engine, and never shown.
+
+It exists because three separate defects share one missing piece — a durable record of block
+outcomes that both writers can reach and something can actually read.
+
+### The record
+
+```ts
+export type BlockAnswer = 'didnt' | 'less' | 'right' | 'longer'
+
+export interface BlockRecord {
+  readonly blockId: string
+  readonly type: LoadType        // Reality Check needs it
+  readonly plannedHours: number  // Reality Check needs it
+  readonly dayIndex: number      // checkedIn needs it
+  readonly answer: BlockAnswer
+  readonly answeredAt: number
+}
+```
+
+It carries `type` and `plannedHours` **itself** rather than looking them up, because a week is
+persisted as a jsonb blob and there are no rows for `block_id` to join against. That is exactly
+why the existing `block_answers` table cannot be read by anything: it stores the answer alone,
+which is not enough to compute an outcome.
+
+### What it fixes
+
+**① The answer vocabulary.** Migration `0004` constrains answers to `yes / no / partly`; §8's
+card sends four duration answers. The two are not variants of one question:
+
+```
+yes / partly / no       → did you do it        (completion)
+less / right / longer   → how long did it take (duration)
+```
+
+Reality Check consumes only the second. The current code multiplies them together —
+`actualHours = plannedHours × happened × overrun` — as though they were one axis, and they are
+not. The commonest study outcome, *"I sat down for the full three hours and got through half the
+essay"*, records as `partly` → `1.5h`, telling the app the student works less than they do. The
+honest reading is that the essay is **longer than three hours**, which is what `longer` records.
+
+Migration `0005` widens the check to the four answers and adds the three columns. Existing rows
+stay valid.
+
+**② The two loops join.** `block_answers` is written by `api/telegram.ts` and read by nothing —
+one hit in the whole codebase, and migration `0004`'s own comment admits it. Meanwhile
+`profile.confirmations` is written only by the app. So answering on your phone at 11pm teaches
+the app nothing, which makes §9's Telegram flow collect into a void. One log with two writers
+and one reader removes the problem rather than adding a sync rule.
+
+**③ `checkedIn` gets a signal.** §6.5's missing-data pessimism — 8% compounding per consecutive
+silent day, forgiven on the next check-in — is implemented in `projection.ts` and can never
+fire, because `toDayInputs` is the only builder of `DayInput` in the app and hardcodes
+`checkedIn: true`. A past day carrying blocks and no answer is a day the student went quiet.
+
+> **Days ahead must be `true`.** A future day has nothing to check in about, and marking the
+> horizon as missed would compound to `1 + 0.08 × 21 = 2.68×` pessimism on every projection,
+> permanently. `checkedIn = dayIndex > today ? true : answered.has(dayIndex)`.
+
+### Where it lives
+
+**Behind the `Repository`**, not in Supabase directly. The app works signed out on IndexedDB,
+and putting the log in `block_answers` alone would silently stop Reality Check working for
+anyone without an account.
+
+```ts
+loadBlockLog(): Promise<readonly BlockRecord[]>
+recordBlockAnswer(record: BlockRecord): Promise<void>
+```
+
+Local adapter → IndexedDB. Supabase adapter → `block_answers`, which needs the RLS policies
+migration `0002` already models on `auth.uid()`; the table currently has RLS enabled with **no
+policies at all**, so the browser can reach none of it. Both adapters run the shared contract
+suite, as they already do for weeks and settings.
+
+### The profile shrinks to one field
+
+`confirmations` and `confirmedItemIds` stop being stored and become derived:
+
+```ts
+confirmations    = log.map(r => ({ type, plannedHours, actualHours: plannedHours * FACTOR[r.answer] }))
+confirmedItemIds = log.map(r => r.blockId)
+```
+
+Leaving `predictions` as the only thing the profile still holds. One source of truth, no sync
+rule, and no question about which side wins when both answered the same block.
+
+### Deliberately invisible
+
+§10 already records that Reality Check stops being narrated when `HowYouWork` is deleted. This
+section is why that is safe rather than a loss: the correction still runs on every projection,
+and §7.5's own stance is that the student is asked relative questions and *need not know the
+parameter exists*. The visible half of the validation story remains the accuracy line on the
+room screen.
+
+---
+
 ## 9. Settings
 
 Behind a small control on the room screen. Account, and the Telegram link.
@@ -530,8 +630,12 @@ validation claim dies without.
 | `src/ui/room/roomModel.ts` | Drops `prescribedOn`'s three-way routing and the `calibrationProgress` row. |
 | `src/ui/room/view.ts` | `zoom(objectId)` → the new screen union. |
 | `src/domain/prescribe.ts` | Simplified per §7. |
-| `src/domain/calibration.ts` | Profile shrinks to `confirmations`, `confirmedItemIds`, `predictions`. |
-| `src/domain/engineParams.ts` | `paramsFor` reads confirmations only; `sleepBaselineHours` is fixed at `SLEEP_BASELINE_HOURS` (5). |
+| `src/domain/calibration.ts` | Profile shrinks to `predictions` alone — §8b derives the other two from the block log. |
+| `src/domain/engineParams.ts` | `paramsFor` takes the block log's outcomes; `sleepBaselineHours` is fixed at `SLEEP_BASELINE_HOURS` (5). |
+| `src/data/types.ts` | `Repository` gains `loadBlockLog` and `recordBlockAnswer` (§8b). |
+| `src/data/localRepository.ts`, `supabaseRepository.ts`, `repositoryContract.ts` | Both adapters implement the log and both run the shared contract. |
+| `src/optimizer/objective.ts` | `toDayInputs` takes the answered days so `checkedIn` stops being hardcoded `true`. |
+| `api/telegram.ts` | `recordBlockAnswer` writes the four-answer vocabulary and the three new columns. |
 | `src/domain/prescribe.ts` | Also returns *where* the free gap is, not only whether one exists. |
 | `src/optimizer/types.ts` | `Schedule.recoveryLog` removed. |
 
@@ -572,6 +676,11 @@ src/domain/recoveryLog.ts
 estimate bias was shown in words. With it gone, `paddingFor`'s correction still runs on every
 projection — it simply stops being narrated. The visible half of the validation story is the
 accuracy line on the room screen, which is the number §8.1 actually asks to be published.
+
+Invisible is not the same as absent, and §8b is what keeps the distinction honest: the block log
+records every answered block durably, on both storage adapters and from both writers, and feeds
+`paramsFor` on every load. Reality Check gets *more* data than it has today, not less — it is
+only the narration that goes.
 
 ---
 

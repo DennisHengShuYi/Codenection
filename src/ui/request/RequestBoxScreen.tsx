@@ -6,7 +6,8 @@ import { DEFAULT_PARAMS, project } from '../../engine'
 import { toDayInputs, type Schedule } from '../../optimizer'
 import { ItemChip } from '../planner/ItemChip'
 import { RoomComparison } from '../room/RoomComparison'
-import { roomStateFor } from '../room/roomState'
+import { roomModel } from '../room/roomModel'
+import { DEFAULT_PROFILE } from '../../domain/calibration'
 
 const TONE_LABELS: Record<Draft['tone'], string> = {
   decline: 'A soft no',
@@ -14,12 +15,10 @@ const TONE_LABELS: Record<Draft['tone'], string> = {
   accept: 'Yes, with the cost said out loud',
 }
 
+/** The comparison takes models now that the room does, so the two rooms carry their own
+ *  controls rather than being inert pictures. */
 const roomFor = (schedule: Schedule) =>
-  roomStateFor(
-    schedule.start,
-    project(schedule.start, toDayInputs(schedule), DEFAULT_PARAMS),
-    schedule,
-  )
+  roomModel({ schedule, profile: DEFAULT_PROFILE, today: 0 })
 
 /**
  * §2.3's request box.

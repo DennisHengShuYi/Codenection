@@ -29,6 +29,8 @@ async function openApp(page: Page, path = '/') {
 test('states the numbers in words for a screen reader', async ({ page }) => {
   await openApp(page)
 
+  // The dial and its spoken summary live behind the light now.
+  await page.getByTestId('object-light').click()
   const summary = page.getByTestId('reserve-text-equivalent')
   await expect(summary).toHaveText(/capacity/i)
   await expect(summary).toHaveText(/\d/)
@@ -39,6 +41,7 @@ test('states the numbers in words for a screen reader', async ({ page }) => {
 test('says whether the fortnight crosses into deficit', async ({ page }) => {
   await openApp(page)
 
+  await page.getByTestId('object-light').click()
   await expect(page.getByTestId('reserve-text-equivalent')).toHaveText(/deficit/i)
 })
 
@@ -46,6 +49,7 @@ test('says whether the fortnight crosses into deficit', async ({ page }) => {
 test('runs the rebalancer in the browser and reports what it changed', async ({ page }) => {
   await openApp(page)
 
+  await page.getByTestId('object-ceiling').click()
   await page.getByTestId('rebalance').click()
 
   const report = page.getByTestId('rebalance-report')

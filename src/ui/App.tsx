@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { createRepository, signOut, unlinkTelegram } from '../data'
 import { SignInScreen } from './auth/SignInScreen'
 import { useSession } from './auth/useSession'
-import { HomeScreen } from './HomeScreen'
+import { RoomShell } from './room/RoomShell'
 
 export function App() {
   const { session, loading, setSession, signedIn } = useSession()
@@ -36,7 +36,7 @@ export function App() {
   }
 
   return (
-    <HomeScreen
+    <RoomShell
       repository={repository}
       session={session}
       onSignOut={() => {

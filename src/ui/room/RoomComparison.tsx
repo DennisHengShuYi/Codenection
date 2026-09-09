@@ -1,5 +1,6 @@
 import { Room } from './Room'
-import type { RoomState } from './roomState'
+import type { ObjectId } from './objects'
+import type { RoomModel } from './roomModel'
 
 /**
  * One room, or two side by side.
@@ -16,21 +17,21 @@ export function RoomComparison({
   ifAccepted,
   onSelect,
 }: {
-  now: RoomState
-  ifAccepted?: RoomState
-  onSelect?: (objectId: string) => void
+  now: RoomModel
+  ifAccepted?: RoomModel
+  onSelect?: (objectId: ObjectId) => void
 }) {
-  if (!ifAccepted) return <Room state={now} onSelect={onSelect} />
+  if (!ifAccepted) return <Room model={now} onSelect={onSelect} />
 
   return (
     <div data-testid="room-comparison" className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <div className="flex flex-col gap-1">
         <h3 className="text-xs font-medium uppercase tracking-wide opacity-70">Now</h3>
-        <Room state={now} onSelect={onSelect} />
+        <Room model={now} onSelect={onSelect} />
       </div>
       <div className="flex flex-col gap-1">
         <h3 className="text-xs font-medium uppercase tracking-wide opacity-70">If you accept</h3>
-        <Room state={ifAccepted} />
+        <Room model={ifAccepted} />
       </div>
     </div>
   )

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { createLocalRepository } from '../data'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
-import { HomeScreen } from './HomeScreen'
+import { RoomShell } from './room/RoomShell'
 
 const item = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
   id: 'laundry',
@@ -37,13 +37,13 @@ const renderHome = async (schedule = week()) => {
   await repository.clear()
   await repository.saveWeek(schedule)
 
-  render(<HomeScreen repository={repository} />)
+  render(<RoomShell repository={repository} />)
   await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
 
   return repository
 }
 
-describe('HomeScreen with Micro-Start and the accuracy note', () => {
+describe('RoomShell with Micro-Start and the accuracy note', () => {
   /**
    * §4.1's manual trigger: a "can't start this" on every task, zero friction, no explanation
    * asked for. Being asked why you are stuck is one more thing to be stuck on.
@@ -51,16 +51,17 @@ describe('HomeScreen with Micro-Start and the accuracy note', () => {
   it('offers "I can\'t start this" on a task', async () => {
     await renderHome()
 
-    await userEvent.click(screen.getByTestId('clutter-box-laundry'))
+    await userEvent.click(screen.getByTestId('object-clutter-laundry'))
 
-    expect(await screen.findByTestId('cant-start-laundry')).toBeVisible()
+    // The box itself is the "I can't start this": walking up to it is the whole gesture, and
+    // no explanation is asked for -- §4.1's zero friction.
+    expect(await screen.findByTestId('micro-start')).toBeVisible()
   })
 
   it('turns that into one concrete first action', async () => {
     await renderHome()
 
-    await userEvent.click(screen.getByTestId('clutter-box-laundry'))
-    await userEvent.click(await screen.findByTestId('cant-start-laundry'))
+    await userEvent.click(screen.getByTestId('object-clutter-laundry'))
 
     const card = await screen.findByTestId('micro-start')
 
@@ -71,8 +72,7 @@ describe('HomeScreen with Micro-Start and the accuracy note', () => {
   it('boxes it in minutes rather than leaving it open-ended', async () => {
     await renderHome()
 
-    await userEvent.click(screen.getByTestId('clutter-box-laundry'))
-    await userEvent.click(await screen.findByTestId('cant-start-laundry'))
+    await userEvent.click(screen.getByTestId('object-clutter-laundry'))
 
     expect((await screen.findByTestId('micro-start')).textContent).toMatch(/\d+ minutes/i)
   })
@@ -80,11 +80,10 @@ describe('HomeScreen with Micro-Start and the accuracy note', () => {
   it('can be waved off and leaves the room as it was', async () => {
     await renderHome()
 
-    await userEvent.click(screen.getByTestId('clutter-box-laundry'))
-    await userEvent.click(await screen.findByTestId('cant-start-laundry'))
+    await userEvent.click(screen.getByTestId('object-clutter-laundry'))
     await userEvent.click(screen.getByRole('button', { name: /not now/i }))
 
-    await waitFor(() => expect(screen.queryByTestId('micro-start')).toBeNull())
+    await waitFor(() => expect(screen.queryByTestId('zoom-clutter-laundry')).toBeNull())
     expect(screen.getByTestId('room-scene')).toBeVisible()
   })
 
@@ -101,6 +100,7 @@ describe('HomeScreen with Micro-Start and the accuracy note', () => {
   it('says on screen that the three-week outlook is not validated', async () => {
     await renderHome()
 
+    await userEvent.click(screen.getByTestId('object-window'))
     expect(screen.getByTestId('accuracy-disclaimer').textContent).toMatch(
       /not a validated|decision aid/i,
     )
@@ -109,6 +109,7 @@ describe('HomeScreen with Micro-Start and the accuracy note', () => {
   it('claims no accuracy before anything has been scored', async () => {
     await renderHome()
 
+    await userEvent.click(screen.getByTestId('object-window'))
     expect(screen.getByTestId('accuracy-measured').textContent).toMatch(/not enough data/i)
   })
 })

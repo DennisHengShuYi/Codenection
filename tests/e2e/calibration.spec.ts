@@ -9,7 +9,7 @@ import { expect, test, type Page } from '@playwright/test'
 async function openCalibration(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: /look around/i }).click()
-  await page.getByTestId('open-calibration').click()
+  await page.getByTestId('object-mirror').click()
 }
 
 // §7.7: nothing is gated behind calibration.
@@ -18,7 +18,7 @@ test('the room works before anything has been calibrated', async ({ page }) => {
   await page.getByRole('button', { name: /look around/i }).click()
 
   await expect(page.getByTestId('room-scene')).toBeVisible()
-  await expect(page.getByTestId('open-calibration')).toBeVisible()
+  await expect(page.getByTestId('object-mirror')).toBeVisible()
 })
 
 test('offers the mode picker, the painter and the payoff together', async ({ page }) => {

@@ -5,7 +5,7 @@ import { createLocalRepository } from '../data'
 import { REVIEW_DAYS } from '../domain/commitments'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
-import { HomeScreen } from './HomeScreen'
+import { RoomShell } from './room/RoomShell'
 
 /**
  * The request box wired into the screen. What this covers that the component tests cannot:
@@ -34,14 +34,14 @@ const renderHome = async (schedule = week()) => {
   await repository.clear()
   await repository.saveWeek(schedule)
 
-  render(<HomeScreen repository={repository} />)
-  await waitFor(() => expect(screen.getByTestId('open-request')).toBeVisible())
+  render(<RoomShell repository={repository} />)
+  await waitFor(() => expect(screen.getByTestId('object-phone')).toBeVisible())
 
   return repository
 }
 
 const askAndPrice = async () => {
-  await userEvent.click(screen.getByTestId('open-request'))
+  await userEvent.click(screen.getByTestId('object-phone'))
   await userEvent.type(
     screen.getByLabelText(/what.*asked/i),
     'can you help with our group project, 6 hours, by friday',
@@ -50,28 +50,33 @@ const askAndPrice = async () => {
   await waitFor(() => expect(screen.getByTestId('request-cost')).toBeVisible())
 }
 
-describe('HomeScreen with the request box', () => {
+describe('RoomShell with the request box', () => {
   it('offers the request box as a third way in', async () => {
     await renderHome()
 
-    expect(screen.getByTestId('open-request')).toBeVisible()
+    expect(screen.getByTestId('object-phone')).toHaveAccessibleName(/someone asked me/i)
   })
 
   // None of the three input paths is buried behind another.
   it('keeps all the ways in visible together', async () => {
     await renderHome()
 
-    expect(screen.getByTestId('open-planner')).toBeVisible()
-    expect(screen.getByTestId('open-request')).toBeVisible()
+    // Every way in is furniture, and each is listed in the sidebar too -- so none is buried
+    // behind another, which is what this test has always been about.
+    expect(screen.getByTestId('object-desk')).toBeVisible()
+    expect(screen.getByTestId('object-phone')).toBeVisible()
+    expect(screen.getByTestId('row-desk')).toBeVisible()
+    expect(screen.getByTestId('row-phone')).toBeVisible()
   })
 
   it('comes back without changing anything when cancelled', async () => {
     const repository = await renderHome()
 
-    await userEvent.click(screen.getByTestId('open-request'))
+    await userEvent.click(screen.getByTestId('object-phone'))
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
 
-    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+    await waitFor(() => expect(screen.queryByTestId('zoom-phone')).toBeNull())
+    expect(screen.getByTestId('room-scene')).toBeVisible()
     expect((await repository.loadWeek())?.items).toHaveLength(0)
   })
 
@@ -108,6 +113,11 @@ describe('HomeScreen with the request box', () => {
       }),
     )
 
+    // The notice moved onto the object it concerns: the phone is marked, and the notice is
+    // what you find when you walk up to it. That asserts more than before, not less.
+    expect(screen.getByTestId('object-phone')).toHaveAttribute('data-attention', 'true')
+
+    await userEvent.click(screen.getByTestId('object-phone'))
     expect(screen.getByTestId('lapsed-notice')).toHaveTextContent('Committee meeting')
   })
 
@@ -118,6 +128,6 @@ describe('HomeScreen with the request box', () => {
       }),
     )
 
-    expect(screen.queryByTestId('lapsed-notice')).toBeNull()
+    expect(screen.getByTestId('object-phone')).toHaveAttribute('data-attention', 'false')
   })
 })

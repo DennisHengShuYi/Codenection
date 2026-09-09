@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
-import { HomeScreen } from './HomeScreen'
+import { RoomShell } from './room/RoomShell'
 
 /**
  * The planner wired into the screen, rather than the components in isolation.
@@ -34,26 +34,33 @@ const renderHome = async () => {
   await repository.clear()
   await repository.saveWeek(emptyWeek())
 
-  render(<HomeScreen repository={repository} />)
-  await waitFor(() => expect(screen.getByTestId('open-planner')).toBeVisible())
+  render(<RoomShell repository={repository} />)
+  // The desk is the way in now: §3.1's planner is what is on it.
+  await waitFor(() => expect(screen.getByTestId('object-desk')).toBeVisible())
 
   return repository
 }
 
-describe('HomeScreen with the planner', () => {
+describe('RoomShell with the planner', () => {
   it('offers a way to say what you are carrying', async () => {
     await renderHome()
 
-    expect(screen.getByTestId('open-planner')).toBeVisible()
+    // Asserted through the surface a student actually meets: a named control in the room,
+    // and the same one in the sidebar.
+    expect(screen.getByTestId('object-desk')).toHaveAccessibleName(/plan my week/i)
+    expect(screen.getByTestId('row-desk')).toBeVisible()
   })
 
   it('opens the planner and can come back without changing anything', async () => {
     const repository = await renderHome()
 
-    await userEvent.click(screen.getByTestId('open-planner'))
+    await userEvent.click(screen.getByTestId('object-desk'))
+    await userEvent.click(screen.getByTestId('desk-type'))
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    await userEvent.click(screen.getByTestId('zoom-back'))
 
-    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+    await waitFor(() => expect(screen.queryByTestId('zoom-desk')).toBeNull())
+    expect(screen.getByTestId('room-scene')).toBeVisible()
     expect((await repository.loadWeek())?.items).toHaveLength(0)
   })
 
@@ -61,7 +68,8 @@ describe('HomeScreen with the planner', () => {
   it('accepted items reach the saved week', async () => {
     const repository = await renderHome()
 
-    await userEvent.click(screen.getByTestId('open-planner'))
+    await userEvent.click(screen.getByTestId('object-desk'))
+    await userEvent.click(screen.getByTestId('desk-type'))
     await userEvent.type(screen.getByLabelText(/on your mind/i), 'gym, laundry')
     await userEvent.click(screen.getByRole('button', { name: /read this/i }))
     await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(2))

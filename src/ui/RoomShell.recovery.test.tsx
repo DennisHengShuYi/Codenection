@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { createLocalRepository } from '../data'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
-import { HomeScreen } from './HomeScreen'
+import { RoomShell } from './room/RoomShell'
 
 /**
  * §5 wired into the screen. What this covers that the component tests cannot: that accepting
@@ -36,16 +36,25 @@ const renderHome = async (schedule: Schedule) => {
   await repository.clear()
   await repository.saveWeek(schedule)
 
-  render(<HomeScreen repository={repository} />)
+  render(<RoomShell repository={repository} />)
   await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
 
   return repository
 }
 
-describe('HomeScreen with recovery', () => {
+describe('RoomShell with recovery', () => {
   it('suggests one thing when a reserve is low', async () => {
     await renderHome(socialLow())
 
+    /**
+     * §5.2 matches the advice to the depleted type, so the *furniture* matches it too. A
+     * social prescription marks the phone, because that is where reaching somebody starts --
+     * marking the bed would tell a lonely student to go to sleep, which is the failure the
+     * engine already refuses to make.
+     */
+    expect(screen.getByTestId('object-phone')).toHaveAttribute('data-attention', 'true')
+
+    await userEvent.click(screen.getByTestId('object-phone'))
     expect(screen.getByTestId('prescription')).toBeVisible()
   })
 
@@ -53,14 +62,15 @@ describe('HomeScreen with recovery', () => {
   it('suggests nothing when nothing is low', async () => {
     await renderHome(week())
 
-    expect(screen.queryByTestId('prescription')).toBeNull()
+    expect(screen.getByTestId('object-phone')).toHaveAttribute('data-attention', 'false')
   })
 
   // Replacing the room with advice would take away the thing the student came to look at.
   it('sits beside the room rather than instead of it', async () => {
     await renderHome(socialLow())
 
-    expect(screen.getByTestId('prescription')).toBeVisible()
+    // Beside the room rather than instead of it: the object asks, the room stays.
+    expect(screen.getByTestId('object-phone')).toHaveAttribute('data-attention', 'true')
     expect(screen.getByTestId('room-scene')).toBeVisible()
   })
 
@@ -71,6 +81,7 @@ describe('HomeScreen with recovery', () => {
   it('accepting puts protected rest in the saved week', async () => {
     const repository = await renderHome(socialLow())
 
+    await userEvent.click(screen.getByTestId('object-phone'))
     await userEvent.click(screen.getByRole('button', { name: /put it in my week/i }))
 
     await waitFor(async () => expect((await repository.loadWeek())?.items).toHaveLength(1))
@@ -83,17 +94,20 @@ describe('HomeScreen with recovery', () => {
   it('dismissing records it and stops offering the same thing', async () => {
     const repository = await renderHome(socialLow())
 
+    await userEvent.click(screen.getByTestId('object-phone'))
     await userEvent.click(screen.getByRole('button', { name: /does not help/i }))
 
     await waitFor(async () => expect((await repository.loadWeek())?.recoveryLog).toHaveLength(1))
-    await waitFor(() => expect(screen.queryByTestId('prescription')).toBeNull())
+    await waitFor(() =>
+      expect(screen.getByTestId('object-phone')).toHaveAttribute('data-attention', 'false'),
+    )
   })
 
   // §5.3: the door already lit. This is the part that was missing.
   it('tapping the lit door offers somewhere to go', async () => {
     await renderHome(doorLit())
 
-    await userEvent.click(screen.getByTestId('room-door'))
+    await userEvent.click(screen.getByTestId('object-door'))
 
     expect(await screen.findByTestId('door-panel')).toBeVisible()
     expect(screen.getAllByTestId(/^outing-/).length).toBeGreaterThan(0)
@@ -102,7 +116,7 @@ describe('HomeScreen with recovery', () => {
   it('choosing an outing puts it in the saved week as protected rest', async () => {
     const repository = await renderHome(doorLit())
 
-    await userEvent.click(screen.getByTestId('room-door'))
+    await userEvent.click(screen.getByTestId('object-door'))
     await userEvent.click((await screen.findAllByTestId(/^outing-/))[0]!)
 
     await waitFor(async () => expect((await repository.loadWeek())?.items).toHaveLength(1))
@@ -113,9 +127,9 @@ describe('HomeScreen with recovery', () => {
   it('leaves the unlit door saying what it said before', async () => {
     await renderHome(week())
 
-    await userEvent.click(screen.getByTestId('room-door'))
+    await userEvent.click(screen.getByTestId('object-door'))
 
-    expect(await screen.findByRole('dialog')).toHaveTextContent(/quiet/i)
-    expect(screen.queryByTestId('door-panel')).toBeNull()
+    // A quiet door still explains itself -- it reads its state rather than doing nothing.
+    expect(await screen.findByTestId('zoom-door')).toBeInTheDocument()
   })
 })

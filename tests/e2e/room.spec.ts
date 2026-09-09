@@ -40,7 +40,7 @@ test('states the room in words as well as drawing it', async ({ page }) => {
 test('opens an object when it is tapped', async ({ page }) => {
   await openApp(page)
 
-  await page.getByTestId('room-plant').click()
+  await page.getByTestId('object-plant').click()
 
-  await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByTestId('zoom-plant')).toBeVisible()
 })

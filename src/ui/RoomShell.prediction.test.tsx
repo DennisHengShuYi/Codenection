@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { createLocalRepository } from '../data'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
-import { HomeScreen } from './HomeScreen'
+import { RoomShell } from './room/RoomShell'
 
 const week = (over: Partial<Schedule> = {}): Schedule => ({
   items: [],
@@ -22,7 +22,7 @@ const renderHome = async (schedule = week()) => {
   await repository.clear()
   await repository.saveWeek(schedule)
 
-  render(<HomeScreen repository={repository} />)
+  render(<RoomShell repository={repository} />)
   await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
 
   return repository
@@ -32,7 +32,7 @@ const renderHome = async (schedule = week()) => {
  * §8.1 end to end, and the reason this file exists: the scoring machinery was built, tested
  * and never called. A module with passing tests that nothing invokes is not a feature.
  */
-describe('HomeScreen scoring its own predictions', () => {
+describe('RoomShell scoring its own predictions', () => {
   /**
    * A week saved before anchoring existed has no real dates, so nothing it recorded could
    * ever be checked. Anchoring on first open is what makes every later claim resolvable.
@@ -66,7 +66,7 @@ describe('HomeScreen scoring its own predictions', () => {
   it('does not ask about energy when there is nothing to score', async () => {
     await renderHome()
 
-    expect(screen.queryByTestId('energy-check-in')).toBeNull()
+    expect(screen.getByTestId('object-character')).toHaveAttribute('data-attention', 'false')
   })
 
   /**
@@ -91,9 +91,13 @@ describe('HomeScreen scoring its own predictions', () => {
       } as NonNullable<typeof settings.calibration>,
     })
 
-    render(<HomeScreen repository={repository} />)
-    await waitFor(() => expect(screen.getByTestId('energy-check-in')).toBeVisible())
+    render(<RoomShell repository={repository} />)
+    // The check-in lives on the character: it is a question about you.
+    await waitFor(() =>
+      expect(screen.getByTestId('object-character')).toHaveAttribute('data-attention', 'true'),
+    )
 
+    await userEvent.click(screen.getByTestId('object-character'))
     await userEvent.click(screen.getByTestId('energy-70'))
 
     await waitFor(async () => {
@@ -119,10 +123,11 @@ describe('HomeScreen scoring its own predictions', () => {
       } as NonNullable<typeof settings.calibration>,
     })
 
-    render(<HomeScreen repository={repository} />)
+    render(<RoomShell repository={repository} />)
 
-    await waitFor(() =>
-      expect(screen.getByTestId('accuracy-measured').textContent).toMatch(/off by about 10/i),
-    )
+    await waitFor(() => expect(screen.getByTestId('object-window')).toBeVisible())
+    await userEvent.click(screen.getByTestId('object-window'))
+
+    expect(screen.getByTestId('accuracy-measured').textContent).toMatch(/off by about 10/i)
   })
 })

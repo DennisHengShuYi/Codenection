@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { HORIZON_DAYS } from '../engine'
 import { createLocalRepository } from '../data'
-import { HomeScreen } from './HomeScreen'
+import { RoomShell } from './room/RoomShell'
 
 /**
  * §1.5's low-energy mode, driven through the real screen rather than the rule in
@@ -29,11 +29,11 @@ const renderDrained = async () => {
   await repository.clear()
   await repository.saveWeek(drainedWeek())
 
-  render(<HomeScreen repository={repository} />)
+  render(<RoomShell repository={repository} />)
   return repository
 }
 
-describe('HomeScreen in low energy', () => {
+describe('RoomShell in low energy', () => {
   // §1.5: "A student at 12% reserve should not be handed a dashboard."
   it('collapses to one number and one action when the reserve is low', async () => {
     await renderDrained()
@@ -52,7 +52,12 @@ describe('HomeScreen in low energy', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /show everything/i }))
 
-    await waitFor(() => expect(screen.getAllByRole('meter')).toHaveLength(5))
+    // The full view is the room. The five bars are one tap further in, behind the light --
+    // which is the point of §1.5's exit: it returns you to everything, not to a dashboard.
+    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+
+    await userEvent.click(screen.getByTestId('object-light'))
+    expect(screen.getAllByRole('meter')).toHaveLength(5)
   })
 
   /**

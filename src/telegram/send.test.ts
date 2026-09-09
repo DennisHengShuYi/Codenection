@@ -3,6 +3,15 @@ import type { ParsedItem } from '../ai'
 import {
   MAX_ECHO_LENGTH,
   appliedReply,
+  askReply,
+  blockAnsweredReply,
+  blocksReply,
+  helpReply,
+  microStartReply,
+  needRequestReply,
+  needTaskReply,
+  noGapReply,
+  restReply,
   confirmationReply,
   discardedReply,
   linkedReply,
@@ -126,5 +135,161 @@ describe('tooLongReply', () => {
   // cut in half would never know which half the app kept.
   it('explains rather than truncating', () => {
     expect(tooLongReply().text).toMatch(/shorter|too long|split/i)
+  })
+})
+
+describe('helpReply', () => {
+  it('names every command a student can use', () => {
+    const text = helpReply().text
+
+    for (const command of ['today', 'yesterday', 'rest', 'stuck', 'ask']) {
+      expect(text).toContain(`/${command}`)
+    }
+  })
+
+  it('says a plain message is a brain dump, since that needs no command', () => {
+    expect(helpReply().text).toMatch(/just (type|send)|plain message|anything else/i)
+  })
+})
+
+describe('blocksReply', () => {
+  const blocks = [
+    { id: 'b1', title: 'Ethics essay', startHour: 9 },
+    { id: 'b2', title: 'Shift', startHour: 17 },
+  ]
+
+  it('names each block and when it was', () => {
+    const reply = blocksReply('today', blocks)
+
+    expect(reply.text).toContain('Ethics essay')
+    expect(reply.text).toContain('Shift')
+  })
+
+  // §7.9's three answers, not two. "Partly" is the honest answer for most blocks and
+  // dropping it would push people into a yes or a no that is not true.
+  it('offers yes, no and partly for the first unanswered block', () => {
+    const actions = blocksReply('today', blocks).buttons?.flat().map((b) => b.data) ?? []
+
+    expect(actions.some((a) => a.includes('yes'))).toBe(true)
+    expect(actions.some((a) => a.includes('no'))).toBe(true)
+    expect(actions.some((a) => a.includes('partly'))).toBe(true)
+  })
+
+  it('says so plainly when the day had nothing on it', () => {
+    const reply = blocksReply('today', [])
+
+    expect(reply.text).toMatch(/nothing/i)
+    expect(reply.buttons).toBeUndefined()
+  })
+})
+
+describe('blockAnsweredReply', () => {
+  /**
+   * §7.9: never punish a miss. §1.3: the app reflects, it does not scold. A student who
+   * did not do the thing is exactly the one whose data is most worth having, and a comment
+   * on it is how they stop answering.
+   */
+  it('answers a miss neutrally, with no comment at all', () => {
+    const text = blockAnsweredReply('no').text
+
+    expect(text).not.toMatch(/sorry|shame|try|tomorrow|better|why|ok\?|should/i)
+  })
+
+  it('answers a yes just as plainly as a no', () => {
+    expect(blockAnsweredReply('yes').text.length).toBeLessThan(60)
+    expect(blockAnsweredReply('no').text.length).toBeLessThan(60)
+  })
+})
+
+describe('restReply', () => {
+  const prescription = {
+    type: 'physical' as const,
+    kind: 'lightExercise' as const,
+    title: 'A walk outside',
+    startHour: 15,
+    hours: 1,
+    protectedRest: true as const,
+  }
+
+  it('offers the one thing, and when', () => {
+    const reply = restReply(prescription)
+
+    expect(reply.text).toContain('A walk outside')
+    expect(reply.text).toMatch(/15|3\s?pm/i)
+  })
+
+  /**
+   * §5.2: one option only. Every extra option lowers the odds of any action at all.
+   *
+   * Declining is not an option in that sense -- it is the way out -- so what is counted is
+   * the things that can be accepted. The first version of this counted anything starting
+   * `rest:`, which caught the decline too and read as a failure when it was not one.
+   */
+  it('offers exactly one thing to accept', () => {
+    const actions = restReply(prescription).buttons?.flat().map((b) => b.data) ?? []
+
+    expect(actions.filter((a) => a.startsWith('rest:accept'))).toHaveLength(1)
+    expect(actions.filter((a) => a === 'rest:decline')).toHaveLength(1)
+  })
+
+  it('says plainly when the day has no room, rather than suggesting the impossible', () => {
+    const reply = noGapReply()
+
+    expect(reply.text.length).toBeGreaterThan(0)
+    expect(reply.buttons).toBeUndefined()
+  })
+})
+
+describe('microStartReply', () => {
+  it('gives the one action and nothing else', () => {
+    const reply = microStartReply('Open the document and write the title.')
+
+    expect(reply.text).toContain('Open the document')
+    expect(reply.buttons).toBeUndefined()
+  })
+
+  it('asks which task when none was named', () => {
+    expect(needTaskReply().text).toMatch(/which|what/i)
+  })
+})
+
+describe('askReply', () => {
+  const cost = { givenUp: ['two gym sessions', 'one evening out'], deficitMovesTo: 14 }
+  const drafts = { soft: 'No, sorry.', defer: 'Not this week — how about the 20th?', accept: 'Yes, but I will drop the gym.' }
+
+  // §2.3: never "this takes 6 hours". Always what it costs in what gets given up.
+  it('prices it in what gets given up, not in hours', () => {
+    const text = askReply(cost, drafts).text
+
+    expect(text).toContain('two gym sessions')
+    expect(text).not.toMatch(/\d+\s*hours?\b/i)
+  })
+
+  it('names the deficit moving when it moves', () => {
+    expect(askReply(cost, drafts).text).toContain('14')
+  })
+
+  it('offers all three tones', () => {
+    const text = askReply(cost, drafts).text
+
+    expect(text).toContain('No, sorry.')
+    expect(text).toContain('how about the 20th?')
+    expect(text).toContain('drop the gym')
+  })
+
+  /**
+   * §2.3's rule, and the one place a bot could quietly break it: the app does the work of
+   * declining and the student keeps the decision. There must be nothing to press that
+   * sends anything to anybody.
+   */
+  it('offers nothing that could send the reply', () => {
+    const reply = askReply(cost, drafts)
+
+    expect(reply.buttons).toBeUndefined()
+    expect(reply.text).not.toMatch(/tap to send|send it|forward this/i)
+  })
+
+  it('asks what the request was when nothing followed the command', () => {
+    expect(needRequestReply().text.length).toBeGreaterThan(0)
   })
 })

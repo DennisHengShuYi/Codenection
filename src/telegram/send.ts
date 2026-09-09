@@ -74,3 +74,148 @@ export const discardedReply = (): Reply => ({
 export const tooLongReply = (): Reply => ({
   text: 'That is too long for me to read in one go. Send it in a couple of shorter messages and I will take them one at a time.',
 })
+
+/** Named so a student can see the whole surface at once. §4.1 and §5.2 both depend on
+ *  somebody remembering the command exists at the moment they need it. */
+export const helpReply = (): Reply => ({
+  text: [
+    'What I can do:',
+    '',
+    '/today — go through today’s blocks',
+    '/yesterday — confirm yesterday in one go',
+    '/rest — one thing that would help right now',
+    '/stuck <task> — one small first step',
+    '/ask <what they asked> — what saying yes would cost',
+    '',
+    'Anything else you send, I read as things to add to your week.',
+  ].join('\n'),
+})
+
+/** The shape a check-in needs from a block, so this module does not depend on the whole
+ *  scheduling model to write a sentence. */
+export interface BlockLine {
+  readonly id: string
+  readonly title: string
+  readonly startHour: number
+}
+
+const clockOf = (hour: number): string => `${String(Math.floor(hour)).padStart(2, '0')}:00`
+
+export function blocksReply(day: 'today' | 'yesterday', blocks: readonly BlockLine[]): Reply {
+  if (blocks.length === 0) {
+    return { text: `Nothing was scheduled ${day}.` }
+  }
+
+  const first = blocks[0] as BlockLine
+  const listed = blocks.map((block) => `• ${clockOf(block.startHour)} ${shorten(block.title)}`)
+
+  return {
+    text: [`${day === 'today' ? 'Today' : 'Yesterday'}:`, '', ...listed, '', `Did ${shorten(first.title)} happen?`].join('\n'),
+    // §7.9's three answers. "Partly" is the honest answer for most blocks, and dropping it
+    // pushes people into a yes or a no that is not true.
+    buttons: [
+      [
+        { label: 'Yes', data: `block:${first.id}:yes` },
+        { label: 'Partly', data: `block:${first.id}:partly` },
+        { label: 'No', data: `block:${first.id}:no` },
+      ],
+    ],
+  }
+}
+
+/**
+ * §7.9's "never punish a miss", and §1.3's mirror-not-scold rule.
+ *
+ * A student who did not do the thing is exactly the one whose data is most worth having,
+ * and a comment on it is how they stop answering. So a no reads the same as a yes.
+ */
+export const blockAnsweredReply = (_answer: 'yes' | 'no' | 'partly'): Reply => ({
+  text: 'Noted.',
+})
+
+export function restReply(prescription: {
+  title: string
+  startHour: number
+  hours: number
+}): Reply {
+  return {
+    text: `${prescription.title}, at ${clockOf(prescription.startHour)}. About ${prescription.hours === 1 ? 'an hour' : `${prescription.hours} hours`}.`,
+    // Exactly one thing to accept. §5.2: every extra option lowers the odds of any action.
+    buttons: [
+      [
+        { label: 'Put it in', data: `rest:accept:${prescription.startHour}` },
+        { label: 'Not now', data: 'rest:decline' },
+      ],
+    ],
+  }
+}
+
+export const noGapReply = (): Reply => ({
+  text: 'There is no gap left today to put anything in. Worth looking at tomorrow instead.',
+})
+
+export const microStartReply = (action: string): Reply => ({
+  text: action,
+})
+
+export const needTaskReply = (): Reply => ({
+  text: 'Which task? Send /stuck and the name of it.',
+})
+
+export const needRequestReply = (): Reply => ({
+  text: 'Send /ask and what they asked you for, and I will tell you what saying yes would cost.',
+})
+
+export function askReply(
+  cost: { givenUp: readonly string[]; deficitMovesTo: number | null },
+  drafts: { soft: string; defer: string; accept: string },
+): Reply {
+  const given = cost.givenUp.length === 0 ? 'nothing you had planned' : cost.givenUp.join(' and ')
+
+  const crossing =
+    cost.deficitMovesTo === null
+      ? []
+      : ['', `It also moves your first bad day to day ${cost.deficitMovesTo}.`]
+
+  return {
+    // §2.3: never "this takes 6 hours". Always what it costs in what gets given up.
+    text: [
+      `Saying yes costs you ${given}.`,
+      ...crossing,
+      '',
+      'Three ways to answer — copy whichever fits:',
+      '',
+      `No: ${drafts.soft}`,
+      '',
+      `Later: ${drafts.defer}`,
+      '',
+      `Yes: ${drafts.accept}`,
+    ].join('\n'),
+    // Deliberately no buttons. §2.3: the app does the work of declining and the student
+    // keeps the decision, so there must be nothing here that sends anything to anybody.
+  }
+}
+
+export const voiceTooLongReply = (): Reply => ({
+  text: 'That recording is longer than I can read in one go. Send a shorter one, or type it instead.',
+})
+
+export const transcriptionUnavailableReply = (): Reply => ({
+  text: 'I cannot listen to voice notes right now. Type it and I will read it the same way.',
+})
+
+export const photoUnreadableReply = (): Reply => ({
+  text: 'I could not read that image. A clearer photo, or type what is on it.',
+})
+
+/**
+ * §7.9's retroactive fill, and why it cannot be answered yet.
+ *
+ * `Schedule` carries `dayIndex` and `horizonDays` but no date, so day 0 is today by
+ * convention and the horizon runs forward only. There is no yesterday in the model to look
+ * up, and answering with today's blocks under yesterday's name would put wrong data into
+ * the very table §2.4 will later trust.
+ */
+export const yesterdayUnavailableReply = (): Reply => ({
+  text: 'I do not keep past days yet, so there is nothing to look back at. Use /today and I will go through today with you.',
+})

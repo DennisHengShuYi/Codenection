@@ -95,3 +95,78 @@ describe('readUpdate', () => {
     expect(intent.kind === 'plan' && intent.chatId).toBe(7)
   })
 })
+
+describe('readUpdate, the rest of the flows', () => {
+  it('reads a command, with its argument', () => {
+    const intent = readUpdate({ message: { chat, text: '/stuck the essay' } })
+
+    expect(intent).toEqual({
+      kind: 'command',
+      chatId: 4242,
+      name: 'stuck',
+      argument: 'the essay',
+    })
+  })
+
+  it.each(['today', 'yesterday', 'rest', 'ask', 'help'])('reads /%s', (name) => {
+    const intent = readUpdate({ message: { chat, text: `/${name}` } })
+
+    expect(intent.kind === 'command' && intent.name).toBe(name)
+  })
+
+  // Answered with help rather than guessed at or ignored.
+  it('turns an unknown command into help', () => {
+    const intent = readUpdate({ message: { chat, text: '/dance' } })
+
+    expect(intent).toEqual({ kind: 'command', chatId: 4242, name: 'help', argument: '' })
+  })
+
+  // Telegram sends several sizes of the same photo. A thumbnail would read badly, so the
+  // largest is the one to send to the model.
+  it('reads a photo, taking the largest size offered', () => {
+    const intent = readUpdate({
+      message: {
+        chat,
+        photo: [
+          { file_id: 'small', file_size: 900 },
+          { file_id: 'large', file_size: 90_000 },
+          { file_id: 'medium', file_size: 9_000 },
+        ],
+      },
+    })
+
+    expect(intent).toEqual({ kind: 'photo', chatId: 4242, fileId: 'large', bytes: 90_000 })
+  })
+
+  it('reads a voice note, with how long it is', () => {
+    const intent = readUpdate({
+      message: { chat, voice: { file_id: 'v1', duration: 12, file_size: 4_000 } },
+    })
+
+    expect(intent).toEqual({ kind: 'voice', chatId: 4242, fileId: 'v1', seconds: 12, bytes: 4_000 })
+  })
+
+  // A recording sent as a file rather than held-to-talk is the same thing to a student.
+  it('treats an audio file like a voice note', () => {
+    const intent = readUpdate({
+      message: { chat, audio: { file_id: 'a1', duration: 30, file_size: 9_000 } },
+    })
+
+    expect(intent.kind).toBe('voice')
+  })
+
+  it('survives a photo array that is empty or malformed', () => {
+    expect(readUpdate({ message: { chat, photo: [] } }).kind).toBe('unhandled')
+    expect(readUpdate({ message: { chat, photo: 'nope' } }).kind).toBe('unhandled')
+    expect(() => readUpdate({ message: { chat, voice: 'nope' } })).not.toThrow()
+  })
+
+  // A caption on a photo must not be read as a brain dump instead of the photo.
+  it('reads a captioned photo as a photo', () => {
+    const intent = readUpdate({
+      message: { chat, photo: [{ file_id: 'p', file_size: 10 }], caption: 'my timetable' },
+    })
+
+    expect(intent.kind).toBe('photo')
+  })
+})

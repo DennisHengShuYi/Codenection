@@ -231,3 +231,109 @@ describe('anything else', () => {
     expect(await handleIntent({ kind: 'unhandled', chatId: null }, h.store, 1000)).toBeNull()
   })
 })
+
+describe('the command surface', () => {
+  const week = (items: unknown[] = []) => ({
+    items,
+    start: { mental: 70, physical: 70, social: 70, errands: 70 },
+    horizonDays: HORIZON_DAYS,
+    sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+  })
+
+  const command = (name: string, argument = '') =>
+    ({ kind: 'command', chatId: 7, name, argument }) as never
+
+  it('answers /help with what it can do', async () => {
+    const h = harness()
+
+    const reply = await handleIntent(command('help'), h.store, 1000)
+
+    expect(reply?.text).toContain('/today')
+  })
+
+  it('answers /today with the day’s blocks', async () => {
+    const block = {
+      id: 'b1', title: 'Ethics essay', type: 'mental', kind: 'studyBlock', hours: 2,
+      intensity: 1, dayIndex: 0, startHour: 9, fixed: true, deadlineDay: null, protectedRest: false,
+    }
+    const h = harness({ loadWeek: async () => week([block]) as never })
+
+    const reply = await handleIntent(command('today'), h.store, 1000)
+
+    expect(reply?.text).toContain('Ethics essay')
+  })
+
+  it('says plainly when today had nothing on it', async () => {
+    const h = harness({ loadWeek: async () => week() as never })
+
+    expect((await handleIntent(command('today'), h.store, 1000))?.text).toMatch(/nothing/i)
+  })
+
+  /**
+   * The schedule carries no date, so there is no yesterday to look up. Answering with
+   * today's blocks under yesterday's name would put wrong data into the very table §2.4
+   * will later trust, so it says so instead.
+   */
+  it('says it cannot look back yet, rather than answering with today', async () => {
+    const h = harness({ loadWeek: async () => week() as never })
+
+    const reply = await handleIntent(command('yesterday'), h.store, 1000)
+
+    expect(reply?.text).toMatch(/past days|look back/i)
+  })
+
+  it('answers /rest with one thing to do', async () => {
+    const h = harness({ loadWeek: async () => week() as never })
+
+    const reply = await handleIntent(command('rest'), h.store, 1000)
+
+    expect(reply?.buttons?.flat().filter((b) => b.data.startsWith('rest:accept'))).toHaveLength(1)
+  })
+
+  it('asks which task when /stuck names none', async () => {
+    const h = harness()
+
+    expect((await handleIntent(command('stuck'), h.store, 1000))?.text).toMatch(/which|what/i)
+  })
+
+  it('answers /stuck with one action, using the model when it is there', async () => {
+    const h = harness()
+    const askModel = vi.fn().mockResolvedValue('Open the document and write the title.')
+
+    const reply = await handleIntent(command('stuck', 'the essay'), h.store, 1000, { askModel })
+
+    expect(askModel).toHaveBeenCalledOnce()
+    expect(reply?.text).toContain('Open the document')
+  })
+
+  // The state CI and the demo run in: §4.1 is useless if it only works when a key is set.
+  it('still answers /stuck with no model configured', async () => {
+    const h = harness()
+
+    const reply = await handleIntent(command('stuck', 'the essay'), h.store, 1000)
+
+    expect(reply?.text).toContain('the essay')
+  })
+
+  it('falls back rather than failing when the model throws', async () => {
+    const h = harness()
+    const askModel = vi.fn().mockRejectedValue(new Error('down'))
+
+    const reply = await handleIntent(command('stuck', 'the essay'), h.store, 1000, { askModel })
+
+    expect(reply?.text.length).toBeGreaterThan(0)
+  })
+
+  // Every new flow refuses an unlinked chat, and writes nothing for one.
+  it.each(['help', 'today', 'yesterday', 'rest', 'stuck'])(
+    'refuses /%s for an unlinked chat, and writes nothing',
+    async (name) => {
+      const h = harness({ accountForChat: async () => null })
+
+      const reply = await handleIntent(command(name, 'x'), h.store, 1000)
+
+      expect(reply?.text).toMatch(/not linked/i)
+      expect(h.saved).toEqual([])
+    },
+  )
+})

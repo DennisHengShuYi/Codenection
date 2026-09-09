@@ -8,6 +8,12 @@
 export { parseBrainDump } from './parseBrainDump'
 export { parseWithRules } from './fallbackParser'
 export { parseModelReply } from './schema'
+export {
+  MAX_TASK_LENGTH,
+  MICRO_START_MINUTES,
+  microStartFrom,
+  microStartPrompt,
+} from './microStart'
 export { readPhoto } from './readPhoto'
 export { readImageFile, type ImageResult } from './image'
 export {

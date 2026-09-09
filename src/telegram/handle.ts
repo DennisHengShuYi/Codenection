@@ -1,8 +1,39 @@
-import { MAX_INPUT_LENGTH, parseBrainDump } from '../ai'
+import { MAX_INPUT_LENGTH, microStartFrom, microStartPrompt, parseBrainDump } from '../ai'
+import { blocksOnDay } from '../domain/dayBlocks'
+import { prescribeRest } from '../domain/prescribe'
 import type { Schedule } from '../optimizer'
 import { resolveConfirmation, summarise, type PendingDump } from './brainDump'
-import { linkedReply, notLinkedReply, tooLongReply, unhandledReply, type Reply } from './send'
+import {
+  blocksReply,
+  helpReply,
+  linkedReply,
+  microStartReply,
+  needTaskReply,
+  noGapReply,
+  notLinkedReply,
+  restReply,
+  tooLongReply,
+  unhandledReply,
+  yesterdayUnavailableReply,
+  type Reply,
+} from './send'
 import type { Intent } from './update'
+
+/**
+ * The calls that need a credential, injected rather than imported.
+ *
+ * Every one of these lives behind `api/`, which is the only place a key is read. Passing
+ * them in keeps this module testable without one, and keeps the browser bundle unable to
+ * reach any of them. An absent service is an ordinary state, not an error: it means the key
+ * is unset, which is CI, the demo, and any deployment before its variables are filled in.
+ */
+export interface ChatServices {
+  readonly askModel?: (prompt: string) => Promise<string | null>
+}
+
+/** Day 0 is today. The schedule carries no date anchor, so this is the only day the model
+ *  can name -- see `yesterdayUnavailableReply` for what that costs. */
+const TODAY = 0
 
 /**
  * Everything the chat flows need from storage, and nothing more.
@@ -41,6 +72,7 @@ export async function handleIntent(
   intent: Intent,
   store: ChatStore,
   now: number,
+  services: ChatServices = {},
 ): Promise<Reply | null> {
   if (intent.kind === 'unhandled') {
     return intent.chatId === null ? null : unhandledReply()
@@ -62,6 +94,50 @@ export async function handleIntent(
   // no pending record. §13.4.
   const accountId = await store.accountForChat(intent.chatId)
   if (accountId === null) return notLinkedReply()
+
+  if (intent.kind === 'command') {
+    switch (intent.name) {
+      case 'help':
+        return helpReply()
+
+      case 'today': {
+        const week = await store.loadWeek(accountId)
+        return blocksReply('today', blocksOnDay(week, TODAY))
+      }
+
+      // The schedule has no date anchor, so there is no yesterday to look up. Said plainly
+      // rather than answered with today's blocks under yesterday's name.
+      case 'yesterday':
+        return yesterdayUnavailableReply()
+
+      case 'rest': {
+        const week = await store.loadWeek(accountId)
+        const prescription = prescribeRest(week, week.start, TODAY)
+
+        return prescription === null ? noGapReply() : restReply(prescription)
+      }
+
+      case 'stuck': {
+        if (intent.argument === '') return needTaskReply()
+
+        // With no model configured this still answers, from the rule. §4.1 is useless if it
+        // only works when a key happens to be set.
+        const reply = services.askModel
+          ? await services.askModel(microStartPrompt(intent.argument)).catch(() => null)
+          : null
+
+        return microStartReply(microStartFrom(intent.argument, reply).action)
+      }
+
+      case 'ask':
+        return unhandledReply()
+    }
+  }
+
+  if (intent.kind === 'photo' || intent.kind === 'voice') {
+    // Wired in api/telegram.ts, which is the only place that can fetch a file from Telegram.
+    return unhandledReply()
+  }
 
   if (intent.kind === 'plan') {
     // Refused before the model is called, so an oversized message cannot cost a request.

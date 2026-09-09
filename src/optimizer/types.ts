@@ -58,6 +58,15 @@ export interface Schedule {
    * carries, not an input to the model.
    */
   readonly commitments?: readonly Commitment[]
+  /**
+   * What recovery was tried and whether it helped (§5.2).
+   *
+   * Carried inside the week for the same reason `commitments` is: no migration, no adapter
+   * change, and it is genuinely part of the week. Optional because weeks saved before this
+   * have no such field and must keep loading. Nothing in `src/engine` or `src/optimizer`
+   * reads it.
+   */
+  readonly recoveryLog?: readonly RecoveryAttempt[]
 }
 
 export type MoveKind =

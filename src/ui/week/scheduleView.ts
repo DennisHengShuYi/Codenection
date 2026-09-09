@@ -1,0 +1,83 @@
+import { answeredIds, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
+import { dateFor } from '../../domain/calendar'
+import type { CalibrationProfile } from '../../domain/calibration'
+import { paramsFor } from '../../domain/engineParams'
+import { DEFICIT_THRESHOLD, HORIZON_DAYS, overallReserve, project } from '../../engine'
+import { toDayInputs, type Schedule } from '../../optimizer'
+
+/**
+ * §4's overview: the whole horizon as 21 cells.
+ *
+ * Pure, and takes `today` as a parameter rather than reading a clock -- the same rule the
+ * engine and `roomModel` follow, and the reason any of this can be tested at all.
+ */
+
+/** Where a day stops reading as light. Roughly a full timetabled day. */
+export const BUSY_ABOVE_HOURS = 6
+/** Where it stops reading as survivable. */
+export const HEAVY_ABOVE_HOURS = 10
+
+export type LoadBand = 'light' | 'busy' | 'heavy'
+
+export interface DayCell {
+  readonly dayIndex: number
+  /** Null for a week saved before anchoring existed. */
+  readonly date: string | null
+  readonly band: LoadBand
+  readonly hours: number
+  /** From the projection, not from the hours: a light day can still be a deficit day if the
+   *  fortnight around it has already emptied the student. */
+  readonly deficit: boolean
+  /** A block on a day already lived that has not been asked about. Drives §4's mark, so the
+   *  confirmation prompt is discoverable from the overview and not only from the card. */
+  readonly unconfirmed: boolean
+  readonly isToday: boolean
+}
+
+export interface ScheduleViewInput {
+  readonly schedule: Schedule
+  readonly profile: CalibrationProfile
+  /** Injected rather than read, so this stays pure. The shell supplies it. */
+  readonly today: number
+  /**
+   * §8b's durable record of what was scheduled and what became of it. Threaded in rather
+   * than loaded here, so this stays pure -- the shell reads it from the repository and
+   * supplies it. Optional and defaulting to empty, mirroring `RoomModelInput`, so every
+   * caller built before the log existed keeps compiling and behaving exactly as it did.
+   */
+  readonly blockLog?: readonly BlockRecord[]
+}
+
+const bandFor = (hours: number): LoadBand =>
+  hours >= HEAVY_ABOVE_HOURS ? 'heavy' : hours >= BUSY_ABOVE_HOURS ? 'busy' : 'light'
+
+export function scheduleView({
+  schedule,
+  profile,
+  today,
+  blockLog = [],
+}: ScheduleViewInput): readonly DayCell[] {
+  const params = paramsFor([...outcomesFrom(blockLog), ...profile.confirmations])
+  const projection = project(schedule.start, toDayInputs(schedule), params)
+
+  const alreadyAsked = (id: string) =>
+    answeredIds(blockLog).includes(id) || profile.confirmedItemIds.includes(id)
+
+  return Array.from({ length: HORIZON_DAYS }, (_, dayIndex): DayCell => {
+    const onDay = schedule.items.filter((item) => item.dayIndex === dayIndex)
+    const hours = onDay.reduce((total, item) => total + item.hours, 0)
+    const reserves = projection.central[dayIndex]
+
+    return {
+      dayIndex,
+      date: dateFor(schedule, dayIndex),
+      band: bandFor(hours),
+      hours,
+      deficit: reserves !== undefined && overallReserve(reserves) < DEFICIT_THRESHOLD,
+      // A day still ahead cannot have been lived, so asking about it would be asking a
+      // student to report the future.
+      unconfirmed: dayIndex <= today && onDay.some((item) => !alreadyAsked(item.id)),
+      isToday: dayIndex === today,
+    }
+  })
+}

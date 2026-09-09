@@ -23,10 +23,15 @@ export const GROQ_TEXT_MODEL = 'openai/gpt-oss-120b'
  * "messages[0].content must be a string". The integration test covers that specifically,
  * so a swap to a text-only model fails there rather than on a student's timetable.
  *
- * It is also the only id on this key that accepts an image at all, so there is no second
- * choice to fall back to. Worth knowing rather than discovering: if this one is retired,
- * the feature has no model, and §1.4's rule means the honest answer is the sentence in
- * `readPhoto.ts` -- not a guess at the picture's contents.
+ * Two ids accept an image: this one and `qwen/qwen3.6-27b`. Prefer this one, and know why
+ * before swapping. `3.6` spends so much of its budget reasoning that it cannot finish
+ * valid JSON for a full timetable inside the free tier's 1000-token-per-request output
+ * limit -- Groq then rejects the truncation outright with `json_validate_failed`. This one
+ * answers the same photograph in ~600 output tokens, well inside the same limit.
+ *
+ * When it fails, the question is whether it is retired or merely busy: it spent an hour
+ * answering "currently over capacity" while this was being written, taking 30s to say so,
+ * which is longer than `vision.ts` waits before giving up. That is a wait, not a swap.
  */
 export const GROQ_VISION_MODEL = 'qwen/qwen3.8-27b'
 

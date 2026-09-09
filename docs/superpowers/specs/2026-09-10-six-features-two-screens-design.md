@@ -456,6 +456,11 @@ validation claim dies without.
 | `src/ui/today/todayCard.ts` | Pure. Picks which block to ask about. |
 | `src/ui/AddSheet.tsx` | Photo · text · request. |
 | `src/ui/useProfile.ts` | Loads and saves the profile. `useCalibration` renamed and moved out of the deleted `calibration/` directory — the profile still has to be persisted once the calibration *screens* are gone. |
+| `src/ui/kit/Sheet.tsx` | §12. Replaces `ZoomLayer`, keeping its focus, Escape and dialog semantics. |
+| `src/ui/kit/Card.tsx` | §12. One card, three tones. |
+| `src/ui/kit/Button.tsx` | §12. Three variants, two sizes, 44px minimum. Replaces 18 hand-written copies. |
+| `src/ui/kit/Field.tsx` | §12. Label, control, help, error. |
+| `src/fixtures/umProfile.ts` | §14 step 0. Seeded confirmations and resolved predictions. |
 
 ### Changed
 
@@ -527,7 +532,121 @@ Each of these is a considered choice, not an oversight.
 
 ---
 
-## 12. Testing
+## 12. Visual design
+
+### The problem, measured
+
+```
+9 colour families across 17 background utilities, chosen per component
+"rounded-lg bg-slate-900 px-4 py-3 text-white" hand-written 18× in 12 files
+styles.css is one line: @import 'tailwindcss'
+no tailwind config, no @theme, no design tokens
+no shared primitive — no Button, no Card, no Sheet, no Field
+de-emphasis is opacity-70, which fades the background through the text
+```
+
+Each feature was built in its own session and invented its own look: violet micro-start, sky
+prescription, amber door panel, rose, indigo, emerald. There is nothing to refactor here
+because there is no system to refactor — this section builds one.
+
+### The palette comes from the room
+
+The room is the app's identity: warm cream walls, a slate ceiling, amber on the floor. The
+interface should sit *in* that room rather than beside it. Tokens go in `styles.css` via
+Tailwind v4's `@theme`.
+
+**Ground and ink:**
+
+```
+--color-ground     #faf8f4    the page
+--color-surface    #ffffff    cards and sheets
+--color-line       #e3ddd2    borders
+--color-ink        #1c1917    primary text
+--color-ink-soft   #6b635a    secondary text — replaces every opacity-70
+```
+
+**Exactly three semantic accents.** More than three and none of them mean anything:
+
+```
+--color-attention  amber-500  needs you: stuck, lapsed, deficit, unconfirmed
+--color-calm       sky-600    recovery, rest, protected blocks
+--color-action     ink        primary buttons
+```
+
+Deleted outright: `violet-50`, `rose-600`, `rose-300`, `indigo-400`, `emerald-600`,
+`slate-500`, `sky-300`, `amber-100`, `amber-400`.
+
+**Four load-type hues, for calendar blocks only**, and never carrying meaning alone (§1.5) —
+every block also shows its label and its type in words:
+
+```
+mental    indigo-500
+physical  teal-600
+social    rose-500
+errands   stone-500
+```
+
+Amber is deliberately excluded from that set, so "needs you" stays unambiguous everywhere.
+
+### Four primitives, and every panel is built from them
+
+New directory `src/ui/kit/`:
+
+| Component | Rules |
+|---|---|
+| `Sheet` | The container every button opens. Title, scrolling body, action bar pinned to the bottom. |
+| `Card` | `bg-surface border-line rounded-xl p-4`, with one prop: `tone="attention" \| "calm" \| null`. |
+| `Button` | `variant="primary" \| "secondary" \| "quiet"`, `size="lg" \| "sm"`. Minimum 44px touch target, always. |
+| `Field` | Label, control, help text, error. Every input goes through it. |
+
+**No component outside `kit/` writes a colour utility.** That is mechanically checkable and
+§13 makes it a test.
+
+### Sheet anatomy — and the one-handed fix
+
+§0.2 requires primary actions in the lower half of the viewport on mobile. Today `ZoomLayer`
+puts "Back to the room" at the **top** and lets each panel scatter its own buttons wherever
+they land — `RoomShell`'s desk panel puts them mid-screen, `Prescription` puts them after a
+paragraph, `PlannerScreen` puts them under a textarea.
+
+```
+┌──────────────────────────────┐
+│  Title                    ╳  │  ← 44px close target
+├──────────────────────────────┤
+│                              │
+│  body — scrolls              │
+│                              │
+├──────────────────────────────┤
+│  [ Primary ]  [ Secondary ]  │  ← pinned; always in the lower third
+└──────────────────────────────┘
+```
+
+Below 768px the sheet rises from the bottom edge and takes the viewport. Above it, it centres
+over the room with the room still visible around it.
+
+`ZoomLayer`'s focus-on-open, its Escape handler, its `role="dialog"` and `aria-modal` are all
+correct and carry over into `Sheet` unchanged. Only the layout and the misplaced back-link
+change.
+
+### Per-panel layout
+
+| Sheet | Title | Body | Action bar |
+|---|---|---|---|
+| **Block** | the block's title | time · type · duration; micro-start card when stuck | derived per §5 |
+| **Today** | How did today go? | three rows, each one button group | none — answering the last row closes it |
+| **Add** | What's coming at you? | three large targets, stacked | Cancel |
+| **Recovery** | the prescription title | one sentence | Put it in my week · Not today |
+| **Photo · Type · Request** | existing copy | existing, re-laid on `Field` | existing buttons, moved into the bar |
+
+### Out of scope for this pass
+
+**Dark mode.** The room's light level already encodes reserve, and a dark chrome around a lit
+room would collide with that meaning. It deserves its own decision, not a side effect of this
+change.
+
+---
+
+## 13. Testing
 
 Written first, per `test-driven-development`. Behaviour changes ship with their tests in the
 same change.
@@ -558,16 +677,28 @@ same change.
 - `RoomShell.test.tsx` — routing only; the eight `RoomShell.*.test.tsx` files have their
   assertions moved down to the component that now owns each one
 
+**The design system (§12):**
+
+- `kit/` components get their own tests — `Button`'s three variants, `Card`'s three tones,
+  `Sheet`'s focus-on-open and Escape (carried over from `ZoomLayer`'s existing tests)
+- **A lint-style test asserting no component outside `src/ui/kit/` writes a colour utility.**
+  Greps the `src/ui` tree for `bg-`, `text-` and `border-` followed by a Tailwind colour name
+  and fails on any hit outside `kit/`. This is the only thing that stops the system decaying
+  back into 18 hand-written buttons, and it is cheap.
+- **A test that every action bar's primary button sits in the lower half** at 390px — §0.2's
+  one-handed rule, which nothing currently checks.
+
 **Responsive verification at 320 / 390 / 768 / 1280px** on both screens, per §0's standing
 requirements — specifically the day hour-grid at 320px, which is the layout this design chose
-*because* seven columns could not survive it.
+*because* seven columns could not survive it, and the room screen at 320px with the paragraph
+capped and both buttons above the fold.
 
 **Three-tap check** (§0): log a task = `+` → type → accept ✓ · take a recovery block = card →
 accept ✓ · start a stuck task = week → day → block, micro-start opens with it ✓.
 
 ---
 
-## 13. Build order
+## 14. Build order
 
 Sequenced so the thing everything else hangs off exists first, and so there is a demoable app
 at every line. **Stop-and-demo line marked.**
@@ -575,15 +706,20 @@ at every line. **Stop-and-demo line marked.**
 | # | Step | Why here |
 |---|---|---|
 | 0 | **Seed confirmations and predictions** | Before any UI. See below — without it the accuracy line reads "not enough data" through the entire demo. |
-| 1 | `scheduleView.ts` + `dayGrid.ts` | Pure, testable, and everything else hangs off them. |
-| 2 | `WeekScreen` — overview + day grid | The new primary surface. |
-| 3 | `blockActions.ts` + `BlockSheet` | Makes the week operable rather than a picture. |
-| 4 | `TodayCard` + `todayCard.ts` | Closes the estimate and sleep loops. |
-| 5 | Strip `Room` to display-only, move the gauge in, add card precedence | The room screen becomes final. |
-| — | **← STOP AND DEMO FROM HERE** | Room, week, blocks, today card, rebalance. All five pitch beats except the request box are reachable. |
-| 6 | `AddSheet` | The three existing input screens behind one control. Rewiring, not new behaviour. |
-| 7 | Recovery simplification | Smallest change on the list, and the one whose absence is least visible in a demo. |
-| 8 | Deletions and `useProfile` rename | Pure removal; nothing depends on it landing. |
+| 1 | **§12 tokens + `kit/`** | Before any screen. Building screens first means restyling them twice, and the 18 hand-written buttons are already the evidence for what happens without it. |
+| 2 | `scheduleView.ts` + `dayGrid.ts` | Pure, testable, and everything else hangs off them. |
+| 3 | `WeekScreen` — overview + day grid | The new primary surface, built on `kit/` from its first commit. |
+| 4 | `blockActions.ts` + `BlockSheet` | Makes the week operable rather than a picture. |
+| 5 | `TodayCard` + `todayCard.ts` | Closes the estimate and sleep loops. |
+| 6 | Strip `Room` to display-only, move the gauge in, add card precedence | The room screen becomes final. |
+| — | **← STOP AND DEMO FROM HERE** | Room, week, blocks, today card, rebalance. All five pitch beats except the request box are reachable, and everything on screen is on the design system. |
+| 7 | `AddSheet`, and re-lay the three input screens on `kit/` | The largest remaining styling debt: `PlannerScreen`, `PhotoImportScreen` and `RequestBoxScreen` are the three files that most predate any system. |
+| 8 | Recovery simplification | Smallest change on the list, and the one whose absence is least visible in a demo. |
+| 9 | Deletions and `useProfile` rename | Pure removal; nothing depends on it landing. |
+
+**Step 1 is not decoration and must not be deferred.** Every screen from step 3 onward is
+written against `kit/`, so the system is paid for once. Deferring it to the end means every
+screen gets styled twice, and the second pass is the one that gets cut when time runs out.
 
 Rebalance needs no step — it moves from the `ceiling` panel to under the overview in step 2 and
 gains its `smallestFix` fallback in step 3.
@@ -609,7 +745,7 @@ so every step can be rehearsed against it.
 
 ---
 
-## 14. Out of scope
+## 15. Out of scope
 
 Not in this change, and not implied by it: any change to `src/engine` or `src/optimizer`
 beyond deleting `Schedule.recoveryLog`; the Telegram bot's server side; Google Calendar

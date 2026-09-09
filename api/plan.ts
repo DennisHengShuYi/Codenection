@@ -2,7 +2,8 @@ import { askGroq } from '../src/ai/groq'
 import { MAX_INPUT_LENGTH } from '../src/ai/types'
 
 /**
- * The server side of the planner, and the only place `GROQ_API_KEY` is read.
+ * The server side of the planner, and one of the two places `GROQ_API_KEY` is read — the
+ * other is `api/read-photo.ts`. Nothing outside `api/` reads it at all.
  *
  * §10's first constraint is that no API key reaches the browser, because a client-side call
  * leaks it in devtools. That is the whole reason this file exists rather than the client

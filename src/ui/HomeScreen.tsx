@@ -4,6 +4,7 @@ import { DEFAULT_PARAMS, floorReserve, overallReserve, project } from '../engine
 import { describeRebalance, makeRng, rebalance, toDayInputs } from '../optimizer'
 import { addItems } from '../domain/addItems'
 import { completeItem, deferItem } from '../domain/scheduleEdits'
+import { PhotoImportScreen } from './planner/PhotoImportScreen'
 import { PlannerScreen } from './planner/PlannerScreen'
 import { AccountBar } from './auth/AccountBar'
 import { PreviewBanner } from './auth/PreviewBanner'
@@ -41,6 +42,7 @@ export function HomeScreen({
   const [working, setWorking] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [planning, setPlanning] = useState(false)
+  const [photographing, setPhotographing] = useState(false)
 
   const reducedMotion = useReducedMotion()
   const { play } = useTidyUp(reducedMotion)
@@ -104,6 +106,20 @@ export function HomeScreen({
           setPlanning(false)
         }}
         onCancel={() => setPlanning(false)}
+      />
+    )
+  }
+
+  // Same placement and same reason as the planner: someone who opened it asked for it, and
+  // the low-energy view would discard the photo they had already chosen.
+  if (photographing) {
+    return (
+      <PhotoImportScreen
+        onAccept={(items) => {
+          setSchedule(addItems(schedule, items))
+          setPhotographing(false)
+        }}
+        onCancel={() => setPhotographing(false)}
       />
     )
   }
@@ -178,8 +194,19 @@ export function HomeScreen({
       {/* §0: primary actions in the lower half of the viewport on mobile, reachable
           one-handed. Full-width at phone size, shrinking to its content above it. */}
       <section className="flex flex-col gap-3">
-        {/* §3.1: the way in. Without it the rest of the app can only rearrange a week the
-            app invented for the student rather than one they actually have. */}
+        {/* §1.4 ranks the camera above typing, because deadlines cause the pile-up and a
+            brief is where the deadlines are. So it sits alongside rather than buried. */}
+        <button
+          type="button"
+          onClick={() => setPhotographing(true)}
+          data-testid="open-photo"
+          className="w-full rounded-lg border border-slate-400 px-4 py-3 text-base sm:w-auto"
+        >
+          Photograph a brief or a planner page
+        </button>
+
+        {/* §3.1: the other way in. Without these two the rest of the app can only rearrange
+            a week it invented for the student rather than one they actually have. */}
         <button
           type="button"
           onClick={() => setPlanning(true)}

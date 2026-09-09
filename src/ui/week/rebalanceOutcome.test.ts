@@ -110,6 +110,37 @@ const stuckButFixableWeek = (): Schedule => {
   return week(items, { start: { mental: 60, physical: 60, social: 60, errands: 60 } })
 }
 
+/**
+ * One movable block, dropped somewhere a wide-open horizon can plainly do better with, so
+ * `rebalance` actually selects a move among multiple competing candidates.
+ *
+ * Used instead of an empty week for the reproducibility test below: on `week([])` at
+ * default reserves, or on `stuckButFixableWeek()`, the search either takes an
+ * essentially-forced path or takes nothing at all, so the seeded `rng()`'s scan offset
+ * never has a real choice to make and a broken `Rng` would go undetected (see the report's
+ * "reproducibility test proves nothing" fix for the RED evidence that this schedule does
+ * not have that problem).
+ */
+const improvableWeek = (): Schedule =>
+  week(
+    [
+      {
+        id: 'essay',
+        title: 'essay',
+        type: 'mental',
+        kind: 'studyBlock',
+        hours: 6,
+        intensity: 2,
+        dayIndex: 10,
+        startHour: 9,
+        fixed: false,
+        deadlineDay: null,
+        protectedRest: false,
+      },
+    ],
+    { start: { mental: 40, physical: 40, social: 40, errands: 40 } },
+  )
+
 describe('runRebalance', () => {
   it('always reports something, even when it changed nothing', () => {
     const outcome = runRebalance(week([]), DEFAULT_PARAMS, SEED)
@@ -128,36 +159,19 @@ describe('runRebalance', () => {
   })
 
   it('offers no fallback when the solver already found something to do', () => {
-    // Wide open horizon, one movable block dropped somewhere the search can plainly do
-    // better with -- so `rebalance` itself finds a real move, and the fallback must not
-    // second-guess it by also suggesting `smallestFixes`' answer.
-    const improvable = week(
-      [
-        {
-          id: 'essay',
-          title: 'essay',
-          type: 'mental',
-          kind: 'studyBlock',
-          hours: 6,
-          intensity: 2,
-          dayIndex: 10,
-          startHour: 9,
-          fixed: false,
-          deadlineDay: null,
-          protectedRest: false,
-        },
-      ],
-      { start: { mental: 40, physical: 40, social: 40, errands: 40 } },
-    )
-
-    const outcome = runRebalance(improvable, DEFAULT_PARAMS, SEED)
+    // The fallback must not second-guess a real improvement `rebalance` itself found.
+    const outcome = runRebalance(improvableWeek(), DEFAULT_PARAMS, SEED)
 
     expect(outcome.fallback).toBeNull()
   })
 
   it('is reproducible, so the student does not see a different answer each render', () => {
-    const first = runRebalance(week([]), DEFAULT_PARAMS, SEED)
-    const second = runRebalance(week([]), DEFAULT_PARAMS, SEED)
+    // `improvableWeek` (not an empty week) so the search actually chooses among several
+    // competing candidates and the seed has a real chance to matter -- see this file's
+    // module doc on `improvableWeek` and task-6b-report.md's "reproducibility test proves
+    // nothing" fix for why an empty week does not exercise this.
+    const first = runRebalance(improvableWeek(), DEFAULT_PARAMS, SEED)
+    const second = runRebalance(improvableWeek(), DEFAULT_PARAMS, SEED)
 
     expect(first.report).toBe(second.report)
   })

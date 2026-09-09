@@ -202,7 +202,11 @@ describe('WeekScreen', () => {
 
     setup(week(), { fallback })
 
-    expect(screen.getByTestId('rebalance-fallback')).toHaveTextContent('Moved the essay 1 day later')
+    // Honest about what actually happened: the rebalancer evaluated moves and rejected
+    // them on its own score, so it must not claim there was "almost nothing to move".
+    const text = screen.getByTestId('rebalance-fallback').textContent
+    expect(text).toContain('Moved the essay 1 day later')
+    expect(text).not.toMatch(/almost nothing to move/i)
   })
 
   it('offers no fallback when the solver already handled it, or the week needs none', () => {

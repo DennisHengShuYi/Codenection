@@ -130,8 +130,8 @@ export function WeekScreen(props: {
 
         {fallback !== null && (
           <p data-testid="rebalance-fallback" role="status" className="text-sm text-ink-soft">
-            There is almost nothing to move. The one thing that would help most:{' '}
-            {fallback.move.description}.
+            Nothing I tried improved the week overall, but this would still cut into the
+            deficit: {fallback.move.description}.
           </p>
         )}
       </div>

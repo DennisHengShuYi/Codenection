@@ -25,6 +25,9 @@ export interface CalibrationProfile {
   /** Where study blocks cluster, or null when nothing has been painted yet. */
   readonly peakStartHour: number | null
   readonly confirmations: readonly BlockOutcome[]
+  /** Which scheduled items have already been asked about, so §7.9's prompt does not ask
+   *  about the same block forever. */
+  readonly confirmedItemIds: readonly string[]
   readonly calibratedDays: number
   /** Whether the student actually chose, as opposed to inheriting the default. The meter
    *  should not credit progress nobody made. */
@@ -46,6 +49,7 @@ export const DEFAULT_PROFILE: CalibrationProfile = {
   sleepBaselineHours: 7,
   peakStartHour: null,
   confirmations: [],
+  confirmedItemIds: [],
   calibratedDays: 0,
   modeChosen: false,
   painted: false,

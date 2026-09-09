@@ -20,9 +20,13 @@ const WEATHER_FILL: Record<RoomState['weather'], string> = {
 export function Room({
   model,
   onSelect,
+  pulsing = null,
 }: {
   model: RoomModel
   onSelect?: (objectId: ObjectId) => void
+  /** The object a button just opened. It pulses so the mapping between the two is absorbed
+   *  without anybody having to rely on it. */
+  pulsing?: ObjectId | null
 }) {
   const { state } = model
   const select = (_id: string) => () => undefined
@@ -163,12 +167,13 @@ export function Room({
             type="button"
             data-testid={`object-${row.id}`}
             data-attention={String(row.attention)}
+            data-pulsing={String(pulsing === row.id)}
             aria-label={row.attention ? `${row.label} — needs you` : row.label}
             onClick={() => onSelect?.(row.id)}
             style={spot}
             className={`absolute rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
               row.attention ? 'ring-2 ring-amber-400 ring-offset-1' : ''
-            }`}
+            } ${pulsing === row.id ? 'ring-4 ring-sky-400 motion-safe:animate-pulse' : ''}`}
           />
         )
       })}

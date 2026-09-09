@@ -156,9 +156,9 @@ describe('RoomShell, object by object', () => {
     await repository.saveWeek(week())
 
     render(<RoomShell repository={repository} />)
-    await waitFor(() => expect(screen.getByTestId('row-light')).toBeVisible())
+    await waitFor(() => expect(screen.getByTestId('button-light')).toBeVisible())
 
-    await userEvent.click(screen.getByTestId('row-light'))
+    await userEvent.click(screen.getByTestId('button-light'))
 
     expect(screen.getAllByRole('meter')).toHaveLength(5)
   })

@@ -122,7 +122,18 @@ export function roomModel({ schedule, profile, today }: RoomModelInput): RoomMod
           {
             id,
             label,
-            reading: lapsedNow.length > 0 ? `${lapsedNow.length} lapsed` : 'nothing waiting',
+            /**
+             * The reading has to be *why* it is asking. It only ever described lapsed
+             * commitments, so once a social prescription could light the phone too, the row
+             * read "nothing waiting — needs you" -- a contradiction a student reads as a bug
+             * in the app rather than a signal about their week.
+             */
+            reading:
+              lapsedNow.length > 0
+                ? `${lapsedNow.length} lapsed`
+                : prescribedOn === 'phone'
+                  ? 'see someone'
+                  : 'nothing waiting',
             attention: lapsedNow.length > 0 || prescribedOn === 'phone',
           },
         ]
@@ -178,7 +189,15 @@ export function roomModel({ schedule, profile, today }: RoomModelInput): RoomMod
           protectedRest: false,
         },
         0,
-        Math.max(0, box.dayIndex - today),
+        /**
+         * How long it has been *waiting*, not how long until it is due.
+         *
+         * This read `dayIndex - today`, which is the wait ahead of a task rather than the
+         * time behind it -- so an errand scheduled a fortnight out reported as sixteen days
+         * overdue, and half the sidebar shouted. §4.1's trigger is "three days past first
+         * appearance"; a task that has not appeared yet cannot be past it.
+         */
+        Math.max(0, today - box.dayIndex),
       )
 
       return { id, label: box.title, reading: `day ${box.dayIndex}`, attention: stuck }

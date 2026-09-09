@@ -34,8 +34,12 @@ export function RoomSidebar({
   return (
     <nav data-testid="room-sidebar" aria-label="Everything in the room" className="flex flex-col gap-2">
       {/* §1.5's text equivalent, which used to sit under the drawing. Here it introduces a
-          list you can actually operate rather than describing a picture you cannot. */}
-      <p data-testid="room-text-equivalent" className="text-sm opacity-80">
+          list you can actually operate rather than describing a picture you cannot.
+
+          Named for the view it is in, not for the room: the buttons carry the same sentence
+          on the room screen, and the words view is a full-screen overlay laid over them --
+          one shared test id would match two paragraphs at once. */}
+      <p data-testid="words-text-equivalent" className="text-sm opacity-80">
         {describeRoom(model.state)}
       </p>
 

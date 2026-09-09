@@ -37,6 +37,7 @@ import { LinkTelegram } from '../settings/LinkTelegram'
 import { isClutterId, type ObjectId } from './objects'
 import { Room } from './Room'
 import { roomModel } from './roomModel'
+import { RoomButtons } from './RoomButtons'
 import { RoomSidebar } from './RoomSidebar'
 import { back, ROOM, toWords, zoomTo, type View } from './view'
 import { ZoomLayer } from './ZoomLayer'
@@ -75,6 +76,9 @@ export function RoomShell({
   /** Which way in the desk is currently offering. §1.4 ranks the camera above typing, so it
    *  is named first -- but neither is chosen for the student. */
   const [deskWay, setDeskWay] = useState<'choose' | 'type' | 'photograph'>('choose')
+  /** The object a button just opened, so the furniture pulses and the mapping is absorbed
+   *  without ever being needed. Cleared on close. */
+  const [pulsing, setPulsing] = useState<ObjectId | null>(null)
 
   const reducedMotion = useReducedMotion()
   const { play } = useTidyUp(reducedMotion)
@@ -138,7 +142,13 @@ export function RoomShell({
 
   const close = () => {
     setDeskWay('choose')
+    setPulsing(null)
     setView(back(view))
+  }
+
+  const openObject = (id: ObjectId) => {
+    setPulsing(id)
+    setView(zoomTo(view, id))
   }
 
   /** What each object shows once you have walked up to it. */
@@ -447,10 +457,6 @@ export function RoomShell({
     <main className="flex min-h-dvh flex-col gap-4 p-4 md:flex-row md:gap-6">
       {/* The rail from 768px up; below that the list is reached by the toggle and takes the
           screen, because a sidebar and a usable room cannot share 320px. */}
-      <div className="hidden md:block md:w-64 md:shrink-0">
-        <RoomSidebar model={model} onSelect={(id) => setView(zoomTo(view, id))} />
-      </div>
-
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         {/* Not chrome, structure. A page with no h1 has no name to a screen reader and no
             identity to anybody else, and dropping it was an oversight rather than a
@@ -462,7 +468,18 @@ export function RoomShell({
             discovering an object first. */}
         {session === null && <PreviewBanner onSignIn={onSignIn} />}
 
-        <Room model={model} onSelect={(id) => setView(zoomTo(view, id))} />
+        {/* The room and the buttons sit beside each other rather than stacked, and that is
+            deliberate: laid *over* the room the buttons covered the furniture, so the
+            promise that both routes reach the same place was false -- the phone could not
+            be tapped at all at 768px and up. Both are reachable now: buttons in a column
+            from 768px up, below the room on a phone. */}
+        <div className="flex flex-col gap-3 md:flex-row md:items-start">
+          <div className="min-w-0 flex-1">
+            <Room model={model} onSelect={openObject} pulsing={pulsing} />
+          </div>
+
+          <RoomButtons model={model} onSelect={openObject} />
+        </div>
 
         <button
           type="button"
@@ -479,7 +496,7 @@ export function RoomShell({
           <button type="button" onClick={close} data-testid="words-back" className="mb-2 text-sm underline">
             Back to the room
           </button>
-          <RoomSidebar model={model} onSelect={(id) => setView(zoomTo(view, id))} />
+          <RoomSidebar model={model} onSelect={openObject} />
         </div>
       )}
 

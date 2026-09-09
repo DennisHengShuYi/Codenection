@@ -279,19 +279,6 @@ describe('the command surface', () => {
     expect((await handleIntent(command('today'), h.store, 1000))?.text).toMatch(/nothing/i)
   })
 
-  /**
-   * The schedule carries no date, so there is no yesterday to look up. Answering with
-   * today's blocks under yesterday's name would put wrong data into the very table §2.4
-   * will later trust, so it says so instead.
-   */
-  it('says it cannot look back yet, rather than answering with today', async () => {
-    const h = harness({ loadWeek: async () => week() as never })
-
-    const reply = await handleIntent(command('yesterday'), h.store, 1000)
-
-    expect(reply?.text).toMatch(/past days|look back/i)
-  })
-
   it('answers /rest with one thing to do when something is low', async () => {
     const h = harness({ loadWeek: async () => week([], depleted) as never })
 
@@ -762,4 +749,84 @@ it('says so rather than failing when reading a photo throws', async () => {
 
   expect(reply?.text.length).toBeGreaterThan(0)
   expect(h.pendings).toEqual([])
+})
+
+/**
+ * §7.9's retroactive fill, unblocked.
+ *
+ * This was answered with "I do not keep past days" until the week gained a real date
+ * (`startedOn`). With an anchor there is a genuine yesterday to look up, so the flow the
+ * spec asked for is finally the flow that runs.
+ */
+describe('looking back at yesterday', () => {
+  const anchoredWeek = (startedOn: string | undefined, items: unknown[] = []) => ({
+    items,
+    start: { mental: 70, physical: 70, social: 70, errands: 70 },
+    horizonDays: HORIZON_DAYS,
+    sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+    ...(startedOn === undefined ? {} : { startedOn }),
+  })
+
+  const blockOn = (dayIndex: number, title: string) => ({
+    id: `b-${dayIndex}`, title, type: 'mental', kind: 'studyBlock', hours: 2,
+    intensity: 1, dayIndex, startHour: 9, fixed: true, deadlineDay: null, protectedRest: false,
+  })
+
+  const yesterday = () => ({ kind: 'command', chatId: 7, name: 'yesterday', argument: '' }) as never
+  const today = () => ({ kind: 'command', chatId: 7, name: 'today', argument: '' }) as never
+
+  // Day 0 is the anchor date, so on the third day of a week yesterday is day 1.
+  const startedThreeDaysAgo = '2026-09-07'
+  const nowOnDayTwo = Date.parse('2026-09-09T12:00:00Z')
+
+  it('lists what was scheduled the day before', async () => {
+    const week = anchoredWeek(startedThreeDaysAgo, [
+      blockOn(1, 'Yesterday lecture'),
+      blockOn(2, 'Today seminar'),
+    ])
+    const h = harness({ loadWeek: async () => week as never })
+
+    const reply = await handleIntent(yesterday(), h.store, nowOnDayTwo)
+
+    expect(reply?.text).toContain('Yesterday lecture')
+    expect(reply?.text).not.toContain('Today seminar')
+  })
+
+  it('reads today from the anchor too, not from a fixed day zero', async () => {
+    const week = anchoredWeek(startedThreeDaysAgo, [
+      blockOn(1, 'Yesterday lecture'),
+      blockOn(2, 'Today seminar'),
+    ])
+    const h = harness({ loadWeek: async () => week as never })
+
+    const reply = await handleIntent(today(), h.store, nowOnDayTwo)
+
+    expect(reply?.text).toContain('Today seminar')
+    expect(reply?.text).not.toContain('Yesterday lecture')
+  })
+
+  // A week saved before anchoring existed has no date to count from, and inventing one
+  // would answer with somebody else's day.
+  it('says it cannot look back when the week has no date', async () => {
+    const h = harness({ loadWeek: async () => anchoredWeek(undefined) as never })
+
+    const reply = await handleIntent(yesterday(), h.store, nowOnDayTwo)
+
+    expect(reply?.text).toMatch(/does not go back|nothing to look at/i)
+  })
+
+  // On the first day of a week, yesterday is before the week began.
+  it('says so when yesterday falls before the week started', async () => {
+    const h = harness({ loadWeek: async () => anchoredWeek('2026-09-09') as never })
+
+    const reply = await handleIntent(yesterday(), h.store, nowOnDayTwo)
+
+    expect(reply?.text).toMatch(/does not go back|nothing to look at/i)
+  })
+
+  it('says plainly when yesterday had nothing on it', async () => {
+    const h = harness({ loadWeek: async () => anchoredWeek(startedThreeDaysAgo) as never })
+
+    expect((await handleIntent(yesterday(), h.store, nowOnDayTwo))?.text).toMatch(/nothing/i)
+  })
 })

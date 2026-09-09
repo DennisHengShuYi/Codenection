@@ -1,4 +1,5 @@
 import { MAX_IMAGE_BYTES, MAX_INPUT_LENGTH, parseBrainDump, type ParsedItem } from '../ai'
+import { todayIndex } from '../domain/calendar'
 import { blocksOnDay } from '../domain/dayBlocks'
 import { firstAction } from '../domain/microStart'
 import { prescribe } from '../domain/prescribe'
@@ -75,9 +76,14 @@ export interface ChatServices {
   } | null>
 }
 
-/** Day 0 is today. The schedule carries no date anchor, so this is the only day the model
- *  can name -- see `yesterdayUnavailableReply` for what that costs. */
-const TODAY = 0
+/**
+ * Which day index "today" is.
+ *
+ * The week now carries a real date (`startedOn`), so this is a lookup rather than a
+ * convention. A week saved before anchoring existed has none, and falls back to day 0 --
+ * which is what every other part of the model still assumes for an unanchored week.
+ */
+const todayFor = (week: Schedule, now: number): number => todayIndex(week, new Date(now)) ?? 0
 
 /**
  * Everything the chat flows need from storage, and nothing more.
@@ -173,13 +179,20 @@ export async function handleIntent(
 
       case 'today': {
         const week = await store.loadWeek(accountId)
-        return blocksReply('today', blocksOnDay(week, TODAY))
+        return blocksReply('today', blocksOnDay(week, todayFor(week, now)))
       }
 
-      // The schedule has no date anchor, so there is no yesterday to look up. Said plainly
-      // rather than answered with today's blocks under yesterday's name.
-      case 'yesterday':
-        return yesterdayUnavailableReply()
+      case 'yesterday': {
+        const week = await store.loadWeek(accountId)
+        const today = todayIndex(week, new Date(now))
+
+        // Unanchored, or the week began today: either way there is no yesterday inside it,
+        // and answering with some other day would put wrong data into the table §2.4 will
+        // later trust.
+        if (today === null || today < 1) return yesterdayUnavailableReply()
+
+        return blocksReply('yesterday', blocksOnDay(week, today - 1))
+      }
 
       case 'rest': {
         const week = await store.loadWeek(accountId)

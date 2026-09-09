@@ -230,15 +230,14 @@ export const photoUnreadableReply = (): Reply => ({
 })
 
 /**
- * §7.9's retroactive fill, and why it cannot be answered yet.
+ * When there is no yesterday inside this week.
  *
- * `Schedule` carries `dayIndex` and `horizonDays` but no date, so day 0 is today by
- * convention and the horizon runs forward only. There is no yesterday in the model to look
- * up, and answering with today's blocks under yesterday's name would put wrong data into
- * the very table §2.4 will later trust.
+ * Either the week predates anchoring and carries no date to count from, or it began today
+ * so yesterday falls before it started. Answering with some other day would put wrong data
+ * into the very table §2.4 will later trust.
  */
 export const yesterdayUnavailableReply = (): Reply => ({
-  text: 'I do not keep past days yet, so there is nothing to look back at. Use /today and I will go through today with you.',
+  text: 'This week does not go back that far, so there is nothing to look at. Use /today and I will go through today with you.',
 })
 
 export const restBookedReply = (): Reply => ({

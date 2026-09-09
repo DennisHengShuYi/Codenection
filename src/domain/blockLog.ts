@@ -45,6 +45,10 @@ export function outcomesFrom(log: readonly BlockRecord[]): readonly BlockOutcome
   return log.map((entry) => ({
     type: entry.type,
     plannedHours: entry.plannedHours,
+    // Rounded to two decimal places rather than left as a raw float product: this value
+    // gets summed and compared repeatedly downstream (paddingFor, projections), and an
+    // unrounded 0.1-style binary-float remainder would drift further with every operation
+    // on it for no measurement anyone actually made.
     actualHours: Math.round(entry.plannedHours * ANSWER_FACTOR[entry.answer] * 100) / 100,
   }))
 }

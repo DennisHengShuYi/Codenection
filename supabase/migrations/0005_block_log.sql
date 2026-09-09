@@ -24,7 +24,11 @@ alter table public.block_answers
 
 -- 0004 enabled RLS with no policies at all, on the reasoning that nothing read the table
 -- and granting access would widen the surface for nothing. Something reads it now, so it
--- gets the same auth.uid() policies 0002 established for user_state.
+-- gets the same four auth.uid() policies 0002 established for user_state: select, insert,
+-- update, and delete. All four, not three -- a delete with no matching policy does not
+-- fail, it silently removes zero rows, which would let `clear()` report success while
+-- leaving every block answer in place for the next `loadBlockLog()` to feed straight back
+-- into `outcomesFrom` and `checkedInDays`.
 create policy "read own answers"
   on public.block_answers for select
   using (auth.uid() = account_id);
@@ -37,3 +41,7 @@ create policy "update own answers"
   on public.block_answers for update
   using (auth.uid() = account_id)
   with check (auth.uid() = account_id);
+
+create policy "delete own answers"
+  on public.block_answers for delete
+  using (auth.uid() = account_id);

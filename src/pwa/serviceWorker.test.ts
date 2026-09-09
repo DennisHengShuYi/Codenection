@@ -25,48 +25,57 @@ interface FakeResponse {
 }
 
 function response(body: string, { ok = true, status = 200, type = 'basic' } = {}): FakeResponse {
-  const value: FakeResponse = {
-    ok,
-    status,
-    type,
-    body,
-    clone: () => value,
-  }
+  const value: FakeResponse = { ok, status, type, body, clone: () => value }
   return value
 }
 
-interface Harness {
-  fetchEvent: (url: string, method?: string) => Promise<{ respondedWith: boolean }>
-  cached: () => string[]
-  networkResponse: FakeResponse
+interface WorkerOptions {
+  /** What the network returns. Ignored when `networkFails` is set. */
+  networkResponse?: FakeResponse
+  /** Simulates being offline, so the worker's fallback path is exercised. */
+  networkFails?: boolean
+  /** What `caches.match` finds. Undefined means an empty cache. */
+  cached?: FakeResponse
+}
+
+interface FetchResult {
+  respondedWith: boolean
+  body: string | undefined
+  wentToNetwork: boolean
 }
 
 /**
  * Runs public/sw.js with fake service-worker globals and returns handles for driving it.
- * `cacheStore` records every URL the worker asks the Cache API to store, which is what the
- * assertions below are really about.
+ * `stored` records every URL the worker asks the Cache API to keep, which is what most of
+ * the assertions below are really about.
  */
-function loadServiceWorker(networkResponse: FakeResponse): Harness {
+function loadServiceWorker(options: WorkerOptions = {}) {
+  const { networkResponse = response('from the network'), networkFails = false, cached } = options
+
   const listeners = new Map<string, Listener>()
-  const cacheStore: string[] = []
+  const stored: string[] = []
+  let networkCalls = 0
 
   const cache = {
     addAll: async () => undefined,
     // The real Cache API rejects any scheme that is not http(s). Reproducing that here is
     // the whole point: without it a worker that "successfully" caches a chrome-extension
     // request would look fine in this suite and throw in a real browser.
-    put: async (request: { url: string }) => {
-      const scheme = new URL(request.url).protocol
+    put: async (request: string | { url: string }, _response: FakeResponse) => {
+      const href = typeof request === 'string' ? new URL(request, ORIGIN).href : request.url
+      const scheme = new URL(href).protocol
       if (scheme !== 'http:' && scheme !== 'https:') {
-        throw new TypeError(`Failed to execute 'put' on 'Cache': Request scheme '${scheme.replace(':', '')}' is unsupported`)
+        throw new TypeError(
+          `Failed to execute 'put' on 'Cache': Request scheme '${scheme.replace(':', '')}' is unsupported`,
+        )
       }
-      cacheStore.push(request.url)
+      stored.push(href)
     },
   }
 
   const caches = {
     open: async () => cache,
-    match: async () => undefined,
+    match: async () => cached,
     keys: async () => [],
     delete: async () => true,
   }
@@ -78,34 +87,45 @@ function loadServiceWorker(networkResponse: FakeResponse): Harness {
     location: { origin: ORIGIN },
   }
 
-  const fetchImpl = async () => networkResponse
+  const fetchImpl = async () => {
+    networkCalls += 1
+    if (networkFails) throw new TypeError('Failed to fetch')
+    return networkResponse
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   new Function('self', 'caches', 'fetch', SW_SOURCE)(self, caches, fetchImpl)
 
   return {
-    networkResponse,
-    cached: () => cacheStore,
-    fetchEvent: async (url: string, method = 'GET') => {
+    stored: () => stored,
+    fetchEvent: async (
+      url: string,
+      { method = 'GET', mode = 'no-cors' } = {},
+    ): Promise<FetchResult> => {
       const handler = listeners.get('fetch')
       if (!handler) throw new Error('the worker registered no fetch handler')
 
-      let responded: Promise<unknown> | undefined
+      const before = networkCalls
+      let responded: Promise<FakeResponse | undefined> | undefined
       handler({
-        request: { method, url },
-        respondWith: (value: Promise<unknown>) => {
+        request: { method, url, mode },
+        respondWith: (value: Promise<FakeResponse | undefined>) => {
           responded = value
         },
         waitUntil: () => undefined,
       })
 
+      const result = responded ? await responded : undefined
       // Let the worker's own detached cache write settle before the assertion reads the
       // store, and surface any rejection it produced rather than letting it become an
       // unhandled promise the way the reported bug did.
-      if (responded) await responded
-      await new Promise((resolve) => setTimeout(resolve, 0))
+      await new Promise((r) => setTimeout(r, 0))
 
-      return { respondedWith: responded !== undefined }
+      return {
+        respondedWith: responded !== undefined,
+        body: result?.body,
+        wentToNetwork: networkCalls > before,
+      }
     },
   }
 }
@@ -121,58 +141,110 @@ describe('the service worker decides what it may cache', () => {
   })
 
   it('never caches a browser-extension request', async () => {
-    // The reported bug: an extension's GET reached cache.put, which rejects on any scheme
-    // that is not http(s), and the rejection surfaced as an uncaught console error.
-    const worker = loadServiceWorker(response('from an extension'))
+    // The originally reported bug: an extension's GET reached cache.put, which rejects on
+    // any scheme that is not http(s), and surfaced as an uncaught console error.
+    const worker = loadServiceWorker()
 
     await worker.fetchEvent('chrome-extension://abcdefghijklmnop/inject.js')
 
-    expect(worker.cached()).toEqual([])
+    expect(worker.stored()).toEqual([])
   })
 
   it('never caches a cross-origin request', async () => {
     // A cache-first worker that stores API reads serves them from the cache forever, so a
     // live projection would quietly show yesterday's numbers until the cache name changed.
-    const worker = loadServiceWorker(response('{"reserve":42}'))
+    const worker = loadServiceWorker({ networkResponse: response('{"reserve":42}') })
 
     await worker.fetchEvent('https://project.supabase.co/rest/v1/blocks?select=*')
 
-    expect(worker.cached()).toEqual([])
+    expect(worker.stored()).toEqual([])
   })
 
   it('never caches an unsuccessful response', async () => {
     // Caching a 404 under a cache-first strategy makes the failure permanent.
-    const worker = loadServiceWorker(response('Not found', { ok: false, status: 404 }))
+    const worker = loadServiceWorker({
+      networkResponse: response('Not found', { ok: false, status: 404 }),
+    })
 
     await worker.fetchEvent(`${ORIGIN}/favicon.ico`)
 
-    expect(worker.cached()).toEqual([])
+    expect(worker.stored()).toEqual([])
   })
 
-  it('caches a successful same-origin response', async () => {
+  it('caches a successful same-origin asset', async () => {
     // The guards above must not cost the worker its actual job.
-    const worker = loadServiceWorker(response('<!doctype html>'))
+    const worker = loadServiceWorker()
 
-    await worker.fetchEvent(`${ORIGIN}/index.html`)
+    await worker.fetchEvent(`${ORIGIN}/assets/index-abc123.js`)
 
-    expect(worker.cached()).toEqual([`${ORIGIN}/index.html`])
+    expect(worker.stored()).toEqual([`${ORIGIN}/assets/index-abc123.js`])
   })
 
   it('leaves a non-GET request entirely alone', async () => {
-    const worker = loadServiceWorker(response('created'))
+    const worker = loadServiceWorker()
 
-    const { respondedWith } = await worker.fetchEvent(`${ORIGIN}/api/session`, 'POST')
+    const { respondedWith } = await worker.fetchEvent(`${ORIGIN}/api/session`, { method: 'POST' })
 
     expect(respondedWith).toBe(false)
-    expect(worker.cached()).toEqual([])
+    expect(worker.stored()).toEqual([])
   })
 
   it('produces no unhandled rejection for a request it refuses to cache', async () => {
-    const worker = loadServiceWorker(response('from an extension'))
+    const worker = loadServiceWorker()
 
     await worker.fetchEvent('chrome-extension://abcdefghijklmnop/inject.js')
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await new Promise((r) => setTimeout(r, 0))
 
     expect(unhandled).toEqual([])
+  })
+})
+
+describe('the service worker keeps the app shell fresh', () => {
+  // The failure these cover, seen in production: index.html was cached first and served
+  // ahead of the network, so after a deploy the browser was handed an old shell naming
+  // hashed bundles the new build had already deleted -- `index-BzvOMcrj.js 404`, and a
+  // blank app. A shell that references content-hashed assets can never be cache-first.
+
+  it('serves a navigation from the network even when a copy is cached', async () => {
+    const worker = loadServiceWorker({
+      networkResponse: response('the new shell'),
+      cached: response('the stale shell'),
+    })
+
+    const result = await worker.fetchEvent(`${ORIGIN}/`, { mode: 'navigate' })
+
+    expect(result.wentToNetwork).toBe(true)
+    expect(result.body).toBe('the new shell')
+  })
+
+  it('refreshes the stored shell on every successful navigation', async () => {
+    // Storing it under /index.html rather than the visited URL keeps one shell entry for
+    // the whole single-page app, instead of one per deep link the user happens to open.
+    const worker = loadServiceWorker({ networkResponse: response('the new shell') })
+
+    await worker.fetchEvent(`${ORIGIN}/some/deep/link`, { mode: 'navigate' })
+
+    expect(worker.stored()).toEqual([`${ORIGIN}/index.html`])
+  })
+
+  it('falls back to the cached shell when the network is gone', async () => {
+    // The offline promise still has to hold: an installed app must open, not show the
+    // browser's error page.
+    const worker = loadServiceWorker({ networkFails: true, cached: response('the last shell') })
+
+    const result = await worker.fetchEvent(`${ORIGIN}/`, { mode: 'navigate' })
+
+    expect(result.body).toBe('the last shell')
+  })
+
+  it('still serves a cached asset without the network', async () => {
+    // Hashed assets stay cache-first: their URL changes whenever their content does, so a
+    // cached copy can never be stale.
+    const worker = loadServiceWorker({ cached: response('cached bundle') })
+
+    const result = await worker.fetchEvent(`${ORIGIN}/assets/index-abc123.js`)
+
+    expect(result.wentToNetwork).toBe(false)
+    expect(result.body).toBe('cached bundle')
   })
 })

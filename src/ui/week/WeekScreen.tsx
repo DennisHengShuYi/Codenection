@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { BlockRecord } from '../../domain/blockLog'
 import type { CalibrationProfile } from '../../domain/calibration'
 import type { Schedule } from '../../optimizer'
 import { Button } from '../kit/Button'
@@ -52,11 +53,19 @@ export function WeekScreen(props: {
   readonly report: string | null
   readonly onRebalance: () => void
   readonly onSelectBlock: (itemId: string) => void
+  /**
+   * §8b's durable record of what was scheduled and what became of it. Threaded through to
+   * `scheduleView` exactly as `roomModel` threads it (`src/ui/room/roomModel.ts`), so a block
+   * answered through the log is not mislabelled "not confirmed" on the app's primary surface
+   * just because this screen forgot to pass it on. Optional and defaulting to empty so every
+   * caller built before the log existed keeps compiling and behaving exactly as it did.
+   */
+  readonly blockLog?: readonly BlockRecord[]
 }) {
-  const { schedule, profile, today, working, report, onRebalance, onSelectBlock } = props
+  const { schedule, profile, today, working, report, onRebalance, onSelectBlock, blockLog = [] } = props
   const [openDay, setOpenDay] = useState<number | null>(null)
 
-  const cells = scheduleView({ schedule, profile, today })
+  const cells = scheduleView({ schedule, profile, today, blockLog })
 
   const grid = openDay === null ? null : dayGrid(schedule, openDay)
 
@@ -74,7 +83,10 @@ export function WeekScreen(props: {
                 type="button"
                 data-testid={`day-${cell.dayIndex}`}
                 aria-label={parts.join(' — ')}
-                aria-pressed={openDay === cell.dayIndex}
+                // A disclosure, not a toggle button: tapping reveals the day grid beneath
+                // it rather than setting a persisted on/off state, so `aria-expanded` is
+                // the correct role for a screen reader -- `aria-pressed` would misreport it.
+                aria-expanded={openDay === cell.dayIndex}
                 onClick={() => setOpenDay(cell.dayIndex)}
                 className={`flex min-h-11 w-full flex-col items-center justify-center gap-1 rounded-lg border border-line p-2 text-xs aspect-square md:aspect-auto ${BAND_SHADE[cell.band]}`}
               >
@@ -122,11 +134,15 @@ export function WeekScreen(props: {
               type="button"
               data-testid={`block-${item.id}`}
               onClick={() => onSelectBlock(item.id)}
-              className={`absolute left-14 right-2 min-h-11 rounded-lg p-1 text-left text-xs text-white ${TYPE_HUE[item.type]}`}
+              className={`absolute left-14 right-2 min-h-11 break-words rounded-lg p-1 text-left text-xs text-white ${TYPE_HUE[item.type]}`}
               style={{ top: `${topPercent}%`, height: `${heightPercent}%` }}
             >
-              <div>{item.title}</div>
-              <div>
+              {/* `break-words` on both lines: a pasted URL or a spaceless course code must
+                  wrap inside the day grid's narrow column rather than push past it -- the
+                  single-column layout only survives 320px if nothing inside it can force a
+                  wider box (§4). */}
+              <div className="break-words">{item.title}</div>
+              <div className="break-words">
                 {TYPE_LABEL[item.type]} — {item.startHour}:00–{item.startHour + item.hours}:00
                 {item.fixed && ' 🔒 fixed'}
                 {item.protectedRest && ' 🛡 protected'}

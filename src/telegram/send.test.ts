@@ -13,10 +13,13 @@ import {
 } from './send'
 
 const item = (title: string): ParsedItem => ({
+  id: `item-${title}`,
   title,
-  loadType: 'mental',
-  effortHours: 2,
+  type: 'mental',
+  hours: 2,
+  deadlineDay: null,
   hard: false,
+  confident: true,
 })
 
 describe('linkedReply', () => {

@@ -20,6 +20,17 @@ export interface ScheduledItem {
   readonly protectedRest: boolean
 }
 
+/**
+ * §5.2's failed-recovery log: what was tried, and whether it actually helped.
+ *
+ * Declared here alongside `Commitment` because it is state the week carries. Nothing in
+ * `src/engine` or `src/optimizer` reads it.
+ */
+export interface RecoveryAttempt {
+  readonly kind: ActivityKind
+  readonly helped: boolean
+}
+
 /** §2.3's provisional yes: an acceptance and the date by which it has to prove itself. */
 export interface Commitment {
   readonly id: string

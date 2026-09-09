@@ -25,6 +25,16 @@ describe('parseDraftReply', () => {
     expect(parseDraftReply({ drafts })).toBeNull()
   })
 
+  /** The same shape tolerance the planner's schema needed, for the same reason: the
+   *  wrapper is our request, and dropping it is the most common way a model deviates. */
+  it('accepts a bare array, because models drop the wrapper', () => {
+    expect(parseDraftReply(good.drafts)).toHaveLength(3)
+  })
+
+  it('still requires all three tones inside a bare array', () => {
+    expect(parseDraftReply(good.drafts.slice(0, 2))).toBeNull()
+  })
+
   it('rejects a reply that is not an object at all', () => {
     expect(parseDraftReply('here are three replies!')).toBeNull()
     expect(parseDraftReply(null)).toBeNull()

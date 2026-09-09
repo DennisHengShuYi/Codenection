@@ -1,4 +1,3 @@
-import { SLEEP_BASELINE_HOURS } from './params'
 import { LOAD_TYPES, type DayInput, type EngineParams, type LoadType, type Reserves } from './types'
 
 /**
@@ -19,7 +18,7 @@ const USEFUL_REST_HOURS = 3
  * move the number it is prescribed for.
  */
 export function recoveryForDay(day: DayInput, params: EngineParams): Reserves {
-  const sleepCredit = Math.max(0, day.sleepHours - SLEEP_BASELINE_HOURS)
+  const sleepCredit = Math.max(0, day.sleepHours - params.sleepBaselineHours)
 
   // One pass rather than two filter-and-reduce chains. This runs 21 times per projection
   // and the optimizer evaluates thousands of projections per solve, so the intermediate

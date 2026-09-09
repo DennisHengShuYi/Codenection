@@ -16,6 +16,7 @@ let currentSession: { userId: string; email: string } | null = {
 }
 
 const signIn = vi.fn()
+const unlinkTelegram = vi.fn(() => Promise.resolve({ ok: true }))
 /** Captured so a test can fire the SIGNED_IN that Supabase really does emit after a
  *  successful sign-in -- which is what would carry the preview week across a second time
  *  if the app and the hook each did the copying. */
@@ -32,6 +33,9 @@ vi.mock('../data', async (importOriginal) => {
     },
     signOut: () => signOut(),
     signIn: (email: string, password: string) => signIn(email, password),
+    unlinkTelegram: () => unlinkTelegram(),
+    hasTelegramLink: () => Promise.resolve(false),
+    requestLinkCode: () => Promise.resolve({ ok: false, message: 'no' }),
   }
 })
 
@@ -73,7 +77,9 @@ describe('App, signed in', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /sign out/i }))
 
-    expect(signOut).toHaveBeenCalledOnce()
+    // Awaited rather than asserted immediately: signing out now unlinks the chat first,
+    // while there is still a session to authorise it, so signOut happens a tick later.
+    await waitFor(() => expect(signOut).toHaveBeenCalledOnce())
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /^sign in$/i })).toBeVisible(),
     )
@@ -123,5 +129,39 @@ describe('signing in', () => {
     render(<App />)
 
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+  })
+})
+
+/**
+ * Signing out unlinks any linked chat.
+ *
+ * Without it, a chat stays able to read and write a week for an account nobody is signed
+ * into -- which on a shared or lost phone is exactly the case the link was meant to be
+ * revocable for.
+ */
+describe('signing out', () => {
+  it('unlinks the chat', async () => {
+    currentSession = { userId: 'u1', email: 'student@um.edu.my' }
+    unlinkTelegram.mockClear().mockResolvedValue({ ok: true })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('student@um.edu.my')).toBeVisible())
+
+    await userEvent.click(screen.getByRole('button', { name: /sign out/i }))
+
+    await waitFor(() => expect(unlinkTelegram).toHaveBeenCalledOnce())
+  })
+
+  // Being unable to tidy up must not trap somebody in an account they asked to leave.
+  it('still signs out when unlinking fails', async () => {
+    currentSession = { userId: 'u1', email: 'student@um.edu.my' }
+    unlinkTelegram.mockClear().mockRejectedValue(new Error('network down'))
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('student@um.edu.my')).toBeVisible())
+
+    await userEvent.click(screen.getByRole('button', { name: /sign out/i }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^sign in$/i })).toBeVisible(),
+    )
   })
 })

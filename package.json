@@ -17,7 +17,8 @@
     "measure:dof": "vite-node scripts/degrees-of-freedom.ts",
     "icons": "node scripts/generate-icons.mjs",
     "measure:solve": "vite-node scripts/measure-solve.ts",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "telegram:webhook": "vite-node scripts/setTelegramWebhook.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

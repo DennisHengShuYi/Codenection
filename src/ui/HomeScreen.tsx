@@ -21,6 +21,7 @@ import { Prescription } from './recovery/Prescription'
 import { LapsedNotice } from './request/LapsedNotice'
 import { RequestBoxScreen } from './request/RequestBoxScreen'
 import { AccountBar } from './auth/AccountBar'
+import { LinkTelegram } from './settings/LinkTelegram'
 import { PreviewBanner } from './auth/PreviewBanner'
 import { CapacityDial } from './dial/CapacityDial'
 import { domainBars } from './dial/domainBars'
@@ -202,7 +203,12 @@ export function HomeScreen({
       {session === null ? (
         <PreviewBanner onSignIn={onSignIn} />
       ) : (
-        <AccountBar session={session} onSignOut={onSignOut} />
+        <>
+          <AccountBar session={session} onSignOut={onSignOut} />
+          {/* A chat is linked to an account, so there is nothing to link to when signed
+              out -- and §13.4 forbids the bot acting for a chat it cannot resolve. */}
+          <LinkTelegram />
+        </>
       )}
 
       {/* §2.3: a provisional yes that the reserve can no longer hold has already lapsed by

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { createRepository, signOut } from '../data'
+import { createRepository, signOut, unlinkTelegram } from '../data'
 import { SignInScreen } from './auth/SignInScreen'
 import { useSession } from './auth/useSession'
 import { HomeScreen } from './HomeScreen'
@@ -40,10 +40,21 @@ export function App() {
       repository={repository}
       session={session}
       onSignOut={() => {
-        void signOut().finally(() => {
-          setSession(null)
-          setBrowsing(false)
-        })
+        // The chat is unlinked first, while there is still a session to authorise it.
+        // Afterwards there would be no identity for the database function to act on, and a
+        // chat would stay able to read a week nobody is signed into -- which on a shared or
+        // lost phone is the case the link was meant to be revocable for.
+        //
+        // Failing to unlink must not block the sign-out itself: being unable to tidy up
+        // cannot trap somebody in an account they asked to leave.
+        void unlinkTelegram()
+          .catch(() => undefined)
+          .then(() => signOut())
+          .catch(() => undefined)
+          .finally(() => {
+            setSession(null)
+            setBrowsing(false)
+          })
       }}
       onSignIn={() => setBrowsing(false)}
     />

@@ -66,3 +66,21 @@ test('an unknown path still serves the app shell, for client-side routing', asyn
 
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Codenection')
 })
+
+/**
+ * The Telegram panel belongs to an account, and this suite has none.
+ *
+ * §13.4 forbids the bot acting for a chat it cannot resolve to an account, and the panel is
+ * the only way to make that link -- so offering it to a visitor with nothing to link to
+ * would be a door that cannot open, the same rule the Google button follows.
+ *
+ * The linked and unlinked states cannot be reached here: the build blanks Supabase so the
+ * suite cannot touch a real project, so those are covered at component level instead.
+ */
+test('offers no Telegram linking to a visitor with no account', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openApp(page)
+
+  await expect(page.getByRole('button', { name: /link telegram/i })).toHaveCount(0)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Codenection')
+})

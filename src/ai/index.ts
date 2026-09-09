@@ -12,6 +12,9 @@ export { parseModelReply } from './schema'
 export { readPhoto } from './readPhoto'
 export { readImageFile, type ImageResult } from './image'
 export { readRequest } from './readRequest'
+export { draftReplies, type DraftOutcome } from './drafts'
+export { templateDrafts, type Draft, type Tone } from './draftTemplates'
+export { parseDraftReply } from './draftSchema'
 export {
   ACCEPTED_TYPES,
   DEFAULT_EFFORT_HOURS,

@@ -6,7 +6,10 @@ import { addItems } from '../domain/addItems'
 import { accept, lapsed } from '../domain/commitments'
 import { freeGapOn, prescribe } from '../domain/prescribe'
 import { attemptsIn, recordAttempt } from '../domain/recoveryLog'
+import { firstAction, type MicroStart } from '../domain/microStart'
 import { scheduleRecovery } from '../domain/scheduleRecovery'
+import { MicroStartCard } from './microStart/MicroStartCard'
+import { AccuracyNote } from './validation/AccuracyNote'
 import { BlockConfirm } from './calibration/BlockConfirm'
 import { CalibrationScreen } from './calibration/CalibrationScreen'
 import { useCalibration } from './calibration/useCalibration'
@@ -56,6 +59,7 @@ export function HomeScreen({
   const [requesting, setRequesting] = useState(false)
   const [calibrating, setCalibrating] = useState(false)
   const [confirmDismissed, setConfirmDismissed] = useState(false)
+  const [microStart, setMicroStart] = useState<MicroStart | null>(null)
   const [dismissedLapses, setDismissedLapses] = useState(false)
 
   const reducedMotion = useReducedMotion()
@@ -206,6 +210,13 @@ export function HomeScreen({
         />
       )}
 
+      {/* §4.1: one concrete first action, from either trigger. */}
+      <MicroStartCard
+        microStart={microStart}
+        onStarted={() => setMicroStart(null)}
+        onDismiss={() => setMicroStart(null)}
+      />
+
       {/* §7.9: the highest value-per-effort input in the app -- one prompt, two taps,
           feeding Reality Check, the carryover matrix and the Micro-Start trigger. */}
       {!confirmDismissed && (
@@ -282,6 +293,11 @@ export function HomeScreen({
             setSelected(null)
           }}
           gapHours={freeGapOn(schedule, 0)}
+          onCantStart={(id) => {
+            const item = schedule.items.find((candidate) => candidate.id === id)
+            if (item) setMicroStart(firstAction(item))
+            setSelected(null)
+          }}
           onChooseOuting={(outing) => {
             setSchedule(
               scheduleRecovery(schedule, {
@@ -306,6 +322,10 @@ export function HomeScreen({
         bars={domainBars(schedule.start, projection, days)}
         projection={projection}
       />
+
+      {/* §8.1's scored number and §8.2's disclaimer, directly under the projection they
+          are about -- §8.2 requires this in the product copy, not only in the pitch. */}
+      <AccuracyNote predictions={profile.predictions} />
 
       {/* §0: primary actions in the lower half of the viewport on mobile, reachable
           one-handed. Full-width at phone size, shrinking to its content above it. */}

@@ -1,4 +1,5 @@
 import type { LoadType } from '../engine'
+import type { EnergyPrediction } from './predictions'
 
 /** §7.1's four, and the failure mode each one is watched for. */
 export type Mode = 'studying' | 'working' | 'both' | 'between'
@@ -28,6 +29,9 @@ export interface CalibrationProfile {
   /** Which scheduled items have already been asked about, so §7.9's prompt does not ask
    *  about the same block forever. */
   readonly confirmedItemIds: readonly string[]
+  /** §8.1's scored claim: two-day energy predictions and what was actually reported. Kept
+   *  with the rest of the profile because it is a record about this student, not this week. */
+  readonly predictions: readonly EnergyPrediction[]
   readonly calibratedDays: number
   /** Whether the student actually chose, as opposed to inheriting the default. The meter
    *  should not credit progress nobody made. */
@@ -50,6 +54,7 @@ export const DEFAULT_PROFILE: CalibrationProfile = {
   peakStartHour: null,
   confirmations: [],
   confirmedItemIds: [],
+  predictions: [],
   calibratedDays: 0,
   modeChosen: false,
   painted: false,

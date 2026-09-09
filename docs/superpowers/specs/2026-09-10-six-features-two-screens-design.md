@@ -845,6 +845,34 @@ same change.
 - `RoomShell.test.tsx` — routing only; the eight `RoomShell.*.test.tsx` files have their
   assertions moved down to the component that now owns each one
 
+**Guards against the failure this codebase keeps repeating.**
+
+Four times a mechanism has been built, tested, and left with no consumer — and every one passed
+CI:
+
+| Orphan | How it failed |
+|---|---|
+| `hardExercise` | a row in `CROSS_EFFECT` no producer could ever emit |
+| `block_answers` | written by the bot, read by nothing |
+| `checkedIn` | hardcoded `true` by the only builder of `DayInput` |
+| calibration | four settings collected, none read |
+
+Green tests proved each of them still did what it used to do — which was nothing. So three
+cheap guards:
+
+- **`reachable.test.ts`** — every `ActivityKind` can be produced by the parser or by a
+  prescription, or appears in an `INTENTIONALLY_ABSENT` map **with a written reason**. That map
+  is the point: a deliberate absence is recorded, a forgotten one fails. (`sleep` is the one
+  legitimate entry — it enters through `Schedule.sleepByDay`, never as an activity.)
+- **`tables.test.ts`** — no table is written without being read. Heuristic: it classifies by the
+  method chained after `from(` within a short window, so a read split across statements would be
+  missed. Narrow on purpose — it catches the shape the mistake actually took, which is a table
+  whose only mention is a write.
+- **`checkedIn`** — asserted to carry real data rather than a constant.
+
+**Each guard must be run against `main` first and seen to fail** on the orphan it exists for. A
+guard that has never failed is not a guard.
+
 **The design system (§12):**
 
 - `kit/` components get their own tests — `Button`'s three variants, `Card`'s three tones,

@@ -3088,6 +3088,132 @@ describe('palette discipline', () => {
 
 - [ ] **Step 2: Run it and watch it fail**, listing every file still carrying a raw colour.
 - [ ] **Step 3: Move each offender onto a token or a `kit/` component** until the list is empty. Do not add exemptions to make it pass.
+
+- [ ] **Step 3a: Write the reachability guard**
+
+Four times in this codebase a mechanism has been built, tested, and left with no consumer:
+`hardExercise` (no producer), `block_answers` (no reader), `checkedIn` (hardcoded true), and the
+whole calibration subsystem (read by nothing). Every one passed CI. This is the test for that
+class.
+
+Create `src/engine/reachable.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest'
+import { parseWithRules } from '../ai/fallbackParser'
+import { ADVICE_KINDS } from '../domain/prescribe'
+import { ACTIVITY_KINDS, LOAD_TYPES, type ActivityKind } from './types'
+
+/**
+ * Phrases a student would plausibly type, one per kind the parser is meant to reach.
+ * Deliberately ordinary: if the guard needs contrived input to pass, the path it is
+ * guarding is not one a real student will take either.
+ */
+const PHRASES = [
+  'essay due friday',
+  'gym',
+  'walk',
+  'coffee with sarah',
+  'laundry',
+  'nap for an hour',
+]
+
+/**
+ * Kinds that are correctly unreachable as an *activity*, with the reason.
+ *
+ * This map is the point of the test. An entry here is a decision somebody made on purpose
+ * and wrote down; a kind that is merely forgotten has no entry and fails.
+ */
+const INTENTIONALLY_ABSENT: Partial<Record<ActivityKind, string>> = {
+  sleep: 'Enters through Schedule.sleepByDay, never as a scheduled activity.',
+}
+
+describe('every ActivityKind is reachable', () => {
+  it('can be produced by the parser or by a prescription', () => {
+    const fromRules = PHRASES.flatMap((phrase) => parseWithRules(phrase)).map((item) => item.kind)
+    const fromAdvice = LOAD_TYPES.map((type) => ADVICE_KINDS[type]).filter(Boolean)
+    const reachable = new Set<ActivityKind>([...fromRules, ...fromAdvice])
+
+    const orphans = ACTIVITY_KINDS.filter(
+      (kind) => !reachable.has(kind) && INTENTIONALLY_ABSENT[kind] === undefined,
+    )
+
+    expect(orphans).toEqual([])
+  })
+})
+```
+
+This needs `prescribe.ts` to export the kinds its `ADVICE` table can produce — add
+`export const ADVICE_KINDS: Partial<Record<LoadType, ActivityKind>>` alongside it, derived from
+the same object rather than duplicated.
+
+**Run it against `main` first** and confirm it fails on `hardExercise`. A guard that has never
+been seen to fail is not a guard.
+
+- [ ] **Step 3b: Write the orphan-table guard**
+
+Create `src/data/tables.test.ts`:
+
+```ts
+import { readFileSync } from 'node:fs'
+import { globSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+
+/**
+ * A table that is written and never read.
+ *
+ * `block_answers` was exactly this for the whole of its existence: one `.upsert(` in
+ * `api/telegram.ts` and no reader anywhere, so a student answering on their phone taught the
+ * app nothing and nothing failed.
+ *
+ * Heuristic, and deliberately narrow: it classifies by the method chained after `from(`
+ * within a short window, so a read split across several statements would be missed. It is
+ * worth having anyway -- it catches the shape the mistake actually took, which is a table
+ * whose only mention in the codebase is a write.
+ */
+const WRITES = /\.(upsert|insert|update|delete)\(/
+const READS = /\.(select|maybeSingle|single)\(/
+
+describe('every table that is written is also read', () => {
+  it('finds no write-only tables', () => {
+    const sources = globSync('{src,api}/**/*.ts').filter((path) => !path.includes('.test.'))
+
+    const reads = new Set<string>()
+    const writes = new Set<string>()
+
+    for (const path of sources) {
+      const text = readFileSync(path, 'utf8')
+
+      for (const match of text.matchAll(/from\('([a-z_]+)'\)/g)) {
+        const table = match[1]!
+        const window = text.slice(match.index, match.index + 300)
+
+        if (READS.test(window)) reads.add(table)
+        if (WRITES.test(window)) writes.add(table)
+      }
+    }
+
+    expect([...writes].filter((table) => !reads.has(table))).toEqual([])
+  })
+})
+```
+
+**Run this against `main` first too** — it should name `block_answers`. If it passes on `main`,
+the regex is wrong and the test is worthless.
+
+- [ ] **Step 3c: Guard `checkedIn`**
+
+Add to `src/optimizer/objective.test.ts`:
+
+```ts
+it('passes real check-in data through rather than asserting everyone checked in', () => {
+  // The third dead mechanism: this was hardcoded `true`, so §6.5's missing-data pessimism
+  // could never fire in the whole app.
+  const days = toDayInputs(week(), [false, true, true])
+
+  expect(days[0]?.checkedIn).toBe(false)
+})
+```
 - [ ] **Step 4: Verify responsively.** `npm run dev`, then at **320 / 390 / 768 / 1280px** check: no horizontal scroll; the room screen keeps both buttons above the fold with the paragraph capped; the day hour-grid is readable; every `Sheet`'s action bar sits in the lower half.
 - [ ] **Step 5: Run everything.** `npm test && npm run typecheck && npm run test:coverage`
 - [ ] **Step 6: Commit** — `test: stop the palette decaying back into eighteen buttons`

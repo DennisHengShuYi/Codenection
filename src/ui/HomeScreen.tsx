@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Repository, Session } from '../data'
 import { DEFAULT_PARAMS, floorReserve, overallReserve, project } from '../engine'
 import { describeRebalance, makeRng, rebalance, toDayInputs } from '../optimizer'
 import { addItems } from '../domain/addItems'
 import { padEstimates, paddingTable } from '../domain/applyPadding'
+import { anchorTo, dateFor, isAnchored, todayIndex } from '../domain/calendar'
+import { predictionsAfter, resolvePrediction } from '../domain/predictions'
 import { accept, lapsed } from '../domain/commitments'
 import { freeGapOn, prescribe } from '../domain/prescribe'
 import { attemptsIn, recordAttempt } from '../domain/recoveryLog'
@@ -11,6 +13,7 @@ import { firstAction, type MicroStart } from '../domain/microStart'
 import { scheduleRecovery } from '../domain/scheduleRecovery'
 import { MicroStartCard } from './microStart/MicroStartCard'
 import { AccuracyNote } from './validation/AccuracyNote'
+import { EnergyCheckIn } from './validation/EnergyCheckIn'
 import { BlockConfirm } from './calibration/BlockConfirm'
 import { CalibrationScreen } from './calibration/CalibrationScreen'
 import { useCalibration } from './calibration/useCalibration'
@@ -62,6 +65,7 @@ export function HomeScreen({
   const [calibrating, setCalibrating] = useState(false)
   const [confirmDismissed, setConfirmDismissed] = useState(false)
   const [microStart, setMicroStart] = useState<MicroStart | null>(null)
+  const [energyAsked, setEnergyAsked] = useState(false)
   const [dismissedLapses, setDismissedLapses] = useState(false)
 
   const reducedMotion = useReducedMotion()
@@ -76,6 +80,28 @@ export function HomeScreen({
   const floor = schedule ? floorReserve(schedule.start) : 100
   const { active: lowEnergy, setOverride } = useLowEnergy(repository, floor)
   const { profile, setProfile } = useCalibration(repository)
+
+  /**
+   * §8.1 needs two things the app could not do until the week carried a date: anchor the
+   * fortnight to a real day, and make a claim about a real day two days out.
+   *
+   * The clock enters here and nowhere deeper. `src/domain/calendar.ts` takes it as a
+   * parameter and the engine never sees it at all, which is what keeps the model pure.
+   */
+  useEffect(() => {
+    if (!schedule) return
+
+    // A week saved before anchoring existed gets anchored the first time it is opened. That
+    // dates it from today rather than from whenever it was really made -- the honest cost of
+    // adding this late, and better than leaving old weeks permanently unanchored.
+    if (!isAnchored(schedule)) {
+      setSchedule(anchorTo(schedule, new Date()))
+      return
+    }
+
+    const next = predictionsAfter(profile.predictions, schedule, DEFAULT_PARAMS, new Date())
+    if (next.length !== profile.predictions.length) setProfile({ ...profile, predictions: next })
+  }, [schedule, profile, setSchedule, setProfile])
 
   /**
    * The solve takes over a second on a laptop and several on phone-class hardware --
@@ -181,6 +207,12 @@ export function HomeScreen({
 
   const capacity = overallReserve(schedule.start)
   const room = roomStateFor(schedule.start, projection, schedule)
+
+  // §8.1 resolves only against a day it actually made a claim about.
+  const todayDate = dateFor(schedule, todayIndex(schedule, new Date()) ?? -1)
+  const todayIsUnscored = profile.predictions.some(
+    (prediction) => prediction.forDate === todayDate && prediction.reported === null,
+  )
 
   if (lowEnergy) {
     return (
@@ -336,6 +368,24 @@ export function HomeScreen({
 
       {/* §8.1's scored number and §8.2's disclaimer, directly under the projection they
           are about -- §8.2 requires this in the product copy, not only in the pitch. */}
+      {/* Asked only when there is actually a prediction about today waiting to be scored.
+          A check-in with nothing to resolve is a question for its own sake. */}
+      {!energyAsked && todayIsUnscored && (
+        <EnergyCheckIn
+          onReport={(energy) => {
+            const today = dateFor(schedule, todayIndex(schedule, new Date()) ?? -1)
+            if (today !== null) {
+              setProfile({
+                ...profile,
+                predictions: resolvePrediction(profile.predictions, today, energy),
+              })
+            }
+            setEnergyAsked(true)
+          }}
+          onDismiss={() => setEnergyAsked(true)}
+        />
+      )}
+
       <AccuracyNote predictions={profile.predictions} />
 
       {/* §0: primary actions in the lower half of the viewport on mobile, reachable

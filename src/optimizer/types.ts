@@ -47,6 +47,19 @@ export interface Schedule {
   readonly horizonDays: number
   readonly sleepByDay: readonly number[]
   /**
+   * The real date day 0 falls on, as YYYY-MM-DD, or absent for a week saved before anchoring
+   * existed.
+   *
+   * Everything else in the model is a day *index*, which works until something has to
+   * survive the app being closed and reopened: a prediction cannot resolve without knowing
+   * which real day it was about, and "what did I do yesterday" cannot be answered at all.
+   *
+   * Read only through `src/domain/calendar.ts`, which takes the clock as a parameter.
+   * Nothing in `src/engine` or `src/optimizer` reads it -- their purity is the reason the
+   * anchor lives out here rather than in the model.
+   */
+  readonly startedOn?: string
+  /**
    * Provisional acceptances and their review dates (§2.3).
    *
    * Carried inside the week rather than in a storage concept of its own, so no migration is

@@ -4,7 +4,11 @@ import type { EnergyPrediction } from '../../domain/predictions'
 import { AccuracyNote } from './AccuracyNote'
 
 const scored = (pairs: ReadonlyArray<[number, number]>): EnergyPrediction[] =>
-  pairs.map(([predicted, reported], index) => ({ forDay: index, predicted, reported }))
+  pairs.map(([predicted, reported], index) => ({
+    forDate: `2026-09-${String(10 + index).padStart(2, '0')}`,
+    predicted,
+    reported,
+  }))
 
 describe('AccuracyNote', () => {
   /**

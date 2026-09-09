@@ -99,6 +99,8 @@ describe('RoomShell', () => {
       saveWeek: () => Promise.reject(new Error('network down')),
       loadSettings: () => Promise.reject(new Error('network down')),
       saveSettings: () => Promise.reject(new Error('network down')),
+      loadBlockLog: () => Promise.reject(new Error('network down')),
+      recordBlockAnswer: () => Promise.reject(new Error('network down')),
       clear: () => Promise.reject(new Error('network down')),
     }
 
@@ -115,6 +117,8 @@ describe('RoomShell', () => {
       saveWeek: () => Promise.reject(new Error('network down')),
       loadSettings: () => Promise.resolve({ lowEnergyOverride: 'auto' as const }),
       saveSettings: () => Promise.reject(new Error('network down')),
+      loadBlockLog: () => Promise.resolve([]),
+      recordBlockAnswer: () => Promise.reject(new Error('network down')),
       clear: () => Promise.resolve(),
     }
 

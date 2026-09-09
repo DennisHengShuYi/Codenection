@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { BlockRecord } from '../../domain/blockLog'
 import { DEFAULT_PROFILE, type CalibrationProfile } from '../../domain/calibration'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule, ScheduledItem } from '../../optimizer'
@@ -185,5 +186,31 @@ describe('roomModel', () => {
   // Silence is a real answer: nothing wrong means nothing marked.
   it('marks nothing in a calm, calibrated week', () => {
     expect(marked({ profile: profile({ modeChosen: true, painted: true }) }).size).toBe(0)
+  })
+
+  /**
+   * §8b: the block log, not the calibration profile, now says which blocks have already
+   * been asked about. `confirmedItemIds` stays on the profile for now -- a later task
+   * deletes the calibration subsystem wholesale -- but nothing reads it any more.
+   */
+  describe('the block log', () => {
+    const block: BlockRecord = {
+      blockId: 'laundry',
+      type: 'errands',
+      plannedHours: 1,
+      dayIndex: 0,
+      answer: 'right',
+      answeredAt: 0,
+    }
+
+    it('stops asking about a block once the log carries an answer for it', () => {
+      expect(marked(SCENARIOS[4]!.input)).toContain('papers')
+
+      expect(marked({ ...SCENARIOS[4]!.input, blockLog: [block] })).not.toContain('papers')
+    })
+
+    it('defaults to an empty log when none is given, so every existing caller keeps working', () => {
+      expect(marked(input())).toEqual(marked({ ...input(), blockLog: [] }))
+    })
   })
 })

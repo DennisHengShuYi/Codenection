@@ -1,3 +1,4 @@
+import { answeredIds, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
 import { calibrationProgress, type CalibrationProfile } from '../../domain/calibration'
 import { lapsed } from '../../domain/commitments'
 import { dateFor } from '../../domain/calendar'
@@ -22,6 +23,13 @@ export interface RoomModelInput {
   readonly profile: CalibrationProfile
   /** Injected rather than read, so this stays pure. The shell supplies it. */
   readonly today: number
+  /**
+   * §8b's durable record of what was scheduled and what became of it. Threaded in rather
+   * than loaded here, so this stays pure -- the shell reads it from the repository and
+   * supplies it. Optional and defaulting to empty so every caller built before this
+   * existed keeps compiling and behaving exactly as it did.
+   */
+  readonly blockLog?: readonly BlockRecord[]
 }
 
 export interface RoomRow {
@@ -47,8 +55,14 @@ const percent = (value: number): string => `${Math.round(value * 100)}%`
  * together rather than by two functions that agree by convention. Attention is computed on
  * every call and never stored, so no flag can get stuck showing a problem that has passed.
  */
-export function roomModel({ schedule, profile, today }: RoomModelInput): RoomModel {
-  const params = paramsFor(profile)
+export function roomModel({ schedule, profile, today, blockLog = [] }: RoomModelInput): RoomModel {
+  // §8b: outcomes come from the durable log and from the profile's own (soon-to-be-retired)
+  // record, combined. Reading the log alone would silently drop every bias measured through
+  // the profile the moment this shipped, with nothing yet writing its replacement into the
+  // log (Task 9 does that) -- the room's own projection would go uncalibrated while the
+  // dial elsewhere in the app kept using it. Combining keeps this byte-for-byte identical
+  // to before while the log is still empty in practice.
+  const params = paramsFor([...outcomesFrom(blockLog), ...profile.confirmations])
   const projection = project(schedule.start, toDayInputs(schedule), params)
   const state = roomStateFor(schedule.start, projection, schedule)
 
@@ -72,8 +86,16 @@ export function roomModel({ schedule, profile, today }: RoomModelInput): RoomMod
           : 'door'
   const lapsedNow = lapsed(schedule, today, params)
 
+  // §8b: a block counts as already asked about if the durable log says so, or if the
+  // profile's own (soon-to-be-retired) record of it does. Only the log side is new; the
+  // profile side stays until the confirmation flow itself writes to the log instead (Task
+  // 9) and the calibration subsystem that owns the field is removed (a later task still).
+  // Dropping it here today would read as though every already-confirmed block had gone
+  // back to being unconfirmed, which is not what happened.
+  const alreadyAsked = (id: string) =>
+    answeredIds(blockLog).includes(id) || profile.confirmedItemIds.includes(id)
   const unconfirmed = schedule.items.find(
-    (candidate) => candidate.dayIndex === today && !profile.confirmedItemIds.includes(candidate.id),
+    (candidate) => candidate.dayIndex === today && !alreadyAsked(candidate.id),
   )
 
   // From the injected day index, not from a clock. Reading `new Date()` here would make the

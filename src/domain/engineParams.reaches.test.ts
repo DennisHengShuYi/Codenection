@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS, HORIZON_DAYS, project } from '../engine'
 import { toDayInputs, type Schedule, type ScheduledItem } from '../optimizer'
-import { DEFAULT_PROFILE } from './calibration'
+import type { BlockOutcome } from './calibration'
 import { paramsFor } from './engineParams'
 
 const item = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
@@ -38,7 +38,7 @@ const week = (over: Partial<Schedule> = {}): Schedule => ({
 const lowestOf = (projection: { central: readonly Record<string, number>[] }, type: string) =>
   projection.central.reduce((low, day) => Math.min(low, day[type] ?? 100), 100)
 
-const overran = (count: number) =>
+const overran = (count: number): BlockOutcome[] =>
   Array.from({ length: count }, () => ({
     type: 'mental' as const,
     plannedHours: 2,
@@ -58,19 +58,15 @@ describe('what the app measures reaches what it projects', () => {
   it('projects a heavier week for a student who consistently overruns', () => {
     const schedule = week()
     const uncalibrated = project(schedule.start, toDayInputs(schedule), DEFAULT_PARAMS)
-    const calibrated = project(
-      schedule.start,
-      toDayInputs(schedule),
-      paramsFor({ ...DEFAULT_PROFILE, confirmations: overran(5) }),
-    )
+    const calibrated = project(schedule.start, toDayInputs(schedule), paramsFor(overran(5)))
 
     expect(lowestOf(calibrated, 'mental')).toBeLessThan(lowestOf(uncalibrated, 'mental'))
   })
 
-  it('projects identically for a student who has calibrated nothing', () => {
+  it('projects identically for a student with no logged outcomes', () => {
     const schedule = week()
 
-    expect(project(schedule.start, toDayInputs(schedule), paramsFor(DEFAULT_PROFILE))).toEqual(
+    expect(project(schedule.start, toDayInputs(schedule), paramsFor([]))).toEqual(
       project(schedule.start, toDayInputs(schedule), DEFAULT_PARAMS),
     )
   })
@@ -83,38 +79,16 @@ describe('what the app measures reaches what it projects', () => {
     const calibrated = project(
       schedule.start,
       toDayInputs(schedule),
-      paramsFor({
-        ...DEFAULT_PROFILE,
-        confirmations: Array.from({ length: 5 }, () => ({
+      paramsFor(
+        Array.from({ length: 5 }, () => ({
           type: 'errands' as const,
           plannedHours: 2,
           actualHours: 4,
         })),
-      }),
+      ),
     )
 
     expect(lowestOf(calibrated, 'errands')).toBeLessThan(lowestOf(uncalibrated, 'errands'))
     expect(lowestOf(calibrated, 'mental')).toBe(lowestOf(uncalibrated, 'mental'))
-  })
-
-  /**
-   * §7.3: the painter's baseline sets what counts as breaking even. A student who normally
-   * sleeps nine hours gets less credit from seven than one who normally sleeps six.
-   */
-  it('credits sleep against the student own baseline', () => {
-    const schedule = week()
-
-    const shortSleeper = project(
-      schedule.start,
-      toDayInputs(schedule),
-      paramsFor({ ...DEFAULT_PROFILE, painted: true, sleepBaselineHours: 5 }),
-    )
-    const longSleeper = project(
-      schedule.start,
-      toDayInputs(schedule),
-      paramsFor({ ...DEFAULT_PROFILE, painted: true, sleepBaselineHours: 9 }),
-    )
-
-    expect(lowestOf(longSleeper, 'mental')).toBeLessThan(lowestOf(shortSleeper, 'mental'))
   })
 })

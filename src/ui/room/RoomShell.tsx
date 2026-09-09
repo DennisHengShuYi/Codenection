@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Repository, Session } from '../../data'
 import { addItems } from '../../domain/addItems'
+import { answeredIds, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
 import { anchorTo, dateFor, isAnchored, todayIndex } from '../../domain/calendar'
 import { accept } from '../../domain/commitments'
 import { paramsFor } from '../../domain/engineParams'
@@ -61,11 +62,18 @@ export function RoomShell({
   session = null,
   onSignOut = () => undefined,
   onSignIn = () => undefined,
+  // §8b's block log. Not yet loaded from the repository here -- nothing writes it through
+  // this screen until Task 9 wires the papers' confirmation onto it, so there is nothing
+  // to load. Threaded in as an input rather than fetched inside this component, the same
+  // way `repository` and `session` are, so a caller that does have it in hand can already
+  // supply it without this component's signature changing again.
+  blockLog = [],
 }: {
   repository: Repository
   session?: Session | null
   onSignOut?: () => void
   onSignIn?: () => void
+  blockLog?: readonly BlockRecord[]
 }) {
   const { schedule, setSchedule } = useSchedule(repository)
   const { profile, setProfile } = useCalibration(repository)
@@ -79,7 +87,15 @@ export function RoomShell({
   const reducedMotion = useReducedMotion()
   const { play } = useTidyUp(reducedMotion)
 
-  const params = useMemo(() => paramsFor(profile), [profile])
+  // §8b: `paramsFor` now takes outcomes directly rather than the whole profile, combined
+  // from the durable log and the profile's own (soon-to-be-retired) record -- see
+  // `roomModel`'s matching combination for why dropping either side here would either lose
+  // calibration the room still shows elsewhere, or diverge from what `roomModel` computes
+  // for the same week.
+  const params = useMemo(
+    () => paramsFor([...outcomesFrom(blockLog), ...profile.confirmations]),
+    [blockLog, profile.confirmations],
+  )
   const floor = schedule
     ? Math.min(schedule.start.mental, schedule.start.physical, schedule.start.social, schedule.start.errands)
     : 100
@@ -98,9 +114,14 @@ export function RoomShell({
       return
     }
 
-    const next = predictionsAfter(profile.predictions, schedule, paramsFor(profile), new Date())
+    const next = predictionsAfter(
+      profile.predictions,
+      schedule,
+      paramsFor([...outcomesFrom(blockLog), ...profile.confirmations]),
+      new Date(),
+    )
     if (next.length !== profile.predictions.length) setProfile({ ...profile, predictions: next })
-  }, [schedule, profile, setSchedule, setProfile])
+  }, [schedule, profile, blockLog, setSchedule, setProfile])
 
   if (!schedule) {
     // A sentence rather than a spinner: a spinner tells a student nothing about what is
@@ -116,7 +137,7 @@ export function RoomShell({
   // threading `schedule!` through every one of them would be noise.
   const week = schedule
   const today = todayIndex(week, new Date()) ?? 0
-  const model = roomModel({ schedule: week, profile, today })
+  const model = roomModel({ schedule: week, profile, today, blockLog })
 
   async function onRebalance() {
     if (working) return
@@ -267,9 +288,19 @@ export function RoomShell({
           </>
         )
       case 'papers': {
+        // §8b: a block counts as already asked about if the durable log says so *or* if
+        // the profile's own record of it does. The log is the future of this check -- it is
+        // what `roomModel` now reads too -- but nothing writes a real answer into it through
+        // this screen yet (Task 9 moves the write here, onto the log's own four-way
+        // vocabulary). Dropping the profile side today would silently break "stops asking
+        // about the same block" the moment this ships, for every block confirmed the way
+        // this screen currently confirms them. `profile.confirmedItemIds` is still written
+        // below for the same reason: the calibration subsystem it belongs to is removed
+        // wholesale in a later task, not piecemeal here.
+        const alreadyAsked = (id: string) =>
+          answeredIds(blockLog).includes(id) || profile.confirmedItemIds.includes(id)
         const block = week.items.find(
-          (candidate) =>
-            candidate.dayIndex === today && !profile.confirmedItemIds.includes(candidate.id),
+          (candidate) => candidate.dayIndex === today && !alreadyAsked(candidate.id),
         )
 
         return (

@@ -68,13 +68,21 @@ function nearestDeadlineByDay(schedule: Schedule): (number | null)[] {
   return out
 }
 
-export function toDayInputs(schedule: Schedule): DayInput[] {
-  return dayInputsFrom(schedule, groupByDay(schedule))
+/**
+ * @param checkedIn §8b's missing-data signal, one entry per horizon day. Defaults to
+ * everybody present, which is what every one of the search's thousands of internal calls
+ * per solve already assumed -- the optimizer has no notion of missed check-ins, and giving
+ * it one would only slow the search down for a signal it cannot act on. Only the app's own
+ * projection, built from the real block log via `checkedInDays`, has real data to pass.
+ */
+export function toDayInputs(schedule: Schedule, checkedIn?: readonly boolean[]): DayInput[] {
+  return dayInputsFrom(schedule, groupByDay(schedule), checkedIn)
 }
 
 function dayInputsFrom(
   schedule: Schedule,
   byDay: readonly ScheduledItem[][],
+  checkedIn?: readonly boolean[],
 ): DayInput[] {
   const nearestDeadline = nearestDeadlineByDay(schedule)
 
@@ -98,7 +106,7 @@ function dayInputsFrom(
       // one place are the exception rather than the rule for a student crossing campus.
       venueChanges: Math.max(0, workingBlocks - 1),
       daysToNearestDeadline: deadline === null ? null : deadline - dayIndex,
-      checkedIn: true,
+      checkedIn: checkedIn?.[dayIndex] ?? true,
     }
   })
 }

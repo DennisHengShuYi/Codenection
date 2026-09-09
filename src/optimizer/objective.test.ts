@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_PARAMS, project } from '../engine'
+import { DEFAULT_PARAMS, HORIZON_DAYS, project } from '../engine'
 import { score, toDayInputs } from './objective'
 import { makeSchedule, restItem, socialBaseline, studyItem } from './testSupport'
 
@@ -26,6 +26,53 @@ describe('toDayInputs', () => {
     const days = toDayInputs(makeSchedule([{ ...studyItem('a', 1, 2), deadlineDay: 5 }]))
 
     expect(days[6]!.daysToNearestDeadline).toBeNull()
+  })
+
+  /**
+   * §8b: the optimizer's search calls this thousands of times per solve and has no notion
+   * of missed check-ins, so the default has to be exactly what every internal call already
+   * assumed -- everybody present -- and only the app's own projection passes real data.
+   */
+  it('defaults every day to checked in when no override is given', () => {
+    const days = toDayInputs(makeSchedule([studyItem('a', 3, 2)]))
+
+    expect(days.every((day) => day.checkedIn)).toBe(true)
+  })
+
+  it('carries a provided checkedIn override through, one entry per day', () => {
+    const checkedIn = Array.from({ length: HORIZON_DAYS }, (_, day) => day !== 2)
+    const days = toDayInputs(makeSchedule([studyItem('a', 3, 2)]), checkedIn)
+
+    expect(days[2]!.checkedIn).toBe(false)
+    expect(days[0]!.checkedIn).toBe(true)
+  })
+
+  /**
+   * The trap the brief calls out by name: wiring §6.5's missing-data pessimism up means
+   * nothing unless it is verified to actually move the number a student is shown.
+   */
+  it('projects more pessimistically when a past day went unanswered than when it did not', () => {
+    // Heavy enough that mental reserve does not simply saturate back at the ceiling every
+    // night on recovery alone -- otherwise a single day's bias difference has nothing to
+    // bite into.
+    const schedule = makeSchedule([
+      ...socialBaseline(),
+      ...Array.from({ length: 14 }, (_, day) => studyItem(`s${day}`, day, 9)),
+    ])
+    const allAnswered = Array.from({ length: HORIZON_DAYS }, () => true)
+    // Silent for every day up to and including the one being read: the penalty is
+    // computed from that day's own missed run, so a check-in on the day itself would
+    // reset it to zero and mask the very effect this proves.
+    const silentThroughTheDrain = allAnswered.map((value, day) => (day <= 13 ? false : value))
+
+    const answered = project(schedule.start, toDayInputs(schedule, allAnswered), DEFAULT_PARAMS)
+    const silent = project(
+      schedule.start,
+      toDayInputs(schedule, silentThroughTheDrain),
+      DEFAULT_PARAMS,
+    )
+
+    expect(silent.central[13]!.mental).toBeLessThan(answered.central[13]!.mental)
   })
 })
 

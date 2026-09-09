@@ -1,9 +1,11 @@
 import { clear, createStore, get, set } from 'idb-keyval'
+import type { BlockRecord } from '../domain/blockLog'
 import type { Schedule } from '../optimizer'
 import { DEFAULT_SETTINGS, type Repository, type StoredSettings } from './types'
 
 const WEEK_KEY = 'week'
 const SETTINGS_KEY = 'settings'
+const BLOCK_LOG_KEY = 'blockLog'
 
 /**
  * @param databaseName Which IndexedDB database to use. Defaults to the app's own.
@@ -37,6 +39,17 @@ export function createLocalRepository(databaseName = 'codenection'): Repository 
 
     async saveSettings(settings) {
       await set(SETTINGS_KEY, settings, store)
+    },
+
+    async loadBlockLog() {
+      return (await get<readonly BlockRecord[]>(BLOCK_LOG_KEY, store)) ?? []
+    },
+
+    async recordBlockAnswer(record) {
+      const existing = (await get<readonly BlockRecord[]>(BLOCK_LOG_KEY, store)) ?? []
+      const withoutThisBlock = existing.filter((entry) => entry.blockId !== record.blockId)
+
+      await set(BLOCK_LOG_KEY, [...withoutThisBlock, record], store)
     },
 
     async clear() {

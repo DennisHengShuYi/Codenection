@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { BlockRecord } from '../domain/blockLog'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
 import { createSupabaseRepository } from './supabaseRepository'
@@ -37,6 +38,10 @@ const calls = {
 }
 
 let maybeSingleResult: StubResult = { data: null, error: null }
+// Resolved when a query chain is awaited directly, without a `.maybeSingle()` -- the shape
+// `loadBlockLog` uses, and the shape the real client supports because its query builders
+// are themselves thenable.
+let listResult: StubResult = { data: [], error: null }
 let writeResult: StubResult = { error: null }
 
 vi.mock('@supabase/supabase-js', () => ({
@@ -54,8 +59,14 @@ vi.mock('@supabase/supabase-js', () => ({
           return builder
         },
         maybeSingle: () => Promise.resolve(maybeSingleResult),
-        upsert(row: unknown) {
+        // Makes the builder itself awaitable, matching the real query builder's own
+        // thenable shape -- `loadBlockLog` awaits the chain directly.
+        then(onFulfilled: (value: StubResult) => unknown, onRejected?: (reason: unknown) => unknown) {
+          return Promise.resolve(listResult).then(onFulfilled, onRejected)
+        },
+        upsert(row: unknown, options?: unknown) {
           calls.upsert.push(row)
+          void options
           return Promise.resolve(writeResult)
         },
         delete() {
@@ -83,6 +94,26 @@ const week = (mental: number): Schedule => ({
 const repo = (userId = 'user-abc') =>
   createSupabaseRepository('https://example.supabase.co', 'anon-key', userId)
 
+const blockRow = (over: Record<string, unknown> = {}) => ({
+  block_id: 'essay',
+  load_type: 'mental',
+  planned_hours: 3,
+  day_index: 2,
+  answer: 'right',
+  answered_at: new Date(1_757_000_000_000).toISOString(),
+  ...over,
+})
+
+const blockRecord = (over: Partial<BlockRecord> = {}): BlockRecord => ({
+  blockId: 'essay',
+  type: 'mental' as const,
+  plannedHours: 3,
+  dayIndex: 2,
+  answer: 'right' as const,
+  answeredAt: 1_757_000_000_000,
+  ...over,
+})
+
 beforeEach(() => {
   calls.from = []
   calls.select = []
@@ -90,6 +121,7 @@ beforeEach(() => {
   calls.upsert = []
   calls.deleted = 0
   maybeSingleResult = { data: null, error: null }
+  listResult = { data: [], error: null }
   writeResult = { error: null }
 })
 
@@ -184,17 +216,62 @@ describe('createSupabaseRepository', () => {
     await expect(repo().saveWeek(week(1))).rejects.toThrow(/could not save state/i)
   })
 
-  it('deletes only the row belonging to this user on clear', async () => {
+  it('deletes only the rows belonging to this user on clear, week and block log alike', async () => {
     await repo().clear()
 
-    expect(calls.deleted).toBe(1)
+    expect(calls.deleted).toBe(2)
     expect(calls.eq).toContainEqual(['id', 'user-abc'])
+    expect(calls.eq).toContainEqual(['account_id', 'user-abc'])
   })
 
   it('throws when clearing fails', async () => {
     writeResult = { error: { message: 'permission denied' } }
 
     await expect(repo().clear()).rejects.toThrow(/could not clear state/i)
+  })
+
+  it('reads the block log belonging to this user, mapping snake_case columns to the record', async () => {
+    listResult = { data: [blockRow()], error: null }
+
+    const log = await repo().loadBlockLog()
+
+    expect(calls.from).toContain('block_answers')
+    expect(calls.eq).toContainEqual(['account_id', 'user-abc'])
+    expect(log).toEqual([blockRecord()])
+  })
+
+  it('returns an empty log when nothing has been recorded', async () => {
+    listResult = { data: [], error: null }
+
+    expect(await repo().loadBlockLog()).toEqual([])
+  })
+
+  it('throws rather than returning an empty log when the block log read fails', async () => {
+    listResult = { error: { message: 'permission denied' } }
+
+    await expect(repo().loadBlockLog()).rejects.toThrow(/could not read block log/i)
+  })
+
+  it('writes a block answer against the row belonging to this user, upserted on the block', async () => {
+    await repo().recordBlockAnswer(blockRecord({ answer: 'longer' }))
+
+    expect(calls.upsert).toHaveLength(1)
+    expect(calls.upsert[0]).toMatchObject({
+      account_id: 'user-abc',
+      block_id: 'essay',
+      load_type: 'mental',
+      planned_hours: 3,
+      day_index: 2,
+      answer: 'longer',
+    })
+  })
+
+  it('throws when recording a block answer fails', async () => {
+    writeResult = { error: { message: 'permission denied' } }
+
+    await expect(repo().recordBlockAnswer(blockRecord())).rejects.toThrow(
+      /could not record block answer/i,
+    )
   })
 })
 

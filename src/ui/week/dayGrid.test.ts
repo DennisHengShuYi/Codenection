@@ -73,4 +73,18 @@ describe('dayGrid', () => {
 
     expect(grid.blocks.map((block) => block.item.id)).toEqual(['mine'])
   })
+
+  it('keeps a window at least an hour wide even when a block runs past midnight, so positioning never divides by zero', () => {
+    // startHour(25) + hours(1) puts the raw upper bound at 27, clamped down to 24, while the
+    // raw lower bound (24) is already inside range and left untouched by clamping alone --
+    // collapsing the window to zero width unless the derivation itself guarantees a minimum.
+    // A zero-width window turns the percentage maths into a division by zero: Infinity when
+    // the numerator is non-zero (as here), NaN when it also happens to be zero -- both invalid
+    // in a style attribute, so both are checked via finiteness rather than either name alone.
+    const grid = dayGrid(week([item('a', 25, 1)]), 0)
+
+    expect(grid.lastHour - grid.firstHour).toBeGreaterThanOrEqual(1)
+    expect(Number.isFinite(grid.blocks[0]?.topPercent)).toBe(true)
+    expect(Number.isFinite(grid.blocks[0]?.heightPercent)).toBe(true)
+  })
 })

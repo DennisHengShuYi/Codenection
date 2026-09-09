@@ -37,6 +37,7 @@ export function ObjectDetail({
   onComplete,
   onDefer,
   onChooseOuting,
+  onCantStart,
   onClose,
 }: {
   objectId: string
@@ -46,6 +47,8 @@ export function ObjectDetail({
   onComplete: (id: string) => void
   onDefer: (id: string) => void
   onChooseOuting?: (outing: Outing) => void
+  /** §4.1's manual trigger: "can't start this", on every task, no explanation asked for. */
+  onCantStart?: (id: string) => void
   onClose: () => void
 }) {
   /**
@@ -84,6 +87,19 @@ export function ObjectDetail({
           </p>
 
           <div className="flex flex-wrap gap-2">
+            {/* §4.1's manual trigger. Zero friction and no explanation asked: being asked
+                why you are stuck is one more thing to be stuck on. */}
+            {onCantStart && (
+              <button
+                type="button"
+                data-testid={`cant-start-${box.id}`}
+                onClick={() => onCantStart(box.id)}
+                className="rounded-lg border border-slate-400 px-3 py-2"
+              >
+                I can&apos;t start this
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => onComplete(box.id)}

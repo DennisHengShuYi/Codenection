@@ -2,6 +2,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { createLocalRepository, DEFAULT_SETTINGS } from '../data'
 import { DEFAULT_PROFILE, type CalibrationProfile } from '../domain/calibration'
+import { umBlockLog } from '../fixtures/umBlockLog'
 import { useProfile } from './useProfile'
 
 let counter = 0
@@ -27,7 +28,12 @@ describe('useProfile', () => {
 
     renderHook(() => useProfile(repository))
 
-    await waitFor(async () => expect((await repository.loadBlockLog()).length).toBeGreaterThan(0))
+    // Every seeded record, not just "more than zero" -- that weaker assertion passed even
+    // when a concurrent-write bug dropped all but one of them (see repositoryContract.ts's
+    // "lands every record from concurrent recordBlockAnswer calls"). The record count comes
+    // from the fixture itself, so this keeps asserting the real thing if it grows.
+    const seeded = umBlockLog('2026-01-01').length
+    await waitFor(async () => expect((await repository.loadBlockLog()).length).toBe(seeded))
   })
 
   it('returns a saved profile untouched, rather than overwriting it with the seed', async () => {

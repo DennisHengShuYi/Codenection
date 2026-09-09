@@ -24,6 +24,23 @@ export function createLocalRepository(databaseName = 'codenection'): Repository 
   // disturb anything else the origin happens to keep in IndexedDB.
   const store = createStore(databaseName, 'state')
 
+  // `recordBlockAnswer` is a read-modify-write over one array, and IndexedDB gives no
+  // atomicity across separate `get`/`set` calls -- concurrent callers (the profile seed
+  // writes several records via `Promise.all`, and a real student can answer two blocks in
+  // quick succession) would each read the same snapshot and the last `set` would win,
+  // silently dropping every other write. Chaining every write through this promise
+  // serialises them onto one queue per repository instance, so each write starts from the
+  // result of the one before it rather than a stale read.
+  let writeQueue: Promise<void> = Promise.resolve()
+
+  function enqueue(write: () => Promise<void>): Promise<void> {
+    const run = writeQueue.then(write)
+    // The queue must keep moving even if this write rejected -- a failed write should not
+    // wedge every write queued after it.
+    writeQueue = run.catch(() => undefined)
+    return run
+  }
+
   return {
     async loadWeek() {
       return (await get<Schedule>(WEEK_KEY, store)) ?? null
@@ -45,11 +62,13 @@ export function createLocalRepository(databaseName = 'codenection'): Repository 
       return (await get<readonly BlockRecord[]>(BLOCK_LOG_KEY, store)) ?? []
     },
 
-    async recordBlockAnswer(record) {
-      const existing = (await get<readonly BlockRecord[]>(BLOCK_LOG_KEY, store)) ?? []
-      const withoutThisBlock = existing.filter((entry) => entry.blockId !== record.blockId)
+    recordBlockAnswer(record) {
+      return enqueue(async () => {
+        const existing = (await get<readonly BlockRecord[]>(BLOCK_LOG_KEY, store)) ?? []
+        const withoutThisBlock = existing.filter((entry) => entry.blockId !== record.blockId)
 
-      await set(BLOCK_LOG_KEY, [...withoutThisBlock, record], store)
+        await set(BLOCK_LOG_KEY, [...withoutThisBlock, record], store)
+      })
     },
 
     async clear() {

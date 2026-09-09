@@ -111,5 +111,24 @@ export function describeRepositoryContract(name: string, make: () => Repository)
 
       expect(await repo.loadBlockLog()).toEqual([])
     })
+
+    /**
+     * `recordBlockAnswer` is a read-modify-write over one stored array. A naive
+     * implementation reads the same near-empty snapshot for every concurrent caller and
+     * the last `set` wins, silently dropping the rest -- exactly what the profile seed
+     * does on first run (several records written via `Promise.all`), and what two blocks
+     * answered in quick succession would do too. Every record must survive regardless.
+     */
+    it('lands every record from concurrent recordBlockAnswer calls', async () => {
+      const records = Array.from({ length: 8 }, (_, index) => record({ blockId: `concurrent-${index}` }))
+
+      await Promise.all(records.map((entry) => repo.recordBlockAnswer(entry)))
+
+      const log = await repo.loadBlockLog()
+      expect(log).toHaveLength(records.length)
+      for (const entry of records) {
+        expect(log.some((saved) => saved.blockId === entry.blockId)).toBe(true)
+      }
+    })
   })
 }

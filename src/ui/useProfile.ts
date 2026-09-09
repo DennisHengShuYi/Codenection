@@ -65,7 +65,17 @@ export function useProfile(repo: Repository): {
     // resolving, the same reasoning that makes the save below fire-and-forget too.
     repo
       .loadBlockLog()
-      .then((log) => (log.length > 0 ? undefined : Promise.all(umBlockLog(seedAnchor()).map((record) => repo.recordBlockAnswer(record)))))
+      .then(async (log) => {
+        if (log.length > 0) return
+        // Sequential, not `Promise.all`: `recordBlockAnswer` is a read-modify-write over
+        // one stored array, and firing every seed record at once let each read the same
+        // near-empty snapshot before any `set` landed, so only the last writer survived.
+        // Awaiting one at a time makes each write start from the result of the one before
+        // it, the same guarantee `repositoryContract.ts` now asserts for adapters directly.
+        for (const record of umBlockLog(seedAnchor())) {
+          await repo.recordBlockAnswer(record)
+        }
+      })
       .catch(() => undefined)
 
     return () => {

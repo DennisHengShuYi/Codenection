@@ -118,14 +118,43 @@ time and it removes the reason `light` needed to be a destination.
 **Beneath the drawing, always:** `describeRoom()`'s paragraph (§1.5's text equivalent), and
 the accuracy line with §8.2's disclaimer beside it.
 
-**Live cards appear only when they apply and are absent otherwise:** the recovery card, the
-"how did today go?" card, a lapsed-commitment notice. On a day when nothing has happened the
-room screen is a room, a number, a paragraph and two buttons.
+**Live cards appear only when they apply and are absent otherwise.** On a day when nothing has
+happened the room screen is a room, a number, a paragraph and two buttons.
 
 **Two permanent controls:** `The week`, and `+`.
 
-**Low-energy mode is not a separate view.** Below the reserve threshold this same screen drops
-the week link and shows one action. §1.5's requirement is met without a second implementation.
+**`describeRoom()`'s paragraph is capped at three sentences.** It can currently emit six, and
+at 320px six sentences push both buttons below the fold. Character state and weather are always
+kept — they are the two the room cannot say any other way — then at most one more, chosen in
+this order: door lit, sleep debt, clutter, plant. The full text stays available to screen
+readers via the drawing's `aria-label`; the cap is visual only.
+
+### Card precedence
+
+There are four things that can want the screen at once — recovery, "how did today go?", a
+lapsed commitment, and a stuck task — and on a bad evening a student can qualify for all four.
+Showing them together hands a menu to a depleted person, which is precisely what §7 deletes
+`outings.ts` for doing.
+
+**One ordered rule, and a cap that depends on reserve:**
+
+```
+1. recovery          (the reserve is low and something would help)
+2. lapsed            (a commitment expired and there are words to send)
+3. stuck task        (a task has sat three days, or missed two slots)
+4. how did today go  (the day is ending and it has not been answered)
+
+below the low-energy threshold  → show exactly ONE card, the first that applies
+otherwise                       → show at most TWO
+```
+
+Recovery leads because it is the only card that addresses *why* the others are hard. "How did
+today go?" is last because it asks the student for something rather than offering them
+anything.
+
+**Low-energy mode is not a separate view.** Below the threshold this same screen drops the week
+link, trims the paragraph to the character sentence, and shows one card — which the rule above
+already defines. §1.5's "one number and one action" is met without a second implementation.
 
 ---
 
@@ -180,8 +209,13 @@ sixteen rows of nothing.
 
 ### Rebalance
 
-Sits under the overview, because it rewrites what is under it. Runs the existing hill-climb
-solver, reports in plain English, plays the tidy-up animation.
+Sits directly under the overview grid and **stays there when a day is open** — the day grid
+opens below it, not between it and the overview. Rebalance belongs to the fortnight, not to the
+selected day, and moving it down as the day expands would suggest it acts on that day alone.
+
+Runs the existing hill-climb solver, reports in plain English, plays the tidy-up animation.
+After a run the overview redraws and the open day stays open, so the change is visible in both
+at once.
 
 **`smallestFix` becomes its fallback**, not a feature of its own. When the solver cannot
 improve the fortnight, Rebalance says so and offers the single most useful move instead.
@@ -205,6 +239,17 @@ buttons; usually two.
 | In the past, confirmed | what you recorded, and Undo |
 
 "I can't start this" is §4.1's manual trigger.
+
+### Micro-start must stay a push
+
+§4.1's automatic trigger fires after two missed slots or three days. If micro-start only lived
+in this sheet it would become **pull** — week → day → block — and a stuck student at 2am is
+exactly the person who will not go looking for it. Today the room at least draws stuck clutter
+with an attention ring; a display-only room removes even that.
+
+So a stuck task also raises a **live card on the room screen** (third in §3's precedence
+order), carrying the same micro-start and opening the same sheet. The sheet is where it lives;
+the card is how it finds you.
 
 The past-block case matters: §4's overview marks days carrying unconfirmed blocks, so there
 are two routes to the same question. **The card is the prompt; the sheet is the place.** Both
@@ -260,16 +305,34 @@ places. The list goes.
 **The whole rule:**
 
 ```
-lowest reserve ≥ 40      → nothing
-less than 1h free today  → nothing
+take the reserves below 40, lowest first
+  errands has no advice → skip it, try the next one
+  none left             → nothing
+
+no free hour today      → nothing
 already dismissed today  → nothing
-otherwise                → one card, 1 hour, today, 16:00
+otherwise                → one card, 1 hour, today, AT THE GAP FOUND
 
   social   → Message someone you like and see them
   physical → Get outside and walk
   mental   → Stop and do nothing — no screen
-  errands  → nothing, deliberately
+  errands  → no advice; falls through
 ```
+
+**Two corrections to the current behaviour, both defects rather than simplifications:**
+
+*Errands no longer swallows the prescription.* `prescribe` takes the single lowest reserve and
+`ADVICE['errands']` is undefined, so it returns null. A student whose errands reserve is lowest
+at 22 while mental sits at 25 gets **no card at all, ever** — the emptiest reserve silently
+suppresses advice for the second-emptiest. Errands still has no advice of its own (telling
+someone who is flat to do a chore is advice nobody follows), but it now falls through instead
+of blocking.
+
+*The insert goes where the gap is.* The gate asks whether there is a free hour today; the
+insert was hardcoded to 16:00. Those are different questions, and once `freeGapOn`'s arithmetic
+is gone nothing reconciles them — the card could schedule rest on top of a class. The scan that
+finds the free hour returns **where** it is, and the block is inserted there. 16:00 survives
+only as the tie-break when the day is empty.
 
 **"Put it in my week"** keeps `scheduleRecovery`'s existing behaviour exactly: inserted with
 both `fixed: true` and `protectedRest: true`. This remains the only path in the app that
@@ -302,13 +365,42 @@ about it.**
 │                                  │
 │ [empty] [low] [ok] [good] [great]│
 │ ─────────────────────────────────│
+│ How did you sleep?               │
+│ [ under 5 ] [ 6 ] [ 7 ] [ 8+ ]   │
+│ ─────────────────────────────────│
 │ Essay draft — you planned 3h     │
 │                                  │
 │ [didn't] [less] [right] [longer] │
 └──────────────────────────────────┘
 ```
 
-Two taps, once a day.
+Three taps, once a day.
+
+### The sleep row, and why it is here
+
+Sleep does not come from the profile. It comes from `schedule.sleepByDay`, and **nothing in
+the app has ever written it after the week is created** — not the painter, not the planner,
+not the check-in. The painter set `sleepBaselineHours`, which is the *threshold* in
+`max(0, sleep − baseline)`, not the sleep data. So sleep has been frozen at its seeded values
+since the first commit, and two of §1.3's nine bindings — the plant and the bed, both driven
+by `sleepDebt` — have been reporting a constant.
+
+Cutting the painter makes that worse in a way that is easy to miss:
+
+```
+before, painted 7h:   max(0, 5.5 − 7) = 0      no sleep credit
+after,  default 5h:   max(0, 5.5 − 5) = 0.5    credit appears
+```
+
+The seeded crunch week sleeps 5.5 hours on weeknights. Falling back to the population baseline
+of 5 would make the app **more optimistic about recovery for exactly the sleep-deprived student
+it exists for**. That is not an acceptable side effect of a UI simplification.
+
+So the sleep row writes `sleepByDay[today]`, closing a loop that has never been closed. It
+costs one tap, it is the only engine input the app asks for and never receives, and it makes
+the plant and the bed move for the first time.
+
+Buckets, not a typed number, per §7.5: `under 5 → 4.5 · 6 → 6 · 7 → 7 · 8+ → 8.5`.
 
 **The energy row** resolves the 48-hour prediction. Unchanged in behaviour: five relative
 bands, never a typed number; a resolved prediction is never rewritten; mean *absolute* error;
@@ -375,7 +467,23 @@ validation claim dies without.
 | `src/ui/room/view.ts` | `zoom(objectId)` → the new screen union. |
 | `src/domain/prescribe.ts` | Simplified per §7. |
 | `src/domain/calibration.ts` | Profile shrinks to `confirmations`, `confirmedItemIds`, `predictions`. |
-| `src/domain/engineParams.ts` | `paramsFor` reads confirmations only. |
+| `src/domain/engineParams.ts` | `paramsFor` reads confirmations only; `sleepBaselineHours` is fixed at `SLEEP_BASELINE_HOURS` (5). |
+| `src/domain/prescribe.ts` | Also returns *where* the free gap is, not only whether one exists. |
+| `src/optimizer/types.ts` | `Schedule.recoveryLog` removed. |
+
+### Persisted profiles
+
+`mode`, `focus`, `semesterBreak`, `peakStartHour`, `painted`, `modeChosen` and `calibratedDays`
+are dropped from the type. Already-saved profiles carry those keys; the loader ignores unknown
+keys, so no migration is needed and nothing fails to load.
+
+**One behaviour change is not silent and must be stated:** a student who had painted a 7-hour
+baseline was getting `sleepBaselineHours: 7`; they now get the population figure of 5. Their
+projections become slightly more generous about sleep recovery from the moment they update. The
+sleep row on the today card (§8) is what makes this defensible — it replaces a painted guess
+about a typical night with a reported figure about an actual one.
+
+`Schedule.recoveryLog` is likewise dropped and ignored on load. No week fails to open.
 
 ### Deleted
 
@@ -409,7 +517,7 @@ Each of these is a considered choice, not an oversight.
 
 | Deviation | Reason |
 |---|---|
-| **The three-day painter is cut** (§11 must-build) | It is the highest-effort screen in the app and produces two parameters that post-block confirmation produces better, from what actually happened. This is the only genuine must-build casualty. |
+| **The three-day painter is cut** (§11 must-build) | The highest-effort screen in the app. It produced two parameters: estimate bias, which post-block confirmation produces better from what actually happened, and `sleepBaselineHours`, which it produced as a *painted guess about a typical night*. §8's sleep row replaces the second with a reported figure about an actual night, and writes `sleepByDay` — which the painter never did. This is the only genuine must-build casualty, and the sleep row is what stops it being a regression. |
 | **Mode picker, focus bucket and semester-break are cut** (§7.1) | Nothing reads them. Cutting them costs the model nothing and removes two on-screen claims the code does not implement. |
 | **"Tap any object for its numbers" is gone** (§1.3) | The drawing is display-only. Every number survives — in the gauge, in `describeRoom()`'s paragraph, and in the week. |
 | **Get-out-of-the-house mode is cut** (§5.3, must-build) | A three-item menu inside a card whose stated premise is that a depleted person cannot choose from a menu. |
@@ -431,9 +539,17 @@ same change.
   empty day; overlapping blocks
 - `blockActions.test.ts` — one case per row of §5's table; `fixed` never offers Move; the
   micro-start trigger at exactly 3 days and exactly 2 misses
-- `todayCard.test.ts` — picks the least-sampled load type; nothing to ask when all confirmed
+- `todayCard.test.ts` — picks the least-sampled load type; nothing to ask when all confirmed;
+  the sleep bucket → hours mapping; **writing a sleep answer changes `sleepByDay[today]` and
+  therefore moves `sleepDebt`**, which is the regression test for the frozen-binding defect
 - `prescribe.test.ts` — rewritten for §7's rule; the four reserve cases; the <1h and
-  dismissed-today gates
+  dismissed-today gates; **errands-lowest falls through to the next reserve under 40 rather
+  than returning null**; **the block is inserted at the gap found, not at 16:00, when 16:00
+  is occupied**
+- `cardPrecedence.test.ts` — the ordering; two cards above the low-energy threshold and
+  exactly one below it; nothing when nothing applies
+- `roomText.test.ts` — extended: never more than three sentences; character and weather always
+  present; the full text still reaches the drawing's `aria-label`
 
 **Components:**
 
@@ -451,7 +567,49 @@ accept ✓ · start a stuck task = week → day → block, micro-start opens wit
 
 ---
 
-## 13. Out of scope
+## 13. Build order
+
+Sequenced so the thing everything else hangs off exists first, and so there is a demoable app
+at every line. **Stop-and-demo line marked.**
+
+| # | Step | Why here |
+|---|---|---|
+| 0 | **Seed confirmations and predictions** | Before any UI. See below — without it the accuracy line reads "not enough data" through the entire demo. |
+| 1 | `scheduleView.ts` + `dayGrid.ts` | Pure, testable, and everything else hangs off them. |
+| 2 | `WeekScreen` — overview + day grid | The new primary surface. |
+| 3 | `blockActions.ts` + `BlockSheet` | Makes the week operable rather than a picture. |
+| 4 | `TodayCard` + `todayCard.ts` | Closes the estimate and sleep loops. |
+| 5 | Strip `Room` to display-only, move the gauge in, add card precedence | The room screen becomes final. |
+| — | **← STOP AND DEMO FROM HERE** | Room, week, blocks, today card, rebalance. All five pitch beats except the request box are reachable. |
+| 6 | `AddSheet` | The three existing input screens behind one control. Rewiring, not new behaviour. |
+| 7 | Recovery simplification | Smallest change on the list, and the one whose absence is least visible in a demo. |
+| 8 | Deletions and `useProfile` rename | Pure removal; nothing depends on it landing. |
+
+Rebalance needs no step — it moves from the `ceiling` panel to under the overview in step 2 and
+gains its `smallestFix` fallback in step 3.
+
+### Seeded data — what already exists, and what does not
+
+`useSchedule` already falls back to `umCrunchWeek()`: a real 21-day UM fortnight with fixed
+classes, assessments, errands, and a sleep pattern of 5.5h on weeknights. **The week grid will
+not be empty and Rebalance will have things to move.** That half of the demo is safe today.
+
+What is **not** seeded is the profile. `DEFAULT_PROFILE` has empty `confirmations` and empty
+`predictions`, which means:
+
+- the accuracy line reads *"not enough data"* — the pitch's credibility close, absent
+- estimate bias stays at 1 — Reality Check never demonstrates anything
+- the today card has nothing resolved to show against
+
+So step 0 adds a seeded profile beside the seeded week: roughly twenty confirmations spread
+across the four load types with a believable overrun bias, and five or six resolved predictions
+giving a mean absolute error in the range the pitch quotes. It ships as a fixture next to
+`umWeek.ts`, used on first run exactly as the week is, and it must exist **before** any UI work
+so every step can be rehearsed against it.
+
+---
+
+## 14. Out of scope
 
 Not in this change, and not implied by it: any change to `src/engine` or `src/optimizer`
 beyond deleting `Schedule.recoveryLog`; the Telegram bot's server side; Google Calendar

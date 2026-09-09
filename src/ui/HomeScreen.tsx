@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Repository, Session } from '../data'
-import { DEFAULT_PARAMS, floorReserve, overallReserve, project } from '../engine'
+import { floorReserve, overallReserve, project } from '../engine'
 import { describeRebalance, makeRng, rebalance, toDayInputs } from '../optimizer'
 import { addItems } from '../domain/addItems'
-import { padEstimates, paddingTable } from '../domain/applyPadding'
 import { anchorTo, dateFor, isAnchored, todayIndex } from '../domain/calendar'
+import { paramsFor } from '../domain/engineParams'
 import { predictionsAfter, resolvePrediction } from '../domain/predictions'
 import { accept, lapsed } from '../domain/commitments'
 import { freeGapOn, prescribe } from '../domain/prescribe'
@@ -70,16 +70,24 @@ export function HomeScreen({
 
   const reducedMotion = useReducedMotion()
   const { play } = useTidyUp(reducedMotion)
+  const { profile, setProfile } = useCalibration(repository)
 
   const days = useMemo(() => (schedule ? toDayInputs(schedule) : []), [schedule])
+
+  /**
+   * §7.3 and §2.4: the model runs on what the app has measured about this student, not on
+   * population defaults. An uncalibrated profile returns the defaults exactly, so a new
+   * student sees the same app as before.
+   */
+  const params = useMemo(() => paramsFor(profile), [profile])
+
   const projection = useMemo(
-    () => (schedule ? project(schedule.start, days, DEFAULT_PARAMS) : null),
-    [schedule, days],
+    () => (schedule ? project(schedule.start, days, params) : null),
+    [schedule, days, params],
   )
 
   const floor = schedule ? floorReserve(schedule.start) : 100
   const { active: lowEnergy, setOverride } = useLowEnergy(repository, floor)
-  const { profile, setProfile } = useCalibration(repository)
 
   /**
    * §8.1 needs two things the app could not do until the week carried a date: anchor the
@@ -99,7 +107,7 @@ export function HomeScreen({
       return
     }
 
-    const next = predictionsAfter(profile.predictions, schedule, DEFAULT_PARAMS, new Date())
+    const next = predictionsAfter(profile.predictions, schedule, paramsFor(profile), new Date())
     if (next.length !== profile.predictions.length) setProfile({ ...profile, predictions: next })
   }, [schedule, profile, setSchedule, setProfile])
 
@@ -121,9 +129,9 @@ export function HomeScreen({
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     try {
-      const result = rebalance(current, DEFAULT_PARAMS, makeRng(SEED))
+      const result = rebalance(current, params, makeRng(SEED))
       setSchedule(result.schedule)
-      setReport(describeRebalance(result, DEFAULT_PARAMS))
+      setReport(describeRebalance(result, params))
       // §1.3's one tidy-up sequence: the visible payoff for a change just agreed to.
       play()
     } finally {
@@ -152,7 +160,7 @@ export function HomeScreen({
           // §2.4 applied silently: a student who consistently overruns gets a week built on
           // what their work actually costs, not on what they hoped. They are told the
           // conclusion on the how-you-work screen rather than asked to do the maths.
-          setSchedule(addItems(schedule, padEstimates(items, paddingTable(profile.confirmations))))
+          setSchedule(addItems(schedule, items))
           setPlanning(false)
         }}
         onCancel={() => setPlanning(false)}
@@ -166,7 +174,7 @@ export function HomeScreen({
     return (
       <PhotoImportScreen
         onAccept={(items) => {
-          setSchedule(addItems(schedule, padEstimates(items, paddingTable(profile.confirmations))))
+          setSchedule(addItems(schedule, items))
           setPhotographing(false)
         }}
         onCancel={() => setPhotographing(false)}
@@ -196,8 +204,7 @@ export function HomeScreen({
           // Today is 0 because the engine is pure and has no calendar; day 0 is "now"
           // everywhere else in the model. A real clock is its own change, not one to
           // smuggle in here.
-          const [padded] = padEstimates([item], paddingTable(profile.confirmations))
-          setSchedule(accept(schedule, padded ?? item, 0))
+          setSchedule(accept(schedule, item, 0))
           setRequesting(false)
         }}
         onCancel={() => setRequesting(false)}
@@ -248,7 +255,7 @@ export function HomeScreen({
           that needs an answer rather than a glance. */}
       {!dismissedLapses && (
         <LapsedNotice
-          commitments={lapsed(schedule, 0, DEFAULT_PARAMS)}
+          commitments={lapsed(schedule, 0, params)}
           onDismiss={() => setDismissedLapses(true)}
         />
       )}

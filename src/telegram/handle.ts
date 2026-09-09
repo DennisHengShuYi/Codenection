@@ -4,13 +4,16 @@ import { prescribeRest } from '../domain/prescribe'
 import type { Schedule } from '../optimizer'
 import { resolveConfirmation, summarise, type PendingDump } from './brainDump'
 import {
+  blockAnsweredReply,
   blocksReply,
+  discardedReply,
   helpReply,
   linkedReply,
   microStartReply,
   needTaskReply,
   noGapReply,
   notLinkedReply,
+  restBookedReply,
   restReply,
   tooLongReply,
   unhandledReply,
@@ -57,6 +60,14 @@ export interface ChatStore {
   savePending(accountId: string, pending: PendingDump): Promise<void>
   findPending(accountId: string, dumpId: string): Promise<PendingDump | null>
   markAnswered(accountId: string, dumpId: string, now: number): Promise<void>
+  /** §7.9's evidence. Recorded, never acted on: Reality Check (§2.4) and the carryover
+   *  matrix (§6.6) will read this, and neither exists yet. */
+  recordBlockAnswer(
+    accountId: string,
+    blockId: string,
+    answer: 'yes' | 'no' | 'partly',
+    now: number,
+  ): Promise<void>
 }
 
 /** Distinct per dump so a button can only ever answer the parse it was attached to. */
@@ -132,6 +143,51 @@ export async function handleIntent(
       case 'ask':
         return unhandledReply()
     }
+  }
+
+  if (intent.kind === 'blockAnswer') {
+    await store.recordBlockAnswer(accountId, intent.blockId, intent.answer, now)
+
+    // The week is deliberately untouched. These answers are evidence for §2.4 and §6.6,
+    // and a check-in that quietly edited the schedule would be acting on data nobody has
+    // validated yet.
+    return blockAnsweredReply(intent.answer)
+  }
+
+  if (intent.kind === 'restAnswer') {
+    if (!intent.accepted || intent.startHour === null) return discardedReply()
+
+    const week = await store.loadWeek(accountId)
+
+    // Re-derived rather than carried in the button: the prescription is deterministic for a
+    // given week and reserves, and a button carrying its own payload could be replayed with
+    // a different one.
+    const prescription = prescribeRest(week, week.start, TODAY)
+    if (prescription === null) return noGapReply()
+
+    await store.saveWeek(accountId, {
+      ...week,
+      items: [
+        ...week.items,
+        {
+          id: `rest-${intent.startHour}-${now}`,
+          title: prescription.title,
+          type: prescription.type,
+          kind: prescription.kind,
+          hours: prescription.hours,
+          intensity: 1,
+          dayIndex: TODAY,
+          startHour: intent.startHour,
+          // §5.1: fixed and protected. Rest the optimizer can move to fit work in is not
+          // protected at all, and this is the app's most important design decision.
+          fixed: true,
+          deadlineDay: null,
+          protectedRest: true,
+        },
+      ],
+    })
+
+    return restBookedReply()
   }
 
   if (intent.kind === 'photo' || intent.kind === 'voice') {

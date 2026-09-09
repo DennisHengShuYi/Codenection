@@ -16,6 +16,8 @@ export type Intent =
   // dispatcher switches on the name either way, and six near-identical shapes would be six
   // places to keep in step for no gain.
   | { kind: 'command'; chatId: number; name: CommandName; argument: string }
+  | { kind: 'blockAnswer'; chatId: number; blockId: string; answer: 'yes' | 'no' | 'partly' }
+  | { kind: 'restAnswer'; chatId: number; startHour: number | null; accepted: boolean }
   | { kind: 'photo'; chatId: number; fileId: string; bytes: number }
   | { kind: 'voice'; chatId: number; fileId: string; seconds: number; bytes: number }
   | { kind: 'unhandled'; chatId: number | null }
@@ -87,15 +89,34 @@ export function readUpdate(update: unknown): Intent {
     const chatId = chatIdOf(query.message)
     const data = typeof query.data === 'string' ? query.data : ''
 
-    const match = /^(confirm|discard):(.+)$/.exec(data)
-    if (chatId === null || match === null) return { kind: 'unhandled', chatId }
+    if (chatId === null) return { kind: 'unhandled', chatId }
 
-    return {
-      kind: 'confirm',
-      chatId,
-      dumpId: match[2] as string,
-      accepted: match[1] === 'confirm',
+    const dump = /^(confirm|discard):(.+)$/.exec(data)
+    if (dump !== null) {
+      return { kind: 'confirm', chatId, dumpId: dump[2] as string, accepted: dump[1] === 'confirm' }
     }
+
+    // Only the three answers §7.9 names. Anything else is a button we did not send.
+    const block = /^block:(.+):(yes|no|partly)$/.exec(data)
+    if (block !== null) {
+      return {
+        kind: 'blockAnswer',
+        chatId,
+        blockId: block[1] as string,
+        answer: block[2] as 'yes' | 'no' | 'partly',
+      }
+    }
+
+    if (data === 'rest:decline') {
+      return { kind: 'restAnswer', chatId, startHour: null, accepted: false }
+    }
+
+    const rest = /^rest:accept:(\d+(?:\.\d+)?)$/.exec(data)
+    if (rest !== null) {
+      return { kind: 'restAnswer', chatId, startHour: Number(rest[1]), accepted: true }
+    }
+
+    return { kind: 'unhandled', chatId }
   }
 
   // `edited_message` is deliberately not read. Telegram resends the whole message when a

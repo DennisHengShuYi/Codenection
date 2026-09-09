@@ -115,6 +115,25 @@ function createStore(client: SupabaseClient): ChatStore {
       }
     },
 
+    /**
+     * §7.9's evidence, recorded and not acted on.
+     *
+     * Upserted on the account and block together, so answering the same block twice
+     * records once -- a student can press a button twice, and Telegram re-sends an update
+     * it was not acknowledged for.
+     */
+    async recordBlockAnswer(accountId, blockId, answer, now) {
+      await client.from('block_answers').upsert(
+        {
+          account_id: accountId,
+          block_id: blockId,
+          answer,
+          answered_at: new Date(now).toISOString(),
+        },
+        { onConflict: 'account_id,block_id' },
+      )
+    },
+
     async markAnswered(accountId, dumpId, now) {
       await client
         .from('telegram_pending')

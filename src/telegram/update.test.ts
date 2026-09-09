@@ -170,3 +170,47 @@ describe('readUpdate, the rest of the flows', () => {
     expect(intent.kind).toBe('photo')
   })
 })
+
+describe('readUpdate, answering a block or a prescription', () => {
+  it('reads a block answer', () => {
+    const intent = readUpdate({
+      callback_query: { message: { chat }, data: 'block:b1:partly' },
+    })
+
+    expect(intent).toEqual({ kind: 'blockAnswer', chatId: 4242, blockId: 'b1', answer: 'partly' })
+  })
+
+  it.each(['yes', 'no', 'partly'])('reads a %s answer', (answer) => {
+    const intent = readUpdate({
+      callback_query: { message: { chat }, data: `block:b1:${answer}` },
+    })
+
+    expect(intent.kind === 'blockAnswer' && intent.answer).toBe(answer)
+  })
+
+  it('ignores an answer that is not one of the three', () => {
+    expect(
+      readUpdate({ callback_query: { message: { chat }, data: 'block:b1:maybe' } }).kind,
+    ).toBe('unhandled')
+  })
+
+  it('reads accepting a rest block', () => {
+    const intent = readUpdate({
+      callback_query: { message: { chat }, data: 'rest:accept:15' },
+    })
+
+    expect(intent).toEqual({ kind: 'restAnswer', chatId: 4242, startHour: 15, accepted: true })
+  })
+
+  it('reads declining one', () => {
+    const intent = readUpdate({ callback_query: { message: { chat }, data: 'rest:decline' } })
+
+    expect(intent).toEqual({ kind: 'restAnswer', chatId: 4242, startHour: null, accepted: false })
+  })
+
+  it('ignores a rest acceptance with an unreadable hour', () => {
+    expect(
+      readUpdate({ callback_query: { message: { chat }, data: 'rest:accept:teatime' } }).kind,
+    ).toBe('unhandled')
+  })
+})

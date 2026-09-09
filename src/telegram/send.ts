@@ -219,3 +219,7 @@ export const photoUnreadableReply = (): Reply => ({
 export const yesterdayUnavailableReply = (): Reply => ({
   text: 'I do not keep past days yet, so there is nothing to look back at. Use /today and I will go through today with you.',
 })
+
+export const restBookedReply = (): Reply => ({
+  text: 'In. Nothing will be scheduled over it.',
+})

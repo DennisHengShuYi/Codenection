@@ -25,6 +25,7 @@ const parsed = (title: string): ParsedItem => ({
 interface Harness {
   store: ChatStore
   saved: Schedule[]
+  blockAnswers: Array<{ blockId: string; answer: string }>
   pendings: PendingDump[]
   answered: string[]
   linked: Array<{ chatId: number; accountId: string }>
@@ -32,6 +33,7 @@ interface Harness {
 
 function harness(over: Partial<ChatStore> = {}): Harness {
   const saved: Schedule[] = []
+  const blockAnswers: Array<{ blockId: string; answer: string }> = []
   const pendings: PendingDump[] = []
   const answered: string[] = []
   const linked: Array<{ chatId: number; accountId: string }> = []
@@ -53,10 +55,13 @@ function harness(over: Partial<ChatStore> = {}): Harness {
     markAnswered: async (_accountId, dumpId) => {
       answered.push(dumpId)
     },
+    recordBlockAnswer: async (_accountId, blockId, answer) => {
+      blockAnswers.push({ blockId, answer })
+    },
     ...over,
   }
 
-  return { store, saved, pendings, answered, linked }
+  return { store, saved, blockAnswers, pendings, answered, linked }
 }
 
 const parse = vi.fn()
@@ -336,4 +341,88 @@ describe('the command surface', () => {
       expect(h.saved).toEqual([])
     },
   )
+})
+
+describe('answering a block', () => {
+  const answer = (blockId = 'b1', value: 'yes' | 'no' | 'partly' = 'yes') =>
+    ({ kind: 'blockAnswer', chatId: 7, blockId, answer: value }) as never
+
+  it('records the answer', async () => {
+    const h = harness()
+
+    await handleIntent(answer('b1', 'partly'), h.store, 1000)
+
+    expect(h.blockAnswers).toEqual([{ blockId: 'b1', answer: 'partly' }])
+  })
+
+  /**
+   * §7.9's never punish a miss. A student who did not do the thing is exactly the one whose
+   * data is most worth having, and a comment on it is how they stop answering.
+   */
+  it('answers a miss with no comment at all', async () => {
+    const h = harness()
+
+    const reply = await handleIntent(answer('b1', 'no'), h.store, 1000)
+
+    expect(reply?.text).not.toMatch(/sorry|shame|tomorrow|better|why|should/i)
+  })
+
+  // The week is evidence for §2.4 and §6.6, which do not exist yet. A check-in that quietly
+  // edited the schedule would be acting on data nobody has validated.
+  it('changes nothing about the week', async () => {
+    const h = harness()
+
+    await handleIntent(answer(), h.store, 1000)
+
+    expect(h.saved).toEqual([])
+  })
+
+  it('records nothing for an unlinked chat', async () => {
+    const h = harness({ accountForChat: async () => null })
+
+    await handleIntent(answer(), h.store, 1000)
+
+    expect(h.blockAnswers).toEqual([])
+  })
+})
+
+describe('answering a rest suggestion', () => {
+  const restAnswer = (accepted: boolean, startHour: number | null = 15) =>
+    ({ kind: 'restAnswer', chatId: 7, startHour, accepted }) as never
+
+  it('adds protected rest to the week when accepted', async () => {
+    const h = harness()
+
+    await handleIntent(restAnswer(true), h.store, 1000)
+
+    expect(h.saved).toHaveLength(1)
+    const added = h.saved[0]?.items.at(-1)
+    expect(added?.protectedRest).toBe(true)
+  })
+
+  // §5.1: the optimizer cannot move protected rest, and cannot schedule over it either.
+  // Rest it can move to fit work in is not protected at all.
+  it('adds it as fixed, so the optimizer cannot move it', async () => {
+    const h = harness()
+
+    await handleIntent(restAnswer(true), h.store, 1000)
+
+    expect(h.saved[0]?.items.at(-1)?.fixed).toBe(true)
+  })
+
+  it('writes nothing when declined', async () => {
+    const h = harness()
+
+    await handleIntent(restAnswer(false, null), h.store, 1000)
+
+    expect(h.saved).toEqual([])
+  })
+
+  it('writes nothing for an unlinked chat', async () => {
+    const h = harness({ accountForChat: async () => null })
+
+    await handleIntent(restAnswer(true), h.store, 1000)
+
+    expect(h.saved).toEqual([])
+  })
 })

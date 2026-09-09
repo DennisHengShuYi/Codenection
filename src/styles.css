@@ -1,1 +1,41 @@
 @import 'tailwindcss';
+
+/*
+ * §12: the palette comes from the room.
+ *
+ * Before this file existed as anything but an import, nine colour families were in use
+ * across seventeen background utilities, chosen per component in whichever session built
+ * it -- violet micro-start, sky prescription, amber door panel, rose, indigo, emerald.
+ * Three semantic accents is the whole budget: more than three and none of them mean
+ * anything.
+ */
+@theme {
+  /* Ground and ink. The room's own warm cream, so the interface sits in the room rather
+     than beside it. */
+  --color-ground: #faf8f4;
+  --color-surface: #ffffff;
+  --color-line: #e3ddd2;
+  --color-ink: #1c1917;
+  /* Replaces every opacity-70. Opacity fades the background through the text and cannot
+     be themed; a colour can be both. */
+  --color-ink-soft: #6b635a;
+
+  /* The three accents, and nothing else. */
+  --color-attention: #f59e0b; /* needs you: stuck, lapsed, deficit, unconfirmed */
+  --color-attention-soft: #fffbeb;
+  --color-calm: #0284c7; /* recovery, rest, protected blocks */
+  --color-calm-soft: #f0f9ff;
+
+  /* Load-type hues, for calendar blocks only, and never carrying meaning alone (§1.5) --
+     every block also shows its label and its type in words. Amber is deliberately not
+     among them so "needs you" stays unambiguous everywhere. */
+  --color-load-mental: #6366f1;
+  --color-load-physical: #0d9488;
+  --color-load-social: #f43f5e;
+  --color-load-errands: #78716c;
+}
+
+body {
+  background: var(--color-ground);
+  color: var(--color-ink);
+}

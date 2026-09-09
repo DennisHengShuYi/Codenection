@@ -21,14 +21,37 @@ import { scrubAuthFragmentFromUrl } from './scrubAuthFragment'
  * true here rather than in the sign-in screen: it never touches that screen, so anything
  * living in its callback would simply not happen for a Google sign-in.
  */
+/**
+ * Whether two sessions describe the same account in the same way.
+ *
+ * Compared field by field rather than by identity, because Supabase builds a fresh object
+ * for every announcement it makes -- and it announces the same account often: on a token
+ * refresh, when a second tab signs in, and whenever another client is constructed. Handing
+ * each of those to React as a new object rebuilds the repository in App's `useMemo` and
+ * reloads the week, which is how routine chatter becomes a render loop.
+ */
+const sameAccount = (a: Session | null, b: Session | null): boolean =>
+  a !== null &&
+  b !== null &&
+  a.userId === b.userId &&
+  a.email === b.email &&
+  a.name === b.name &&
+  a.avatarUrl === b.avatarUrl
+
 export function useSession(): {
   session: Session | null
   loading: boolean
   setSession: (next: Session | null) => void
   signedIn: (next: Session) => void
 } {
-  const [session, setSession] = useState<Session | null>(null)
+  const [session, setSessionState] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+
+  /** Keeps the existing object when nothing about the account changed, so everything keyed
+   *  on the session -- the repository above all -- is not rebuilt for no reason. */
+  const setSession = useCallback((next: Session | null) => {
+    setSessionState((current) => (sameAccount(current, next) ? current : next))
+  }, [])
 
   /** The account whose preview week has already been copied across. Supabase reports the
    *  same session more than once in normal operation, and copying twice would put a
@@ -55,7 +78,7 @@ export function useSession(): {
     void carryOverWeek(createLocalRepository(), createRepository(next)).finally(() =>
       setSession(next),
     )
-  }, [])
+  }, [setSession])
 
   useEffect(() => {
     let cancelled = false
@@ -92,7 +115,7 @@ export function useSession(): {
       cancelled = true
       stop()
     }
-  }, [signedIn])
+  }, [signedIn, setSession])
 
   return { session, loading, setSession, signedIn }
 }

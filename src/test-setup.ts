@@ -7,15 +7,15 @@ import { cleanup, configure } from '@testing-library/react'
 import { afterEach } from 'vitest'
 
 /**
- * Testing Library's one-second default is tuned for waiting on a render. Two of these
- * screens wait on a dynamic `import()` instead -- the planner and photo import both load
- * the parser on demand, to keep Zod out of the initial bundle -- and the first test to
- * reach that import also pays for Vite transforming the chunk.
+ * Testing Library's one-second default is tuned for waiting on a render. Three screens wait
+ * on a dynamic `import()` instead -- the planner, photo import and the request box all load
+ * the parser on demand, to keep Zod out of the initial bundle -- and the first test to reach
+ * one also pays for Vite transforming the chunk.
  *
- * Alone that fits inside a second; in a full parallel run on a busy machine it does not,
- * and the result was a test that passed by itself and failed in the suite. Raised rather
- * than the assertions being weakened: the thing being waited for is genuinely slower than
- * a render, and a wait that is too short tests the machine rather than the code.
+ * Alone that fits inside a second; in a full parallel run on a busy machine it does not, and
+ * the result was a test that passed by itself and failed in the suite. Raised rather than
+ * the assertions being weakened: the thing being waited for is genuinely slower than a
+ * render, and a wait that is too short tests the machine rather than the code.
  */
 configure({ asyncUtilTimeout: 5000 })
 

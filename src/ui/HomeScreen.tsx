@@ -3,9 +3,12 @@ import type { Repository, Session } from '../data'
 import { DEFAULT_PARAMS, floorReserve, overallReserve, project } from '../engine'
 import { describeRebalance, makeRng, rebalance, toDayInputs } from '../optimizer'
 import { addItems } from '../domain/addItems'
+import { accept, lapsed } from '../domain/commitments'
 import { completeItem, deferItem } from '../domain/scheduleEdits'
 import { PhotoImportScreen } from './planner/PhotoImportScreen'
 import { PlannerScreen } from './planner/PlannerScreen'
+import { LapsedNotice } from './request/LapsedNotice'
+import { RequestBoxScreen } from './request/RequestBoxScreen'
 import { AccountBar } from './auth/AccountBar'
 import { PreviewBanner } from './auth/PreviewBanner'
 import { CapacityDial } from './dial/CapacityDial'
@@ -43,6 +46,8 @@ export function HomeScreen({
   const [selected, setSelected] = useState<string | null>(null)
   const [planning, setPlanning] = useState(false)
   const [photographing, setPhotographing] = useState(false)
+  const [requesting, setRequesting] = useState(false)
+  const [dismissedLapses, setDismissedLapses] = useState(false)
 
   const reducedMotion = useReducedMotion()
   const { play } = useTidyUp(reducedMotion)
@@ -124,6 +129,24 @@ export function HomeScreen({
     )
   }
 
+  // Same again for the request box, and the same reason: the low-energy view would discard
+  // the request they had already pasted.
+  if (requesting) {
+    return (
+      <RequestBoxScreen
+        schedule={schedule}
+        onAccept={(item) => {
+          // Today is 0 because the engine is pure and has no calendar; day 0 is "now"
+          // everywhere else in the model. A real clock is its own change, not one to
+          // smuggle in here.
+          setSchedule(accept(schedule, item, 0))
+          setRequesting(false)
+        }}
+        onCancel={() => setRequesting(false)}
+      />
+    )
+  }
+
   const capacity = overallReserve(schedule.start)
   const room = roomStateFor(schedule.start, projection, schedule)
 
@@ -149,6 +172,16 @@ export function HomeScreen({
         <PreviewBanner onSignIn={onSignIn} />
       ) : (
         <AccountBar session={session} onSignOut={onSignOut} />
+      )}
+
+      {/* §2.3: a provisional yes that the reserve can no longer hold has already lapsed by
+          the time this appears. Above the room, because it is the one thing on this screen
+          that needs an answer rather than a glance. */}
+      {!dismissedLapses && (
+        <LapsedNotice
+          commitments={lapsed(schedule, 0, DEFAULT_PARAMS)}
+          onDismiss={() => setDismissedLapses(true)}
+        />
       )}
 
       {/* §1.1: the room is the surface; the dial sits in one corner as a compact
@@ -205,8 +238,18 @@ export function HomeScreen({
           Photograph a brief or a planner page
         </button>
 
-        {/* §3.1: the other way in. Without these two the rest of the app can only rearrange
-            a week it invented for the student rather than one they actually have. */}
+        {/* §2.3: for work someone else is trying to hand you. */}
+        <button
+          type="button"
+          onClick={() => setRequesting(true)}
+          data-testid="open-request"
+          className="w-full rounded-lg border border-slate-400 px-4 py-3 text-base sm:w-auto"
+        >
+          Someone asked me for something
+        </button>
+
+        {/* §3.1: the third way in. Without these the rest of the app can only rearrange a
+            week it invented for the student rather than one they actually have. */}
         <button
           type="button"
           onClick={() => setPlanning(true)}

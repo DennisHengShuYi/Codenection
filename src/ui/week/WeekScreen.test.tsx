@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { BlockRecord } from '../../domain/blockLog'
 import { DEFAULT_PROFILE } from '../../domain/calibration'
 import { HORIZON_DAYS, LOAD_TYPES, type LoadType } from '../../engine'
-import type { Schedule, ScheduledItem } from '../../optimizer'
+import type { Fix, Schedule, ScheduledItem } from '../../optimizer'
 import { BUSY_ABOVE_HOURS } from './scheduleView'
 import { WeekScreen } from './WeekScreen'
 
@@ -183,6 +183,32 @@ describe('WeekScreen', () => {
 
     expect(screen.getByTestId('block-rest')).toHaveTextContent(/🛡/)
     expect(screen.getByTestId('block-rest')).toHaveTextContent(/protected/i)
+  })
+
+  it('offers the single best remaining move when the solver could not improve the week', () => {
+    const fallback: Fix = {
+      move: {
+        kind: 'shiftDay',
+        itemId: 'essay',
+        description: 'Moved the essay 1 day later',
+        apply: (schedule) => schedule,
+      },
+      worstBefore: 11,
+      worstAfter: 44,
+      gain: 33,
+      deficitDaysBefore: 3,
+      deficitDaysAfter: 2,
+    }
+
+    setup(week(), { fallback })
+
+    expect(screen.getByTestId('rebalance-fallback')).toHaveTextContent('Moved the essay 1 day later')
+  })
+
+  it('offers no fallback when the solver already handled it, or the week needs none', () => {
+    setup(week(), { fallback: null })
+
+    expect(screen.queryByTestId('rebalance-fallback')).not.toBeInTheDocument()
   })
 
   it('reflects the opened day as a disclosure, not a toggle', async () => {

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { BlockRecord } from '../../domain/blockLog'
 import type { CalibrationProfile } from '../../domain/calibration'
-import type { Schedule } from '../../optimizer'
+import type { Fix, Schedule } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { dayGrid } from './dayGrid'
 import { scheduleView, type LoadBand } from './scheduleView'
@@ -51,6 +51,15 @@ export function WeekScreen(props: {
   readonly today: number
   readonly working: boolean
   readonly report: string | null
+  /**
+   * §2.2/§4: the single best remaining move, when Rebalance could not improve the
+   * fortnight but the fortnight still needs help. Null when the solver found something to
+   * do, or when the week needs nothing at all -- `describeRebalance` already tells those
+   * two apart in `report`, so the fallback only ever adds to that, never contradicts it.
+   * Optional and defaulting to null so every caller built before this feature existed
+   * keeps compiling and behaving exactly as it did.
+   */
+  readonly fallback?: Fix | null
   readonly onRebalance: () => void
   readonly onSelectBlock: (itemId: string) => void
   /**
@@ -62,7 +71,17 @@ export function WeekScreen(props: {
    */
   readonly blockLog?: readonly BlockRecord[]
 }) {
-  const { schedule, profile, today, working, report, onRebalance, onSelectBlock, blockLog = [] } = props
+  const {
+    schedule,
+    profile,
+    today,
+    working,
+    report,
+    fallback = null,
+    onRebalance,
+    onSelectBlock,
+    blockLog = [],
+  } = props
   const [openDay, setOpenDay] = useState<number | null>(null)
 
   const cells = scheduleView({ schedule, profile, today, blockLog })
@@ -106,6 +125,13 @@ export function WeekScreen(props: {
         {report !== null && (
           <p data-testid="rebalance-report" role="status" className="text-sm text-ink-soft">
             {report}
+          </p>
+        )}
+
+        {fallback !== null && (
+          <p data-testid="rebalance-fallback" role="status" className="text-sm text-ink-soft">
+            There is almost nothing to move. The one thing that would help most:{' '}
+            {fallback.move.description}.
           </p>
         )}
       </div>

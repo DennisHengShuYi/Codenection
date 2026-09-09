@@ -37,6 +37,14 @@ describe('Sheet', () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 
+  it('ignores keys other than Escape', async () => {
+    const { onClose } = setup()
+
+    await userEvent.keyboard('{Enter}')
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('closes from the close control', async () => {
     const { onClose } = setup()
 
@@ -56,5 +64,52 @@ describe('Sheet', () => {
     setup()
 
     expect(screen.queryByTestId('sheet-actions')).not.toBeInTheDocument()
+  })
+
+  it('does not steal focus from a control inside the body when the title changes while mounted', () => {
+    const onClose = vi.fn()
+    const { rerender } = render(
+      <Sheet title="0 words" onClose={onClose}>
+        <input aria-label="notes" />
+      </Sheet>,
+    )
+
+    screen.getByLabelText('notes').focus()
+
+    // A title that is merely a display string -- e.g. a live word count -- is not a signal
+    // that a new sheet has opened. Re-running the focus effect whenever it happens to change
+    // would yank focus away from whatever the user is doing inside the body.
+    rerender(
+      <Sheet title="3 words" onClose={onClose}>
+        <input aria-label="notes" />
+      </Sheet>,
+    )
+
+    expect(screen.getByLabelText('notes')).toHaveFocus()
+  })
+
+  it('still moves focus to the panel on a forced remount, even when the title repeats', () => {
+    const onClose = vi.fn()
+    const outside = document.createElement('button')
+    document.body.appendChild(outside)
+
+    // Two different opens can legitimately share a title ("Note", "Note"). A consumer that
+    // keeps Sheet in the same JSX position signals a genuinely new open with `key`, not with
+    // title -- so a remount via key must still take focus regardless of what title reads.
+    const { rerender } = render(
+      <Sheet key="a" title="Note" onClose={onClose}>
+        <p>first</p>
+      </Sheet>,
+    )
+    outside.focus()
+
+    rerender(
+      <Sheet key="b" title="Note" onClose={onClose}>
+        <p>second</p>
+      </Sheet>,
+    )
+
+    expect(screen.getByRole('dialog')).toHaveFocus()
+    document.body.removeChild(outside)
   })
 })

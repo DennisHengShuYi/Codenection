@@ -12,6 +12,16 @@ import { useEffect, useRef, type ReactNode } from 'react'
  *
  * Below 768px it takes the viewport, because a brain-dump box squeezed into a corner of a
  * phone is unusable. Above it, it centres and the room stays visible around the edges.
+ *
+ * Focus is taken once, on mount, rather than whenever `title` changes. `ZoomLayer` keyed the
+ * same effect on `objectId`, which is unique per object; `title` is a display string with no
+ * such guarantee -- two different opens can share one ("Note", "Note"), and a title can also
+ * change for reasons that have nothing to do with a new open (a live word count, say) while
+ * the sheet stays mounted. Keying on it either misses a real swap that happens to keep the
+ * same title, or steals focus from whatever the user is doing inside the body when the title
+ * changes without one. A consumer that keeps `Sheet` in the same JSX position and swaps its
+ * content in place -- rather than mounting a fresh one, which every current consumer does --
+ * must pass a `key` so React remounts it; that remount is what moves focus, not the title.
  */
 export function Sheet({
   title,
@@ -28,7 +38,7 @@ export function Sheet({
 
   useEffect(() => {
     panel.current?.focus()
-  }, [title])
+  }, [])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

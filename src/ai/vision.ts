@@ -1,0 +1,88 @@
+import { HORIZON_DAYS } from '../engine'
+import { parseModelReply } from './schema'
+import { MAX_ITEMS, type ParsedItem } from './types'
+
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
+
+/** Groq's current vision-capable model. */
+const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct'
+
+/** Longer than the planner's eight seconds, because an image is far more to process --
+ *  still bounded, per §10's third constraint. */
+const VISION_TIMEOUT_MS = 20000
+
+/**
+ * §1.4's photo-of-anything entry point lives here rather than in branching code: the model
+ * does the identifying, so the instruction has to permit a brief, a planner page, a
+ * whiteboard or a slide without the code needing to know which it got.
+ */
+const SYSTEM_PROMPT = [
+  "You read a photograph of a student's work and turn it into a task list.",
+  'It may be an assignment brief, a handwritten planner page, a whiteboard, a lecture',
+  'slide, a shift roster or a sticky note. Read whatever is actually there.',
+  'Reply with JSON only, shaped {"items":[{"title","type","hours","deadlineDay","hard"}]}.',
+  'type is one of: mental, physical, social, errands.',
+  'hours is your estimate of effort, between 0 and 24. Use stated word counts or weightings',
+  'where the page gives them.',
+  `deadlineDay is a day index from 0 (today) to ${HORIZON_DAYS - 1}, or null if the page`,
+  'does not state one. hard is true only where a fixed date is actually printed.',
+  `Return at most ${MAX_ITEMS} items.`,
+  // The line that matters most, and the one the test pins. A model filling in a plausible
+  // deadline is exactly the silent poisoning §1.4 exists to prevent.
+  'Never invent a task, a date or a number that is not visible in the image.',
+].join(' ')
+
+/**
+ * One of the two places a Groq key is used, and only ever reached from `api/`.
+ *
+ * The reply goes through the planner's own schema rather than a second copy: one schema
+ * means a vision reply cannot quietly become the unvalidated path by drifting away from a
+ * duplicate, and it is what makes a photographed brief produce exactly the items a typed
+ * brain dump does.
+ */
+export async function askVision(dataUrl: string, apiKey: string): Promise<ParsedItem[] | null> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), VISION_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(GROQ_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: VISION_MODEL,
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'What is in this picture? Return the JSON.' },
+              { type: 'image_url', image_url: { url: dataUrl } },
+            ],
+          },
+        ],
+      }),
+    })
+
+    if (!response.ok) return null
+
+    const body = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>
+    }
+    const content = body.choices?.[0]?.message?.content
+    if (typeof content !== 'string') return null
+
+    return parseModelReply(JSON.parse(content))
+  } catch {
+    // A timeout, a dead network, or JSON that is not JSON. All the same answer to the
+    // caller, which turns it into a sentence rather than a stack trace.
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
+}

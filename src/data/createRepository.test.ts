@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { createRepository } from './createRepository'
 
-const configured = { supabaseUrl: 'https://example.supabase.co', supabaseAnonKey: 'anon-key' }
-const nothing = { supabaseUrl: null, supabaseAnonKey: null }
+const configured = { supabaseUrl: 'https://example.supabase.co', supabaseAnonKey: 'anon-key', telegramBot: null }
+const nothing = { supabaseUrl: null, supabaseAnonKey: null, telegramBot: null }
 const session = { userId: 'user-1', email: 'a@b.com' }
 
 describe('createRepository', () => {

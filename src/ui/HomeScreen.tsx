@@ -7,6 +7,7 @@ import { completeItem, deferItem } from '../domain/scheduleEdits'
 import { PhotoImportScreen } from './planner/PhotoImportScreen'
 import { PlannerScreen } from './planner/PlannerScreen'
 import { AccountBar } from './auth/AccountBar'
+import { LinkTelegram } from './settings/LinkTelegram'
 import { PreviewBanner } from './auth/PreviewBanner'
 import { CapacityDial } from './dial/CapacityDial'
 import { domainBars } from './dial/domainBars'
@@ -148,7 +149,12 @@ export function HomeScreen({
       {session === null ? (
         <PreviewBanner onSignIn={onSignIn} />
       ) : (
-        <AccountBar session={session} onSignOut={onSignOut} />
+        <>
+          <AccountBar session={session} onSignOut={onSignOut} />
+          {/* A chat is linked to an account, so there is nothing to link to when signed
+              out -- and §13.4 forbids the bot acting for a chat it cannot resolve. */}
+          <LinkTelegram />
+        </>
       )}
 
       {/* §1.1: the room is the surface; the dial sits in one corner as a compact

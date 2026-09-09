@@ -13,7 +13,11 @@ describe('readDataConfig', () => {
   })
 
   it('reports nulls when nothing is configured', () => {
-    expect(readDataConfig({})).toEqual({ supabaseUrl: null, supabaseAnonKey: null })
+    expect(readDataConfig({})).toEqual({
+      supabaseUrl: null,
+      supabaseAnonKey: null,
+      telegramBot: null,
+    })
   })
 
   // Half a configuration is a misconfiguration. Running on one of the two values would
@@ -23,6 +27,7 @@ describe('readDataConfig', () => {
     expect(readDataConfig({ VITE_SUPABASE_URL: 'https://example.supabase.co' })).toEqual({
       supabaseUrl: null,
       supabaseAnonKey: null,
+      telegramBot: null,
     })
   })
 
@@ -30,6 +35,7 @@ describe('readDataConfig', () => {
     expect(readDataConfig({ VITE_SUPABASE_ANON_KEY: 'anon-key' })).toEqual({
       supabaseUrl: null,
       supabaseAnonKey: null,
+      telegramBot: null,
     })
   })
 
@@ -37,6 +43,7 @@ describe('readDataConfig', () => {
     expect(readDataConfig({ VITE_SUPABASE_URL: '  ', VITE_SUPABASE_ANON_KEY: '' })).toEqual({
       supabaseUrl: null,
       supabaseAnonKey: null,
+      telegramBot: null,
     })
   })
 })

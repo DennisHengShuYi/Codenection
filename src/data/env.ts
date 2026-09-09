@@ -1,6 +1,9 @@
 export interface DataConfig {
   readonly supabaseUrl: string | null
   readonly supabaseAnonKey: string | null
+  /** The bot's username, so the app can build a link that opens it. Safe to publish -- it
+   *  is the public name anybody can already see on the bot. */
+  readonly telegramBot: string | null
 }
 
 const clean = (value: string | undefined): string | null => {
@@ -29,9 +32,11 @@ export function readDataConfig(
   // Half a configuration is a misconfiguration. Running on one value would build a
   // client that fails at its first request rather than at startup, which is a much
   // harder failure to place -- so both or neither.
+  const telegramBot = clean(env.VITE_TELEGRAM_BOT)
+
   if (supabaseUrl === null || supabaseAnonKey === null) {
-    return { supabaseUrl: null, supabaseAnonKey: null }
+    return { supabaseUrl: null, supabaseAnonKey: null, telegramBot }
   }
 
-  return { supabaseUrl, supabaseAnonKey }
+  return { supabaseUrl, supabaseAnonKey, telegramBot }
 }

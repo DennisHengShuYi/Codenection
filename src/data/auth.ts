@@ -11,7 +11,14 @@ import {
  *  ~220KB, and a signed-out visitor running on browser storage never needs it. */
 let clientPromise: Promise<SupabaseClient> | null = null
 
-function getClient(): Promise<SupabaseClient> {
+/**
+ * Exported so that every module needing the *signed-in* client shares this one.
+ *
+ * A second client on the same storage key announces itself to the first, which arrives as
+ * an auth change and, before the fix in supabaseRepository, drove a render loop that took
+ * the app down. One client per concern is not a style preference here.
+ */
+export function getClient(): Promise<SupabaseClient> {
   const { supabaseUrl, supabaseAnonKey } = readDataConfig()
 
   if (supabaseUrl === null || supabaseAnonKey === null) {

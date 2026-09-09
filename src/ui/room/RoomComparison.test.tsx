@@ -1,7 +1,26 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { RoomComparison } from './RoomComparison'
+import { DEFAULT_PROFILE } from '../../domain/calibration'
+import { HORIZON_DAYS } from '../../engine'
+import type { Schedule } from '../../optimizer'
+import { roomModel } from './roomModel'
 import type { RoomState } from './roomState'
+
+/** The comparison now takes models, because the room does. Built from a real week so the
+ *  rows -- and therefore the controls -- exist. */
+const modelOf = (over: Partial<Schedule> = {}) =>
+  roomModel({
+    schedule: {
+      items: [],
+      start: { mental: 70, physical: 70, social: 70, errands: 70 },
+      horizonDays: HORIZON_DAYS,
+      sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+      ...over,
+    },
+    profile: DEFAULT_PROFILE,
+    today: 0,
+  })
 
 const state = (character: RoomState['character']): RoomState => ({
   ceilingPressure: 0.2,
@@ -17,7 +36,7 @@ const state = (character: RoomState['character']): RoomState => ({
 
 describe('RoomComparison', () => {
   it('shows one room when there is nothing to compare', () => {
-    render(<RoomComparison now={state('steady')} />)
+    render(<RoomComparison now={modelOf()} />)
 
     expect(screen.getAllByTestId('room-scene')).toHaveLength(1)
   })
@@ -28,13 +47,13 @@ describe('RoomComparison', () => {
    * of its caller, deliberately, so the room does not need reshaping when it arrives.
    */
   it('shows two rooms when there is', () => {
-    render(<RoomComparison now={state('steady')} ifAccepted={state('runningLow')} />)
+    render(<RoomComparison now={modelOf()} ifAccepted={modelOf({ start: { mental: 25, physical: 25, social: 25, errands: 25 } })} />)
 
     expect(screen.getAllByTestId('room-scene')).toHaveLength(2)
   })
 
   it('labels which room is which', () => {
-    render(<RoomComparison now={state('steady')} ifAccepted={state('runningLow')} />)
+    render(<RoomComparison now={modelOf()} ifAccepted={modelOf({ start: { mental: 25, physical: 25, social: 25, errands: 25 } })} />)
 
     expect(screen.getByText(/^now$/i)).toBeVisible()
     expect(screen.getByText(/if you accept/i)).toBeVisible()
@@ -42,7 +61,7 @@ describe('RoomComparison', () => {
 
   // §10 is firm: never two rooms side by side on a phone.
   it('stacks rather than pairing on a narrow screen', () => {
-    render(<RoomComparison now={state('steady')} ifAccepted={state('runningLow')} />)
+    render(<RoomComparison now={modelOf()} ifAccepted={modelOf({ start: { mental: 25, physical: 25, social: 25, errands: 25 } })} />)
     const layout = screen.getByTestId('room-comparison')
 
     expect(layout.className).toMatch(/grid-cols-1/)

@@ -1,6 +1,8 @@
 import { Character } from './Character'
+import { clutterHotspot, HOTSPOTS } from './hotspots'
+import { isClutterId, type ObjectId } from './objects'
+import type { RoomModel } from './roomModel'
 import type { RoomState } from './roomState'
-import { describeRoom } from './roomText'
 
 const WEATHER_FILL: Record<RoomState['weather'], string> = {
   clear: '#bae6fd',
@@ -16,22 +18,25 @@ const WEATHER_FILL: Record<RoomState['weather'], string> = {
  * the drawing alone conveys nothing at all to a screen reader.
  */
 export function Room({
-  state,
+  model,
   onSelect,
 }: {
-  state: RoomState
-  onSelect?: (objectId: string) => void
+  model: RoomModel
+  onSelect?: (objectId: ObjectId) => void
 }) {
-  const select = (id: string) => () => onSelect?.(id)
+  const { state } = model
+  const select = (_id: string) => () => undefined
 
   return (
-    <section className="flex flex-col gap-3">
+    /* Locked to the viewBox's 3:2 ratio so the hotspot percentages stay over the artwork at
+       every width, and capped at the viewport so a tall screen does not stretch it. */
+    <section className="relative mx-auto aspect-[3/2] max-h-dvh w-full">
       {/* viewBox and no width: it scales to its container at every breakpoint without a
           media query, which is §10's argument for hand-rolled SVG over an image. */}
       <svg
         data-testid="room-scene"
         viewBox="0 0 300 200"
-        className="w-full rounded-lg bg-slate-900/5"
+        className="absolute inset-0 h-full w-full rounded-lg bg-slate-900/5"
         aria-hidden="true"
         focusable="false"
       >
@@ -138,10 +143,35 @@ export function Room({
         <Character state={state.character} />
       </svg>
 
-      {/* §1.5: a primary view, in the document for everyone. */}
-      <p data-testid="room-text-equivalent" className="text-sm opacity-80">
-        {describeRoom(state)}
-      </p>
+      {/*
+        The controls. Real HTML buttons over the drawing rather than elements inside it --
+        see hotspots.ts for why. Rendered in the model's fixed order, so tabbing through the
+        room walks it in the same order the sidebar lists it.
+
+        Attention is named as well as drawn: §1.5's rule that colour alone cannot carry
+        meaning applies to furniture too, and a glow says nothing to somebody who cannot see
+        it.
+      */}
+      {model.rows.map((row) => {
+        const spot = isClutterId(row.id)
+          ? clutterHotspot(state.clutter.findIndex((box) => row.id.endsWith(box.id)))
+          : HOTSPOTS[row.id]
+
+        return (
+          <button
+            key={row.id}
+            type="button"
+            data-testid={`object-${row.id}`}
+            data-attention={String(row.attention)}
+            aria-label={row.attention ? `${row.label} — needs you` : row.label}
+            onClick={() => onSelect?.(row.id)}
+            style={spot}
+            className={`absolute rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+              row.attention ? 'ring-2 ring-amber-400 ring-offset-1' : ''
+            }`}
+          />
+        )
+      })}
     </section>
   )
 }

@@ -20,7 +20,7 @@ import { toDayInputs } from '../../optimizer'
 import { PreviewBanner } from '../auth/PreviewBanner'
 import { BlockConfirm } from '../calibration/BlockConfirm'
 import { CalibrationScreen } from '../calibration/CalibrationScreen'
-import { useCalibration } from '../calibration/useCalibration'
+import { useProfile } from '../useProfile'
 import { MicroStartCard } from '../microStart/MicroStartCard'
 import { PhotoImportScreen } from '../planner/PhotoImportScreen'
 import { PlannerScreen } from '../planner/PlannerScreen'
@@ -76,7 +76,7 @@ export function RoomShell({
   blockLog?: readonly BlockRecord[]
 }) {
   const { schedule, setSchedule } = useSchedule(repository)
-  const { profile, setProfile } = useCalibration(repository)
+  const { profile, setProfile } = useProfile(repository)
   const [view, setView] = useState<View>(ROOM)
   const [report, setReport] = useState<string | null>(null)
   const [working, setWorking] = useState(false)

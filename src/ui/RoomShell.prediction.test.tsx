@@ -53,12 +53,18 @@ describe('RoomShell scoring its own predictions', () => {
     })
   })
 
-  it('leaves the prediction unscored until somebody says how the day went', async () => {
+  // §8b: `umProfile` seeds predictions that are already resolved -- that is what lets the
+  // accuracy line publish a real number from the first render (see `RoomShell.microStart.test.tsx`).
+  // The pipeline's "unscored until reported" behaviour still holds for a claim nothing has
+  // seeded yet; `predictions.test.ts` covers `recordPrediction`/`resolvePrediction` directly
+  // for that. What this level can still promise is that the seed is exactly what shipped:
+  // a real, deliberately non-zero reported value, not an accidental null.
+  it('carries the seeded prediction already scored, rather than a placeholder', async () => {
     const repository = await renderHome()
 
     await waitFor(async () => {
       const saved = (await repository.loadSettings()).calibration?.predictions ?? []
-      expect(saved[0]?.reported).toBeNull()
+      expect(saved[0]?.reported).toBe(50)
     })
   })
 

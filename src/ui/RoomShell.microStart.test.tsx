@@ -106,10 +106,13 @@ describe('RoomShell with Micro-Start and the accuracy note', () => {
     )
   })
 
-  it('claims no accuracy before anything has been scored', async () => {
+  // §8b: the seeded profile carries real history now (see `umProfile`), so a fresh room is
+  // never a cold start for the accuracy line -- it has something to publish from the first
+  // render, which is the whole reason the fixture exists.
+  it('publishes a real accuracy number from the seeded profile rather than "not enough data"', async () => {
     await renderHome()
 
     await userEvent.click(screen.getByTestId('object-window'))
-    expect(screen.getByTestId('accuracy-measured').textContent).toMatch(/not enough data/i)
+    expect(screen.getByTestId('accuracy-measured').textContent).toMatch(/off by about 9\.8/i)
   })
 })

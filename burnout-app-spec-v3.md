@@ -22,7 +22,7 @@ Five promises, one feature cluster each. This structure is the spec, the build p
 | 4 | Start without paralysis | §4 |
 | 5 | Take breaks before burnout | §5 |
 
-Supporting: the engine (§6), calibration (§7), validation (§8), Malaysia specifics (§9), technical (§10), scope (§11), pitch (§12).
+Supporting: the engine (§6), calibration (§7), validation (§8), Malaysia specifics (§9), technical (§10), scope (§11), pitch (§12), the chat channel (§13).
 
 ### Standing requirements
 
@@ -568,10 +568,12 @@ A standing requirement (§0), not a polish pass. Build mobile-first at 390px and
 
 ### External dependencies
 
-Two, both free tier, both with hardcoded fallbacks:
+All free tier, all with hardcoded fallbacks:
 
 - **Groq** for the say-anything planner, Micro-Start, decline drafting and cost framing.
 - **Vision model** for OCR. Cache parsed results so nothing is called live on stage.
+- **Messaging channel** (§13) for the chat surface. The app must stay fully usable with the
+  bot switched off -- it is a second door, never the only one.
 - **Places (optional)** for get-outside, with a curated local list as fallback.
 
 ### Widget
@@ -584,7 +586,7 @@ A true home-screen widget is not available to PWAs on either platform. What is a
 |---|---|
 | 1–5, platform freedom | Web PWA, permitted |
 | 6, deployable | Vercel plus Supabase, public URL, installable to a real phone. **Deploy hello world on day one.** |
-| 7, third-party APIs | Two free-tier services, own keys, fallbacks |
+| 7, third-party APIs | Free-tier services only, own keys, a fallback for each (§10 external dependencies, §13.6) |
 | 8, know your internals | The reserve equation and efficiency curve explain in 20 seconds. **Every member must be able to do this**, not just whoever wrote it |
 | 9, core logic built during hackathon | Engine, optimizer, room, dial, planner all original |
 | 10, accessibility | Six items implemented properly, named specifically |
@@ -646,3 +648,152 @@ Then the credibility close:
 - "Your calendar tells you what you agreed to. This tells you whether you can survive it."
 - "The app doesn't remind students to rest. It makes resting the path of least resistance."
 - "It shouldn't just track and report. We don't track. We forecast, and then we act on it."
+
+---
+
+## 13. The chat channel
+
+### 13.1 Why a bot at all
+
+**The highest-value input path in this document depends on the least reliable delivery
+mechanism we have.** §7.9 calls post-block confirmation "the single highest value-per-effort
+input path in the app" -- two taps that feed Reality Check (§2.4), the carryover matrix
+(§6.6) and the Micro-Start trigger (§4.1) at once. It needs a notification to exist. §10
+concedes that per-block push cannot be scheduled from Vercel's free tier, that iOS PWA push
+requires 16.4+ *and* a home-screen install, and that no real widget is available to a PWA at
+all.
+
+A chat bot removes that whole class of problem. It reaches any phone, needs no install, has
+no OS version gate, and its prompt arrives as a message to reply to rather than as a
+notification the student must act on inside an app they have to open first.
+
+**This does not contradict §2.3.** The integration rejected there is the *Web Share Target
+API* -- a browser feature, Android-only, unsupported on iOS. A bot is a different mechanism
+and inherits none of that objection. §2.3's actual rule, that the app never declines
+autonomously, holds here unchanged and is restated in §13.4.
+
+**The bot is a second door, never the only one.** Every flow below already exists in the
+app, or is specced to. Nothing may become bot-only: a student without the bot must lose no
+capability, and a channel outage must never take the product down.
+
+### 13.2 Telegram or WhatsApp
+
+> **Team decision required.** These pull in opposite directions and the answer changes the
+> build. Recommendation below; decide before writing the adapter.
+
+| | Telegram | WhatsApp |
+|---|---|---|
+| Proactive messages | Unrestricted once the student starts the bot | **Only within 24h of their last message**, otherwise pre-approved templates only |
+| Cost | Free | Templates are billable, and categorised |
+| Time to first message | Minutes, a token from BotFather | Days if verifying a business; minutes on a sandbox with a join code |
+| Interface | Inline keyboards, effectively unlimited | Three quick-reply buttons, or a ten-item list |
+| Account linking | A deep link carrying a token, one tap | A code the student must send back |
+| **Where Malaysian students already are** | **Smaller** | **Dominant** |
+
+**The tension is real and worth stating plainly.** Telegram is the better engineering choice
+by some distance: free, instant, and -- critically -- it does not restrict proactive
+messaging, which is the entire point of a product built on nudges (§5.2) and check-ins
+(§7.9). WhatsApp's 24-hour window fights the core of what this app does.
+
+WhatsApp is the better *product* choice, because it is where the students in the brief
+actually are. §1.4 already observes that a shift roster arrives "as a photo in a group
+chat" -- that is a WhatsApp behaviour, and forwarding is native there in a way it is not
+elsewhere.
+
+**Recommendation: build on Telegram, name WhatsApp as the target, and put one adapter
+between the flows and the transport.** The flows in §13.3 are identical either way; only
+delivery differs. That makes the channel a configuration decision rather than a rewrite, and
+it means a demo cannot be lost to a verification queue.
+
+**Have the answer ready for a judge who asks why not WhatsApp**, because one will: the
+24-hour window, template billing, and business-verification lead time -- and the adapter
+that makes it a swap rather than a rebuild.
+
+### 13.3 What the bot does
+
+Every flow is an existing part of the product reached through a different door. None is new
+behaviour, and none may bypass the confirmation rules in §3.2.
+
+**Post-block confirmation (§7.9).** "Did the 7pm study block happen?" with *yes / no /
+partly*, and the two-tap difficulty rating riding on the same prompt. This is the flow that
+justifies the channel: without it, Reality Check has no data source at all.
+
+**Brain dump (§3.1).** A message or a **voice note**, parsed into structured items and
+returned as something to confirm before any of it counts. Voice is already wanted in §3.1 as
+an accessibility win; in a chat app it is simply how a thought gets sent, rather than a
+feature to build.
+
+**Photo import (§1.4).** Forward a timetable, an assignment brief, a shift roster, or a
+photographed planner page. Same vision pipeline, same confirm step. Forwarding from the group
+chat the photo arrived in removes every step between seeing it and importing it.
+
+**Retroactive fill (§7.9).** "Yesterday looks like it went to plan, correct?" One reply
+confirms the day. This is what recovers data from students who ignore prompts, and it is
+cheap once the channel exists.
+
+**Recovery nudge (§5.2).** One option, sized to the real gap, matched to the depleted type.
+One option only, for the reason §5.2 already gives: a depleted person cannot choose from a
+menu.
+
+**Micro-Start (§4.1).** "Can't start this" as a message, answered with one concrete action
+under ten minutes.
+
+**Request pricing (§2.3).** Forward an incoming ask; get back what it costs in what gets
+given up, and a drafted reply. The draft is text the student copies and sends themselves.
+
+### 13.4 What the bot must never do
+
+- **Commit anything unconfirmed.** §3.2 applies unchanged: parsed items are proposals until
+  the student approves them. A chat interface makes silent commitment easier, which is
+  exactly why the rule matters more here.
+- **Decline, send, or reply on the student's behalf.** §2.3: the app does the *work* of
+  declining and the student keeps the *decision*. A bot that can send messages must still
+  never send that one.
+- **Renew or accept anything unattended.** ADR-0008's stance, restated for a channel where
+  it would be easy to forget.
+- **Carry the room or the dial.** Those are visual and glanceable by design (§1.1). Send a
+  deep link into the app instead.
+- **Treat a phone number or chat id as an identity.** See §13.5.
+- **Scold.** §1.3's gamification rule and §7.9's "never punish a miss" both hold. A missed
+  block gets a neutral answer, not a comment.
+
+### 13.5 Linking an account
+
+A phone number or chat id is a claim, not proof. The app shows a short-lived code; the
+student sends it to the bot; the bot links that chat to the signed-in account. §13.2 notes
+Telegram can carry this in a deep link instead, which is one tap rather than a copy.
+
+Until a chat is linked it may do nothing that touches an account. Unlinking is available from
+the app, and signing out must not silently leave a linked chat able to read a week.
+
+### 13.6 Technical shape
+
+- **Inbound is a webhook into a Vercel function** (§10 Deployment): a short request and a
+  short response, exactly what serverless is good at. No second host, and no change to the
+  Vercel-only decision.
+- **Verify every inbound payload's signature**, and treat message content as untrusted input
+  crossing a trust boundary. It is the most exposed surface in the product, because anyone at
+  all can message a bot.
+- **Outbound scheduling is not Vercel's.** Per-block prompts need minute granularity, which
+  free-tier cron does not have. Supabase `pg_cron` plus an Edge Function -- the same
+  conclusion §10 reaches for push.
+- **One adapter between the flows and the transport**, per §13.2, so the channel stays a
+  configuration decision.
+- **The bot degrades to nothing.** Switched off, or with its API down, the app is exactly the
+  app: no flow becomes unreachable, matching how every other external dependency in §10 is
+  treated.
+
+### 13.7 Scope, honestly
+
+All seven flows in §13.3 is a second product, and this document's own build order (§10) has
+four days in it. The channel is worth specifying whole and building narrow.
+
+- **Must build, if the channel is attempted at all:** account linking (§13.5), and **one**
+  flow end to end. Post-block confirmation is the highest product value; brain-dump-by-voice
+  is the better demo beat. Which one is a **team decision**.
+- **If time allows:** photo forwarding, retroactive fill, recovery nudges.
+- **Roadmap slide:** Micro-Start over chat, request pricing and drafted declines, and the
+  WhatsApp transport itself if the build ran on Telegram.
+
+**A live bot on stage needs a network, a phone and a linked account.** Rehearse it, and keep
+a seeded fallback, in the same spirit as §10's rule that nothing is called live on stage.

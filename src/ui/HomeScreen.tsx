@@ -4,9 +4,13 @@ import { DEFAULT_PARAMS, floorReserve, overallReserve, project } from '../engine
 import { describeRebalance, makeRng, rebalance, toDayInputs } from '../optimizer'
 import { addItems } from '../domain/addItems'
 import { accept, lapsed } from '../domain/commitments'
+import { freeGapOn, prescribe } from '../domain/prescribe'
+import { attemptsIn, recordAttempt } from '../domain/recoveryLog'
+import { scheduleRecovery } from '../domain/scheduleRecovery'
 import { completeItem, deferItem } from '../domain/scheduleEdits'
 import { PhotoImportScreen } from './planner/PhotoImportScreen'
 import { PlannerScreen } from './planner/PlannerScreen'
+import { Prescription } from './recovery/Prescription'
 import { LapsedNotice } from './request/LapsedNotice'
 import { RequestBoxScreen } from './request/RequestBoxScreen'
 import { AccountBar } from './auth/AccountBar'
@@ -184,6 +188,14 @@ export function HomeScreen({
         />
       )}
 
+      {/* §5.2: one thing to do, beside the room rather than instead of it -- replacing the
+          room with advice would take away the thing the student came to look at. */}
+      <Prescription
+        prescription={prescribe(schedule, attemptsIn(schedule))}
+        onAccept={(suggestion) => setSchedule(scheduleRecovery(schedule, suggestion))}
+        onDismiss={(suggestion) => setSchedule(recordAttempt(schedule, suggestion.kind, false))}
+      />
+
       {/* §1.1: the room is the surface; the dial sits in one corner as a compact
           readout. §10: at phone width it stacks above rather than sitting beside. */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -210,6 +222,20 @@ export function HomeScreen({
           }}
           onDefer={(id) => {
             setSchedule(deferItem(schedule, id))
+            setSelected(null)
+          }}
+          gapHours={freeGapOn(schedule, 0)}
+          onChooseOuting={(outing) => {
+            setSchedule(
+              scheduleRecovery(schedule, {
+                title: outing.title,
+                type: 'physical',
+                kind: 'lightExercise',
+                hours: outing.hours,
+                dayIndex: 0,
+                startHour: 16,
+              }),
+            )
             setSelected(null)
           }}
           onClose={() => setSelected(null)}

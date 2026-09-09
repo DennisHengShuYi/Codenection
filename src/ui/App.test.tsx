@@ -35,7 +35,7 @@ describe('App', () => {
       expect(screen.getByRole('button', { name: /look around/i })).toBeVisible(),
     )
     await userEvent.click(screen.getByRole('button', { name: /look around/i }))
-    await waitFor(() => expect(screen.getByRole('status')).toBeVisible())
+    await waitFor(() => expect(screen.getByTestId('preview-banner')).toBeVisible())
 
     await userEvent.click(screen.getByRole('button', { name: /create an account to keep it/i }))
 
@@ -52,8 +52,11 @@ describe('App', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /look around/i }))
 
+    // Queried by test id rather than by the status role: the prescription (§5.2) is also a
+    // live region, and two of those on one page is correct ARIA rather than a bug. A query
+    // that assumed it was the only one broke the moment a second legitimately appeared.
     await waitFor(() =>
-      expect(screen.getByRole('status')).toHaveTextContent(/not being saved/i),
+      expect(screen.getByTestId('preview-banner')).toHaveTextContent(/not being saved/i),
     )
   })
 })

@@ -3,6 +3,7 @@ import type { Repository, Session } from '../data'
 import { DEFAULT_PARAMS, floorReserve, overallReserve, project } from '../engine'
 import { describeRebalance, makeRng, rebalance, toDayInputs } from '../optimizer'
 import { addItems } from '../domain/addItems'
+import { padEstimates, paddingTable } from '../domain/applyPadding'
 import { accept, lapsed } from '../domain/commitments'
 import { freeGapOn, prescribe } from '../domain/prescribe'
 import { attemptsIn, recordAttempt } from '../domain/recoveryLog'
@@ -121,7 +122,10 @@ export function HomeScreen({
     return (
       <PlannerScreen
         onAccept={(items) => {
-          setSchedule(addItems(schedule, items))
+          // §2.4 applied silently: a student who consistently overruns gets a week built on
+          // what their work actually costs, not on what they hoped. They are told the
+          // conclusion on the how-you-work screen rather than asked to do the maths.
+          setSchedule(addItems(schedule, padEstimates(items, paddingTable(profile.confirmations))))
           setPlanning(false)
         }}
         onCancel={() => setPlanning(false)}
@@ -135,7 +139,7 @@ export function HomeScreen({
     return (
       <PhotoImportScreen
         onAccept={(items) => {
-          setSchedule(addItems(schedule, items))
+          setSchedule(addItems(schedule, padEstimates(items, paddingTable(profile.confirmations))))
           setPhotographing(false)
         }}
         onCancel={() => setPhotographing(false)}
@@ -165,7 +169,8 @@ export function HomeScreen({
           // Today is 0 because the engine is pure and has no calendar; day 0 is "now"
           // everywhere else in the model. A real clock is its own change, not one to
           // smuggle in here.
-          setSchedule(accept(schedule, item, 0))
+          const [padded] = padEstimates([item], paddingTable(profile.confirmations))
+          setSchedule(accept(schedule, padded ?? item, 0))
           setRequesting(false)
         }}
         onCancel={() => setRequesting(false)}

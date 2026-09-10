@@ -8,6 +8,12 @@
       "includeFiles": "src/**"
     }
   },
+  "crons": [
+    {
+      "path": "/api/daily",
+      "schedule": "0 1 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/((?!api/).*)",

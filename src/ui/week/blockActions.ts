@@ -89,7 +89,7 @@ export function blockSheet({
   return {
     item,
     actions,
-    microStart: isStuck(item, 0, daysWaiting) ? firstAction(item) : null,
+    microStart: isStuck(item, daysWaiting) ? firstAction(item) : null,
     recordedAnswer: actions.includes('undo')
       ? (blockLog.find((record) => record.blockId === item.id)?.answer ?? null)
       : null,

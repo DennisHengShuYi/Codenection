@@ -179,7 +179,6 @@ export function roomModel({ schedule, profile, today, blockLog = [] }: RoomModel
           deadlineDay: null,
           protectedRest: false,
         },
-        0,
         Math.max(0, box.dayIndex - today),
       )
 

@@ -217,10 +217,15 @@ Runs the existing hill-climb solver, reports in plain English, plays the tidy-up
 After a run the overview redraws and the open day stays open, so the change is visible in both
 at once.
 
-**`smallestFix` becomes its fallback**, not a feature of its own. When the solver cannot
-improve the fortnight, Rebalance says so and offers the single most useful move instead.
-§2.5 warns this is the likely case for a real final-year student, which makes it the more
-honest headline rather than a consolation prize.
+**`smallestFix` becomes its fallback**, not a feature of its own. It does not exist for the
+case where there is nothing left to move at all — with no candidates, both searches come back
+empty and `describeRebalance` already has its own honest line for that ("nothing left to move,
+this fortnight is beyond what rearranging can fix"). It exists for the narrower, more common
+case: the hill climb rejects every candidate under its own objective — usually on fragmentation
+or floor grounds — while at least one of those same candidates would still measurably help the
+student (fewer days in deficit, a higher floor). Rebalance then says it found nothing, and
+offers that one move instead. §2.5 warns this is the likely case for a real final-year student,
+which makes it the more honest headline rather than a consolation prize.
 
 ---
 

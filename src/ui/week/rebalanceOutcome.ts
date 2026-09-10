@@ -12,9 +12,18 @@ import {
  * §4: rebalance, and what to say when it cannot help.
  *
  * `smallestFixes` has been built and tested since the optimizer landed and has never been
- * reachable from any screen. §2.5 warns that a real final-year student's movable set may be
- * almost empty -- so "your fortnight has nothing to move, but here is the one thing that
- * would help most" is not a consolation prize, it is the more likely headline.
+ * reachable from any screen.
+ *
+ * This is not for an almost-empty movable set -- with no candidates, `neighbours()` comes
+ * back empty for both searches, `smallestFixes` finds nothing either, and that case is
+ * already `describeRebalance`'s own line for an overloaded week with nothing to move. It is
+ * for the case where there *are* movable candidates but the hill climb rejects all of them
+ * under `score` (usually on fragmentation or floor grounds), while at least one of those
+ * same candidates still measurably helps the student under `smallestFixes`' own ranking --
+ * see `smallestFix.ts` for why the two rankings deliberately disagree. §2.5 warns this is
+ * the likely case for a real final-year student, so "your fortnight has nothing to move,
+ * but here is the one thing that would help most" is not a consolation prize, it is the
+ * more likely headline.
  */
 export interface RebalanceOutcome {
   /** The week to adopt. Unchanged from the input when the solver found nothing. */

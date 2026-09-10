@@ -50,7 +50,11 @@ export function LapsedNotice({
       {commitments.map((commitment) => (
         <div key={commitment.id} data-testid={`lapsed-item-${commitment.id}`} className="flex flex-col gap-1">
           <p className="text-sm font-medium">{commitment.title}</p>
-          <Field label="Withdrawal message">
+          {/* The label is redundant with the sentence directly above -- "Here is what you
+              could send" already says what this box is, at an emotionally loaded moment
+              that does not need it repeated. Hidden visually only: the accessible name
+              stays for a screen-reader user. */}
+          <Field label="Withdrawal message" hideLabel>
             <textarea
               data-testid={`withdrawal-${commitment.id}`}
               defaultValue={withdrawalFor(commitment)}

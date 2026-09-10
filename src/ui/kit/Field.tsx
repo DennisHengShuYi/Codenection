@@ -12,11 +12,21 @@ export function Field({
   help,
   error,
   children,
+  hideLabel = false,
 }: {
   label: string
   help?: string
   error?: string
   children: ReactElement<{ id?: string; 'aria-describedby'?: string; 'aria-invalid'?: boolean }>
+  /**
+   * Keeps the accessible name but hides the label visually. For a control whose
+   * surrounding copy already says what it is -- `LapsedNotice`'s "Withdrawal message",
+   * sitting directly under a sentence that already named it -- a visible label repeats
+   * something the student just read, at a moment (withdrawing from a commitment) that is
+   * already asking enough of them. The label stays in the accessibility tree either way,
+   * so nothing is lost for a screen-reader user; only the sighted repetition goes.
+   */
+  hideLabel?: boolean
 }) {
   const id = useId()
   const noteId = `${id}-note`
@@ -26,7 +36,7 @@ export function Field({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium text-ink">
+      <label htmlFor={id} className={hideLabel ? 'sr-only' : 'text-sm font-medium text-ink'}>
         {label}
       </label>
 

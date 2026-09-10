@@ -24,19 +24,29 @@ const SIZES: Record<ButtonSize, string> = {
   sm: 'min-h-11 px-3 py-2 text-sm',
 }
 
+/** The one default look, shared by `Button` and `buttonClassName` rather than repeated as
+ *  two separate parameter defaults -- two defaults that happen to agree today have no
+ *  reason to keep agreeing once a second non-button call site wants a different one. */
+const DEFAULT_VARIANT: ButtonVariant = 'primary'
+const DEFAULT_SIZE: ButtonSize = 'lg'
+
 /**
  * The class list `Button` renders, exported so a control that genuinely cannot be a
  * `<button>` -- a navigation `<a>`, which a real `<button>` would break for middle-click
  * and open-in-new-tab -- can still look identical instead of retyping this string an
  * eighteenth time. `LinkTelegram`'s "Open Telegram" link uses this.
  */
-export function buttonClassName(variant: ButtonVariant = 'primary', size: ButtonSize = 'lg', className = ''): string {
+export function buttonClassName(
+  variant: ButtonVariant = DEFAULT_VARIANT,
+  size: ButtonSize = DEFAULT_SIZE,
+  className = '',
+): string {
   return `inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60 motion-reduce:transition-none ${VARIANTS[variant]} ${SIZES[size]} ${className}`
 }
 
 export function Button({
-  variant = 'primary',
-  size = 'lg',
+  variant = DEFAULT_VARIANT,
+  size = DEFAULT_SIZE,
   className = '',
   type = 'button',
   ...rest

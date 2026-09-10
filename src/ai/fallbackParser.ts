@@ -80,6 +80,12 @@ const PHYSICAL_LIGHT_WORDS = ['walk', 'yoga']
  *
  * If these lists ever take a value from outside this file, that reasoning is void.
  */
+// Triaged, not ignored. Semgrep reads the interpolation and warns about ReDoS from an
+// injected pattern, but `word` is never user input: all three call sites pass a literal from
+// a module-level constant (`SIGNALS`, `PHYSICAL_LIGHT_WORDS`, `REST_WORDS`). The student's
+// text is `lower`, the haystack, and `\bword\b` has no nested quantifier to backtrack on. If
+// a signal word ever comes from anywhere but a constant in this file, this stops being true.
+// nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
 const hasSignalWord = (lower: string, word: string): boolean => new RegExp(`\\b${word}\\b`).test(lower)
 
 /** Splits on the punctuation people actually use in a dump. */

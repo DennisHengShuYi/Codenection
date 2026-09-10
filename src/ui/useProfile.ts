@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { DEFAULT_SETTINGS, type Repository } from '../data'
+import { DEFAULT_SETTINGS, type Repository, type Session } from '../data'
 import { DEFAULT_PROFILE, type CalibrationProfile } from '../domain/calibration'
 import { umBlockLog } from '../fixtures/umBlockLog'
 import { umProfile } from '../fixtures/umProfile'
@@ -24,8 +24,17 @@ const seedAnchor = (): string => new Date().toISOString().split('T')[0] ?? '2026
  *
  * Applied on screen whether or not it persists, for the same reason: a student who picks a
  * mode should see it selected even if the write fails.
+ *
+ * `session` gates the demo seed. §14 step 0 wants a session-less preview to open on a week
+ * with history rather than "not enough data", but that seed is fabricated -- invented
+ * predictions and ~20 invented `BlockRecord`s tuned to read as measured. A signed-in
+ * account is a real student, not a preview, so `session !== null` skips the seed entirely
+ * and a real first run starts from `DEFAULT_PROFILE` and an empty log, honestly.
  */
-export function useProfile(repo: Repository): {
+export function useProfile(
+  repo: Repository,
+  session: Session | null = null,
+): {
   profile: CalibrationProfile
   setProfile: (next: CalibrationProfile) => void
 } {
@@ -44,10 +53,11 @@ export function useProfile(repo: Repository): {
         // reference, so a legacy blob missing the field and a brand-new install both land
         // here and both get the seed rather than the empty default.
         // §14 step 0: a profile with history, so §8's accuracy line has something to publish
-        // on first open rather than "not enough data" for the whole demo.
+        // on first open rather than "not enough data" for the whole demo -- but only for a
+        // session-less preview. A real signed-in student never gets the fabricated seed.
         const calibration = saved.calibration
-        const needsSeed = calibration === undefined || calibration === DEFAULT_PROFILE
-        const resolved = needsSeed ? umProfile(seedAnchor()) : calibration
+        const needsSeed = session === null && (calibration === undefined || calibration === DEFAULT_PROFILE)
+        const resolved = needsSeed ? umProfile(seedAnchor()) : (calibration ?? DEFAULT_PROFILE)
 
         if (!cancelled) setLocal(resolved)
 
@@ -63,25 +73,29 @@ export function useProfile(repo: Repository): {
     // empty log is a fresh install, not a student with no history. Fire-and-forget and kept
     // independent of the profile load: a failure here must not stop the profile from
     // resolving, the same reasoning that makes the save below fire-and-forget too.
-    repo
-      .loadBlockLog()
-      .then(async (log) => {
-        if (log.length > 0) return
-        // Sequential, not `Promise.all`: `recordBlockAnswer` is a read-modify-write over
-        // one stored array, and firing every seed record at once let each read the same
-        // near-empty snapshot before any `set` landed, so only the last writer survived.
-        // Awaiting one at a time makes each write start from the result of the one before
-        // it, the same guarantee `repositoryContract.ts` now asserts for adapters directly.
-        for (const record of umBlockLog(seedAnchor())) {
-          await repo.recordBlockAnswer(record)
-        }
-      })
-      .catch(() => undefined)
+    // Gated on `session === null` for the same reason as the profile seed above: a real
+    // account must never receive fabricated history.
+    if (session === null) {
+      repo
+        .loadBlockLog()
+        .then(async (log) => {
+          if (log.length > 0) return
+          // Sequential, not `Promise.all`: `recordBlockAnswer` is a read-modify-write over
+          // one stored array, and firing every seed record at once let each read the same
+          // near-empty snapshot before any `set` landed, so only the last writer survived.
+          // Awaiting one at a time makes each write start from the result of the one before
+          // it, the same guarantee `repositoryContract.ts` now asserts for adapters directly.
+          for (const record of umBlockLog(seedAnchor())) {
+            await repo.recordBlockAnswer(record)
+          }
+        })
+        .catch(() => undefined)
+    }
 
     return () => {
       cancelled = true
     }
-  }, [repo])
+  }, [repo, session])
 
   function setProfile(next: CalibrationProfile) {
     setLocal(next)

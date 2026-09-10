@@ -1,9 +1,11 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { createLocalRepository, DEFAULT_SETTINGS } from '../data'
+import { createLocalRepository, DEFAULT_SETTINGS, type Session } from '../data'
 import { DEFAULT_PROFILE, type CalibrationProfile } from '../domain/calibration'
 import { umBlockLog } from '../fixtures/umBlockLog'
 import { useProfile } from './useProfile'
+
+const session: Session = { userId: 'student-1', email: 'student@example.edu' }
 
 let counter = 0
 
@@ -88,6 +90,24 @@ describe('useProfile', () => {
         { forDate: '2026-09-01', predicted: 40, reported: 35 },
       ]),
     )
+  })
+
+  /**
+   * CRITICAL: seeding was gated only on "the log is empty", not on whether this is a real
+   * session. A real student signing up got ~20 invented `BlockRecord`s and a fabricated
+   * profile written into their live account, printed back as though it were measured
+   * history. Seeding is a demo-only convenience (§14 step 0 for a session-less preview) and
+   * must never fire for a signed-in account.
+   */
+  it('does not seed a fabricated profile or block log for a real signed-in first run', async () => {
+    const repository = repo()
+    await repository.clear()
+
+    const { result } = renderHook(() => useProfile(repository, session))
+
+    // Give any (wrongly) fired seed a chance to land before asserting it didn't.
+    await waitFor(() => expect(result.current.profile).toEqual(DEFAULT_PROFILE))
+    expect(await repository.loadBlockLog()).toEqual([])
   })
 
   it('does not reseed the block log when one already exists', async () => {

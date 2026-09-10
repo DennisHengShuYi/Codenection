@@ -78,7 +78,7 @@ export function RoomShell({
   onAnswerBlock: (record: BlockRecord) => void
 }) {
   const { schedule, setSchedule } = useSchedule(repository)
-  const { profile, setProfile } = useProfile(repository)
+  const { profile, setProfile } = useProfile(repository, session)
   const [view, setView] = useState<View>(ROOM)
   const [report, setReport] = useState<string | null>(null)
   const [fallback, setFallback] = useState<Fix | null>(null)
@@ -194,7 +194,7 @@ export function RoomShell({
   const recoveryPrescription = prescribe(week)
   const lapsedCommitments = lapsed(week, today, params)
   const stuckItem = week.items.find(
-    (item) => item.id !== stuckDismissedId && isStuck(item, 0, Math.max(0, today - item.dayIndex)),
+    (item) => item.id !== stuckDismissedId && isStuck(item, Math.max(0, today - item.dayIndex)),
   )
   const blockForToday = blockToAsk({ schedule: week, today, blockLog })
   const askEnergy = profile.predictions.some(

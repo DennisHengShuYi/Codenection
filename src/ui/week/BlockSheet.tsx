@@ -1,9 +1,7 @@
 import { useState, type JSX } from 'react'
-import { firstAction, type MicroStart } from '../../domain/microStart'
 import { IN_THEIR_WORDS } from '../../domain/realityCheck'
 import type { BlockAnswer } from '../../domain/blockLog'
 import { Button, type ButtonVariant } from '../kit/Button'
-import { Card } from '../kit/Card'
 import { hourLabel } from '../kit/labels'
 import { Sheet } from '../kit/Sheet'
 import type { BlockAction, BlockSheetModel } from './blockActions'
@@ -38,15 +36,6 @@ const isSimpleAction = (action: BlockAction): action is SimpleAction =>
 const whenText = (item: BlockSheetModel['item']): string =>
   `${hourLabel(item.startHour)}–${hourLabel(item.startHour + item.hours)} · ${IN_THEIR_WORDS[item.type]} · ${item.hours} hours`
 
-function MicroStartCard({ microStart }: { readonly microStart: MicroStart }): JSX.Element {
-  return (
-    <Card tone="calm" data-testid="micro-start" className="mt-4">
-      <p>{microStart.action}</p>
-      <p>{microStart.minutes} minutes. That is the whole ask.</p>
-    </Card>
-  )
-}
-
 export function BlockSheet({
   model,
   onClose,
@@ -57,6 +46,7 @@ export function BlockSheet({
   onRested,
   onEdit,
   onRemove,
+  onMicroStart,
 }: {
   readonly model: BlockSheetModel
   readonly onClose: () => void
@@ -71,15 +61,11 @@ export function BlockSheet({
   readonly onEdit: (itemId: string) => void
   /** Takes the block out of the week. Called only after the confirmation below. */
   readonly onRemove: (itemId: string) => void
+  /** §4.1's manual trigger: opens the ladder for this block on a page of its own. */
+  readonly onMicroStart: (itemId: string) => void
 }): JSX.Element {
-  const [revealed, setRevealed] = useState(false)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
-  const { item, actions, microStart: given, recordedAnswer } = model
-
-  // §4.1's manual trigger: "I can't start this" reveals a first move even for a block the
-  // domain has not (yet) called stuck. A block already flagged stuck arrives with `given` set
-  // and is shown unasked -- clicking here would have nothing new to add.
-  const microStart = given ?? (revealed ? firstAction(item) : null)
+  const { item, actions, recordedAnswer } = model
 
   const simpleHandlers: Record<SimpleAction, (itemId: string) => void> = {
     done: onDone,
@@ -122,9 +108,12 @@ export function BlockSheet({
         </>
       )}
 
-      {actions.includes('cantStart') && (
-        <Button variant="quiet" onClick={() => setRevealed(true)}>
-          I can't start this
+      {/* §4.1's manual trigger, and now on every block. It asks for no explanation, which
+          is the whole point: being asked why you are stuck is one more thing to be stuck
+          on. */}
+      {actions.includes('microStart') && (
+        <Button variant="secondary" data-testid="micro-start" onClick={() => onMicroStart(item.id)}>
+          Micro start
         </Button>
       )}
 
@@ -195,8 +184,6 @@ export function BlockSheet({
             : `You said: ${CONFIRM_LABELS[recordedAnswer]}`}
         </p>
       )}
-
-      {microStart !== null && <MicroStartCard microStart={microStart} />}
     </Sheet>
   )
 }

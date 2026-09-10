@@ -1,5 +1,4 @@
 import { answeredIds, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
-import { firstAction, isStuck, type MicroStart } from '../../domain/microStart'
 import type { Schedule, ScheduledItem } from '../../optimizer'
 
 /**
@@ -19,7 +18,7 @@ import type { Schedule, ScheduledItem } from '../../optimizer'
 export type BlockAction =
   | 'done'
   | 'later'
-  | 'cantStart'
+  | 'microStart'
   | 'confirm'
   | 'undo'
   | 'didRest'
@@ -35,13 +34,19 @@ export type BlockAction =
  * own week -- a cancelled class, a tutorial that turned out to be two hours -- is right to
  * be able to do that on a fixed block, on protected rest, and on last Tuesday. The form says
  * what each of those costs; it does not refuse.
+ *
+ * `microStart` joins them for that reason and one more. §4.1's manual trigger used to be
+ * hidden on fixed blocks, on protected rest and on anything past -- which is to say it was
+ * hidden on a good share of what a student is actually stuck on: the lab report for
+ * Tuesday's fixed lab, the errand that was due last week. What made hiding it feel safe was
+ * §5.1's protected recovery, and that protection now lives where it belongs -- in what the
+ * rest and sleep chains SAY (see `ruleLadder`) -- rather than in a missing button.
  */
-const MANUAL: readonly BlockAction[] = ['edit', 'remove']
+const MANUAL: readonly BlockAction[] = ['microStart', 'edit', 'remove']
 
 export interface BlockSheetModel {
   readonly item: ScheduledItem
   readonly actions: readonly BlockAction[]
-  readonly microStart: MicroStart | null
   /**
    * What the student said, when `actions` is `['undo']`. Null otherwise.
    *
@@ -84,7 +89,7 @@ const actionsFor = (
   // app the class itself changed.
   if (item.fixed) return ['done', ...MANUAL]
 
-  return ['done', 'later', 'cantStart', ...MANUAL]
+  return ['done', 'later', ...MANUAL]
 }
 
 export function blockSheet({
@@ -103,16 +108,11 @@ export function blockSheet({
   // and the id in the open view no longer exists.
   if (item === undefined) return null
 
-  // How long it has been *waiting*, not how long until it is due. `item.dayIndex - today` is
-  // the wait *ahead* of a task, and using it reported a fortnight-out errand as sixteen days
-  // overdue -- the same bug roomModel already had to fix.
-  const daysWaiting = Math.max(0, today - item.dayIndex)
   const actions = actionsFor(item, blockLog, today)
 
   return {
     item,
     actions,
-    microStart: isStuck(item, daysWaiting) ? firstAction(item) : null,
     recordedAnswer: actions.includes('undo')
       ? (blockLog.find((record) => record.blockId === item.id)?.answer ?? null)
       : null,

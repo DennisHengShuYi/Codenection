@@ -248,8 +248,7 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         deadlineDay: null,
         protectedRest: false,
       },
-      actions: ['done', 'later', 'cantStart'],
-      microStart: null,
+      actions: ['done', 'later', 'microStart'],
       recordedAnswer: null,
     }
 
@@ -264,6 +263,7 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         onRested={vi.fn()}
         onEdit={vi.fn()}
         onRemove={vi.fn()}
+        onMicroStart={vi.fn()}
       />,
     )
 

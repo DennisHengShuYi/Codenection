@@ -18,8 +18,7 @@ const model = (over: Partial<BlockSheetModel> = {}): BlockSheetModel => ({
     deadlineDay: null,
     protectedRest: false,
   },
-  actions: ['done', 'later', 'cantStart'],
-  microStart: null,
+  actions: ['done', 'later', 'microStart'],
   recordedAnswer: null,
   ...over,
 })
@@ -34,6 +33,7 @@ const setup = (over: Partial<BlockSheetModel> = {}) => {
     onRested: vi.fn(),
     onEdit: vi.fn(),
     onRemove: vi.fn(),
+    onMicroStart: vi.fn(),
   }
   render(<BlockSheet model={model(over)} {...handlers} />)
   return handlers
@@ -107,22 +107,23 @@ describe('BlockSheet', () => {
     expect(screen.getByTestId('rested-no')).toHaveTextContent("I didn't")
   })
 
-  it('shows the micro-start unasked when one is offered', () => {
-    setup({ microStart: { itemId: 'essay', action: 'Open the document and write the title.', minutes: 8 } })
+  it('opens the micro-start page for this block', async () => {
+    const handlers = setup()
 
-    expect(screen.getByTestId('micro-start')).toHaveTextContent('Open the document')
-    expect(screen.getByTestId('micro-start')).toHaveTextContent('8 minutes. That is the whole ask.')
+    await userEvent.click(screen.getByTestId('micro-start'))
+
+    expect(handlers.onMicroStart).toHaveBeenCalledWith('essay')
   })
 
-  it('reveals the micro-start when "I can\'t start this" is pressed and none was already shown', async () => {
-    setup({ actions: ['done', 'later', 'cantStart'], microStart: null })
+  // The inline reveal is gone. Two ways to a first move is two answers that can disagree
+  // about the same block, and only one of them can be the model's.
+  it('no longer reveals a micro-start inside the sheet', () => {
+    setup()
 
-    expect(screen.queryByTestId('micro-start')).not.toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('button', { name: "I can't start this" }))
-
-    expect(screen.getByTestId('micro-start')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: "I can't start this" })).not.toBeInTheDocument()
+    expect(screen.queryByText(/that is the whole ask/i)).not.toBeInTheDocument()
   })
+
 
   it('says the block type in the same words Reality Check uses', () => {
     setup({ item: { ...model().item, type: 'social' } })

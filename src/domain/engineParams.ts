@@ -53,12 +53,17 @@ export function paramsFor(
   // Two independent learners over two different measurements: what the student's estimates
   // do, and what recovery does for them. Neither may disturb the other, which is why they
   // are composed here rather than folded into one correction.
-  const { sleep, rest } = recoveryScales(predictions)
+  const { sleep, rest, socialContact, isolation } = recoveryScales(predictions)
 
   return {
     ...DEFAULT_PARAMS,
     estimateBias,
     kSleep: scaledReserves(DEFAULT_PARAMS.kSleep, sleep),
     kRest: scaledReserves(DEFAULT_PARAMS.kRest, rest),
+    // §18's other two learnable coefficients. Both are plain scalars rather than per-type
+    // maps, so there is no load-bearing zero to preserve here -- but see `scaledReserves`
+    // for why that mattered so much on the two above.
+    kSocialContact: DEFAULT_PARAMS.kSocialContact * socialContact,
+    isolationDrainPerDay: DEFAULT_PARAMS.isolationDrainPerDay * isolation,
   }
 }

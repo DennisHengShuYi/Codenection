@@ -181,3 +181,96 @@ describe('recoveryScales', () => {
     expect(JSON.stringify(before)).toBe(snapshot)
   })
 })
+
+/**
+ * §18: `estimateBias` was the only parameter that learned, and this pass added `kSleep` and
+ * `kRest`. The list names four more. Two of them can be learned honestly from a scalar
+ * prediction and two cannot, and saying which is which is the point.
+ *
+ * `kSocialContact` and `isolationDrainPerDay` both move the social reserve continuously, so
+ * a residual can be attributed to either the same way sleep and rest already are.
+ * `typeIntensity` is four numbers and one scalar cannot separate them.
+ * `socialFloorHoursPerDay` is a threshold: its derivative is zero everywhere except a cliff,
+ * so a finite difference reads either nothing or nonsense.
+ */
+describe('recoveryScales, the social coefficients', () => {
+  const socialSample = (index: number, residual: number): EnergyPrediction => ({
+    forDate: `2026-10-${String(index + 1).padStart(2, '0')}`,
+    predicted: 50,
+    reported: 50 + residual,
+    basis: {
+      assumedSleepHours: 5,
+      assumedRestHours: 0,
+      sleepScaleSensitivity: 0,
+      restScaleSensitivity: 0,
+      socialScaleSensitivity: 10,
+      isolationScaleSensitivity: 0,
+    },
+  })
+
+  const isolationSample = (index: number, residual: number): EnergyPrediction => ({
+    ...socialSample(index, residual),
+    basis: {
+      assumedSleepHours: 5,
+      assumedRestHours: 0,
+      sleepScaleSensitivity: 0,
+      restScaleSensitivity: 0,
+      socialScaleSensitivity: 0,
+      isolationScaleSensitivity: 10,
+    },
+  })
+
+  const run = (make: (i: number, r: number) => EnergyPrediction, n: number, residual: number) =>
+    Array.from({ length: n }, (_, index) => make(index, residual))
+
+  it('assumes the population default for a student it has learned nothing about', () => {
+    expect(recoveryScales([]).socialContact).toBe(1)
+    expect(recoveryScales([]).isolation).toBe(1)
+  })
+
+  it('learns that seeing people does more for this student than the default', () => {
+    expect(recoveryScales(run(socialSample, MIN_SAMPLES, 8)).socialContact).toBeGreaterThan(1)
+  })
+
+  it('learns that being alone costs this student more', () => {
+    expect(recoveryScales(run(isolationSample, MIN_SAMPLES, -8)).isolation).toBeLessThan(1)
+  })
+
+  /** The same identifiability rule, extended: these two both move the social reserve, so a
+   *  fortnight where both mattered is evidence about neither. */
+  it('throws away a sample where both social coefficients moved', () => {
+    const confounded = Array.from({ length: MIN_SAMPLES * 3 }, (_, index) => ({
+      ...socialSample(index, 20),
+      basis: {
+        assumedSleepHours: 5,
+        assumedRestHours: 0,
+        sleepScaleSensitivity: 0,
+        restScaleSensitivity: 0,
+        socialScaleSensitivity: 10,
+        isolationScaleSensitivity: 10,
+      },
+    }))
+
+    expect(recoveryScales(confounded).socialContact).toBe(1)
+    expect(recoveryScales(confounded).isolation).toBe(1)
+  })
+
+  it('never updates more than one coefficient from one sample', () => {
+    const scales = recoveryScales(run(socialSample, MIN_SAMPLES, 8))
+
+    expect(scales.sleep).toBe(1)
+    expect(scales.rest).toBe(1)
+    expect(scales.isolation).toBe(1)
+  })
+
+  /** Predictions recorded before the social sensitivities existed carry neither field, and
+   *  must still teach what they can about sleep and rest. */
+  it('still learns sleep from a record made before the social fields existed', () => {
+    expect(recoveryScales(runOf(sleepSample, MIN_SAMPLES, 8)).sleep).toBeGreaterThan(1)
+  })
+
+  it('bounds them exactly as it bounds the others', () => {
+    expect(recoveryScales(run(socialSample, 30, 500)).socialContact).toBeLessThanOrEqual(MAX_SCALE)
+    expect(recoveryScales(run(isolationSample, 30, -500)).isolation).toBeGreaterThanOrEqual(MIN_SCALE)
+  })
+})

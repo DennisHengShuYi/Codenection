@@ -40,13 +40,36 @@ const MIN_SENSITIVITY = 0.5
  */
 const DOMINANCE = 0.8
 
-export interface RecoveryScales {
-  readonly sleep: number
-  readonly rest: number
-}
+/**
+ * The coefficients a scalar prediction can honestly identify.
+ *
+ * `typeIntensity` is deliberately absent: it is four numbers, and one scalar residual cannot
+ * separate them. So is `socialFloorHoursPerDay`, which is a threshold -- its derivative is
+ * zero everywhere except a cliff, so a finite difference reads either nothing or nonsense.
+ * Both stay population constants, and that is an answer rather than an omission.
+ */
+export const LEARNED = ['sleep', 'rest', 'socialContact', 'isolation'] as const
+
+export type Learned = (typeof LEARNED)[number]
+
+export type RecoveryScales = Readonly<Record<Learned, number>>
 
 /** What the app assumes about a student it has never seen: exactly the population default. */
-export const NEUTRAL_SCALES: RecoveryScales = { sleep: 1, rest: 1 }
+export const NEUTRAL_SCALES: RecoveryScales = {
+  sleep: 1,
+  rest: 1,
+  socialContact: 1,
+  isolation: 1,
+}
+
+/** How far each coefficient moved this particular claim. Absent fields read as zero, which
+ *  is what a prediction recorded before they existed honestly says about them. */
+const sensitivitiesOf = (basis: PredictionBasis): Readonly<Record<Learned, number>> => ({
+  sleep: basis.sleepScaleSensitivity,
+  rest: basis.restScaleSensitivity,
+  socialContact: basis.socialScaleSensitivity ?? 0,
+  isolation: basis.isolationScaleSensitivity ?? 0,
+})
 
 const clamp = (value: number): number => Math.min(MAX_SCALE, Math.max(MIN_SCALE, value))
 
@@ -55,20 +78,27 @@ const wellFormed = (basis: PredictionBasis | undefined): basis is PredictionBasi
   Number.isFinite(basis.sleepScaleSensitivity) &&
   Number.isFinite(basis.restScaleSensitivity)
 
-/** Which coefficient this sample is evidence about, or null when it is evidence about
- *  neither. */
-function attribute(basis: PredictionBasis): 'sleep' | 'rest' | null {
-  const sleep = Math.abs(basis.sleepScaleSensitivity)
-  const rest = Math.abs(basis.restScaleSensitivity)
-  const total = sleep + rest
+/**
+ * Which single coefficient this sample is evidence about, or null when it is evidence about
+ * none of them.
+ *
+ * Generalised from the two-way split to a field of four, and the rule is unchanged: one
+ * coefficient must carry nearly all of the movement. Two that both moved are confounded --
+ * the residual could belong to either, and splitting it makes them chase each other week
+ * after week -- so the sample is discarded rather than apportioned. With four candidates
+ * that happens more often, which is the honest cost of learning more things from one number.
+ */
+function attribute(basis: PredictionBasis): Learned | null {
+  const magnitudes = sensitivitiesOf(basis)
+  const total = LEARNED.reduce((sum, name) => sum + Math.abs(magnitudes[name]), 0)
   if (total === 0) return null
 
-  const share = sleep / total
-  if (share >= DOMINANCE) return sleep >= MIN_SENSITIVITY ? 'sleep' : null
-  if (share <= 1 - DOMINANCE) return rest >= MIN_SENSITIVITY ? 'rest' : null
+  const dominant = LEARNED.find((name) => Math.abs(magnitudes[name]) / total >= DOMINANCE)
+  if (dominant === undefined) return null
 
-  // Both moved. Not evidence about either.
-  return null
+  // Dominant, but of a movement too small to divide a residual by without inventing an
+  // enormous correction out of a fortnight that said nothing.
+  return Math.abs(magnitudes[dominant]) >= MIN_SENSITIVITY ? dominant : null
 }
 
 /**
@@ -91,8 +121,8 @@ function attribute(basis: PredictionBasis): 'sleep' | 'rest' | null {
  * below `MIN_SAMPLES` the answer is exactly the population default.
  */
 export function recoveryScales(predictions: readonly EnergyPrediction[]): RecoveryScales {
-  const scale = { sleep: 1, rest: 1 }
-  const seen = { sleep: 0, rest: 0 }
+  const scale: Record<Learned, number> = { ...NEUTRAL_SCALES }
+  const seen: Record<Learned, number> = { sleep: 0, rest: 0, socialContact: 0, isolation: 0 }
 
   // Sorted by date, and copied first: `predictions` belongs to the profile the app writes
   // back. Resolutions can arrive out of order, and an answer that depended on array order
@@ -106,10 +136,7 @@ export function recoveryScales(predictions: readonly EnergyPrediction[]): Recove
     const which = attribute(prediction.basis)
     if (which === null) continue
 
-    const sensitivity =
-      which === 'sleep'
-        ? prediction.basis.sleepScaleSensitivity
-        : prediction.basis.restScaleSensitivity
+    const sensitivity = sensitivitiesOf(prediction.basis)[which]
 
     // Positive when the app under-predicted: the student had more left than it claimed, so
     // whatever restores them restores them more than the default says.
@@ -123,8 +150,7 @@ export function recoveryScales(predictions: readonly EnergyPrediction[]): Recove
     seen[which] += 1
   }
 
-  return {
-    sleep: seen.sleep >= MIN_SAMPLES ? clamp(scale.sleep) : 1,
-    rest: seen.rest >= MIN_SAMPLES ? clamp(scale.rest) : 1,
-  }
+  return Object.fromEntries(
+    LEARNED.map((name) => [name, seen[name] >= MIN_SAMPLES ? clamp(scale[name]) : 1]),
+  ) as RecoveryScales
 }

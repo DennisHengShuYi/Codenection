@@ -39,6 +39,20 @@ export interface PredictionBasis {
   readonly sleepScaleSensitivity: number
   /** The same, for `kRest`. */
   readonly restScaleSensitivity: number
+  /**
+   * The same, for `kSocialContact` and `isolationDrainPerDay`.
+   *
+   * Optional because predictions recorded before these existed carry neither, and must keep
+   * teaching what they can about sleep and rest rather than being discarded wholesale.
+   *
+   * These two are the only other coefficients a scalar prediction can honestly identify.
+   * `typeIntensity` is four numbers and one scalar cannot separate them;
+   * `socialFloorHoursPerDay` is a threshold whose derivative is zero everywhere except a
+   * cliff, so a finite difference reads either nothing or nonsense. Both are left as
+   * population constants deliberately.
+   */
+  readonly socialScaleSensitivity?: number
+  readonly isolationScaleSensitivity?: number
 }
 
 export interface EnergyPrediction {
@@ -163,6 +177,14 @@ function basisFor(
     restScaleSensitivity: bumpedBy({
       ...params,
       kRest: scaledReserves(params.kRest, 1 + SENSITIVITY_STEP),
+    }),
+    socialScaleSensitivity: bumpedBy({
+      ...params,
+      kSocialContact: params.kSocialContact * (1 + SENSITIVITY_STEP),
+    }),
+    isolationScaleSensitivity: bumpedBy({
+      ...params,
+      isolationDrainPerDay: params.isolationDrainPerDay * (1 + SENSITIVITY_STEP),
     }),
   }
 }

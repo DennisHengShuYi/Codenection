@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { ParsedItem } from '../ai'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
-import { describePlacement, placeItems } from './placement'
+import { DEFAULT_PARAMS } from '../engine'
+import { describePlacement, fixThatMakesRoom, placeItems } from './placement'
+import { slotOn } from './slotFinder'
 
 const empty = (): Schedule => ({
   items: [],
@@ -189,5 +191,59 @@ describe('describePlacement', () => {
    *  in every other thing the app says. */
   it('says so when it could not find room at all', () => {
     expect(describePlacement(note({ fitted: false }), null)).toMatch(/no room|does not fit|full/i)
+  })
+})
+
+/**
+ * §15's second question -- "could it fit if something moved?" -- answered without building
+ * the second scheduler §16 forbids.
+ *
+ * `smallestFixes` ranks by deficit days and floor, which is not the same question as "does
+ * this open a gap on the day my essay wanted". Taking its top move meant the app often
+ * offered something true but unrelated: a real improvement to the fortnight that did
+ * nothing about the thing the student had just been told did not fit.
+ */
+describe('fixThatMakesRoom', () => {
+  const parsedNeed = (over: Partial<ParsedItem> = {}) => parsed({ hours: 4, ...over })
+
+  it('has nothing to offer when the week has nothing movable', () => {
+    const walled = { ...empty(), items: [fullDay(3)] }
+
+    expect(fixThatMakesRoom(walled, parsedNeed({ deadlineDay: 3 }), 3, DEFAULT_PARAMS)).toBeNull()
+  })
+
+  /**
+   * The property that matters: whatever is offered, applying it has to actually open room
+   * on the day that was wanted. Anything else is a non-sequitur dressed as help.
+   */
+  it('only offers a move that actually makes room where it was wanted', () => {
+    const crowded = {
+      ...empty(),
+      items: [
+        ...Array.from({ length: 5 }, (_, index) => ({
+          ...fullDay(3),
+          id: `soft-${index}`,
+          hours: 3,
+          startHour: 8 + index * 3,
+          fixed: false,
+          deadlineDay: 12,
+        })),
+      ],
+    }
+
+    const fix = fixThatMakesRoom(crowded, parsedNeed({ deadlineDay: 3 }), 3, DEFAULT_PARAMS)
+
+    if (fix !== null) {
+      expect(slotOn(fix.move.apply(crowded), 3, { hours: 4, type: 'mental', kind: 'studyBlock' })).not.toBeNull()
+    }
+  })
+
+  it('does not modify the week it was given', () => {
+    const crowded = { ...empty(), items: [{ ...fullDay(3), fixed: false, deadlineDay: 12 }] }
+    const snapshot = JSON.stringify(crowded)
+
+    fixThatMakesRoom(crowded, parsedNeed({ deadlineDay: 3 }), 3, DEFAULT_PARAMS)
+
+    expect(JSON.stringify(crowded)).toBe(snapshot)
   })
 })

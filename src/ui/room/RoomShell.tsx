@@ -3,7 +3,7 @@ import type { Repository, Session } from '../../data'
 import type { ParsedItem } from '../../ai'
 import { isDistressed } from '../../domain/distress'
 import { energyHistory } from '../../domain/energyHistory'
-import { describePlacement, placeItems } from '../../domain/placement'
+import { describePlacement, fixThatMakesRoom, placeItems } from '../../domain/placement'
 import { checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
 import { anchorTo, dateFor, isAnchored, todayIndex } from '../../domain/calendar'
 import { accept, lapsed } from '../../domain/commitments'
@@ -15,7 +15,7 @@ import { completeItem, deferItem } from '../../domain/scheduleEdits'
 import { scheduleRecovery } from '../../domain/scheduleRecovery'
 import { overallReserve, project } from '../../engine'
 import type { Fix } from '../../optimizer'
-import { smallestFixes, toDayInputs } from '../../optimizer'
+import { toDayInputs } from '../../optimizer'
 import { AddSheet } from '../AddSheet'
 import { AccountBar } from '../auth/AccountBar'
 import { PreviewBanner } from '../auth/PreviewBanner'
@@ -231,9 +231,19 @@ export function RoomShell({
     const moved = notes.filter((note) => note.movedFrom !== null || !note.fitted)
     setPlacementLines(notes.map((note) => describePlacement(note, next)))
 
-    // Only when something actually had to give. A week that simply absorbed the new work has
-    // nothing to offer and nothing to apologise for.
-    setPlacementFix(moved.length === 0 ? null : (smallestFixes(next, params, 1)[0] ?? null))
+    // Only when something actually had to give -- a week that simply absorbed the new work
+    // has nothing to offer and nothing to apologise for -- and only a move that opens room
+    // on the day that failed. `smallestFixes` ranks by deficit days and floor, which is a
+    // different question, so its top move was often true and entirely unrelated to what the
+    // student had just been told did not fit.
+    const first = moved[0]
+    const wanted = items.find((item) => first !== undefined && first.title === item.title)
+
+    setPlacementFix(
+      first === undefined || wanted === undefined
+        ? null
+        : fixThatMakesRoom(next, wanted, first.movedFrom ?? first.dayIndex, params),
+    )
   }
 
   function answerBlock(itemId: string, answer: BlockAnswer) {

@@ -3,7 +3,7 @@ import type { BlockRecord } from '../../domain/blockLog'
 import { DEFAULT_PROFILE } from '../../domain/calibration'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule, ScheduledItem } from '../../optimizer'
-import { blockToAsk, SLEEP_HOURS, withSleep } from './todayCard'
+import { blockToAsk, SLEEP_HOURS, withSleep } from './checkIn'
 
 const item = (id: string, type: ScheduledItem['type'], dayIndex = 0): ScheduledItem => ({
   id,

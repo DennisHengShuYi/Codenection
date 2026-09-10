@@ -1,8 +1,9 @@
+import type { JSX } from 'react'
 import type { BlockAnswer } from '../../domain/blockLog'
 import type { ScheduledItem } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { Card } from '../kit/Card'
-import { SLEEP_HOURS, type SleepBucket } from './todayCard'
+import { SLEEP_HOURS, type SleepBucket } from './checkIn'
 
 /** §7.5: ask relative, not absolute. Nobody knows their energy as a number, and §8.1's
  *  scale is fixed -- taken from `EnergyCheckIn` verbatim, not renumbered or relabelled. */

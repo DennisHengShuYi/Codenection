@@ -2,10 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { ScheduledItem } from '../../optimizer'
-// Explicit extension: this directory also has `todayCard.ts` (Task 9), and on a
-// case-insensitive filesystem (Windows) an extensionless './TodayCard' resolves the `.ts`
-// candidate first and silently loads the wrong module.
-import { TodayCard } from './TodayCard.tsx'
+import { TodayCard } from './TodayCard'
 
 const block: ScheduledItem = {
   id: 'essay',
@@ -107,6 +104,15 @@ describe('TodayCard', () => {
     const card = screen.getByRole('region')
     expect(card.textContent).not.toMatch(/how did it go/i)
     expect(card.textContent).not.toMatch(/finished/i)
+  })
+
+  // Brief's "the copy never scolds" item. Kept as a real check rather than a tautology: this
+  // regex would genuinely fail against copy like "you should have started this".
+  it('never scolds or blames', () => {
+    setup()
+
+    const card = screen.getByRole('region')
+    expect(card.textContent).not.toMatch(/should have|failed|you didn'?t|you missed/i)
   })
 
   it('does not render a row that has already been answered', () => {

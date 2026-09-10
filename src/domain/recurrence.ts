@@ -17,6 +17,52 @@ export interface Repeat {
   readonly untilDay: number | null
 }
 
+/** The weekday a horizon day falls on, or null without an anchor to count from. */
+function weekdayOf(schedule: Schedule, dayIndex: number): number | null {
+  const date = dateFor(schedule, dayIndex)
+
+  return date === null ? null : new Date(`${date}T00:00:00Z`).getUTCDay()
+}
+
+const sameTitle = (a: string, b: string): boolean =>
+  a.trim().toLowerCase() === b.trim().toLowerCase()
+
+/**
+ * Whether this looks like another instance of something already in the week.
+ *
+ * §37: the same class, noticed rather than declared. A student adding a block whose title
+ * matches one already sitting on the same weekday at the same hour is typing out a series
+ * one instance at a time, and offering to fill the horizon costs no new screen and no new
+ * input path.
+ *
+ * It is also the best answer available for part-time shifts, which arrive as photos in
+ * group chats and change week to week -- so they never come with the word "every" attached
+ * for a parser to find.
+ *
+ * All three signals are required together. Title alone matches two unrelated essays; the
+ * slot alone matches whatever else happens to be timetabled at nine on a Tuesday. Only the
+ * conjunction is evidence, and the answer here is a question to put to the student rather
+ * than a change to make on their behalf.
+ */
+export function looksRecurring(
+  item: ParsedItem,
+  schedule: Schedule,
+  startHour: number,
+): boolean {
+  // Already declared as repeating: there is nothing to offer.
+  if (item.repeat !== null || item.deadlineDay === null) return false
+
+  const weekday = weekdayOf(schedule, item.deadlineDay)
+  if (weekday === null) return false
+
+  return schedule.items.some(
+    (existing) =>
+      existing.startHour === startHour &&
+      sameTitle(existing.title, item.title) &&
+      weekdayOf(schedule, existing.dayIndex) === weekday,
+  )
+}
+
 let series = 0
 
 const nextSeriesId = (): string => {

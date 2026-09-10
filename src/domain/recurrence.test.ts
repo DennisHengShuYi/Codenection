@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { ParsedItem } from '../ai'
 import { HORIZON_DAYS } from '../engine'
-import type { Schedule } from '../optimizer'
-import { expandRecurring } from './recurrence'
+import type { Schedule, ScheduledItem } from '../optimizer'
+import { expandRecurring, looksRecurring } from './recurrence'
 
 const week = (startedOn?: string): Schedule => ({
   items: [],
@@ -149,5 +149,82 @@ describe('expandRecurring', () => {
     const expanded = expandRecurring(parsed({ repeat: { weekdays: [], untilDay: null } }), anchored, 0)
 
     expect(expanded).toHaveLength(1)
+  })
+})
+
+/**
+ * §37: the same class, noticed rather than declared.
+ *
+ * If a student adds something and a similar-titled block already sits on the same weekday
+ * at the same hour, that is a series they are typing out one instance at a time. Offering to
+ * fill the horizon costs no new screen and no new input path -- and it is the best answer
+ * available for part-time shifts, which arrive as photos in group chats and change week to
+ * week, so they never come with the word "every" attached.
+ */
+describe('looksRecurring', () => {
+  const block = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
+    id: 'existing',
+    title: 'WIA3001 lecture',
+    type: 'mental',
+    kind: 'studyBlock',
+    hours: 2,
+    intensity: 1,
+    dayIndex: 1,
+    startHour: 9,
+    fixed: true,
+    deadlineDay: null,
+    protectedRest: false,
+    ...over,
+  })
+
+  const anchored = (items: ScheduledItem[]) => ({ ...week('2026-09-07'), items })
+
+  it('spots the same class a week later at the same hour', () => {
+    const existing = anchored([block({ dayIndex: 1, startHour: 9 })])
+
+    expect(looksRecurring(parsed({ deadlineDay: 8 }), existing, 9)).toBe(true)
+  })
+
+  it('says nothing about a different day of the week', () => {
+    const existing = anchored([block({ dayIndex: 1, startHour: 9 })])
+
+    expect(looksRecurring(parsed({ deadlineDay: 9 }), existing, 9)).toBe(false)
+  })
+
+  it('says nothing about the same weekday at a different hour', () => {
+    const existing = anchored([block({ dayIndex: 1, startHour: 9 })])
+
+    expect(looksRecurring(parsed({ deadlineDay: 8 }), existing, 14)).toBe(false)
+  })
+
+  /** The title is what makes it the same thing rather than a coincidence of timetabling. */
+  it('says nothing about an unrelated block that happens to share the slot', () => {
+    const existing = anchored([block({ title: 'Gym', dayIndex: 1, startHour: 9 })])
+
+    expect(looksRecurring(parsed({ deadlineDay: 8 }), existing, 9)).toBe(false)
+  })
+
+  it('is not fooled by capitals or stray spacing', () => {
+    const existing = anchored([block({ title: '  wia3001 LECTURE ', dayIndex: 1, startHour: 9 })])
+
+    expect(looksRecurring(parsed({ deadlineDay: 8 }), existing, 9)).toBe(true)
+  })
+
+  it('says nothing about an undated item, which has no weekday to match', () => {
+    const existing = anchored([block({ dayIndex: 1, startHour: 9 })])
+
+    expect(looksRecurring(parsed({ deadlineDay: null }), existing, 9)).toBe(false)
+  })
+
+  it('says nothing when the week does not know what day it starts on', () => {
+    expect(looksRecurring(parsed({ deadlineDay: 8 }), { ...week(), items: [block()] }, 9)).toBe(false)
+  })
+
+  /** Something already declared as repeating needs no offer. */
+  it('says nothing about an item that already repeats', () => {
+    const existing = anchored([block({ dayIndex: 1, startHour: 9 })])
+    const already = parsed({ deadlineDay: 8, repeat: { weekdays: [2], untilDay: null } })
+
+    expect(looksRecurring(already, existing, 9)).toBe(false)
   })
 })

@@ -81,3 +81,91 @@ test('opens a block from the day grid', async ({ page }) => {
 
   await expect(page.getByRole('dialog')).toBeVisible()
 })
+
+/**
+ * The edit form at every width, opened from a block and carrying a long unbroken title in
+ * its own text input.
+ *
+ * The width guard above proved the day GRID survives 320px; the form is a second surface,
+ * with three select pickers and a number input on one row, and it can overflow where the
+ * grid does not. Same long-title fixture for the same reason: a short title never exercises
+ * whether the box can be forced wider than the column.
+ */
+for (const width of [320, 390, 768, 1280]) {
+  test(`the edit form fits at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 })
+    await openWeekWithLongTitleBlock(page)
+
+    await page.getByText(UNBROKEN_TITLE).click()
+    await page.getByTestId('edit-block').click()
+    await expect(page.getByLabel('What')).toBeVisible()
+
+    const overflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    )
+
+    expect(overflows, `horizontal overflow at ${width}px`).toBe(false)
+  })
+}
+
+/**
+ * The whole manual round trip, in a real browser and across a real reload: put a block in by
+ * hand, on a day chosen from the grid, and find it still there after the page is thrown away
+ * and rebuilt from storage.
+ *
+ * The reload is the half no jsdom test covers -- `setSchedule` persisting is tested, but not
+ * that a hand-added block comes back out of the browser's own database looking the same.
+ */
+test('a block added by hand survives a reload', async ({ page }) => {
+  await openApp(page)
+
+  await page.getByTestId('open-week').click()
+  await page.getByTestId('day-4').click()
+  await page.getByTestId('add-block').click()
+
+  await expect(page.getByRole('dialog', { name: /add a block/i })).toBeVisible()
+  await page.getByLabel('What').fill('Coffee with Sam')
+  await page.getByTestId('save-block').click()
+
+  await expect(page.getByRole('dialog', { name: /the week/i })).toBeVisible()
+
+  await page.reload()
+
+  // Looking around is session state, so a reload returns a visitor with no account to the
+  // way in. Pre-existing behaviour and nothing to do with the block -- but it has to be
+  // walked through again before the week is reachable, which is the point: the block has to
+  // survive coming back out of the browser's own database, not just out of React.
+  await page.getByRole('button', { name: /look around/i }).click()
+
+  // No second click on `The week`: the address survived the reload, so the week sheet comes
+  // back open on its own. That is Ruling 57 working -- the URL is where the student is, not
+  // a decoration on top of React state -- and clicking again would only hit the backdrop.
+  await expect(page.getByRole('dialog', { name: /the week/i })).toBeVisible()
+  await page.getByTestId('day-4').click()
+
+  await expect(page.getByText('Coffee with Sam')).toBeVisible()
+})
+
+/**
+ * Removing names the block, and "Keep it" genuinely keeps it.
+ *
+ * The confirmation IS the safeguard -- there is no undo behind it -- so it is worth proving
+ * in a real browser that the cancelling answer does nothing at all.
+ */
+test('removing a block asks first, and keeping it changes nothing', async ({ page }) => {
+  await openWeekWithLongTitleBlock(page)
+
+  await page.getByText(UNBROKEN_TITLE).click()
+  await page.getByTestId('remove-block').click()
+  await expect(page.getByTestId('confirm-remove')).toContainText(/takes it out of your week/i)
+
+  await page.getByTestId('sheet-actions').getByRole('button', { name: 'Keep it' }).click()
+  await expect(page.getByTestId('block-when')).toBeVisible()
+
+  await page.getByTestId('remove-block').click()
+  await page.getByTestId('confirm-remove-yes').click()
+
+  await expect(page.getByRole('dialog', { name: /the week/i })).toBeVisible()
+  await page.getByTestId(`day-${DEFAULT_DAY}`).click()
+  await expect(page.getByText(UNBROKEN_TITLE)).toHaveCount(0)
+})

@@ -56,18 +56,36 @@ describe('parseWithRules', () => {
     expect(parseWithRules('that thing i keep forgetting')[0]?.type).toBe('errands')
   })
 
-  it('reads an explicit day into a deadline', () => {
+  /**
+   * A stated day is a *deadline*, not a pinned time -- and an essay due Friday is the
+   * clearest case of the difference. It cannot move past Friday and is completely free
+   * before it, which makes it one of the most movable things in the week.
+   *
+   * This used to set `hard: true`, which nothing read. Now that the flag is honoured under
+   * its real name, setting it here would pin the essay to an hour nobody chose and forbid
+   * the optimizer from touching it.
+   */
+  it('reads an explicit day into a deadline without pinning a time', () => {
     const item = parseWithRules('essay due friday', 0)[0]
 
     expect(item?.deadlineDay).not.toBeNull()
-    expect(item?.hard).toBe(true)
+    expect(item?.fixed).toBe(false)
   })
 
-  it('leaves items with no stated deadline undated and soft', () => {
+  it('leaves items with no stated deadline undated and movable', () => {
     const item = parseWithRules('gym')[0]
 
     expect(item?.deadlineDay).toBeNull()
-    expect(item?.hard).toBe(false)
+    expect(item?.fixed).toBe(false)
+  })
+
+  /** The rules cannot read a *time* out of free text, so they never pin anything at all.
+   *  Whatever a fragment says, the chip's checkbox is where a class becomes fixed. */
+  it('never pins a block, whatever the words say', () => {
+    const items = parseWithRules('lecture monday 9am, lab tuesday, shift friday', 0)
+
+    expect(items.length).toBeGreaterThan(0)
+    expect(items.every((item) => item.fixed === false)).toBe(true)
   })
 
   it('reads a word count into a bigger effort estimate', () => {

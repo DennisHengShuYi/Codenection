@@ -345,3 +345,52 @@ describe('WeekScreen', () => {
     expect(screen.getByTestId('day-3')).toHaveAttribute('aria-expanded', 'true')
   })
 })
+
+/**
+ * The silently-wrong empty state.
+ *
+ * Fixed load -- classes, labs, shifts -- is the baseline everything else is measured
+ * against. A student who never imported a timetable is being modelled as having no classes
+ * at all, and the week grid renders that as twenty-one cheerful light squares. The screen
+ * looks like good news when it is actually a screen with no information in it.
+ *
+ * Said once, quietly, and never again once there is anything fixed to work around.
+ */
+describe('WeekScreen with no fixed commitments', () => {
+  const lecture = (dayIndex: number) => item(`lecture-${dayIndex}`, dayIndex, 9, 2, { fixed: true })
+
+  it('says so when the week has no classes or shifts in it', () => {
+    setup(week())
+
+    expect(screen.getByTestId('no-fixed-load')).toHaveTextContent(
+      'Your week has no classes or shifts in it. Add them and the forecast gets a lot sharper.',
+    )
+  })
+
+  /**
+   * The case that makes the message honest rather than merely present. A week full of
+   * typed essays still has no timetable in it, and telling that student their forecast is
+   * complete is the same silent wrongness from the other direction.
+   */
+  it('still says so when the week holds only movable work', () => {
+    setup(week([item('essay', 2), item('reading', 4)]))
+
+    expect(screen.getByTestId('no-fixed-load')).toBeVisible()
+  })
+
+  it('says nothing once a single fixed block exists', () => {
+    setup(week([lecture(1)]))
+
+    expect(screen.queryByTestId('no-fixed-load')).not.toBeInTheDocument()
+  })
+
+  /** Protected rest is fixed load the student did not put there, so it must not be read as
+   *  a timetable and silence the prompt. */
+  it('does not count protected rest as a timetable', () => {
+    const rest = item('rest', 3, 20, 1, { fixed: true, protectedRest: true, kind: 'rest' })
+
+    setup(week([rest]))
+
+    expect(screen.getByTestId('no-fixed-load')).toBeVisible()
+  })
+})

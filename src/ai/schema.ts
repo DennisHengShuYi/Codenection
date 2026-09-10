@@ -29,6 +29,33 @@ const replySchema = z.object({
           .max(HORIZON_DAYS - 1)
           .nullable(),
         hard: z.boolean(),
+        /**
+         * Whether the model actually read this row, or reconstructed it.
+         *
+         * Defaulted rather than required, in the cautious direction: a reply that omits it
+         * is one that never claimed certainty, and `parseModelReply` is all-or-nothing, so
+         * requiring it would let one missing field discard every other item in the reply.
+         */
+        confident: z.boolean().default(false),
+        /**
+         * §40's whole recurrence vocabulary: which weekdays, and when it stops.
+         *
+         * Bounded at the boundary like everything else here. A weekday outside 0-6 or an
+         * end day outside the horizon is a model inventing structure, and `expandRecurring`
+         * would turn one such value into a whole semester of wrong classes.
+         */
+        repeat: z
+          .object({
+            weekdays: z.array(z.number().int().min(0).max(6)).max(7),
+            untilDay: z
+              .number()
+              .int()
+              .min(0)
+              .max(HORIZON_DAYS - 1)
+              .nullable(),
+          })
+          .nullable()
+          .default(null),
       }),
     )
     .max(MAX_ITEMS),
@@ -60,10 +87,19 @@ export function parseModelReply(raw: unknown): ParsedItem[] | null {
   const result = replySchema.safeParse(withWrapper(raw))
   if (!result.success) return null
 
-  return result.data.items.map((item) => ({
+  return result.data.items.map(({ hard, ...item }) => ({
     id: nextId(),
     ...item,
-    // Everything from the model is a proposal. §3.2: nothing enters unconfirmed.
-    confident: false,
+    // `hard` is the model's word on the wire; `fixed` is the domain's. Mapped here rather
+    // than carried through under two names, because what the model is asserting -- "a
+    // fixed time was printed on the page" -- is a *proposal* for the chip's checkbox, and
+    // the student's accept is what turns it into a pinned block.
+    fixed: hard,
+    // `confident` is the model's own word on whether it read this row or reconstructed it,
+    // and it is carried through rather than overwritten. It used to be hardcoded `false`,
+    // which meant `ItemChip`'s "not sure about this one" fired on every row of every
+    // import -- a warning that is always on carries no information, and students learn to
+    // tap past it. §3.2's "nothing enters unconfirmed" is unaffected: it is the accept
+    // flow that enforces that, not this flag.
   }))
 }

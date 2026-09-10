@@ -1,29 +1,24 @@
 import { LOAD_TYPES, type ActivityKind, type LoadType, type Reserves } from '../engine'
 import type { Schedule } from '../optimizer'
+import { blocksOnDay } from './dayBlocks'
+import { DAY_END_HOUR, gapsOn, MIN_GAP_HOURS, WAKE_HOUR, type FreeSlot } from './slotFinder'
 
 /** Below the comfortable band, but above §1.5's low-energy threshold of 20 -- so advice
  *  arrives before the reduced view takes over, rather than after. */
 const PRESCRIBE_BELOW = 40
 
-/** Under half an hour there is nothing worth scheduling, and suggesting one is noise. */
-const MIN_GAP_HOURS = 0.5
-
 /** `USEFUL_REST_HOURS`. Past this the engine credits nothing, so a longer suggestion would
  *  promise recovery the model refuses to pay out. */
 const MAX_BLOCK_HOURS = 3
 
-/** Waking hours in a day, once sleep is set aside. */
-const WAKING_HOURS = 16
-
-/** When a student's day actually starts, borrowed from `dayGrid.DEFAULT_FIRST_HOUR` -- the
- *  codebase's existing answer to the same question. Scanning from midnight instead would let
- *  a free-looking stretch of the night be reported as an open slot and rest get prescribed
- *  before anyone is awake for it. */
-const WAKE_HOUR = 8
+/** Waking hours in a day, once sleep is set aside. `MIN_GAP_HOURS` and `WAKE_HOUR` are
+ *  `slotFinder`'s now: they describe the shape of a day rather than anything about advice,
+ *  and two copies of "when does a student wake up" is one too many. */
+const WAKING_HOURS = DAY_END_HOUR - WAKE_HOUR
 
 /** Late afternoon: a gap a student plausibly still has, rather than first thing. Used only
  *  as the tie-break when a day is completely empty and there is no real gap to point at. It
- *  sits inside [WAKE_HOUR, WAKE_HOUR + WAKING_HOURS) so it stays a coherent time of day. */
+ *  sits inside [WAKE_HOUR, DAY_END_HOUR) so it stays a coherent time of day. */
 const DEFAULT_START_HOUR = 16
 
 export interface Prescription {
@@ -36,11 +31,10 @@ export interface Prescription {
   readonly startHour: number
 }
 
-/** A stretch of the day with nothing scheduled on it yet. */
-export interface FreeSlot {
-  readonly startHour: number
-  readonly hours: number
-}
+/** A stretch of the day with nothing scheduled on it yet. Re-exported rather than
+ *  redeclared: `prescribe` was where this shape started, and callers still import it from
+ *  here, but `slotFinder` is the one that defines it now. */
+export type { FreeSlot }
 
 /**
  * §5.2's matching, stated once.
@@ -77,37 +71,15 @@ export const ADVICE_KINDS: Partial<Record<LoadType, ActivityKind>> = Object.from
  * plausible tie-break rather than hour zero, which would read as scheduling rest at midnight.
  */
 export function freeSlotOn(schedule: Schedule, dayIndex: number): FreeSlot | null {
-  const busy = schedule.items
-    .filter((scheduledItem) => scheduledItem.dayIndex === dayIndex)
-    .map((scheduledItem) => ({
-      start: scheduledItem.startHour,
-      end: scheduledItem.startHour + scheduledItem.hours,
-    }))
-    .sort((a, b) => a.start - b.start)
-
-  if (busy.length === 0) {
+  // The empty-day tie-break, kept deliberately. A day with nothing on it has no boundary to
+  // point at, and reporting hour zero -- or `gapsOn`'s honest `WAKE_HOUR` -- would read as
+  // prescribing rest first thing in the morning. This is the one thing `slotFinder` does
+  // not know about, because it is about how advice *sounds* rather than where a block fits.
+  if (blocksOnDay(schedule, dayIndex).length === 0) {
     return { startHour: DEFAULT_START_HOUR, hours: WAKING_HOURS }
   }
 
-  const dayEnd = WAKE_HOUR + WAKING_HOURS
-  let cursor = WAKE_HOUR
-  for (const busyBlock of busy) {
-    // Clamp each block to the waking window -- anything before WAKE_HOUR or after dayEnd is
-    // sleep, not a free slot nobody would ever act on.
-    const blockStart = Math.max(busyBlock.start, WAKE_HOUR)
-    const blockEnd = Math.min(busyBlock.end, dayEnd)
-    if (blockEnd <= cursor) continue
-
-    if (blockStart - cursor >= MIN_GAP_HOURS) {
-      return { startHour: cursor, hours: blockStart - cursor }
-    }
-
-    cursor = Math.max(cursor, blockEnd)
-    if (cursor >= dayEnd) return null
-  }
-
-  const tailGap = dayEnd - cursor
-  return tailGap >= MIN_GAP_HOURS ? { startHour: cursor, hours: tailGap } : null
+  return gapsOn(schedule, dayIndex)[0] ?? null
 }
 
 const sortedByReserve = (reserves: Reserves): readonly LoadType[] =>

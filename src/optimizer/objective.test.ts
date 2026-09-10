@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS, HORIZON_DAYS, project } from '../engine'
 import { ALL_PRESENT, score, toDayInputs } from './objective'
-import { makeSchedule, restItem, socialBaseline, studyItem } from './testSupport'
+import type { ScheduledItem } from './types'
+import { errandItem, makeSchedule, restItem, socialBaseline, studyItem } from './testSupport'
 
 describe('toDayInputs', () => {
   it('produces one day per horizon day, even where nothing is scheduled', () => {
@@ -192,5 +193,69 @@ describe('score', () => {
     expect(score(higherFloor, DEFAULT_PARAMS)).toBeGreaterThan(
       score(lowerFloorFlatter, DEFAULT_PARAMS),
     )
+  })
+})
+
+/**
+ * §20: four hours of final-year project and four hours of laundry were interchangeable load.
+ *
+ * The solver could defer the FYP chapter to its deadline to protect the floor, and nothing
+ * in the score called that a bad trade -- the two differed only by `typeIntensity`, which
+ * says how tiring they are, not what it costs to leave one until the last day.
+ *
+ * The weight is derived, never asked for. §20 is explicit that nobody should be made to
+ * rank their own work, because everybody marks everything high; it comes from the load type
+ * and the size of the block, both of which the app already knows.
+ */
+describe('score and what it costs to leave something until the deadline', () => {
+  const due = (item: ScheduledItem, deadlineDay: number, dayIndex: number): ScheduledItem => ({
+    ...item,
+    deadlineDay,
+    dayIndex,
+  })
+
+  const fyp = (dayIndex: number) => due(studyItem('fyp', dayIndex, 9), 8, dayIndex)
+  const laundry = (dayIndex: number) => ({
+    ...due(errandItem('laundry', dayIndex, 9), 8, dayIndex),
+    hours: studyItem('fyp', 0, 9).hours,
+  })
+
+  const scoreOf = (item: ScheduledItem) => score(makeSchedule([item]), DEFAULT_PARAMS)
+
+  it('prefers a week with buffer left before the deadline', () => {
+    expect(scoreOf(fyp(4))).toBeGreaterThan(scoreOf(fyp(8)))
+  })
+
+  /**
+   * The whole point. Both weeks defer the same number of hours to the same deadline, so
+   * every other term scores them identically -- only the consequence of being late differs.
+   */
+  it('minds deferring the project more than deferring the laundry', () => {
+    const projectDeferred = scoreOf(fyp(8)) - scoreOf(fyp(4))
+    const laundryDeferred = scoreOf(laundry(8)) - scoreOf(laundry(4))
+
+    expect(projectDeferred).toBeLessThan(laundryDeferred)
+  })
+
+  /** Undated work has no deadline to be late for, so it carries no pressure at all. */
+  it('charges nothing for work with no deadline', () => {
+    const undated = { ...studyItem('reading', 8, 9), deadlineDay: null }
+
+    expect(scoreOf(undated)).toBeCloseTo(scoreOf({ ...undated, dayIndex: 4 }))
+  })
+
+  /**
+   * A tiebreaker, not a fourth objective. §2.1's ordering is floor first: if this could
+   * outrank the floor, the solver would cheerfully wreck a student's worst day to move an
+   * essay one day earlier.
+   */
+  it('never outranks the floor it is supposed to be protecting', () => {
+    const safeButCrushing = makeSchedule([
+      ...Array.from({ length: 10 }, (_, day) => ({ ...studyItem(`heavy-${day}`, day, 9), hours: 10 })),
+      fyp(4),
+    ])
+    const latePlusEasy = makeSchedule([fyp(8)])
+
+    expect(score(latePlusEasy, DEFAULT_PARAMS)).toBeGreaterThan(score(safeButCrushing, DEFAULT_PARAMS))
   })
 })

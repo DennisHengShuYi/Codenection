@@ -1,3 +1,4 @@
+import type { Repeat } from '../domain/recurrence'
 import type { ActivityKind, LoadType } from '../engine'
 
 export interface ParsedItem {
@@ -14,7 +15,40 @@ export interface ParsedItem {
   readonly hours: number
   /** Day index within the horizon, or null when nothing in the text implied one. */
   readonly deadlineDay: number | null
-  readonly hard: boolean
+  /**
+   * Whether this is pinned to a *time* -- a lecture, a lab, a shift.
+   *
+   * Distinct from `deadlineDay`, which the schema used to conflate it with under the name
+   * `hard`. `fixed` means the optimizer may not move it at all; `deadlineDay` means it may
+   * not move it *past* a day but is free before it. An essay with a hard deadline is
+   * maximally movable, so one boolean could never have carried both -- and while it did,
+   * nothing read it.
+   *
+   * The model's `hard` seeds this, but it is the student's answer, not the model's: it is
+   * editable on the chip and the accept is what commits it. §5.1's guarantee holds on the
+   * side that matters -- see `addItems`, which still refuses to create `protectedRest`
+   * whatever this says.
+   */
+  readonly fixed: boolean
+  /**
+   * How often this comes round, or null for a one-off.
+   *
+   * §36: the schema returned one `deadlineDay`, so "WIA3001 lecture every Tuesday 9am"
+   * produced a single item on a single day -- and recurring items are almost entirely the
+   * fixed set that everything else is measured against. If the timetable is wrong, every
+   * projection is wrong, and nothing in the app revealed it.
+   *
+   * Expanded at entry by `domain/recurrence`, never carried further: nothing downstream of
+   * the add flow knows recurrence exists.
+   */
+  readonly repeat: Repeat | null
+  /**
+   * §39: which series this instance came from, when it came from one.
+   *
+   * Optional because a one-off has none. One field, and it is what makes "this class has
+   * ended" a single operation rather than deleting three items by hand.
+   */
+  readonly seriesId?: string
   /**
    * Whether this was read with confidence.
    *

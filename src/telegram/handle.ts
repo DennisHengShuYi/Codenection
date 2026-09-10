@@ -1,11 +1,18 @@
 import { MAX_IMAGE_BYTES, MAX_INPUT_LENGTH, parseBrainDump, type ParsedItem } from '../ai'
 import { todayIndex } from '../domain/calendar'
 import { blocksOnDay } from '../domain/dayBlocks'
-import type { BlockAnswer, BlockRecord } from '../domain/blockLog'
+import { answeredIds, checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../domain/blockLog'
+import type { BlockOutcome } from '../domain/calibration'
+import { lapsed } from '../domain/commitments'
+import { paramsFor } from '../domain/engineParams'
+import type { EnergyPrediction } from '../domain/predictions'
+import { accuracyLine } from '../domain/predictions'
+import { biasLine } from '../domain/realityCheck'
+import { runRebalance } from '../domain/rebalanceOutcome'
 import { firstAction } from '../domain/microStart'
 import { prescribe } from '../domain/prescribe'
-import type { LoadType } from '../engine'
-import type { Schedule } from '../optimizer'
+import { overallReserve, project, type LoadType } from '../engine'
+import { toDayInputs, type Schedule } from '../optimizer'
 import { tooLongToTranscribe } from './audio'
 import { resolveConfirmation, summarise, type PendingDump } from './brainDump'
 import {
@@ -15,6 +22,10 @@ import {
   blockAnsweredReply,
   blocksReply,
   discardedReply,
+  lapsedReply,
+  needDayReply,
+  rebalanceReply,
+  weekReply,
   helpReply,
   linkedReply,
   microStartReply,
@@ -97,6 +108,29 @@ export interface ChatServices {
  */
 const todayFor = (week: Schedule, now: number): number => todayIndex(week, new Date(now)) ?? 0
 
+/** §2.1's search takes its randomness as a parameter. The same seed the app uses, so a
+ *  student who rebalances in chat and then in the app is not shown two different weeks. */
+const REBALANCE_SEED = 20260908
+
+/**
+ * §7.6's line, for whichever load type the app actually has evidence about.
+ *
+ * The app can put this beside the block it is asking about; chat has no block in hand, so
+ * it picks the type with the most logged history. A bias quoted about a type the student
+ * has never logged is a claim about nothing, and `biasLine` already returns null below
+ * `MIN_SAMPLES` -- this only chooses which question to ask it.
+ */
+function bestMeasuredBias(outcomes: readonly BlockOutcome[]): string | null {
+  const counted = new Map<LoadType, number>()
+  for (const outcome of outcomes) {
+    counted.set(outcome.type, (counted.get(outcome.type) ?? 0) + 1)
+  }
+
+  const best = [...counted.entries()].sort((a, b) => b[1] - a[1])[0]
+
+  return best === undefined ? null : biasLine(outcomes, best[0])
+}
+
 /**
  * Everything the chat flows need from storage, and nothing more.
  *
@@ -132,6 +166,18 @@ export interface ChatStore {
    * and collapsing them prices a request on evidence nobody has.
    */
   loadBlockLog(accountId: string): Promise<readonly BlockRecord[]>
+  /**
+   * §8.1's resolved predictions, from the same `user_state.settings` blob the app reads.
+   *
+   * Here so the bot can publish the accuracy figure it measured, and -- more importantly --
+   * so `paramsFor` gets the recovery coefficients the prediction loop has learned. Without
+   * it a request priced in chat runs a different model from the same request priced in the
+   * app, which is Ruling 41's failure exactly.
+   *
+   * Resolves to empty rather than rejecting when there is no profile yet: a student who has
+   * answered nothing is an ordinary state, unlike an unreadable block log.
+   */
+  loadPredictions(accountId: string): Promise<readonly EnergyPrediction[]>
 }
 
 /**
@@ -202,6 +248,24 @@ export async function handleIntent(
   const accountId = await store.accountForChat(intent.chatId)
   if (accountId === null) return notLinkedReply()
 
+  /**
+   * Which blocks §8b's log already holds an answer for.
+   *
+   * Fails closed, and the direction matters. If the log cannot be read we return every id
+   * on the week rather than none, so the day is still listed but nothing is asked about.
+   * The alternative -- treating an unreadable log as empty -- would ask a student to
+   * re-answer a block they had already answered and overwrite the real record with it,
+   * which is the same "assume rather than admit" failure `73efd65` removed from pricing.
+   */
+  const answeredSoFar = async (week: Schedule): Promise<readonly string[]> => {
+    try {
+      return answeredIds(await store.loadBlockLog(accountId))
+    } catch {
+      // Every id on the week, so `blocksReply` finds nothing left to ask about.
+      return week.items.map((item) => item.id)
+    }
+  }
+
   if (intent.kind === 'command') {
     switch (intent.name) {
       case 'help':
@@ -209,7 +273,7 @@ export async function handleIntent(
 
       case 'today': {
         const week = await store.loadWeek(accountId)
-        return blocksReply('today', blocksOnDay(week, todayFor(week, now)))
+        return blocksReply('today', blocksOnDay(week, todayFor(week, now)), await answeredSoFar(week))
       }
 
       case 'yesterday': {
@@ -221,7 +285,86 @@ export async function handleIntent(
         // later trust.
         if (today === null || today < 1) return yesterdayUnavailableReply()
 
-        return blocksReply('yesterday', blocksOnDay(week, today - 1))
+        return blocksReply('yesterday', blocksOnDay(week, today - 1), await answeredSoFar(week))
+      }
+
+      /**
+       * §22: the state of the fortnight, which chat could not see at all.
+       *
+       * Every figure is computed by the same functions the room and the dial read -- the
+       * projection, `accuracyLine`, `biasLine` -- so the two doors cannot quote a student
+       * two different weeks. `biasLine` is asked about the load type they have most
+       * history for, since a bias about a type they have never logged is nothing.
+       */
+      case 'week': {
+        const week = await store.loadWeek(accountId)
+        const today = todayFor(week, now)
+        const blockLog = await store.loadBlockLog(accountId).catch(() => null)
+        if (blockLog === null) return askUnavailableReply()
+
+        const predictions = await store.loadPredictions(accountId).catch(() => [])
+        const outcomes = outcomesFrom(blockLog)
+        const params = paramsFor(outcomes, predictions)
+        const projection = project(
+          week.start,
+          toDayInputs(week, checkedInDays(blockLog, today, week.horizonDays)),
+          params,
+        )
+
+        return weekReply({
+          reserve: Math.round(overallReserve(week.start)),
+          firstDeficitDay: projection.firstDeficitDay,
+          accuracy: accuracyLine(predictions),
+          bias: bestMeasuredBias(outcomes),
+        })
+      }
+
+      /** §22: any day of the fortnight, not only today and yesterday. */
+      case 'day': {
+        const asked = Number.parseInt(intent.argument, 10)
+        const week = await store.loadWeek(accountId)
+
+        // Refused rather than clamped. A student who typed 40 and got day 20 would be
+        // reading a day they did not ask for and had no way to know they were reading.
+        if (!Number.isInteger(asked) || asked < 0 || asked >= week.horizonDays) {
+          return needDayReply(week.horizonDays)
+        }
+
+        return blocksReply('today', blocksOnDay(week, asked), await answeredSoFar(week))
+      }
+
+      /**
+       * §22: the same rebalance the week screen runs, through `runRebalance` -- which now
+       * lives in `src/domain` for exactly this reason. Two rearranging algorithms with
+       * different logic would disagree, and the one that ran last would win.
+       */
+      case 'rebalance': {
+        const week = await store.loadWeek(accountId)
+        const blockLog = await store.loadBlockLog(accountId).catch(() => null)
+        if (blockLog === null) return askUnavailableReply()
+
+        const predictions = await store.loadPredictions(accountId).catch(() => [])
+        const outcome = runRebalance(
+          week,
+          paramsFor(outcomesFrom(blockLog), predictions),
+          REBALANCE_SEED,
+        )
+        await store.saveWeek(accountId, outcome.schedule)
+
+        return rebalanceReply(outcome.report, outcome.fallback?.move.description ?? null)
+      }
+
+      /** §2.3: a provisional yes that stopped being affordable, said out loud. */
+      case 'lapsed': {
+        const week = await store.loadWeek(accountId)
+        const blockLog = await store.loadBlockLog(accountId).catch(() => null)
+        if (blockLog === null) return askUnavailableReply()
+
+        const predictions = await store.loadPredictions(accountId).catch(() => [])
+
+        return lapsedReply(
+          lapsed(week, todayFor(week, now), paramsFor(outcomesFrom(blockLog), predictions), blockLog),
+        )
       }
 
       case 'rest': {

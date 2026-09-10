@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ParsedItem } from '../ai'
 import type { BlockRecord } from '../domain/blockLog'
+import type { EnergyPrediction } from '../domain/predictions'
 import type { EngineParams } from '../engine'
 import type { Schedule } from '../optimizer'
 import { Button } from './kit/Button'
@@ -30,6 +31,7 @@ export function AddSheet({
   params,
   today,
   blockLog,
+  predictions,
   onAcceptItems,
   onAcceptRequest,
   onClose,
@@ -42,6 +44,9 @@ export function AddSheet({
   /** §6.5/§8b's check-in evidence, threaded to the request path so its price reflects the
    *  same silence-aware projection the room and the dial already show. */
   readonly blockLog: readonly BlockRecord[]
+  /** §8.1's resolved predictions, forwarded to the request path so both rooms it draws run
+   *  the model the rest of the app runs rather than the population one. */
+  readonly predictions: readonly EnergyPrediction[]
   readonly onAcceptItems: (items: readonly ParsedItem[]) => void
   readonly onAcceptRequest: (item: ParsedItem) => void
   readonly onClose: () => void
@@ -86,6 +91,7 @@ export function AddSheet({
         params={params}
         today={today}
         blockLog={blockLog}
+        predictions={predictions}
         onAccept={(item) => {
           onAcceptRequest(item)
           close()

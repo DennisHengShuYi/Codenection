@@ -63,4 +63,66 @@ describe('RoomShell with the planner', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(screen.getByTestId('room-scene')).toBeVisible()
   })
+
+  /**
+   * §16: never silently reshuffle. A student who adds something and finds their week
+   * quietly rearranged has lost their grip on it, so the app says what it did and offers
+   * anything further as a choice.
+   */
+  it('says what it did with what was added', async () => {
+    await openPlanner()
+
+    await userEvent.type(screen.getByLabelText(/on your mind/i), 'gym, laundry')
+    await userEvent.click(screen.getByRole('button', { name: /read this/i }))
+    await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(2))
+
+    await userEvent.click(screen.getByRole('button', { name: /add these/i }))
+
+    await waitFor(() => expect(screen.getByTestId('placement-note')).toBeVisible())
+    expect(screen.getByTestId('placement-note')).toHaveTextContent(/Added/)
+  })
+
+  /** A week that simply absorbed the new work has nothing to apologise for and nothing to
+   *  offer, so no move is proposed. */
+  it('offers no move when nothing had to give', async () => {
+    await openPlanner()
+
+    await userEvent.type(screen.getByLabelText(/on your mind/i), 'laundry')
+    await userEvent.click(screen.getByRole('button', { name: /read this/i }))
+    await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(1))
+
+    await userEvent.click(screen.getByRole('button', { name: /add these/i }))
+
+    await waitFor(() => expect(screen.getByTestId('placement-note')).toBeVisible())
+    expect(screen.queryByTestId('placement-do')).toBeNull()
+  })
+
+  /** "Leave it" is the healthy default: doing nothing keeps the week the student decided
+   *  on, which is the principle underneath provisional yes pointed at placement. */
+  it('leaves the week exactly as it was when the offer is declined', async () => {
+    const repository = await openPlanner()
+
+    await userEvent.type(screen.getByLabelText(/on your mind/i), 'gym, laundry')
+    await userEvent.click(screen.getByRole('button', { name: /read this/i }))
+    await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(2))
+    await userEvent.click(screen.getByRole('button', { name: /add these/i }))
+    await waitFor(() => expect(screen.getByTestId('placement-note')).toBeVisible())
+
+    const settled = (await repository.loadWeek())?.items.map((item) => ({
+      id: item.id,
+      dayIndex: item.dayIndex,
+      startHour: item.startHour,
+    }))
+
+    const leave = screen.queryByTestId('placement-leave')
+    if (leave !== null) await userEvent.click(leave)
+
+    expect(
+      (await repository.loadWeek())?.items.map((item) => ({
+        id: item.id,
+        dayIndex: item.dayIndex,
+        startHour: item.startHour,
+      })),
+    ).toEqual(settled)
+  })
 })

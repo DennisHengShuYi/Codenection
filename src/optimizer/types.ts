@@ -18,6 +18,16 @@ export interface ScheduledItem {
    *  important design decision in the app: the optimizer cannot move protected rest, and
    *  cannot schedule anything over it either. */
   readonly protectedRest: boolean
+  /**
+   * §39: which recurring series this block came from, when it came from one.
+   *
+   * Optional, because most blocks are one-offs and every week saved before recurrence
+   * existed has none. The optimizer never reads it -- recurrence is expanded at entry and
+   * nothing downstream needs to know it happened -- but it is what makes "this class has
+   * ended" or "it moved to Thursday" a single operation rather than editing three items by
+   * hand.
+   */
+  readonly seriesId?: string
 }
 
 /** §2.3's provisional yes: an acceptance and the date by which it has to prove itself. */

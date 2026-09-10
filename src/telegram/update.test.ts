@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readUpdate } from './update'
+import { callbackIdOf, readUpdate } from './update'
 
 const chat = { id: 4242 }
 
@@ -300,5 +300,39 @@ describe('readUpdate, edges that only malformed input reaches', () => {
 
   it('ignores a button press carrying no data', () => {
     expect(readUpdate({ callback_query: { message: { chat } } }).kind).toBe('unhandled')
+  })
+})
+
+/**
+ * Telegram spins a loading indicator on a button the moment it is tapped, and clears it
+ * only when the bot answers that specific callback query. Nothing here ever did, so every
+ * button press in the app span until the client gave up on it -- the student's own signal
+ * that their answer had registered was a timeout.
+ *
+ * Read here rather than in `api/telegram.ts` on purpose: that file is typechecked and
+ * never tested, which is the stated reason three bugs lived in it for as long as they did.
+ */
+describe('callbackIdOf', () => {
+  it('finds the id a button press has to be acknowledged with', () => {
+    expect(callbackIdOf({ callback_query: { id: '99', message: { chat }, data: 'confirm:d1' } })).toBe('99')
+  })
+
+  it('finds it even for a press it does not know how to act on', () => {
+    expect(callbackIdOf({ callback_query: { id: '99', message: { chat }, data: 'nonsense' } })).toBe('99')
+  })
+
+  it('has nothing to acknowledge for an ordinary message', () => {
+    expect(callbackIdOf({ message: { chat, text: 'gym' } })).toBeNull()
+  })
+
+  /** Anyone can post to the webhook, so the id is validated rather than trusted: a
+   *  non-string here would be interpolated straight into an outbound API call. */
+  it.each([
+    ['a missing id', { callback_query: { message: { chat } } }],
+    ['an id that is not a string', { callback_query: { id: 99, message: { chat } } }],
+    ['nothing at all', null],
+    ['a string', 'callback_query'],
+  ])('refuses %s', (_name, update) => {
+    expect(callbackIdOf(update)).toBeNull()
   })
 })

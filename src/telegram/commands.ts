@@ -9,7 +9,18 @@
  * A plain message stays a brain dump. That is the commonest thing a student sends, and it
  * must not need ceremony.
  */
-export const COMMANDS = ['today', 'yesterday', 'rest', 'stuck', 'ask', 'help'] as const
+export const COMMANDS = [
+  'week',
+  'day',
+  'today',
+  'yesterday',
+  'rest',
+  'stuck',
+  'ask',
+  'rebalance',
+  'lapsed',
+  'help',
+] as const
 
 export type CommandName = (typeof COMMANDS)[number]
 

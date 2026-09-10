@@ -11,7 +11,7 @@ const GROQ_TIMEOUT_MS = 8000
 
 const SYSTEM_PROMPT = [
   "You turn a student's unstructured notes into a task list.",
-  'Reply with JSON only, shaped {"items":[{"title","type","kind","hours","deadlineDay","hard"}]}.',
+  'Reply with JSON only, shaped {"items":[{"title","type","kind","hours","deadlineDay","hard","confident"}]}.',
   'type is one of: mental, physical, social, errands.',
   // Derived from `BLOCK_KINDS` rather than typed out, so the prompt cannot go on asking
   // for a kind `ai/schema.ts` rejects. It used to offer `sleep`, which the boundary now
@@ -23,6 +23,10 @@ const SYSTEM_PROMPT = [
   'hours is your estimate of effort, between 0 and 24.',
   `deadlineDay is a day index from 0 (today) to ${HORIZON_DAYS - 1}, or null if none is implied.`,
   'hard is true only when the student stated a fixed date or deadline.',
+  'confident is false when you had to guess at what an item is or how long it takes, and',
+  'true when the notes say it plainly.',
+  'repeat is {"weekdays":[1,3],"untilDay":null} for something that happens every week on',
+  'those days (0 is Sunday), and null for a one-off. Use it for classes, labs and shifts.',
   `Return at most ${MAX_ITEMS} items. Do not invent tasks the notes do not mention.`,
 ].join(' ')
 

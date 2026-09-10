@@ -1,5 +1,7 @@
 import type { JSX } from 'react'
 import type { BlockAnswer } from '../../domain/blockLog'
+import type { BlockOutcome } from '../../domain/calibration'
+import { biasLine } from '../../domain/realityCheck'
 import type { ScheduledItem } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { Card } from '../kit/Card'
@@ -56,13 +58,25 @@ export function TodayCard(props: {
   readonly block: ScheduledItem | null
   readonly askEnergy: boolean
   readonly askSleep: boolean
+  /**
+   * §2.4's history, for the Reality Check line only.
+   *
+   * Defaulted rather than required, because §0 forbids a cold start: a student on day one
+   * has no outcomes, and the card still has to render.
+   */
+  readonly outcomes?: readonly BlockOutcome[]
   readonly onEnergy: (energy: number) => void
   readonly onSleep: (bucket: SleepBucket) => void
   readonly onBlock: (itemId: string, answer: BlockAnswer) => void
   readonly onDismiss: () => void
 }): JSX.Element | null {
-  const { block, askEnergy, askSleep, onEnergy, onSleep, onBlock, onDismiss } = props
+  const { block, askEnergy, askSleep, outcomes = [], onEnergy, onSleep, onBlock, onDismiss } = props
   const askBlock = block !== null
+
+  // §7.6, and only for the block actually on the card: a bias quoted about some other load
+  // type is one the student cannot connect to anything in front of them. Null when there
+  // is nothing measured worth saying, which is most of the first week.
+  const bias = block === null ? null : biasLine(outcomes, block.type)
 
   if (!askEnergy && !askSleep && !askBlock) {
     return null
@@ -134,6 +148,17 @@ export function TodayCard(props: {
               </Button>
             ))}
           </div>
+
+          {/* §7.6's Reality Check. Placed under the answers rather than above them so it
+              reads as the app explaining itself after the question, not as a nudge toward
+              a particular answer -- Ruling 22 keeps these four buttons visually equal for
+              exactly that reason, and a line arguing "you always overrun" sitting above
+              them would undo it. */}
+          {bias !== null && (
+            <p data-testid="bias-line" className="text-xs text-ink-soft">
+              {bias}
+            </p>
+          )}
         </fieldset>
       )}
 

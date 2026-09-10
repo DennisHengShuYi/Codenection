@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Repository, Session } from '../../data'
-import { addItems } from '../../domain/addItems'
+import type { ParsedItem } from '../../ai'
+import { isDistressed } from '../../domain/distress'
+import { energyHistory } from '../../domain/energyHistory'
+import { describePlacement, placeItems } from '../../domain/placement'
 import { checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
 import { anchorTo, dateFor, isAnchored, todayIndex } from '../../domain/calendar'
 import { accept, lapsed } from '../../domain/commitments'
@@ -12,12 +15,13 @@ import { completeItem, deferItem } from '../../domain/scheduleEdits'
 import { scheduleRecovery } from '../../domain/scheduleRecovery'
 import { overallReserve, project } from '../../engine'
 import type { Fix } from '../../optimizer'
-import { toDayInputs } from '../../optimizer'
+import { smallestFixes, toDayInputs } from '../../optimizer'
 import { AddSheet } from '../AddSheet'
 import { AccountBar } from '../auth/AccountBar'
 import { PreviewBanner } from '../auth/PreviewBanner'
 import { domainBars } from '../dial/domainBars'
 import { Button } from '../kit/Button'
+import { Card } from '../kit/Card'
 import { Sheet } from '../kit/Sheet'
 import { LinkTelegram } from '../settings/LinkTelegram'
 import { LowEnergyControl } from '../settings/LowEnergyControl'
@@ -29,7 +33,7 @@ import { useSchedule } from '../useSchedule'
 import { AccuracyNote } from '../validation/AccuracyNote'
 import { BlockSheet } from '../week/BlockSheet'
 import { blockSheet } from '../week/blockActions'
-import { runRebalance } from '../week/rebalanceOutcome'
+import { runRebalance } from '../../domain/rebalanceOutcome'
 import { WeekScreen } from '../week/WeekScreen'
 import { visibleCards } from './cardPrecedence'
 import { LiveCards } from './LiveCards'
@@ -88,18 +92,29 @@ export function RoomShell({
   // "not today" of its own any more. §7 retired the recovery card's permanent
   // failed-recovery log: "not today" is now exactly this kind of same-day dismissal rather
   // than a report that suppressed the advice forever.
+  const [distressDismissed, setDistressDismissed] = useState(false)
   const [recoveryDismissed, setRecoveryDismissed] = useState(false)
   const [lapsedDismissed, setLapsedDismissed] = useState(false)
   const [stuckDismissedId, setStuckDismissedId] = useState<string | null>(null)
   const [todayDismissed, setTodayDismissed] = useState(false)
   const [sleepAnsweredToday, setSleepAnsweredToday] = useState(false)
 
+  // What just happened to the things the student added, and the one move that would help if
+  // anything had to give. Session-scoped like every other dismissal here: a report on an
+  // action they just took, not a state of the week.
+  const [placementLines, setPlacementLines] = useState<readonly string[]>([])
+  const [placementFix, setPlacementFix] = useState<Fix | null>(null)
+
   const reducedMotion = useReducedMotion()
   const { play } = useTidyUp(reducedMotion)
 
   // §8b/Task 17: the durable log is the only source `paramsFor` reads now -- see
   // `roomModel.ts`'s matching call for why the profile's `confirmations` side is gone.
-  const params = useMemo(() => paramsFor(outcomesFrom(blockLog)), [blockLog])
+  // Derived once and shared: `paramsFor` pads the week with it, and §7.6's Reality Check
+  // line on the today card quotes the very same history back to the student. Two calls
+  // would be two chances for the number shown to drift from the number applied.
+  const outcomes = useMemo(() => outcomesFrom(blockLog), [blockLog])
+  const params = useMemo(() => paramsFor(outcomes, profile.predictions), [outcomes, profile.predictions])
   const floor = schedule
     ? Math.min(schedule.start.mental, schedule.start.physical, schedule.start.social, schedule.start.errands)
     : 100
@@ -126,7 +141,10 @@ export function RoomShell({
     const next = predictionsAfter(
       profile.predictions,
       schedule,
-      paramsFor(outcomesFrom(blockLog)),
+      // The same `params` the week is projected with. It derives purely from `blockLog` and
+      // the profile, both already in this effect's dependencies -- recomputing it here was a
+      // third copy of one number.
+      params,
       new Date(),
       blockLog,
     )
@@ -172,7 +190,7 @@ export function RoomShell({
   // parameter rather than reading one itself.
   const nowHour = now.getHours()
   const todayDate = dateFor(week, today)
-  const model = roomModel({ schedule: week, today, blockLog })
+  const model = roomModel({ schedule: week, today, blockLog, predictions: profile.predictions })
 
   // §1.2's breakdown: the five domain bars each against its own ceiling, and the
   // low-social-flagged-as-warning logic that is the app's own differentiator over a tracker
@@ -201,6 +219,21 @@ export function RoomShell({
     } finally {
       setWorking(false)
     }
+  }
+
+  // A `const` arrow rather than a declaration: declarations hoist above the `today === null`
+  // guard, so TypeScript could not narrow the day away and `placeItems` would be handed a
+  // possibly-null one.
+  const acceptItems = (items: readonly ParsedItem[]) => {
+    const { schedule: next, notes } = placeItems(week, items, today)
+    setSchedule(next)
+
+    const moved = notes.filter((note) => note.movedFrom !== null || !note.fitted)
+    setPlacementLines(notes.map((note) => describePlacement(note, next)))
+
+    // Only when something actually had to give. A week that simply absorbed the new work has
+    // nothing to offer and nothing to apologise for.
+    setPlacementFix(moved.length === 0 ? null : (smallestFixes(next, params, 1)[0] ?? null))
   }
 
   function answerBlock(itemId: string, answer: BlockAnswer) {
@@ -233,7 +266,12 @@ export function RoomShell({
   const askSleep = !sleepAnsweredToday
   const showTodayCard = !todayDismissed && (askEnergy || askSleep || blockForToday !== null)
 
+  // §8's floor case. Read off what the student reported rather than the modelled reserves: a
+  // claim this serious must rest on what they actually said, not on the app's guess.
+  const reportedEnergy = energyHistory(profile.predictions)
+
   const cards = visibleCards({
+    distress: !distressDismissed && isDistressed(reportedEnergy),
     recovery: !recoveryDismissed && recoveryPrescription !== null,
     lapsed: !lapsedDismissed && lapsedCommitments.length > 0,
     stuck: stuckItem !== undefined,
@@ -286,7 +324,8 @@ export function RoomShell({
           params={params}
           today={today}
           blockLog={blockLog}
-          onAcceptItems={(items) => setSchedule(addItems(week, items))}
+          predictions={profile.predictions}
+          onAcceptItems={(items) => acceptItems(items)}
           onAcceptRequest={(item) => setSchedule(accept(week, item, today))}
           onClose={closeToRoom}
         />
@@ -376,6 +415,7 @@ export function RoomShell({
           onSelectBlock={(itemId) => setView(toBlock(itemId))}
           blockLog={blockLog}
           capacity={overallReserve(week.start)}
+          history={reportedEnergy}
           bars={bars}
           projection={projection}
           // Ruling 56. §1.5's gate travelled with the breakdown when Ruling 53 moved it
@@ -477,10 +517,55 @@ export function RoomShell({
             {paragraph}
           </p>
 
+          {/* §16: never silently reshuffle. What was added, where it went, and -- only when
+              something had to give -- the single move that would help, offered rather than
+              taken. "Leave it" is the healthy default: doing nothing keeps the week the
+              student decided on. */}
+          {placementLines.length > 0 && (
+            <Card role="status" data-testid="placement-note" className="flex flex-col gap-2">
+              {placementLines.map((line, index) => (
+                <p key={`${line}-${index}`} className="text-sm">
+                  {line}
+                </p>
+              ))}
+
+              {placementFix !== null && (
+                <>
+                  <p className="text-sm text-ink-soft">Or: {placementFix.move.description}.</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      data-testid="placement-do"
+                      onClick={() => {
+                        setSchedule(placementFix.move.apply(week))
+                        setPlacementLines([])
+                        setPlacementFix(null)
+                      }}
+                    >
+                      Do that
+                    </Button>
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      data-testid="placement-leave"
+                      onClick={() => {
+                        setPlacementLines([])
+                        setPlacementFix(null)
+                      }}
+                    >
+                      Leave it
+                    </Button>
+                  </div>
+                </>
+              )}
+            </Card>
+          )}
+
           <AccuracyNote predictions={profile.predictions} />
 
           <LiveCards
             cards={cards}
+            onDistressDismiss={() => setDistressDismissed(true)}
             recoveryPrescription={recoveryPrescription}
             onRecoveryAccept={(taken) => setSchedule(scheduleRecovery(week, taken))}
             onRecoveryDismiss={() => setRecoveryDismissed(true)}
@@ -492,6 +577,7 @@ export function RoomShell({
             blockForToday={blockForToday}
             askEnergy={askEnergy}
             askSleep={askSleep}
+            outcomes={outcomes}
             onEnergy={(energy) => {
               if (todayDate === null) return
               setProfile({ ...profile, predictions: resolvePrediction(profile.predictions, todayDate, energy) })

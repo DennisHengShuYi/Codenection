@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { BlockOutcome } from './calibration'
 import { paramsFor } from './engineParams'
+import type { EnergyPrediction } from './predictions'
 import { DEFAULT_PARAMS } from '../engine'
 
 const overran = (count: number, type: BlockOutcome['type'] = 'mental'): BlockOutcome[] =>
@@ -45,9 +46,79 @@ describe('paramsFor', () => {
   it('changes nothing else about the parameters', () => {
     const params = paramsFor(overran(5))
 
-    expect(params.kSleep).toEqual(DEFAULT_PARAMS.kSleep)
     expect(params.dailyHoursCap).toBe(DEFAULT_PARAMS.dailyHoursCap)
     expect(params.isolationDrainPerDay).toBe(DEFAULT_PARAMS.isolationDrainPerDay)
     expect(params.sleepBaselineHours).toBe(DEFAULT_PARAMS.sleepBaselineHours)
+  })
+})
+
+/**
+ * The second parameter that learns.
+ *
+ * `estimateBias` was the only one; everything else -- `kSleep`, `kRest`, `kSocialContact`,
+ * `typeIntensity`, the whole coupling matrix -- was a population constant, so an introvert
+ * and an extrovert got the same numbers and the app called them the same thing. This is the
+ * one the prediction loop can actually support, because the app already claims a figure 48
+ * hours out and already finds out whether it was right.
+ */
+describe('paramsFor and what the prediction loop has learned', () => {
+  const sleepSamples = (n: number, residual: number): EnergyPrediction[] =>
+    Array.from({ length: n }, (_, index) => ({
+      forDate: `2026-09-${String(index + 1).padStart(2, '0')}`,
+      predicted: 50,
+      reported: 50 + residual,
+      basis: {
+        assumedSleepHours: 7,
+        assumedRestHours: 0,
+        sleepScaleSensitivity: 10,
+        restScaleSensitivity: 0,
+      },
+    }))
+
+  /** §7.7's no cold start, kept byte for byte. Opening the app must not quietly change the
+   *  model, and a caller that passes no predictions at all must be unaffected. */
+  it('is exactly the population default for a student it has learned nothing about', () => {
+    expect(paramsFor([])).toEqual(paramsFor([], []))
+    expect(paramsFor([], []).kSleep).toEqual(DEFAULT_PARAMS.kSleep)
+    expect(paramsFor([], []).kRest).toEqual(DEFAULT_PARAMS.kRest)
+  })
+
+  it('scales what sleep restores once the loop has enough to go on', () => {
+    const learned = paramsFor([], sleepSamples(6, 8))
+
+    expect(learned.kSleep.mental).toBeGreaterThan(DEFAULT_PARAMS.kSleep.mental)
+  })
+
+  /**
+   * The highest-risk line in the whole change.
+   *
+   * `params.ts` states outright that these zeros are load-bearing rather than rounded
+   * down: a non-zero coefficient lets an isolated student recover by sleeping, which makes
+   * the app's answer to loneliness an early night and erases the one signal the engine
+   * exists to surface. A multiplier must leave an exact zero exactly zero.
+   */
+  it('never lets a learned scale give sleep or rest power over the social reserve', () => {
+    const learned = paramsFor([], sleepSamples(20, 40))
+
+    expect(learned.kSleep.social).toBe(0)
+    expect(learned.kRest.social).toBe(0)
+  })
+
+  it('leaves every other parameter alone', () => {
+    const learned = paramsFor([], sleepSamples(6, 8))
+
+    expect(learned.kSocialContact).toBe(DEFAULT_PARAMS.kSocialContact)
+    expect(learned.typeIntensity).toEqual(DEFAULT_PARAMS.typeIntensity)
+    expect(learned.sleepBaselineHours).toBe(DEFAULT_PARAMS.sleepBaselineHours)
+    expect(learned.isolationDrainPerDay).toBe(DEFAULT_PARAMS.isolationDrainPerDay)
+  })
+
+  /** The two learners are independent: one measures estimates, the other measures
+   *  recovery, and neither may quietly disturb the other. */
+  it('composes with the estimate bias rather than replacing it', () => {
+    const both = paramsFor(overran(5), sleepSamples(6, 8))
+
+    expect(both.estimateBias.mental).toBeGreaterThan(1)
+    expect(both.kSleep.mental).toBeGreaterThan(DEFAULT_PARAMS.kSleep.mental)
   })
 })

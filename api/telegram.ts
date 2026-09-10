@@ -4,6 +4,7 @@ import { readPhoto } from '../src/ai/readPhoto'
 import { readRequest } from '../src/ai/readRequest'
 import { draftReplies } from '../src/ai/drafts'
 import type { BlockRecord } from '../src/domain/blockLog'
+import type { EnergyPrediction } from '../src/domain/predictions'
 import { HORIZON_DAYS } from '../src/engine'
 import type { Schedule } from '../src/optimizer'
 import type { PendingDump } from '../src/telegram/brainDump'
@@ -12,7 +13,7 @@ import { handleIntent, type ChatServices, type ChatStore } from '../src/telegram
 import { hasExpired } from '../src/telegram/linkCode'
 import { priceAskWith } from '../src/telegram/priceAsk'
 import type { Reply } from '../src/telegram/send'
-import { readUpdate } from '../src/telegram/update'
+import { callbackIdOf, readUpdate } from '../src/telegram/update'
 
 /**
  * The chat channel's front door (§13.6), and the only file that reads
@@ -183,6 +184,28 @@ export function createStore(client: SupabaseClient): ChatStore {
       )
     },
 
+    /**
+     * §8.1's resolved predictions, from the same `user_state.settings` blob the app writes.
+     *
+     * Empty rather than thrown on failure, and the asymmetry with `loadBlockLog` is
+     * deliberate: an absent profile is an ordinary state -- a student who has answered
+     * nothing yet -- whereas an unreadable block log means "we do not know", which must not
+     * be collapsed into "they answered nothing". Here the worst case of guessing wrong is
+     * the population defaults, which is what the app itself uses on day one.
+     */
+    async loadPredictions(accountId) {
+      const { data } = await client
+        .from('user_state')
+        .select('settings')
+        .eq('id', accountId)
+        .maybeSingle()
+
+      const settings = data?.settings as { calibration?: { predictions?: unknown } } | null
+      const predictions = settings?.calibration?.predictions
+
+      return Array.isArray(predictions) ? (predictions as EnergyPrediction[]) : []
+    },
+
     async markAnswered(accountId, dumpId, now) {
       await client
         .from('telegram_pending')
@@ -232,6 +255,27 @@ async function say(botToken: string, chatId: number, reply: Reply): Promise<void
   })
 }
 
+/**
+ * Clears the loading spinner Telegram puts on a tapped button.
+ *
+ * Owed for every press, including ones that read as `unhandled` -- an unrecognised button
+ * is exactly the case where a student is left staring at a spinner with nothing else
+ * happening. Failures are swallowed: this is an acknowledgement, and a student who cannot
+ * be told their tap registered is still better served by the reply that follows than by an
+ * exception that loses it.
+ */
+async function acknowledge(botToken: string, callbackId: string): Promise<void> {
+  try {
+    await fetch(`${TELEGRAM_API}/bot${botToken}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: callbackId }),
+    })
+  } catch {
+    // Nothing to do and nobody to tell. The reply itself is the real answer.
+  }
+}
+
 export default async function handler(request: Request): Promise<Response> {
   const config: Parameters<typeof checkRequest>[1] = {
     botToken: process.env.TELEGRAM_BOT_TOKEN,
@@ -253,6 +297,7 @@ export default async function handler(request: Request): Promise<Response> {
   try {
     const update: unknown = await request.json()
     const intent = readUpdate(update)
+    const callbackId = callbackIdOf(update)
 
     const client = createClient(config.supabaseUrl as string, config.serviceRoleKey as string, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -260,6 +305,10 @@ export default async function handler(request: Request): Promise<Response> {
 
     const groqKey = process.env.GROQ_API_KEY
     const botToken = config.botToken as string
+
+    // Before the work, not after: the spinner is showing now, and `handleIntent` can take a
+    // model call's worth of seconds to come back.
+    if (callbackId !== null) await acknowledge(botToken, callbackId)
 
     /**
      * The model-backed calls, assembled here because this is the only file that may read a

@@ -1,4 +1,4 @@
-import type { EngineParams } from '../../engine'
+import type { EngineParams } from '../engine'
 import {
   describeRebalance,
   makeRng,
@@ -6,7 +6,7 @@ import {
   smallestFixes,
   type Fix,
   type Schedule,
-} from '../../optimizer'
+} from '../optimizer'
 
 /**
  * §4: rebalance, and what to say when it cannot help.

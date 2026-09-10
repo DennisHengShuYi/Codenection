@@ -21,6 +21,7 @@ const modelOf = (over: Partial<Schedule> = {}) =>
     // Nothing answered, said rather than assumed (Ruling 51): these fixtures are about the
     // side-by-side layout, not about calibration.
     blockLog: [],
+    predictions: [],
   })
 
 const state = (character: RoomState['character']): RoomState => ({

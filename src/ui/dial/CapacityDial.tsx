@@ -1,5 +1,7 @@
+import type { EnergyPoint } from '../../domain/energyHistory'
 import type { Projection } from '../../engine'
 import { DomainBarList } from './DomainBarList'
+import { Sparkline } from './Sparkline'
 import { angleForPercent, arcPath, DIAL_MAX_PERCENT, pointOnArc } from './dialGeometry'
 import { describeDial } from './dialText'
 import type { DomainBar } from './domainBars'
@@ -20,11 +22,21 @@ export function CapacityDial({
   capacity,
   bars,
   projection,
+  history = [],
   compact = false,
 }: {
   capacity: number
   bars: readonly DomainBar[]
   projection: Projection
+  /**
+   * §8b's reported energy, oldest first, for the trend under the gauge.
+   *
+   * The gauge is one number about now and the bars are a forecast; this is the only thing
+   * on the screen that is a record of what the student actually said. Defaulted to empty so
+   * every caller built before it existed keeps compiling, and so §0's no-cold-start rule
+   * holds for a student on day one.
+   */
+  history?: readonly EnergyPoint[]
   compact?: boolean
 }) {
   const needle = pointOnArc(CX, CY, R - NEEDLE_INSET, angleForPercent(capacity))
@@ -88,6 +100,11 @@ export function CapacityDial({
           {Math.round(capacity)}%
         </span>
       </p>
+
+      {/* Directly under the number it is the history of, and dropped on the compact dial
+          for the same reason the bars are: §1.1's corner readout is one figure, and a
+          fortnight of dots beside it is a second thing to read. */}
+      {!compact && <Sparkline points={history} />}
 
       {!compact && <DomainBarList bars={bars} />}
 

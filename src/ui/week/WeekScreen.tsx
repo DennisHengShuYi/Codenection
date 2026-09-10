@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { BlockRecord } from '../../domain/blockLog'
 import type { Projection } from '../../engine'
 import type { Fix, Schedule } from '../../optimizer'
+import type { EnergyPoint } from '../../domain/energyHistory'
 import { CapacityDial } from '../dial/CapacityDial'
 import type { DomainBar } from '../dial/domainBars'
 import { Button } from '../kit/Button'
@@ -97,6 +98,14 @@ export function WeekScreen(props: {
    * week without it compile and look fine.
    */
   readonly capacity: number
+  /**
+   * §8b's reported energy, oldest first, for the trend under the gauge.
+   *
+   * It arrived here with the gauge: Ruling 53 moved the breakdown off the room, and the
+   * history belongs beside the number it is the history of. Optional and defaulting to
+   * empty so §0's no-cold-start rule holds for a student on day one.
+   */
+  readonly history?: readonly EnergyPoint[]
   readonly bars: readonly DomainBar[]
   readonly projection: Projection
   /**
@@ -124,6 +133,7 @@ export function WeekScreen(props: {
     onSelectBlock,
     blockLog = [],
     capacity,
+    history = [],
     bars,
     projection,
     lowEnergy,
@@ -132,10 +142,28 @@ export function WeekScreen(props: {
 
   const cells = scheduleView({ schedule, today, blockLog })
 
+  /**
+   * Fixed load is the baseline everything else is measured against, so a week with none is
+   * a week the app is quietly guessing about -- and the grid draws that as twenty-one
+   * light days, which reads as good news rather than as missing information.
+   *
+   * `protectedRest` is excluded deliberately: rest the optimizer pinned is fixed load the
+   * student did not put there, and counting it would let the app fall silent about a
+   * timetable it still has never seen.
+   */
+  const hasFixedLoad = schedule.items.some((item) => item.fixed && !item.protectedRest)
+
   const grid = openDay === null ? null : dayGrid(schedule, openDay)
 
   return (
     <div className="flex flex-col gap-4">
+      {!hasFixedLoad && (
+        <p data-testid="no-fixed-load" className="text-sm text-ink-soft">
+          Your week has no classes or shifts in it. Add them and the forecast gets a lot
+          sharper.
+        </p>
+      )}
+
       <ul className="grid grid-cols-3 gap-2 md:grid-cols-7">
         {cells.map((cell) => {
           const parts = [dayLabel(cell.dayIndex, cell.date), BAND_LABEL[cell.band]]
@@ -243,7 +271,7 @@ export function WeekScreen(props: {
           <h2 className="text-sm font-semibold tracking-wide text-ink-soft">
             Where your reserves stand
           </h2>
-          <CapacityDial capacity={capacity} bars={bars} projection={projection} />
+          <CapacityDial capacity={capacity} bars={bars} projection={projection} history={history} />
         </section>
       )}
     </div>

@@ -27,6 +27,7 @@ const setup = (over: Partial<Parameters<typeof RequestBoxScreen>[0]> = {}) => {
     params: DEFAULT_PARAMS,
     today: 0,
     blockLog: [],
+    predictions: [],
     onAccept: vi.fn(),
     onCancel: vi.fn(),
     ...over,

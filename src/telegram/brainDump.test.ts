@@ -20,8 +20,9 @@ const parsed = (title: string): ParsedItem => ({
   kind: 'studyBlock',
   hours: 2,
   deadlineDay: null,
-  hard: false,
+  fixed: false,
   confident: true,
+  repeat: null,
 })
 
 const outcome = (items: readonly ParsedItem[], source: 'model' | 'fallback' = 'model'): ParseOutcome => ({

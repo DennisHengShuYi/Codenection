@@ -1,5 +1,6 @@
 import { checkedInDays, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
 import { paramsFor } from '../../domain/engineParams'
+import type { EnergyPrediction } from '../../domain/predictions'
 import { project } from '../../engine'
 import { toDayInputs, type Schedule } from '../../optimizer'
 import { roomStateFor, type RoomState } from './roomState'
@@ -20,6 +21,15 @@ export interface RoomModelInput {
    * student had answered nothing. A caller with no log must now say `[]` in its own words.
    */
   readonly blockLog: readonly BlockRecord[]
+  /**
+   * §8.1's resolved predictions, from which the recovery coefficients are learned.
+   *
+   * Required for Ruling 51's reason, which applies here word for word: a call site that
+   * forgets these compiles, looks reasonable, and quietly draws the room from population
+   * coefficients while the today card scores itself against learned ones. A caller with no
+   * predictions says `[]` in its own words.
+   */
+  readonly predictions: readonly EnergyPrediction[]
 }
 
 export interface RoomModel {
@@ -48,11 +58,14 @@ export interface RoomModel {
  * a prediction still to score" flag -- which is why `RequestBoxScreen` was passing
  * `DEFAULT_PROFILE` to a model that never looked at it.
  */
-export function roomModel({ schedule, today, blockLog }: RoomModelInput): RoomModel {
+export function roomModel({ schedule, today, blockLog, predictions }: RoomModelInput): RoomModel {
   // §8b/Task 17: the durable log is the only source now. It used to be unioned with the
   // profile's own `confirmations` because nothing wrote a `BlockRecord` in the running app
   // yet -- `TodayCard` and the Telegram bot both do now, so the profile side is gone.
-  const params = paramsFor(outcomesFrom(blockLog))
+  // Threaded so the drawing runs the same model the prediction loop does. Left out, the
+  // room would be lit by population coefficients while the today card scored itself against
+  // learned ones -- two surfaces describing the same fortnight differently.
+  const params = paramsFor(outcomesFrom(blockLog), predictions)
   // §8b/Ruling 11 amended: a past day carrying no answer is a day the student went quiet,
   // and the model should get more worried, not pretend it heard from them. Days from
   // `today` onward stay checked in -- there is nothing to check in about yet -- which is

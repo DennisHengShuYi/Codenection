@@ -44,8 +44,9 @@ const request = (): ParsedItem => ({
   kind: 'studyBlock',
   hours: 6,
   deadlineDay: 4,
-  hard: false,
+  fixed: false,
   confident: true,
+  repeat: null,
 })
 
 /** Every block answered "took longer", which is what moves `paramsFor` off the population

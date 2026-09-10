@@ -67,6 +67,19 @@ const PHYSICAL_LIGHT_WORDS = ['walk', 'yoga']
  * against. Every signal list in this file is checked through this, not just `REST_WORDS`:
  * the same hazard sits behind "exam" in "example" and "call" in "recall".
  */
+/**
+ * Semgrep flags this as `detect-non-literal-regexp` (possible ReDoS). Triaged as a false
+ * positive, and worth stating so the next scan does not re-litigate it:
+ *
+ * `word` is never user input. Every call site passes a literal from `SIGNALS`,
+ * `PHYSICAL_LIGHT_WORDS` or `REST_WORDS` -- module-level `const` arrays of plain lowercase
+ * words. The student's text is `lower`, the *subject*, not the pattern. ReDoS needs either
+ * an attacker-controlled pattern or catastrophic backtracking, and `\bword\b` over a bare
+ * literal has neither: no nesting, no alternation, no overlapping quantifiers, so matching
+ * is linear. The subject is bounded too, by `MAX_INPUT_LENGTH`.
+ *
+ * If these lists ever take a value from outside this file, that reasoning is void.
+ */
 const hasSignalWord = (lower: string, word: string): boolean => new RegExp(`\\b${word}\\b`).test(lower)
 
 /** Splits on the punctuation people actually use in a dump. */
@@ -155,10 +168,14 @@ export function parseWithRules(text: string, today = 0): ParsedItem[] {
         kind,
         hours: hoursOf(lower),
         deadlineDay,
-        // A stated day is the student saying it is fixed. Everything else stays soft until
-        // they say otherwise.
-        hard: deadlineDay !== null,
+        // Never pre-pinned. The rules here can spot a stated *day*, which is a deadline
+        // and is carried by `deadlineDay` already -- they cannot tell that from a stated
+        // *time*, which is what `fixed` means. Guessing would pin blocks the optimizer may
+        // not move on the strength of the word "Tuesday", so this stays off and the chip's
+        // checkbox is where a class becomes fixed.
+        fixed: false,
         confident,
+        repeat: null,
       }
     })
 }

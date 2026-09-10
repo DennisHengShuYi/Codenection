@@ -22,8 +22,9 @@ const parsed = (title: string): ParsedItem => ({
   kind: 'studyBlock',
   hours: 2,
   deadlineDay: null,
-  hard: false,
+  fixed: false,
   confident: true,
+  repeat: null,
 })
 
 interface Harness {
@@ -63,6 +64,7 @@ function harness(over: Partial<ChatStore> = {}): Harness {
       blockAnswers.push(answer)
     },
     loadBlockLog: async () => [],
+    loadPredictions: async () => [],
     ...over,
   }
 
@@ -282,6 +284,134 @@ describe('the command surface', () => {
     const h = harness({ loadWeek: async () => week() as never })
 
     expect((await handleIntent(command('today'), h.store, 1000))?.text).toMatch(/nothing/i)
+  })
+
+  /**
+   * §8b②: a student answering on their phone must not meet a different question from the
+   * one the app asks. `/today` used to ask about `blocks[0]` whatever the log held, so
+   * answering the first block got them asked about it again on the next `/today`, for
+   * ever, while every other block on the day stayed unreachable from chat.
+   */
+  describe('/today and what has already been answered', () => {
+    const second = { ...studyBlock, id: 'b2', title: 'Stats problem set' }
+    const bothBlocks = () => week([studyBlock, second]) as never
+
+    const logFor = (blockId: string): BlockRecord[] => [
+      { blockId, type: 'mental', plannedHours: 2, dayIndex: 0, answer: 'right', answeredAt: 1 },
+    ]
+
+    it('moves on to the next block once the first has been answered', async () => {
+      const h = harness({ loadWeek: bothBlocks, loadBlockLog: async () => logFor('b1') })
+
+      const reply = await handleIntent(command('today'), h.store, 1000)
+
+      expect(reply?.text).toContain('Did Stats problem set happen?')
+      expect(reply?.buttons?.flat().every((b) => b.data.startsWith('block:b2:'))).toBe(true)
+    })
+
+    it('stops asking once the whole day is in the log', async () => {
+      const h = harness({
+        loadWeek: bothBlocks,
+        loadBlockLog: async () => [...logFor('b1'), ...logFor('b2')],
+      })
+
+      const reply = await handleIntent(command('today'), h.store, 1000)
+
+      expect(reply?.buttons).toBeUndefined()
+      expect(reply?.text).toContain('Ethics essay')
+    })
+
+    /**
+     * Fails closed. An unreadable log and an empty one mean opposite things -- "we do not
+     * know" versus "they have answered nothing" -- and treating the first as the second
+     * would ask a student to re-answer a block and overwrite the real record with the
+     * repeat. So the day is still listed and nothing is asked.
+     */
+    it('asks nothing rather than re-asking when the log cannot be read', async () => {
+      const h = harness({
+        loadWeek: bothBlocks,
+        loadBlockLog: async () => {
+          throw new Error('offline')
+        },
+      })
+
+      const reply = await handleIntent(command('today'), h.store, 1000)
+
+      expect(reply?.buttons).toBeUndefined()
+      expect(reply?.text).toContain('Ethics essay')
+    })
+  })
+
+  /**
+   * §22: two thirds of the model was unreachable from chat. Almost none of this is new
+   * logic -- these are commands over functions the app's own screens already read, so the
+   * thing worth testing is that both doors get the same answer rather than two models.
+   */
+  describe('the commands that reached parity with the app', () => {
+    it('answers /week with where the student is and where it stops holding', async () => {
+      const h = harness({ loadWeek: async () => week([studyBlock]) as never })
+
+      const reply = await handleIntent(command('week'), h.store, 1000)
+
+      expect(reply?.text).toMatch(/\d+%/)
+      expect(reply?.text).toMatch(/holds|day \d+/i)
+    })
+
+    /** §8.1's figure was app-only. A student who lives in chat could never see how good the
+     *  app's claims about them actually were. */
+    it('publishes the accuracy figure it measured', async () => {
+      const h = harness({
+        loadPredictions: async () => [{ forDate: '2026-01-01', predicted: 60, reported: 50 }],
+      })
+
+      expect((await handleIntent(command('week'), h.store, 1000))?.text).toMatch(/off by about/i)
+    })
+
+    it('answers /day with that day’s blocks', async () => {
+      const h = harness({ loadWeek: async () => week([{ ...studyBlock, dayIndex: 3 }]) as never })
+
+      expect((await handleIntent(command('day', '3'), h.store, 1000))?.text).toContain('Ethics essay')
+    })
+
+    /** Refused rather than clamped: a student who typed 40 and was shown day 20 would be
+     *  reading a day they never asked for and had no way to know it. */
+    it.each(['40', '-1', 'tuesday', ''])('refuses /day %s rather than guessing', async (argument) => {
+      const h = harness()
+
+      expect((await handleIntent(command('day', argument), h.store, 1000))?.text).toMatch(/which day/i)
+    })
+
+    it('answers /rebalance by actually rebalancing and saving the result', async () => {
+      const h = harness({ loadWeek: async () => week([studyBlock]) as never })
+
+      const reply = await handleIntent(command('rebalance'), h.store, 1000)
+
+      expect(reply?.text.length).toBeGreaterThan(0)
+      expect(h.saved).toHaveLength(1)
+    })
+
+    it('answers /lapsed plainly when nothing has fallen through', async () => {
+      const h = harness()
+
+      expect((await handleIntent(command('lapsed'), h.store, 1000))?.text).toMatch(/nothing/i)
+    })
+
+    /**
+     * An unreadable block log means "we do not know", and every one of these is judged
+     * against it. Saying so beats quoting a number computed from an assumption nobody made.
+     */
+    it.each(['week', 'rebalance', 'lapsed'])('refuses /%s when the log cannot be read', async (name) => {
+      const h = harness({
+        loadBlockLog: async () => {
+          throw new Error('offline')
+        },
+      })
+
+      const reply = await handleIntent(command(name), h.store, 1000)
+
+      expect(reply?.text).toMatch(/cannot|right now/i)
+      expect(h.saved).toEqual([])
+    })
   })
 
   it('answers /rest with one thing to do when something is low', async () => {

@@ -6,6 +6,9 @@ import {
   askReply,
   blockAnsweredReply,
   blocksReply,
+  lapsedReply,
+  rebalanceReply,
+  weekReply,
   helpReply,
   microStartReply,
   needRequestReply,
@@ -28,8 +31,9 @@ const item = (title: string): ParsedItem => ({
   kind: 'studyBlock',
   hours: 2,
   deadlineDay: null,
-  hard: false,
+  fixed: false,
   confident: true,
+  repeat: null,
 })
 
 describe('linkedReply', () => {
@@ -143,7 +147,17 @@ describe('helpReply', () => {
   it('names every command a student can use', () => {
     const text = helpReply().text
 
-    for (const command of ['today', 'yesterday', 'rest', 'stuck', 'ask']) {
+    for (const command of [
+      'week',
+      'today',
+      'yesterday',
+      'day',
+      'rebalance',
+      'rest',
+      'stuck',
+      'ask',
+      'lapsed',
+    ]) {
       expect(text).toContain(`/${command}`)
     }
   })
@@ -192,6 +206,59 @@ describe('blocksReply', () => {
 
     expect(reply.text).toMatch(/nothing/i)
     expect(reply.buttons).toBeUndefined()
+  })
+
+  /**
+   * The bot used to ask about `blocks[0]` unconditionally, so a student who answered it got
+   * asked about the same block again on the next `/today` -- for ever -- while every other
+   * block on the day stayed unreachable from their phone. The app has never behaved that
+   * way: `blockToAsk` skips what the log already holds and moves on.
+   */
+  it('moves on to the next block once the first has been answered', () => {
+    const actions = blocksReply('today', blocks, ['b1']).buttons?.flat().map((b) => b.data) ?? []
+
+    expect(actions.length).toBe(4)
+    expect(actions.every((action) => action.startsWith('block:b2:s:3:1:'))).toBe(true)
+  })
+
+  it('asks nothing once every block on the day has been answered', () => {
+    const answered = blocksReply('today', blocks, ['b1', 'b2'])
+
+    expect(answered.buttons).toBeUndefined()
+    // The day is still worth listing -- the student asked what was on it.
+    expect(answered.text).toContain('Ethics essay')
+    expect(answered.text).toContain('Shift')
+  })
+
+  it('still lists every block on the day, not only the one being asked about', () => {
+    const text = blocksReply('today', blocks, ['b1']).text
+
+    expect(text).toContain('Ethics essay')
+    expect(text).toContain('Shift')
+  })
+
+  /**
+   * §23: Telegram silently drops a `sendMessage` whose `callback_data` exceeds 64 bytes,
+   * and `api/telegram.ts` ignores the response -- so the failure mode is a keyboard that
+   * simply never appears, with nothing logged anywhere. The single-character type and
+   * answer codes exist to buy headroom; this is the test that proves the budget is still
+   * being met rather than merely intended.
+   */
+  it('keeps every callback payload inside the 64-byte limit Telegram enforces', () => {
+    const longest = [
+      {
+        id: 'added-1757000000000-24-parsed-123',
+        title: 'A very long block title that does not enter the payload at all',
+        startHour: 9,
+        type: 'physical' as const,
+        hours: 10.5,
+        dayIndex: 20,
+      },
+    ]
+
+    for (const button of blocksReply('today', longest).buttons?.flat() ?? []) {
+      expect(new TextEncoder().encode(button.data).length).toBeLessThanOrEqual(64)
+    }
   })
 })
 
@@ -379,5 +446,80 @@ describe('the wording at its edges', () => {
     ).text
 
     expect(text).not.toMatch(/undefined/)
+  })
+})
+
+/**
+ * §22's parity renderers.
+ *
+ * The rule these are written to: the bot never decides anything. Every number below is
+ * computed in `src/domain` or `src/optimizer` and handed here already made -- if a
+ * threshold comparison ever appears in this file, it belongs somewhere else and the app
+ * should be reading it from the same place.
+ */
+describe('weekReply', () => {
+  const summary = {
+    reserve: 62,
+    firstDeficitDay: 6,
+    accuracy: 'Measured over 5 days: off by about 7 points.',
+    bias: 'You underestimate study and writing by about 1.4×. We pad it automatically.',
+  }
+
+  it('leads with where the student is now', () => {
+    expect(weekReply(summary).text).toContain('62')
+  })
+
+  it('names the day the fortnight stops holding', () => {
+    expect(weekReply(summary).text).toMatch(/day 6/i)
+  })
+
+  /** §8.2: the 21-day projection is a decision aid and is never described as validated. */
+  it('says plainly when the fortnight holds', () => {
+    expect(weekReply({ ...summary, firstDeficitDay: null }).text).toMatch(/holds|clear|nothing/i)
+  })
+
+  /** The two honesty lines the app shows and chat could not: what the app measured about
+   *  its own accuracy, and what it measured about the student's estimates. */
+  it('carries the accuracy figure and the reality-check line across', () => {
+    const text = weekReply(summary).text
+
+    expect(text).toContain('off by about 7 points')
+    expect(text).toContain('underestimate study and writing')
+  })
+
+  it('omits a bias line there is nothing to say about', () => {
+    expect(weekReply({ ...summary, bias: null }).text).not.toMatch(/underestimate/)
+  })
+})
+
+describe('rebalanceReply', () => {
+  it('reports what the solver did in its own words', () => {
+    expect(rebalanceReply('Moved two blocks; your worst day goes from 31 to 44.', null).text).toContain(
+      'worst day goes from 31 to 44',
+    )
+  })
+
+  /** §2.5: "nothing to move, but here is the one thing that would help" is the likelier
+   *  headline for a real final-year student, not a consolation prize. */
+  it('offers the single best remaining move when the solver found none', () => {
+    const reply = rebalanceReply('Nothing I tried improved the week.', 'move the laundry to Saturday')
+
+    expect(reply.text).toContain('move the laundry to Saturday')
+  })
+
+  it('says nothing extra when the solver already helped', () => {
+    expect(rebalanceReply('Moved two blocks.', null).text).not.toMatch(/would still/i)
+  })
+})
+
+describe('lapsedReply', () => {
+  it('names what has fallen through', () => {
+    const reply = lapsedReply([{ title: 'Cover Amir’s shift' }])
+
+    expect(reply.text).toContain('Cover Amir’s shift')
+  })
+
+  it('says so plainly when nothing has', () => {
+    expect(lapsedReply([]).text).toMatch(/nothing|still standing|all good/i)
   })
 })

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BlockRecord } from '../domain/blockLog'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
+import { getSession } from './auth'
 import { createSupabaseRepository } from './supabaseRepository'
 import { DEFAULT_SETTINGS } from './types'
 
@@ -47,6 +48,12 @@ let writeResult: StubResult = { error: null }
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     __constructed: (calls.clients += 1),
+    // Enough of the auth surface for `getSession` to run for real. Leaving it off would
+    // still let the count assertion below pass -- `getSession` swallows the resulting
+    // throw -- but it would pass for the wrong reason.
+    auth: {
+      getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+    },
     from(table: string) {
       calls.from.push(table)
       const builder = {
@@ -81,6 +88,16 @@ vi.mock('@supabase/supabase-js', () => ({
       }
       return builder
     },
+  }),
+}))
+
+// The auth module reads its configuration from the environment, which the test config
+// blanks. Supplied here -- with the same url and key the repository is built on -- so that
+// "one client" is a claim about both modules rather than about this one in isolation.
+vi.mock('./env', () => ({
+  readDataConfig: () => ({
+    supabaseUrl: 'https://example.supabase.co',
+    supabaseAnonKey: 'anon-key',
   }),
 }))
 
@@ -305,6 +322,27 @@ describe('the Supabase client', () => {
     const before = calls.clients
 
     repo('user-abc')
+
+    expect(calls.clients).toBe(before)
+  })
+
+  /**
+   * The half of "one client" that the tests above cannot see.
+   *
+   * Storage and authentication are separate concerns and live in separate modules, but
+   * they are not separate *clients*: both talk to the same project, so both land on the
+   * same `sb-<ref>-auth-token` key in local storage. Two clients there is the warned-about
+   * condition whether they came from one module or two -- and a memo per module looks
+   * entirely correct while still producing exactly that.
+   */
+  it('is shared with the auth module, which works against the same storage key', async () => {
+    // Ordered so the repository builds it first and auth is the one asked to reuse. The
+    // reverse ordering is the same claim, but this way a failure names the module that
+    // built a second client.
+    await repo('user-abc').loadWeek()
+    const before = calls.clients
+
+    await getSession()
 
     expect(calls.clients).toBe(before)
   })

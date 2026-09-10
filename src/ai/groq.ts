@@ -1,9 +1,9 @@
 import { BLOCK_KINDS, HORIZON_DAYS } from '../engine'
+import { GROQ_TEXT_MODEL, GROQ_TRANSCRIBE_MODEL } from './models'
 import { parseModelReply } from './schema'
 import { MAX_ITEMS, type ParsedItem } from './types'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
-const GROQ_MODEL = 'llama-3.3-70b-versatile'
 
 /** §10, constraint 3: the call is time-boxed and falls back rather than hanging the
  *  confirm screen behind a model that never answers. */
@@ -51,7 +51,7 @@ export async function askGroq(text: string, apiKey: string): Promise<ParsedItem[
         authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: GROQ_MODEL,
+        model: GROQ_TEXT_MODEL,
         temperature: 0,
         response_format: { type: 'json_object' },
         messages: [
@@ -104,7 +104,7 @@ export async function transcribeAudio(audio: Blob, apiKey: string): Promise<stri
   try {
     const form = new FormData()
     form.append('file', audio, 'note.ogg')
-    form.append('model', 'whisper-large-v3-turbo')
+    form.append('model', GROQ_TRANSCRIBE_MODEL)
     // Asking for plain text rather than JSON: there is one field wanted and no reason to
     // parse a document to reach it.
     form.append('response_format', 'text')

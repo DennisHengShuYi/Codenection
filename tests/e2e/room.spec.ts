@@ -30,6 +30,37 @@ for (const width of [320, 390, 768, 1280]) {
   })
 }
 
+/**
+ * Ruling 52, measured rather than inferred.
+ *
+ * The corner gauge was in the DOM with the right number and painted behind the room's own
+ * wall rect, because the scene `<svg>` is a later absolutely positioned sibling with no
+ * z-index between them. Five unit tests passed on it, all asserting presence or text.
+ *
+ * A real browser can answer the question those could not: hit-test the middle of the
+ * gauge and ask what is actually on top there. On the shipped DOM order the answer is
+ * something inside the scene; it has to be the gauge.
+ */
+test('shows the corner gauge on top of the room, not behind its wall', async ({ page }) => {
+  await openApp(page)
+
+  const gauge = page.getByTestId('room-gauge')
+  await expect(gauge).toBeVisible()
+
+  const box = await gauge.boundingBox()
+  expect(box, 'the gauge has no box to hit-test').not.toBeNull()
+
+  const topmost = await page.evaluate(
+    ([x, y]) => {
+      const hit = document.elementFromPoint(x as number, y as number)
+      return hit === null ? null : (hit.closest('[data-testid]')?.getAttribute('data-testid') ?? hit.tagName)
+    },
+    [box!.x + box!.width / 2, box!.y + box!.height / 2],
+  )
+
+  expect(topmost).toBe('room-gauge')
+})
+
 // §1.5: the picture carries nothing to a screen reader, so the words have to be there.
 test('states the room in words as well as drawing it', async ({ page }) => {
   await openApp(page)
@@ -63,4 +94,165 @@ test('draws the room without turning any of it back into a control', async ({ pa
   await scene.getByTestId('room-plant').click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.getByTestId('sheet')).toHaveCount(0)
+})
+
+/**
+ * Rulings 54 and 55, measured in the only place they can be.
+ *
+ * The room now fills the screen, `Settings`, `The week` and `+` sit inside it, and the
+ * paragraph, the accuracy line and the live cards ride in a band over the lower room.
+ * Overlaid controls have failed here before -- PR #39's band "covered the furniture and
+ * swallowed its clicks -- the phone was unreachable from 768px up". The click-swallowing
+ * half cannot recur (the drawing is display-only now: nothing inside it wants a click), so
+ * what is left to prove is the visual half, and one thing PR #39 did not have a name for:
+ * **the character has to stay legible**, because §1.3's character is how this app says how
+ * the student is doing and nothing else expresses it.
+ *
+ * Every assertion here is a measurement of the rendered page, not of the DOM: a unit test
+ * can say the band contains the paragraph, and would say exactly the same thing about a
+ * band painted over the character's face.
+ */
+const controlAt = (page: Page, x: number, y: number) =>
+  page.evaluate(
+    ([px, py]) => {
+      const hit = document.elementFromPoint(px as number, py as number)
+      return hit === null ? null : (hit.closest('[data-testid]')?.getAttribute('data-testid') ?? hit.tagName)
+    },
+    [x, y],
+  )
+
+/**
+ * The four required widths, each with a height a screen of that width actually has. The
+ * height is not decoration here: the band is capped against the character's position, which
+ * is `min(52.33vw, 60.38% of the stage)` down the screen, so which of the two terms wins changes with
+ * the shape of the viewport. 320x568 is the small phone the band has least room on and the
+ * one a flat percentage cap got wrong.
+ */
+const VIEWPORTS: readonly (readonly [number, number])[] = [
+  [320, 568],
+  [390, 844],
+  [768, 800],
+  [1280, 800],
+]
+
+for (const [width, height] of VIEWPORTS) {
+  test(`the room screen keeps its controls hittable and its character clear at ${width}x${height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height })
+    await openApp(page)
+
+    const stage = await page.getByTestId('room-stage').boundingBox()
+    const scene = await page.getByTestId('room-scene').boundingBox()
+    const band = await page.getByTestId('room-band').boundingBox()
+    const character = await page.getByTestId('room-character').boundingBox()
+    expect(stage && scene && band && character, 'a measured element has no box').toBeTruthy()
+
+    // The room fills the screen: the drawing spans the stage, and the stage spans the
+    // viewport. Not "is visible" -- the aspect-boxed room it replaces was visible too.
+    expect(stage!.height, `the stage does not fill the viewport at ${width}px`).toBeGreaterThanOrEqual(
+      height - 10,
+    )
+    expect(scene!.height).toBeGreaterThanOrEqual(stage!.height - 1)
+
+    // The band overlays the LOWER room rather than sitting beneath it: it starts inside the
+    // drawing and ends at the bottom of the screen.
+    expect(band!.y).toBeGreaterThan(scene!.y)
+    expect(band!.y + band!.height).toBeGreaterThanOrEqual(stage!.y + stage!.height - 1)
+
+    // Ruling 55's binding constraint. The whole character -- head, face, posture, feet on
+    // the floor line -- stays above the band's top edge, so nothing about how the student
+    // is doing is read through a translucent panel or lost behind one.
+    expect(
+      character!.y + character!.height,
+      `the band covers the character at ${width}px`,
+    ).toBeLessThanOrEqual(band!.y)
+
+    // And the same thing asked of the browser rather than of the arithmetic: what is
+    // actually painted at the character's face?
+    const face = await controlAt(page, character!.x + character!.width / 2, character!.y + character!.height * 0.2)
+    expect(face).toBe('room-character')
+
+    // The words are the room's text equivalent and the accuracy line is the app's own
+    // honesty about its predictions: both sit above the cards in the band and both must be
+    // on the screen without scrolling anything, at every width. The band scrolls only for
+    // what comes after them.
+    for (const id of ['room-text-equivalent', 'accuracy-note']) {
+      const box = await page.getByTestId(id).boundingBox()
+      expect(box, `${id} has no box at ${width}px`).not.toBeNull()
+      expect(box!.y, `${id} starts above the band at ${width}px`).toBeGreaterThanOrEqual(band!.y)
+      expect(
+        box!.y + box!.height,
+        `${id} is cut off by the bottom of the band at ${width}px`,
+      ).toBeLessThanOrEqual(band!.y + band!.height)
+    }
+
+    // §1.5's fold rule, which is why the controls were outside the room in the first place:
+    // nothing the student needs may require a scroll.
+    const scrolls = await page.evaluate(
+      () => document.documentElement.scrollHeight > document.documentElement.clientHeight + 1,
+    )
+    expect(scrolls, `the room screen scrolls at ${width}px`).toBe(false)
+
+    // All three controls, hit-tested where a thumb would land. `toBeVisible` passes on a
+    // button painted under an opaque band; `elementFromPoint` does not.
+    for (const id of ['open-settings', 'open-week', 'open-add']) {
+      const control = page.getByTestId(id)
+      await expect(control).toBeVisible()
+
+      const box = await control.boundingBox()
+      expect(box, `${id} has no box at ${width}px`).not.toBeNull()
+      expect(box!.height, `${id} is under the 44px touch target at ${width}px`).toBeGreaterThanOrEqual(44)
+
+      const topmost = await controlAt(page, box!.x + box!.width / 2, box!.y + box!.height / 2)
+      expect(topmost, `${id} is covered at ${width}px`).toBe(id)
+    }
+  })
+}
+
+/**
+ * "The room fills the screen" has to survive a screen that is not the drawing's shape.
+ *
+ * A 3:2 room in a 16:10 window letterboxes: `preserveAspectRatio` leaves a band down each
+ * side. The room reaches into those bands because the wall, the ceiling and the floor are
+ * drawn far past the viewBox and an `<svg>` clips to its element box rather than to its
+ * viewBox -- so the room continues rather than the drawing sitting in a rectangle of
+ * background colour. 1280x800 is wide enough for the drawing to be limited by height, which
+ * is what produces the side bands; a point ten pixels from the left edge lands in one.
+ */
+test('reaches the edges of a screen the drawing does not fit, with room rather than backdrop', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await openApp(page)
+
+  const scene = await page.getByTestId('room-scene').boundingBox()
+  expect(scene!.width).toBe(1280)
+
+  const nearTop = await controlAt(page, 10, 200)
+  const nearFloor = await controlAt(page, 10, 470)
+
+  expect(nearTop, 'the left edge at wall height is not wall').toBe('room-wall')
+  expect(nearFloor, 'the left edge at floor height is not floor').toBe('room-floor')
+})
+
+/**
+ * The band earns its place only if it actually carries the things §3 put beneath the
+ * drawing. Asserted at 390px with them on screen at once, and clicked through, so this
+ * cannot pass on a band that renders them somewhere unreachable.
+ */
+test('carries the words, the accuracy line and the live cards in the band, and still opens the week from it', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 800 })
+  await openApp(page)
+
+  const band = page.getByTestId('room-band')
+  await expect(band.getByTestId('room-text-equivalent')).not.toHaveText('')
+  await expect(band.getByTestId('accuracy-note')).toBeVisible()
+
+  // And the band is a place a student can act from, not just read: the week opens from it.
+  await page.getByTestId('open-week').click()
+  await expect(page.getByTestId('week-back')).toBeVisible()
+  await expect(page.getByTestId('room-band')).toHaveCount(0)
 })

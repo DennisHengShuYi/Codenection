@@ -69,7 +69,17 @@ export function App() {
   }
 
   return (
-    <>
+    /* One viewport-height column, not a bare fragment.
+     *
+     * The room stage below is the full height of the screen and the band inside it is
+     * anchored to the stage's bottom edge. A sentence rendered above the stage in normal
+     * flow would push the whole stage down: the band would land below the fold, taking `+`
+     * -- the one control low-energy mode keeps -- with it, and the page would gain a
+     * scrollbar in a state the student is already having a bad time in. Making the two
+     * flex children of one `h-dvh` column takes the notice's height out of the stage
+     * instead of out of the screen. Costs nothing when the notice is absent, which is
+     * almost always: the stage is then the only child and fills the column exactly. */
+    <div className="flex h-dvh flex-col">
       {/* Rendered here rather than inside `RoomShell` because this is where the hook that
           knows about it lives, and threading it down would mean a new required prop on all
           34 render sites for a sentence that appears when storage is broken. A block answer
@@ -79,7 +89,7 @@ export function App() {
         <p
           data-testid="block-log-problem"
           role="status"
-          className="mx-auto max-w-screen-md px-4 pt-4 text-sm text-attention"
+          className="mx-auto w-full max-w-screen-md shrink-0 px-4 pt-4 text-sm text-attention"
         >
           {blockLogProblem}
         </p>
@@ -108,6 +118,6 @@ export function App() {
         }}
         onSignIn={() => setBrowsing(false)}
       />
-    </>
+    </div>
   )
 }

@@ -63,6 +63,29 @@ describe('parseModelReply', () => {
     expect(parseModelReply(null)).toBeNull()
   })
 
+  /**
+   * Observed, not hypothesised: asked for `{"items":[...]}`, the vision model answered a
+   * photographed timetable with a bare array of exactly the right items, and every one of
+   * them was thrown away over the missing wrapper. The student saw "I could not read that
+   * photo" about a photo that had been read correctly.
+   *
+   * The wrapper is our request, not the boundary. What the boundary is for is the contents
+   * of each item -- an invented load type, an hours figure that would corrupt the
+   * projection -- and none of that is weakened by accepting the other shape. The test
+   * below this one is what keeps that true.
+   */
+  it('accepts a bare array, because models drop the wrapper', () => {
+    const items = parseModelReply(good.items)
+
+    expect(items).toHaveLength(2)
+    expect(items?.[0]?.title).toBe('WIA3001 essay')
+  })
+
+  it('validates the contents of a bare array exactly as strictly', () => {
+    expect(parseModelReply([{ ...good.items[0], type: 'spiritual' }])).toBeNull()
+    expect(parseModelReply([{ ...good.items[0], hours: 500 }])).toBeNull()
+  })
+
   it('rejects an item with no title', () => {
     expect(parseModelReply({ items: [{ ...good.items[0], title: '' }] })).toBeNull()
   })

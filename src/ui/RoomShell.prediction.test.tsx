@@ -156,6 +156,11 @@ describe('RoomShell showing reported energy over time', () => {
     })
   }
 
+  /**
+   * On the week screen, not the room. The trend travelled with the gauge when Ruling 53
+   * moved the five-domain breakdown off the room -- the room reads capacity once, and the
+   * history of a number belongs beside the number.
+   */
   it('plots the days the student has reported on', async () => {
     counter += 1
     const repository = createLocalRepository(`prediction-trend-${counter}`)
@@ -164,6 +169,8 @@ describe('RoomShell showing reported energy over time', () => {
     await seedReported(repository, [30, 50, 70, 90])
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+    await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-week'))
 
     await waitFor(() => expect(screen.getByTestId('sparkline')).toBeInTheDocument())
     expect(screen.getByTestId('sparkline').getAttribute('points')?.split(' ')).toHaveLength(4)
@@ -186,8 +193,12 @@ describe('RoomShell showing reported energy over time', () => {
     await seedReported(repository, [])
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
-    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+    await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-week'))
 
+    // Checked on the screen that would draw it, so this cannot pass merely because the
+    // trend lives somewhere else now.
+    await waitFor(() => expect(screen.getByTestId('rebalance')).toBeVisible())
     expect(screen.queryByTestId('sparkline')).not.toBeInTheDocument()
   })
 
@@ -201,8 +212,12 @@ describe('RoomShell showing reported energy over time', () => {
     await seedReported(repository, [40, 60])
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
-    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+    await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-week'))
 
+    // Checked on the screen that would draw it, so this cannot pass merely because the
+    // trend lives somewhere else now.
+    await waitFor(() => expect(screen.getByTestId('rebalance')).toBeVisible())
     expect(screen.queryByTestId('sparkline')).not.toBeInTheDocument()
   })
 })

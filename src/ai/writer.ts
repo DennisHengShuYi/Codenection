@@ -1,8 +1,8 @@
 import { parseDraftReply } from './draftSchema'
 import type { Draft } from './draftTemplates'
+import { GROQ_TEXT_MODEL } from './models'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
-const GROQ_MODEL = 'llama-3.3-70b-versatile'
 
 /** Matches the planner's budget: this is text, not an image. §10's third constraint. */
 const DRAFT_TIMEOUT_MS = 8000
@@ -55,7 +55,7 @@ export async function askWriter(brief: DraftBrief, apiKey: string): Promise<Draf
         authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: GROQ_MODEL,
+        model: GROQ_TEXT_MODEL,
         temperature: 0.3,
         response_format: { type: 'json_object' },
         messages: [

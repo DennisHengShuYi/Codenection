@@ -4,20 +4,20 @@ import { describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
+import { CHARACTER_BOTTOM } from './room/scene/palette'
 import { RoomShell } from './room/RoomShell'
 
 /**
  * The room screen itself, rather than the components in isolation.
  *
  * §3 gives it a fixed shape: `<h1>`, `PreviewBanner`, `Room`, the `describeRoom` paragraph,
- * `AccuracyNote`, the live cards, then `The week` and `+`. §1.1's dial moved permanently
- * into the room's own corner gauge once the drawing became display-only (Task 12) -- there
- * is no remaining tap target to carry a separate dial screen, so that half of the old file
- * (the five domain bars behind `light`) has no home to move to and is not relocated; it is
- * a real, reported reduction in reachability rather than a silent one -- see the task
- * report. What this file keeps proving: that the room leads, and that acting on a block now
- * reaches the *stored* week through the week screen and the block sheet, not a tap on the
- * room itself.
+ * `AccuracyNote`, the live cards, then `The week` and `+`. §1.1's compact readout is the
+ * room's corner gauge and nothing else (Ruling 53): the five-bar breakdown that Ruling 28
+ * correctly rescued from orphanhood was parked here by mistake, giving the room two
+ * capacity readings, and it now lives on the week screen. What this file proves: that the
+ * room leads, that it reads capacity exactly once, that the breakdown is still reachable
+ * from it, and that acting on a block reaches the *stored* week through the week screen and
+ * the block sheet rather than a tap on the room itself.
  */
 const weekWithErrand = (): Schedule => ({
   items: [
@@ -73,15 +73,48 @@ describe('RoomShell with the room', () => {
   })
 
   /**
-   * Coordinator review (combined 12+13): `CapacityDial` -- the semicircular gauge, the five
-   * domain bars each against its own ceiling, and the low-social-flagged-as-warning logic
-   * that is the app's actual differentiator -- had zero production consumers once `Room`'s
-   * tap targets went. §1.1 says it "sits in one corner as a compact readout, no tap
-   * required", not that it is deleted. This is the behavioural RED: a state with a low
-   * social reserve must show the warning without any interaction, and it fails against the
-   * bare-percentage-only room screen.
+   * Ruling 53. `CapacityDial` was bolted onto the room screen beneath the two permanent
+   * controls, which gave the room two capacity readings: the compact corner gauge §1.1
+   * asked for, and a five-bar dashboard the room screen's design never contained (the doc
+   * mentions `CapacityDial` once, in a §11 footnote about a colour token). The breakdown
+   * moved to the week screen; the room keeps one reading.
+   *
+   * The behavioural RED: every part of the loud second reading must be absent from the
+   * room, and this fails against the screen that shipped.
    */
-  it('shows the low-social warning with no tap required', async () => {
+  it('reads capacity once on the room screen, as the corner gauge alone', async () => {
+    await renderWithErrand()
+
+    expect(screen.getByTestId('room-gauge')).toHaveTextContent(/^\d{1,3}%$/)
+    expect(screen.queryAllByRole('meter')).toHaveLength(0)
+    expect(screen.queryByTestId('dial-gauge')).toBeNull()
+    expect(screen.queryByTestId('reserve-text-equivalent')).toBeNull()
+  })
+
+  /**
+   * The other half of the move, and the half that matters most: Ruling 28 found this
+   * content orphaned once and it must not be orphaned again. Reachability is asserted by
+   * walking there the way a student does -- one tap on `The week` -- rather than by
+   * rendering `CapacityDial` in isolation and assuming somebody links to it.
+   */
+  it('reaches the five domain bars and the spoken summary through the week screen', async () => {
+    await renderWithErrand()
+
+    expect(screen.queryAllByRole('meter')).toHaveLength(0)
+
+    await userEvent.click(screen.getByTestId('open-week'))
+
+    expect(await screen.findAllByRole('meter')).toHaveLength(5)
+    expect(screen.getByTestId('reserve-text-equivalent')).toBeVisible()
+  })
+
+  /**
+   * The low-social warning is the single clearest evidence the model understands burnout
+   * rather than summing hours -- a tracker reads a quiet week as healthy. It has already
+   * been lost once (Ruling 28), so the move gets its own test rather than riding on the
+   * meters above.
+   */
+  it('still flags a low social reserve as a warning, one tap into the week', async () => {
     counter += 1
     const repository = createLocalRepository(`room-dial-${counter}`)
     await repository.clear()
@@ -93,16 +126,13 @@ describe('RoomShell with the room', () => {
     })
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
-
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
-    expect(screen.getByTestId('warning-social')).toHaveTextContent(/spending a lot of time alone/i)
-  })
 
-  it('still carries the five domain bars and the dial\'s own spoken summary', async () => {
-    await renderWithErrand()
+    await userEvent.click(screen.getByTestId('open-week'))
 
-    expect(screen.getAllByRole('meter')).toHaveLength(5)
-    expect(screen.getByTestId('reserve-text-equivalent')).toBeVisible()
+    expect(await screen.findByTestId('warning-social')).toHaveTextContent(
+      /spending a lot of time alone/i,
+    )
   })
 
   /**
@@ -266,5 +296,129 @@ describe('RoomShell with the room', () => {
     expect(screen.queryByRole('button', { name: /undo/i })).toBeNull()
     expect(await screen.findByTestId('recorded-answer')).toHaveTextContent('You said: About right')
     expect(onAnswerBlock).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * Rulings 54 and 55: the room fills the screen, its three controls sit inside it, and
+ * §3's "beneath the drawing" content -- the paragraph, the accuracy line and the live
+ * cards -- moves into a band that overlays the lower part of the room.
+ *
+ * What this file can prove is structure: what contains what, and in which order. The two
+ * things that actually broke the last time controls were overlaid are geometric -- a band
+ * covering the furniture, and a control nobody can hit -- and jsdom has no layout engine
+ * and no Tailwind stylesheet, so a `toBeVisible()` here would pass over a button painted
+ * under an opaque band. Those are measured in a real browser instead, in
+ * `tests/e2e/room.spec.ts` at 320/390/768/1280.
+ */
+describe('the room screen, with the controls inside the room', () => {
+  /**
+   * The trap this branch has already paid for once: the scene carries `role="img"`, which
+   * hides its whole subtree from the accessibility tree. A control drawn inside the
+   * `<svg>` would look right and be unreachable to a screen reader, so every control has
+   * to be a SIBLING positioned over it rather than a child of it.
+   */
+  it('puts all three controls inside the room, as siblings of the drawing rather than children', async () => {
+    await renderWithErrand()
+
+    const stage = screen.getByTestId('room-stage')
+    const scene = screen.getByTestId('room-scene')
+
+    expect(stage).toContainElement(scene)
+
+    for (const id of ['open-settings', 'open-week', 'open-add']) {
+      const control = screen.getByTestId(id)
+      expect(stage).toContainElement(control)
+      expect(scene.contains(control)).toBe(false)
+    }
+  })
+
+  /**
+   * The same rule, widened past the three controls named above: nothing inside the drawing
+   * is a control, now or later. The check above names `open-settings`, `open-week` and
+   * `open-add`; this one fails on a *fourth* control someone drops into the `<svg>` because
+   * it aligned nicely there -- which is the way this trap gets sprung, not by moving the
+   * three that already have a test each.
+   *
+   * A CSS locator rather than a role query, and deliberately: `role="img"` hides the
+   * subtree from the accessibility tree, so `getAllByRole('button')` scoped to the scene
+   * reports zero whether or not any exist -- a guard that cannot fail.
+   */
+  it('leaves the drawing itself with no controls in it at all', async () => {
+    await renderWithErrand()
+
+    const scene = screen.getByTestId('room-scene')
+
+    expect(scene.querySelectorAll('button, a, [role="button"], [role="link"]')).toHaveLength(0)
+  })
+
+  /**
+   * Ruling 55's choice: the words and the cards overlay the lower room instead of scrolling
+   * below it, so nothing that needs the student is off the screen. Structurally that means
+   * one band, inside the same stage as the drawing and after it in document order -- two
+   * absolutely positioned siblings in one stacking context paint in tree order, so a band
+   * placed before the scene would be behind the room's own wall, which is exactly how the
+   * corner gauge was invisible for a fortnight (Ruling 52).
+   */
+  it('gathers the paragraph, the accuracy line and the cards into one band over the room', async () => {
+    await renderWithErrand()
+
+    const stage = screen.getByTestId('room-stage')
+    const scene = screen.getByTestId('room-scene')
+    const band = screen.getByTestId('room-band')
+
+    expect(stage).toContainElement(band)
+    expect(band).toContainElement(screen.getByTestId('room-text-equivalent'))
+    expect(band).toContainElement(screen.getByTestId('accuracy-note'))
+    expect(band).toContainElement(screen.getByRole('region', { name: /today's check-in/i }))
+
+    // Later in the tree than the drawing, so it paints over the room rather than under it.
+    expect(Boolean(scene.compareDocumentPosition(band) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+  })
+
+  /**
+   * The band can hold two cards at 320px, which is taller than the space between the
+   * character's head and the bottom of the screen. Rather than let it grow over the
+   * character, the band scrolls -- and the two controls are pinned outside that scrolling
+   * region, so `The week` and `+` cannot be scrolled off by a long card. That pinning is
+   * the difference between "the controls are in the band" and "the controls are reachable".
+   */
+  it("pins the two controls outside the band's scrolling region", async () => {
+    await renderWithErrand()
+
+    const scroller = screen.getByTestId('room-band-content')
+
+    expect(scroller).toContainElement(screen.getByTestId('room-text-equivalent'))
+    expect(scroller.contains(screen.getByTestId('open-week'))).toBe(false)
+    expect(scroller.contains(screen.getByTestId('open-add'))).toBe(false)
+  })
+
+  /**
+   * The other end of `Character.test.tsx`'s measurement, and the reason that one is worth
+   * having: the band's cap is a Tailwind arbitrary value, which cannot read a TypeScript
+   * constant, so nothing made the cap and the artwork move together. `room.spec.ts` catches
+   * the drift at four viewports in a real browser -- but only as an unexplained geometric
+   * failure, and only for the pair of numbers that happen to be in the string today.
+   *
+   * So the percentages are re-derived here from `CHARACTER_BOTTOM` and the fill viewBox the
+   * room draws into (`Room.tsx`: `0 0 300 260`). The character sits at
+   * `CHARACTER_BOTTOM x min(stageWidth/300, stageHeight/260)` down the stage, which is
+   * `min(CHARACTER_BOTTOM/300 of the width, CHARACTER_BOTTOM/260 of the height)`; the band
+   * may have the rest, less a finger's margin. Raise `CHARACTER_BOTTOM` and this fails at
+   * the line that has to change.
+   *
+   * Percentages rather than `dvh`, deliberately: the cap resolves against the stage, and
+   * `App` gives the stage less than the viewport when the degraded-storage notice is above
+   * it. `100dvh` there would cap the band against a height the stage does not have.
+   */
+  it('caps the band at the space the character leaves, derived rather than typed', async () => {
+    await renderWithErrand()
+
+    const across = ((CHARACTER_BOTTOM / 300) * 100).toFixed(2)
+    const down = ((CHARACTER_BOTTOM / 260) * 100).toFixed(2)
+
+    expect(screen.getByTestId('room-band').className).toContain(
+      `max-h-[calc(100%-min(${across}vw,${down}%)-1rem)]`,
+    )
   })
 })

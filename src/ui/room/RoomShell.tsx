@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Repository, Session } from '../../data'
 import type { ParsedItem } from '../../ai'
+import { isDistressed } from '../../domain/distress'
+import { energyHistory } from '../../domain/energyHistory'
 import { describePlacement, placeItems } from '../../domain/placement'
 import { checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
 import { anchorTo, dateFor, isAnchored, todayIndex } from '../../domain/calendar'
 import { accept, lapsed } from '../../domain/commitments'
-import { isDistressed } from '../../domain/distress'
-import { energyHistory } from '../../domain/energyHistory'
 import { paramsFor } from '../../domain/engineParams'
 import { firstAction, isStuck } from '../../domain/microStart'
 import { predictionsAfter, resolvePrediction } from '../../domain/predictions'
@@ -19,7 +19,6 @@ import { smallestFixes, toDayInputs } from '../../optimizer'
 import { AddSheet } from '../AddSheet'
 import { AccountBar } from '../auth/AccountBar'
 import { PreviewBanner } from '../auth/PreviewBanner'
-import { CapacityDial } from '../dial/CapacityDial'
 import { domainBars } from '../dial/domainBars'
 import { Button } from '../kit/Button'
 import { Card } from '../kit/Card'
@@ -100,9 +99,9 @@ export function RoomShell({
   const [todayDismissed, setTodayDismissed] = useState(false)
   const [sleepAnsweredToday, setSleepAnsweredToday] = useState(false)
 
-  // What just happened to the things the student added, and the one move that would help
-  // if anything had to give. Session-scoped like every other dismissal here: this is a
-  // report on an action they just took, not a state of the week.
+  // What just happened to the things the student added, and the one move that would help if
+  // anything had to give. Session-scoped like every other dismissal here: a report on an
+  // action they just took, not a state of the week.
   const [placementLines, setPlacementLines] = useState<readonly string[]>([])
   const [placementFix, setPlacementFix] = useState<Fix | null>(null)
 
@@ -115,7 +114,7 @@ export function RoomShell({
   // line on the today card quotes the very same history back to the student. Two calls
   // would be two chances for the number shown to drift from the number applied.
   const outcomes = useMemo(() => outcomesFrom(blockLog), [blockLog])
-  const params = useMemo(() => paramsFor(outcomes), [outcomes])
+  const params = useMemo(() => paramsFor(outcomes, profile.predictions), [outcomes, profile.predictions])
   const floor = schedule
     ? Math.min(schedule.start.mental, schedule.start.physical, schedule.start.social, schedule.start.errands)
     : 100
@@ -142,9 +141,9 @@ export function RoomShell({
     const next = predictionsAfter(
       profile.predictions,
       schedule,
-      // The same `params` the week is projected with. It derives purely from `blockLog`,
-      // which is already in this effect's dependencies, so this is the identical value --
-      // recomputing it here was a third copy of one number.
+      // The same `params` the week is projected with. It derives purely from `blockLog` and
+      // the profile, both already in this effect's dependencies -- recomputing it here was a
+      // third copy of one number.
       params,
       new Date(),
       blockLog,
@@ -193,10 +192,12 @@ export function RoomShell({
   const todayDate = dateFor(week, today)
   const model = roomModel({ schedule: week, today, blockLog, predictions: profile.predictions })
 
-  // §1.1's dial: the reserve, the five domain bars each against its own ceiling, and the
+  // §1.2's breakdown: the five domain bars each against its own ceiling, and the
   // low-social-flagged-as-warning logic that is the app's own differentiator over a tracker
-  // that would read a quiet week as healthy. Same `checkedIn` wiring as `roomModel.ts`, so
-  // the dial and the room agree about what "silent" means.
+  // that would read a quiet week as healthy. Computed here, where the engine call already
+  // is, and handed to `WeekScreen` -- Ruling 53 moved the breakdown off the room so the
+  // room reads capacity once, through `Room`'s own corner gauge. Same `checkedIn` wiring as
+  // `roomModel.ts`, so the breakdown and the room agree about what "silent" means.
   const days = toDayInputs(week, checkedInDays(blockLog, today, week.horizonDays))
   const projection = project(week.start, days, params)
   const bars = domainBars(week.start, projection, days)
@@ -220,19 +221,9 @@ export function RoomShell({
     }
   }
 
-  /**
-   * §15/§16: place what was accepted, say where it went, and offer one optional move.
-   *
-   * Deliberately not a second rearranging algorithm. `placeItems` never touches anything
-   * already in the week, so the student's own decisions survive intact; when something had
-   * to land somewhere other than where it asked, `smallestFixes` -- the search that already
-   * exists, with full 21-day scoring -- is asked for the single best move, and the student
-   * decides whether to take it. Two systems rearranging a week with different logic would
-   * disagree, and the one that ran last would win.
-   */
   // A `const` arrow rather than a declaration: declarations hoist above the `today === null`
-  // guard, so TypeScript cannot narrow the day away and `placeItems` would be handed a
-  // possibly-null day. The guard is the real protection; this keeps the compiler able to see it.
+  // guard, so TypeScript could not narrow the day away and `placeItems` would be handed a
+  // possibly-null one.
   const acceptItems = (items: readonly ParsedItem[]) => {
     const { schedule: next, notes } = placeItems(week, items, today)
     setSchedule(next)
@@ -240,8 +231,8 @@ export function RoomShell({
     const moved = notes.filter((note) => note.movedFrom !== null || !note.fitted)
     setPlacementLines(notes.map((note) => describePlacement(note, next)))
 
-    // Only when something actually had to give. A week that simply absorbed the new work
-    // has nothing to offer and nothing to apologise for.
+    // Only when something actually had to give. A week that simply absorbed the new work has
+    // nothing to offer and nothing to apologise for.
     setPlacementFix(moved.length === 0 ? null : (smallestFixes(next, params, 1)[0] ?? null))
   }
 
@@ -275,8 +266,8 @@ export function RoomShell({
   const askSleep = !sleepAnsweredToday
   const showTodayCard = !todayDismissed && (askEnergy || askSleep || blockForToday !== null)
 
-  // §8's floor case. Read off what the student reported rather than the modelled reserves:
-  // a claim this serious must rest on what they actually said, not on the app's guess.
+  // §8's floor case. Read off what the student reported rather than the modelled reserves: a
+  // claim this serious must rest on what they actually said, not on the app's guess.
   const reportedEnergy = energyHistory(profile.predictions)
 
   const cards = visibleCards({
@@ -294,53 +285,234 @@ export function RoomShell({
 
   const paragraph = lowEnergy ? firstSentence(describeRoom(model.state)) : describeRoom(model.state)
 
-  return (
-    <main className="mx-auto flex min-h-dvh max-w-screen-md flex-col gap-4 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-sm font-semibold tracking-wide text-ink-soft">Codenection</h1>
+  /**
+   * The three sheets, written once and rendered by whichever screen is showing. They were
+   * inside the one `<main>` when the room and the week shared a layout; the room screen is
+   * its own full-bleed stage now (Ruling 54), and duplicating forty lines of sheet wiring
+   * across the two branches is how one of them quietly stops opening.
+   */
+  const sheets = (
+    <>
+      {view.kind === 'block' && blockModel !== null && (
+        <BlockSheet
+          key={view.itemId}
+          model={blockModel}
+          onClose={closeToRoom}
+          onDone={(itemId) => {
+            setSchedule(completeItem(week, itemId))
+            closeToRoom()
+          }}
+          onLater={(itemId) => {
+            setSchedule(deferItem(week, itemId))
+            closeToRoom()
+          }}
+          onConfirm={(itemId, answer) => {
+            answerBlock(itemId, answer)
+            closeToRoom()
+          }}
+          onRested={(itemId, rested) => {
+            answerBlock(itemId, rested ? 'right' : 'didnt')
+            closeToRoom()
+          }}
+        />
+      )}
+
+      {view.kind === 'add' && (
+        <AddSheet
+          key="add"
+          schedule={week}
+          params={params}
+          today={today}
+          blockLog={blockLog}
+          predictions={profile.predictions}
+          onAcceptItems={(items) => acceptItems(items)}
+          onAcceptRequest={(item) => setSchedule(accept(week, item, today))}
+          onClose={closeToRoom}
+        />
+      )}
+
+      {view.kind === 'settings' && (
+        <Sheet
+          key="settings"
+          title="Settings"
+          onClose={closeToRoom}
+          // §0.2's lower-half-primary rule: sign-out is the one real action this sheet
+          // offers, so it belongs in the pinned bar rather than inside `AccountBar`'s own
+          // scrolling body -- the same place every other sheet puts its actions.
+          actions={
+            session !== null ? (
+              <Button variant="quiet" onClick={onSignOut}>
+                Sign out
+              </Button>
+            ) : undefined
+          }
+        >
+          <div className="flex flex-col gap-4">
+            {/* First, and above the account rows on purpose. This is the one setting that
+                changes what the student can see, and the one a student in low-energy mode
+                came here for -- putting it under sign-in and Telegram would make the way
+                out of a collapsed interface the last thing on the page. It is also the
+                only part of this sheet that works signed out. */}
+            <LowEnergyControl value={lowEnergyOverride} onChange={setOverride} />
+
+            {session !== null ? (
+              <>
+                <AccountBar session={session} />
+                <LinkTelegram />
+              </>
+            ) : (
+              <p className="text-sm text-ink-soft">
+                Sign in to keep this week and link Telegram to it.
+              </p>
+            )}
+          </div>
+        </Sheet>
+      )}
+    </>
+  )
+
+  /**
+   * `secondary` rather than `quiet`: on the room screen this button sits over the drawing,
+   * and an underlined text link over a wall wash and a ceiling beam is a control the eye
+   * has to hunt for. It carries its own surface instead, the same way the corner gauge does.
+   */
+  const settingsButton = (
+    <Button
+      variant="secondary"
+      size="sm"
+      data-testid="open-settings"
+      onClick={() => setView(toSettings())}
+    >
+      Settings
+    </Button>
+  )
+
+  if (isWeekScreen) {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-screen-md flex-col gap-4 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-sm font-semibold tracking-wide text-ink-soft">Codenection</h1>
+          {settingsButton}
+        </div>
+
         <Button
           variant="quiet"
           size="sm"
-          data-testid="open-settings"
-          onClick={() => setView(toSettings())}
+          data-testid="week-back"
+          onClick={() => setView(ROOM)}
+          className="self-start"
         >
-          Settings
+          Back to the room
         </Button>
-      </div>
 
-      {isWeekScreen ? (
-        <>
-          <Button variant="quiet" size="sm" data-testid="week-back" onClick={() => setView(ROOM)} className="self-start">
-            Back to the room
-          </Button>
-          <WeekScreen
-            schedule={week}
-            today={today}
-            working={working}
-            report={report}
-            fallback={fallback}
-            onRebalance={() => void onRebalance()}
-            onSelectBlock={(itemId) => setView(toBlock(itemId))}
-            blockLog={blockLog}
-          />
-        </>
-      ) : (
-        <>
-          {/* The one thing that is not furniture. A student who does not know their week is
-              not being saved will lose it, and a warning about data loss must not require
-              discovering an object first. */}
+        <WeekScreen
+          schedule={week}
+          today={today}
+          working={working}
+          report={report}
+          fallback={fallback}
+          onRebalance={() => void onRebalance()}
+          onSelectBlock={(itemId) => setView(toBlock(itemId))}
+          blockLog={blockLog}
+          capacity={overallReserve(week.start)}
+          history={reportedEnergy}
+          bars={bars}
+          projection={projection}
+          // Ruling 56. §1.5's gate travelled with the breakdown when Ruling 53 moved it
+          // here. Hiding `The week` is NOT enough on its own: a stuck card at low energy
+          // opens a block, `isWeekScreen` turns true, and `back({kind:'block'})` leaves the
+          // student standing on this screen without `The week` ever being pressed.
+          lowEnergy={lowEnergy}
+        />
+
+        {sheets}
+      </main>
+    )
+  }
+
+  /**
+   * The room screen (Rulings 54 and 55).
+   *
+   * The room is the whole screen -- no title bar above it, no button row below it -- and
+   * everything else rides over it: `Settings` in the corner opposite the gauge, and one
+   * band along the bottom holding the paragraph, the accuracy line, the live cards and the
+   * two permanent controls.
+   *
+   * Overlaid controls have failed here once already (PR #39: they "covered the furniture
+   * and swallowed its clicks -- the phone was unreachable from 768px up"). Half of that
+   * cannot recur -- the drawing is display-only, so there is nothing inside it left to
+   * swallow a click from. The half that can is occlusion, and the thing that must not be
+   * occluded is the character: it is how this app says how the student is doing and nothing
+   * else expresses it. Two things keep it legible, and the band is measured against the
+   * character's own box at 320/390/768/1280 in `room.spec.ts`:
+   *
+   * 1. The scene is composed clear of the band. The fill framing draws into a 260-unit
+   *    viewBox aligned to the top of the stage, so the furniture and the character occupy
+   *    the upper 150 units and the floor runs on beneath them. The band is then capped at
+   *    the space that leaves: the character's box ends at `CHARACTER_BOTTOM` (157) of the
+   *    viewBox's 260 units and the drawing is scaled by `min(stageWidth / 300,
+   *    stageHeight / 260)`, so the character's lowest point is at
+   *    `min(52.33vw, 60.38% of the stage)` and the band may have everything below it, less
+   *    a finger's margin. A single flat percentage cannot express that -- 36% is right for
+   *    a laptop and throws away half the band on a 320x568 phone, where the drawing is
+   *    limited by width and the character sits far higher up the screen.
+   *    The height term is `%` of this stage rather than `dvh` on purpose: `App` puts the
+   *    degraded-storage notice in the same column as the stage, so the stage is sometimes
+   *    shorter than the viewport and a `dvh` cap would be measured against a height it does
+   *    not have. Both figures are re-derived from `CHARACTER_BOTTOM` in
+   *    `RoomShell.room.test.tsx`, and the artwork is measured against it in
+   *    `Character.test.tsx`, so the cap and the drawing can no longer drift apart in
+   *    silence.
+   * 2. The band is translucent over a blur, so where it does cross the floor the room is
+   *    still visibly behind it rather than replaced by a panel.
+   *
+   * The controls sit in the band rather than in the top corners for the lower-half-primary
+   * rule -- the primary action belongs where a thumb is -- and they are pinned OUTSIDE the
+   * band's scrolling region, so a tall card can never push `+` off the screen.
+   *
+   * Every one of these is a SIBLING of the `<svg>`, never a child: the drawing carries
+   * `role="img"`, which hides its whole subtree from the accessibility tree, so a control
+   * placed inside it would be invisible to a screen reader while looking perfectly correct.
+   */
+  return (
+    <main
+      data-testid="room-stage"
+      /* `h-dvh` standing alone -- 34 render sites drop this component straight into the
+         document body -- and `flex-1 min-h-0` when `App` puts it in a column beside the
+         degraded-storage notice, where it must take what is left of the viewport rather
+         than a second full one. In a non-flex parent the two flex declarations are inert,
+         so the standalone behaviour is unchanged. */
+      className="relative h-dvh w-full min-h-0 flex-1 overflow-hidden"
+    >
+      {/* The room screen has no visible title -- the room is the title. The heading stays
+          for the document outline and for anyone navigating by heading. */}
+      <h1 className="sr-only">Codenection</h1>
+
+      <Room model={model} frame="fill" />
+
+      <div className="absolute left-2 top-2">{settingsButton}</div>
+
+      <section
+        data-testid="room-band"
+        className="absolute inset-x-0 bottom-0 flex max-h-[calc(100%-min(52.33vw,60.38%)-1rem)] flex-col gap-3 border-t border-line bg-surface/85 p-3 backdrop-blur-sm"
+      >
+        <div
+          data-testid="room-band-content"
+          className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
+        >
+          {/* The one thing that is not furniture, and first in the band for that reason. A
+              student who does not know their week is not being saved will lose it, and a
+              warning about data loss must not be something they scroll to. */}
           {session === null && <PreviewBanner onSignIn={onSignIn} />}
-
-          <Room model={model} />
 
           {/* Flagged by Task 12: the drawing's own `aria-label` (`describeRoomFully`) is
               already the complete text equivalent a screen reader needs, and this capped
               paragraph repeats a subset of the same sentences verbatim -- character and
               weather always, in the same words. Left as visible-and-announced, the two
               would read out back to back: the full version, then a partial repeat of it.
-              `aria-hidden` keeps it for sighted readers (§1.5, still worth having as
-              running text rather than only inside an SVG's accessible name) without
-              saying anything twice to assistive tech. */}
+              `aria-hidden` keeps it for sighted readers (still worth having as running text
+              rather than only inside an SVG's accessible name) without saying anything
+              twice to assistive tech. */}
           <p data-testid="room-text-equivalent" aria-hidden="true" className="text-sm text-ink-soft">
             {paragraph}
           </p>
@@ -417,117 +589,28 @@ export function RoomShell({
             onBlockAnswer={answerBlock}
             onTodayDismiss={() => setTodayDismissed(true)}
           />
+        </div>
 
-          <div className="flex items-center justify-between gap-2">
-            {!lowEnergy && (
-              <Button variant="quiet" data-testid="open-week" onClick={() => setView(toWeek())}>
-                The week
-              </Button>
-            )}
-            <Button
-              data-testid="open-add"
-              aria-label="Add something"
-              onClick={() => setView(toAdd())}
-              className="ml-auto"
-            >
-              +
-            </Button>
-          </div>
-
-          {/* §1.1: "sits in one corner as a compact readout, no tap required." Placed after
-              the room's two permanent controls rather than before them, so the dial's own
-              bulk (five domain bars, trends, warnings, its spoken summary) cannot push
-              `The week` / `+` below the fold at 320px -- those two stay exactly where they
-              already were, and the dial is additional content beneath. Hidden in low-energy
-              mode: §1.5's "one number and one action" is the corner gauge already in `Room`
-              plus the single live card, and a five-bar breakdown is exactly the dashboard
-              §1.5 says a depleted student should not be handed. */}
+        {/* Pinned below the scrolling region: a long card must never be able to scroll the
+            two permanent controls off the screen. */}
+        <div className="flex shrink-0 items-center justify-between gap-2">
           {!lowEnergy && (
-            <CapacityDial
-              capacity={overallReserve(week.start)}
-              bars={bars}
-              projection={projection}
-              history={reportedEnergy}
-            />
+            <Button variant="secondary" data-testid="open-week" onClick={() => setView(toWeek())}>
+              The week
+            </Button>
           )}
-        </>
-      )}
+          <Button
+            data-testid="open-add"
+            aria-label="Add something"
+            onClick={() => setView(toAdd())}
+            className="ml-auto"
+          >
+            +
+          </Button>
+        </div>
+      </section>
 
-      {view.kind === 'block' && blockModel !== null && (
-        <BlockSheet
-          key={view.itemId}
-          model={blockModel}
-          onClose={closeToRoom}
-          onDone={(itemId) => {
-            setSchedule(completeItem(week, itemId))
-            closeToRoom()
-          }}
-          onLater={(itemId) => {
-            setSchedule(deferItem(week, itemId))
-            closeToRoom()
-          }}
-          onConfirm={(itemId, answer) => {
-            answerBlock(itemId, answer)
-            closeToRoom()
-          }}
-          onRested={(itemId, rested) => {
-            answerBlock(itemId, rested ? 'right' : 'didnt')
-            closeToRoom()
-          }}
-        />
-      )}
-
-      {view.kind === 'add' && (
-        <AddSheet
-          key="add"
-          schedule={week}
-          params={params}
-          today={today}
-          blockLog={blockLog}
-          predictions={profile.predictions}
-          onAcceptItems={(items) => acceptItems(items)}
-          onAcceptRequest={(item) => setSchedule(accept(week, item, today))}
-          onClose={closeToRoom}
-        />
-      )}
-
-      {view.kind === 'settings' && (
-        <Sheet
-          key="settings"
-          title="Settings"
-          onClose={closeToRoom}
-          // §0.2's lower-half-primary rule: sign-out is the one real action this sheet
-          // offers, so it belongs in the pinned bar rather than inside `AccountBar`'s own
-          // scrolling body -- the same place every other sheet puts its actions.
-          actions={
-            session !== null ? (
-              <Button variant="quiet" onClick={onSignOut}>
-                Sign out
-              </Button>
-            ) : undefined
-          }
-        >
-          <div className="flex flex-col gap-4">
-            {/* First, and above the account rows on purpose. This is the one setting that
-                changes what the student can see, and the one a student in low-energy mode
-                came here for -- putting it under sign-in and Telegram would make the way
-                out of a collapsed interface the last thing on the page. It is also the
-                only part of this sheet that works signed out. */}
-            <LowEnergyControl value={lowEnergyOverride} onChange={setOverride} />
-
-            {session !== null ? (
-              <>
-                <AccountBar session={session} />
-                <LinkTelegram />
-              </>
-            ) : (
-              <p className="text-sm text-ink-soft">
-                Sign in to keep this week and link Telegram to it.
-              </p>
-            )}
-          </div>
-        </Sheet>
-      )}
+      {sheets}
     </main>
   )
 }

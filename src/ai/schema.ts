@@ -69,11 +69,22 @@ const nextId = (): string => {
 }
 
 /**
+ * The wrapper is our request; the item contents are the boundary.
+ *
+ * Models drop `{"items":...}` and answer with the array on its own -- observed from the
+ * vision model on a photographed timetable, where every item was well-formed and the whole
+ * import was discarded over the shape around them. Accepting both costs nothing that
+ * matters: every item still goes through the schema above unchanged, so an invented load
+ * type or an absurd hours figure is refused in an array exactly as in an object.
+ */
+const withWrapper = (raw: unknown): unknown => (Array.isArray(raw) ? { items: raw } : raw)
+
+/**
  * Null rather than throwing: a malformed reply is an expected outcome that falls back to
  * the rule-based parser, not an exceptional one.
  */
 export function parseModelReply(raw: unknown): ParsedItem[] | null {
-  const result = replySchema.safeParse(raw)
+  const result = replySchema.safeParse(withWrapper(raw))
   if (!result.success) return null
 
   return result.data.items.map(({ hard, ...item }) => ({

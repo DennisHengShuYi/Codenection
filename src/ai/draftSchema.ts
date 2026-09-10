@@ -27,8 +27,13 @@ const replySchema = z.object({
     .length(TONES.length),
 })
 
+/** The planner's schema needed exactly this, for the same reason: the wrapper is our
+ *  request, and dropping it is the most common way a model deviates. Nothing inside is
+ *  relaxed -- an invented tone or a missing third draft is refused either way. */
+const withWrapper = (raw: unknown): unknown => (Array.isArray(raw) ? { drafts: raw } : raw)
+
 export function parseDraftReply(raw: unknown): Draft[] | null {
-  const result = replySchema.safeParse(raw)
+  const result = replySchema.safeParse(withWrapper(raw))
   if (!result.success) return null
 
   const byTone = new Map<Tone, Draft>()

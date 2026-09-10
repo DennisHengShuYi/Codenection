@@ -89,23 +89,24 @@ at the same visual weight as the features touched daily.
 ## 3. Screen one — the room
 
 ```
-┌──────────────────────────────────┐
+┌──────────────────────────────────┐  ← the screen edge IS the room
 │ ░░░░░░░░ ceiling ░░░░░░░░░░░░░░  │
-│                        ╭──────╮  │
-│  ▭ papers    █door█    │ 68%  │  │
-│                        │ ▁▃█▂ │  │
-│  ✱ char   ▫ desk       ╰──────╯  │
-│  ■■■ clutter   ▓▓bed▓▓   ❦ plant │
+│ [Settings]                ╭────╮ │
+│  ▭ papers    █door█       │68% │ │
+│                           ╰────╯ │
+│  ✱ char   ▫ desk    ▓▓bed▓▓  ❦   │
+│ ─────────────── floor ────────── │
+│░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░│  ← band, translucent, over the floor
+│░ You are running low. Storm     ░│
+│░ coming.                        ░│
+│░ 48h predictions: right 4 of 5. ░│
+│░ The 21-day outlook is not      ░│
+│░ validated.                     ░│
+│░ ⚡ live cards, when they apply  ░│
+│░ [ The week ]              ┏━┓  ░│
+│░                           ┃+┃  ░│
+│░                           ┗━┛  ░│
 └──────────────────────────────────┘
-  You are running low. Storm coming.
-  48h predictions: right 4 of 5 so far.
-  The 21-day outlook is not validated.
-
-  ⚡ live cards, only when they apply
-
-     [ The week ]            ┏━┓
-                             ┃+┃
-                             ┗━┛
 ```
 
 **The drawing is display-only.** No tap targets at all. All nine of §1.3's bindings survive
@@ -115,19 +116,89 @@ they do not navigate.
 **The gauge sits inside the room**, in a corner. This is §1.1 taken literally for the first
 time and it removes the reason `light` needed to be a destination.
 
-**Beneath the drawing, always:** `describeRoom()`'s paragraph (§1.5's text equivalent), and
-the accuracy line with §8.2's disclaimer beside it.
+**The room fills the screen, and everything else is over it (Rulings 54 and 55).** There is no
+title bar above the drawing and no button row beneath it: the room is the screen, edge to edge,
+and the rest of the screen's contents ride on top of it. This replaces an earlier sketch in
+which the room was a boxed 3:2 illustration with the words, the cards and the controls stacked
+below it on a scrolling page. See *The room is the screen* below for what that costs and what
+holds it together.
+
+**In one band across the bottom, always:** `describeRoom()`'s paragraph (§1.5's text
+equivalent), and the accuracy line with §8.2's disclaimer beside it. The band is translucent
+over a blur, so the floor it covers is still visibly the room.
 
 **Live cards appear only when they apply and are absent otherwise.** On a day when nothing has
-happened the room screen is a room, a number, a paragraph and two buttons.
+happened the room screen is a room, a number, a paragraph and the three controls below.
 
-**Two permanent controls:** `The week`, and `+`.
+**Three controls, all inside the room:** `Settings` in the top corner opposite the gauge, and
+`The week` and `+` pinned along the bottom of the band.
 
 **`describeRoom()`'s paragraph is capped at three sentences.** It can currently emit six, and
-at 320px six sentences push both buttons below the fold. Character state and weather are always
-kept — they are the two the room cannot say any other way — then at most one more, chosen in
-this order: door lit, sleep debt, clutter, plant. The full text stays available to screen
+six sentences make the band tall enough at 320px to bury the room behind it. Character state
+and weather are always kept — they are the two the room cannot say any other way — then at
+most one more, chosen in this order: door lit, sleep debt, clutter, plant. The full text stays available to screen
 readers via the drawing's `aria-label`; the cap is visual only.
+
+### The room is the screen
+
+The room being full-bleed with its controls inside it is a change from this document's earlier
+shape, taken deliberately by the user against it (Ruling 54), so it is written down here rather
+than left as something only the code says.
+
+Overlaid controls have been tried here once and recorded as a failure: PR #39's overlay
+"covered the furniture and swallowed its clicks — the phone was unreachable from 768px up".
+Half of that cannot recur — the drawing is display-only now, so there is nothing inside it left
+to swallow a click from. What remains is occlusion, and one thing occlusion may not touch:
+
+**The character must stay legible at every width.** §1.3's character is how this app says how
+the student is doing; the paragraph paraphrases it, and nothing else expresses it. Bed, desk and
+clutter may pass behind the band. The character may not.
+
+Three things hold that, and all three are measured in `tests/e2e/room.spec.ts` at
+320×568 / 390×844 / 768×800 / 1280×800 rather than asserted in prose:
+
+1. **The drawing is composed clear of the band.** The room screen draws the 300×200 scene into
+   a 300×260 viewBox aligned to the top of its stage, so the furniture and the character occupy
+   the upper part and the floor runs on beneath them.
+2. **The band is capped at the space below the character.** The character's box ends at 157 of
+   those 260 units — `CHARACTER_BOTTOM` in `scene/palette.ts` — and the drawing scales by
+   `min(stageWidth / 300, stageHeight / 260)`, so its lowest point is at
+   `min(52.33vw, 60.38% of the stage)` and the band takes what is below, less a finger's
+   margin. A single flat percentage cannot express this: the right cap for a laptop throws away
+   half the band on a 320×568 phone, where the drawing is limited by width instead of height.
+   The height term is a percentage of the stage rather than `dvh` because the stage is not
+   always the whole viewport — the degraded-storage notice shares a column with it. Both
+   figures are re-derived from `CHARACTER_BOTTOM` in test, and the artwork is measured against
+   it, so neither can move without the other.
+3. **The band is translucent over a blur**, so where it crosses the floor the room is behind it
+   rather than replaced by it.
+
+**Controls are siblings of the `<svg>`, never children.** The drawing carries `role="img"` with
+`describeRoomFully()` as its accessible name, and that hides its whole subtree from the
+accessibility tree — a control drawn inside it would look right and be invisible to a screen
+reader.
+
+**The two bottom controls are pinned outside the band's scrolling region.** When the words and
+the cards together are taller than the space above the character the band scrolls internally;
+`The week` and `+` do not scroll with it, and the paragraph and the accuracy line are both on
+screen without scrolling at every width. A second card, or a long one, is what scrolls.
+
+**The room reaches the edges of a screen it does not fit.** A 3:2 room in a 16:10 window
+letterboxes. The wall, ceiling and floor are drawn far past the viewBox and an `<svg>` clips to
+its element box rather than its viewBox, so those bands are more room rather than backdrop.
+
+**Low-energy mode, restated rather than inherited.** Below the threshold the room screen drops
+`The week`, trims the paragraph to the character sentence and shows one card. It keeps `+` —
+logging something urgent should not require leaving the mode — and it keeps `Settings`, which is
+the only way back out of a collapsed interface and now floats over the drawing in a corner.
+"Hides the dial" moved rather than disappeared. Ruling 53 put the five-bar breakdown on the
+week screen, so **the week screen withholds it below the threshold** and the room withholds
+`The week`. Two acts, not one, and the second is the load-bearing one: hiding the entry point
+is not the same as hiding the dashboard, because the week screen is also reached without
+pressing `The week` — a stuck card at low energy opens a block, which renders the week beneath
+the sheet and leaves the student on it when the sheet closes. Gating only the button would have
+handed a depleted student the dashboard by the one route most likely to fire on a bad day
+(Ruling 56). Driven end to end in `RoomShell.lowEnergy.test.tsx`.
 
 ### Card precedence
 
@@ -181,6 +252,25 @@ w3   ░░  ░░  ▓▓  ▓▓  ░░  ░░  ░░
 
 A day carrying an unconfirmed block is marked, so the confirmation prompt is discoverable from
 the overview rather than only from the card.
+
+### Where your reserves stand
+
+§1.2's five-domain breakdown — each domain against its own ceiling, with its trend glyph and,
+where it applies, its written warning — sits at the **foot of this screen**, under a heading,
+beneath the day grid.
+
+It is here rather than on the room because the room reads capacity exactly once, as the corner
+gauge §1.1 asks for. Two readings of the same number on the landing screen is the duplication
+this whole design exists to remove, and the louder of the two was the "dashboard a student at
+12% reserve should not be handed". The week is the screen about how the fortnight spends the
+reserve, so the breakdown of where it is going belongs to it.
+
+Last on the screen, not first: the overview and Rebalance are §4's primary surface, and a
+dashboard above them would push the fortnight's one action below the fold at 320px.
+
+The low-social warning — "You have been spending a lot of time alone" — lives in this
+breakdown. It is the single clearest evidence the model understands burnout rather than
+summing hours, and it must stay reachable wherever the breakdown goes.
 
 ### Day
 
@@ -898,7 +988,10 @@ guard that has never failed is not a guard.
 **Responsive verification at 320 / 390 / 768 / 1280px** on both screens, per §0's standing
 requirements — specifically the day hour-grid at 320px, which is the layout this design chose
 *because* seven columns could not survive it, and the room screen at 320px with the paragraph
-capped and both buttons above the fold.
+capped, both buttons hittable inside the room, and the character clear of the band. The room
+screen's measurements are geometric, not `toBeVisible()`: a button painted under an opaque band
+is visible, and a band over the character's face contains the paragraph just as well as one
+below it.
 
 **Three-tap check** (§0): log a task = `+` → type → accept ✓ · take a recovery block = card →
 accept ✓ · start a stuck task = week → day → block, micro-start opens with it ✓.

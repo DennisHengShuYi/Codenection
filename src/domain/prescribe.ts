@@ -12,11 +12,12 @@ const MIN_GAP_HOURS = 0.5
  *  promise recovery the model refuses to pay out. */
 const MAX_BLOCK_HOURS = 3
 
-/** Used when a day is empty and there is no gap to measure. */
-const DEFAULT_GAP_HOURS = 1
-
 /** Waking hours in a day, once sleep is set aside. */
 const WAKING_HOURS = 16
+
+/** Late afternoon: a gap a student plausibly still has, rather than first thing. Used only
+ *  as the tie-break when a day is completely empty and there is no real gap to point at. */
+const DEFAULT_START_HOUR = 16
 
 export interface Prescription {
   readonly id: string
@@ -26,6 +27,12 @@ export interface Prescription {
   readonly hours: number
   readonly dayIndex: number
   readonly startHour: number
+}
+
+/** A stretch of the day with nothing scheduled on it yet. */
+export interface FreeSlot {
+  readonly startHour: number
+  readonly hours: number
 }
 
 /**
@@ -38,7 +45,8 @@ export interface Prescription {
  *
  * Errands is absent on purpose. A depleted errands reserve is already answered by the room's
  * clutter boxes, which let a student clear one and see it leave the week -- and telling
- * somebody who is flat to do a chore is advice nobody follows.
+ * somebody who is flat to do a chore is advice nobody follows. Its absence must not suppress
+ * advice for whichever reserve is next lowest -- see `prescribe`.
  */
 const ADVICE: Partial<Record<LoadType, { kind: ActivityKind; title: string }>> = {
   social: { kind: 'socialRestorative', title: 'Message someone you like and see them' },
@@ -46,17 +54,51 @@ const ADVICE: Partial<Record<LoadType, { kind: ActivityKind; title: string }>> =
   mental: { kind: 'rest', title: 'Stop and do nothing — no screen' },
 }
 
-/** Hours left on a day once everything scheduled on it is accounted for. */
-export function freeGapOn(schedule: Schedule, dayIndex: number): number {
-  const busy = schedule.items
-    .filter((item) => item.dayIndex === dayIndex)
-    .reduce((total, item) => total + item.hours, 0)
+/** Every `ActivityKind` a prescription can produce, derived from `ADVICE` rather than
+ *  duplicated so the two can never drift apart. */
+export const ADVICE_KINDS: Partial<Record<LoadType, ActivityKind>> = Object.fromEntries(
+  (Object.entries(ADVICE) as ReadonlyArray<[LoadType, { kind: ActivityKind; title: string }]>).map(
+    ([type, entry]) => [type, entry.kind],
+  ),
+)
 
-  return Math.max(0, WAKING_HOURS - busy)
+/**
+ * The first stretch of day `dayIndex` with at least `MIN_GAP_HOURS` free, scanning from the
+ * start of the waking day. `null` when nothing on the day is that free.
+ *
+ * An empty day has no real boundary to point at, so it reports `DEFAULT_START_HOUR` as a
+ * plausible tie-break rather than hour zero, which would read as scheduling rest at midnight.
+ */
+export function freeSlotOn(schedule: Schedule, dayIndex: number): FreeSlot | null {
+  const busy = schedule.items
+    .filter((scheduledItem) => scheduledItem.dayIndex === dayIndex)
+    .map((scheduledItem) => ({
+      start: scheduledItem.startHour,
+      end: scheduledItem.startHour + scheduledItem.hours,
+    }))
+    .sort((a, b) => a.start - b.start)
+
+  if (busy.length === 0) {
+    return { startHour: DEFAULT_START_HOUR, hours: WAKING_HOURS }
+  }
+
+  let cursor = 0
+  for (const busyBlock of busy) {
+    const gapEnd = Math.min(busyBlock.start, WAKING_HOURS)
+    if (gapEnd - cursor >= MIN_GAP_HOURS) {
+      return { startHour: cursor, hours: gapEnd - cursor }
+    }
+
+    cursor = Math.max(cursor, busyBlock.end)
+    if (cursor >= WAKING_HOURS) return null
+  }
+
+  const tailGap = WAKING_HOURS - cursor
+  return tailGap >= MIN_GAP_HOURS ? { startHour: cursor, hours: tailGap } : null
 }
 
-const lowestOf = (reserves: Reserves): LoadType =>
-  LOAD_TYPES.reduce((lowest, type) => (reserves[type] < reserves[lowest] ? type : lowest))
+const sortedByReserve = (reserves: Reserves): readonly LoadType[] =>
+  [...LOAD_TYPES].sort((a, b) => reserves[a] - reserves[b])
 
 /**
  * One thing to do, matched to what is actually empty.
@@ -74,8 +116,12 @@ export function prescribe(
   schedule: Schedule,
   log: readonly RecoveryAttempt[] = [],
 ): Prescription | null {
-  const type = lowestOf(schedule.start)
-  if (schedule.start[type] >= PRESCRIBE_BELOW) return null
+  // Sorted ascending so the emptiest reserve with no advice of its own (errands) never
+  // silently suppresses advice for whichever reserve is next lowest.
+  const type = sortedByReserve(schedule.start).find(
+    (candidate) => schedule.start[candidate] < PRESCRIBE_BELOW && ADVICE[candidate] !== undefined,
+  )
+  if (!type) return null
 
   const advice = ADVICE[type]
   if (!advice) return null
@@ -83,18 +129,19 @@ export function prescribe(
   // §5.2's last line: what did not work stops being suggested.
   if (log.some((attempt) => attempt.kind === advice.kind && !attempt.helped)) return null
 
-  const free = freeGapOn(schedule, 0)
-  const gap = Math.min(free === 0 ? 0 : Math.max(free, DEFAULT_GAP_HOURS), MAX_BLOCK_HOURS)
-  if (gap < MIN_GAP_HOURS) return null
+  const slot = freeSlotOn(schedule, 0)
+  if (!slot) return null
+
+  const hours = Math.min(slot.hours, MAX_BLOCK_HOURS)
+  if (hours < MIN_GAP_HOURS) return null
 
   return {
     id: `prescription-${advice.kind}`,
     type,
     kind: advice.kind,
     title: advice.title,
-    hours: Math.round(gap * 2) / 2,
+    hours: Math.round(hours * 2) / 2,
     dayIndex: 0,
-    // Late afternoon: a gap a student plausibly still has, rather than first thing.
-    startHour: 16,
+    startHour: slot.startHour,
   }
 }

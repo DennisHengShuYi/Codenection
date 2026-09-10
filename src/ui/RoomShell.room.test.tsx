@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
+import { CHARACTER_BOTTOM } from './room/scene/palette'
 import { RoomShell } from './room/RoomShell'
 
 /**
@@ -390,5 +391,34 @@ describe('the room screen, with the controls inside the room', () => {
     expect(scroller).toContainElement(screen.getByTestId('room-text-equivalent'))
     expect(scroller.contains(screen.getByTestId('open-week'))).toBe(false)
     expect(scroller.contains(screen.getByTestId('open-add'))).toBe(false)
+  })
+
+  /**
+   * The other end of `Character.test.tsx`'s measurement, and the reason that one is worth
+   * having: the band's cap is a Tailwind arbitrary value, which cannot read a TypeScript
+   * constant, so nothing made the cap and the artwork move together. `room.spec.ts` catches
+   * the drift at four viewports in a real browser -- but only as an unexplained geometric
+   * failure, and only for the pair of numbers that happen to be in the string today.
+   *
+   * So the percentages are re-derived here from `CHARACTER_BOTTOM` and the fill viewBox the
+   * room draws into (`Room.tsx`: `0 0 300 260`). The character sits at
+   * `CHARACTER_BOTTOM x min(stageWidth/300, stageHeight/260)` down the stage, which is
+   * `min(CHARACTER_BOTTOM/300 of the width, CHARACTER_BOTTOM/260 of the height)`; the band
+   * may have the rest, less a finger's margin. Raise `CHARACTER_BOTTOM` and this fails at
+   * the line that has to change.
+   *
+   * Percentages rather than `dvh`, deliberately: the cap resolves against the stage, and
+   * `App` gives the stage less than the viewport when the degraded-storage notice is above
+   * it. `100dvh` there would cap the band against a height the stage does not have.
+   */
+  it('caps the band at the space the character leaves, derived rather than typed', async () => {
+    await renderWithErrand()
+
+    const across = ((CHARACTER_BOTTOM / 300) * 100).toFixed(2)
+    const down = ((CHARACTER_BOTTOM / 260) * 100).toFixed(2)
+
+    expect(screen.getByTestId('room-band').className).toContain(
+      `max-h-[calc(100%-min(${across}vw,${down}%)-1rem)]`,
+    )
   })
 })

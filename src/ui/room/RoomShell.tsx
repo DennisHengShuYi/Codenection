@@ -409,12 +409,20 @@ export function RoomShell({
    * 1. The scene is composed clear of the band. The fill framing draws into a 260-unit
    *    viewBox aligned to the top of the stage, so the furniture and the character occupy
    *    the upper 150 units and the floor runs on beneath them. The band is then capped at
-   *    the space that leaves: the character's box ends at 157 of the viewBox's 260 units and
-   *    the drawing is scaled by `min(100vw / 300, 100dvh / 260)`, so the character's lowest
-   *    point is at `min(52.33vw, 60.38dvh)` and the band may have everything below it, less
-   *    a finger's margin. A flat percentage cannot express that -- 36% is right for a
-   *    laptop and throws away half the band on a 320x568 phone, where the drawing is
+   *    the space that leaves: the character's box ends at `CHARACTER_BOTTOM` (157) of the
+   *    viewBox's 260 units and the drawing is scaled by `min(stageWidth / 300,
+   *    stageHeight / 260)`, so the character's lowest point is at
+   *    `min(52.33vw, 60.38% of the stage)` and the band may have everything below it, less
+   *    a finger's margin. A single flat percentage cannot express that -- 36% is right for
+   *    a laptop and throws away half the band on a 320x568 phone, where the drawing is
    *    limited by width and the character sits far higher up the screen.
+   *    The height term is `%` of this stage rather than `dvh` on purpose: `App` puts the
+   *    degraded-storage notice in the same column as the stage, so the stage is sometimes
+   *    shorter than the viewport and a `dvh` cap would be measured against a height it does
+   *    not have. Both figures are re-derived from `CHARACTER_BOTTOM` in
+   *    `RoomShell.room.test.tsx`, and the artwork is measured against it in
+   *    `Character.test.tsx`, so the cap and the drawing can no longer drift apart in
+   *    silence.
    * 2. The band is translucent over a blur, so where it does cross the floor the room is
    *    still visibly behind it rather than replaced by a panel.
    *
@@ -427,7 +435,15 @@ export function RoomShell({
    * placed inside it would be invisible to a screen reader while looking perfectly correct.
    */
   return (
-    <main data-testid="room-stage" className="relative h-dvh w-full overflow-hidden">
+    <main
+      data-testid="room-stage"
+      /* `h-dvh` standing alone -- 34 render sites drop this component straight into the
+         document body -- and `flex-1 min-h-0` when `App` puts it in a column beside the
+         degraded-storage notice, where it must take what is left of the viewport rather
+         than a second full one. In a non-flex parent the two flex declarations are inert,
+         so the standalone behaviour is unchanged. */
+      className="relative h-dvh w-full min-h-0 flex-1 overflow-hidden"
+    >
       {/* The room screen has no visible title -- the room is the title. The heading stays
           for the document outline and for anyone navigating by heading. */}
       <h1 className="sr-only">Codenection</h1>
@@ -438,7 +454,7 @@ export function RoomShell({
 
       <section
         data-testid="room-band"
-        className="absolute inset-x-0 bottom-0 flex max-h-[calc(100dvh-min(52.33vw,60.38dvh)-1rem)] flex-col gap-3 border-t border-line bg-surface/85 p-3 backdrop-blur-sm"
+        className="absolute inset-x-0 bottom-0 flex max-h-[calc(100%-min(52.33vw,60.38%)-1rem)] flex-col gap-3 border-t border-line bg-surface/85 p-3 backdrop-blur-sm"
       >
         <div
           data-testid="room-band-content"

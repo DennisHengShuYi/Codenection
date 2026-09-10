@@ -49,6 +49,24 @@ export const PALETTE = {
 export const FLOOR_Y = 148
 
 /**
+ * The character's lowest drawn point, in scene units, across all five postures.
+ *
+ * This is the room screen's one load-bearing measurement (§3, *The room is the screen*).
+ * The bottom band is capped at `100% - min(52.33vw, 60.38%) - 1rem`, and those two figures
+ * are this number read through the fill viewBox: `157/300 = 52.33%` of the width and
+ * `157/260 = 60.38%` of the height, because the drawing is scaled by
+ * `min(stageWidth/300, stageHeight/260)`. If the character reaches lower -- a deeper slump,
+ * longer arms, a lower `FLOOR_Y` -- the band starts covering the one thing §1.3 says may
+ * never be covered.
+ *
+ * It lived only inside a Tailwind arbitrary-value string and two comments, so nothing in
+ * code bound the cap to the artwork. `Character.test.tsx` now measures the drawing against
+ * it and `RoomShell.room.test.tsx` derives the cap's percentages from it, which puts the
+ * tripwire beside the thing that trips it rather than in a Playwright geometry assertion.
+ */
+export const CHARACTER_BOTTOM = 157
+
+/**
  * How far past the viewBox the building is painted.
  *
  * The scene is 300x200 units, but the room screen shows it in a viewBox taller than that

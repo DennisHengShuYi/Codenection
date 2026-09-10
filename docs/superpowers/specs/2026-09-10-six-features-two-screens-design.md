@@ -161,10 +161,15 @@ Three things hold that, and all three are measured in `tests/e2e/room.spec.ts` a
    a 300×260 viewBox aligned to the top of its stage, so the furniture and the character occupy
    the upper part and the floor runs on beneath them.
 2. **The band is capped at the space below the character.** The character's box ends at 157 of
-   those 260 units and the drawing scales by `min(100vw / 300, 100dvh / 260)`, so its lowest
-   point is at `min(52.33vw, 60.38dvh)` and the band takes what is below, less a finger's
-   margin. A flat percentage cannot express this: the right cap for a laptop throws away half
-   the band on a 320×568 phone, where the drawing is limited by width instead of height.
+   those 260 units — `CHARACTER_BOTTOM` in `scene/palette.ts` — and the drawing scales by
+   `min(stageWidth / 300, stageHeight / 260)`, so its lowest point is at
+   `min(52.33vw, 60.38% of the stage)` and the band takes what is below, less a finger's
+   margin. A single flat percentage cannot express this: the right cap for a laptop throws away
+   half the band on a 320×568 phone, where the drawing is limited by width instead of height.
+   The height term is a percentage of the stage rather than `dvh` because the stage is not
+   always the whole viewport — the degraded-storage notice shares a column with it. Both
+   figures are re-derived from `CHARACTER_BOTTOM` in test, and the artwork is measured against
+   it, so neither can move without the other.
 3. **The band is translucent over a blur**, so where it crosses the floor the room is behind it
    rather than replaced by it.
 

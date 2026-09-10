@@ -124,7 +124,7 @@ const controlAt = (page: Page, x: number, y: number) =>
 /**
  * The four required widths, each with a height a screen of that width actually has. The
  * height is not decoration here: the band is capped against the character's position, which
- * is `min(52.33vw, 60.38dvh)` down the screen, so which of the two terms wins changes with
+ * is `min(52.33vw, 60.38% of the stage)` down the screen, so which of the two terms wins changes with
  * the shape of the viewport. 320x568 is the small phone the band has least room on and the
  * one a flat percentage cap got wrong.
  */

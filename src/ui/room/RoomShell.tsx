@@ -434,9 +434,9 @@ export function RoomShell({
    * The room screen (Rulings 54 and 55).
    *
    * The room is the whole screen -- no title bar above it, no button row below it -- and
-   * everything else rides over it: `Settings` in the corner opposite the gauge, and one
-   * band along the bottom holding the paragraph, the accuracy line, the live cards and the
-   * two permanent controls.
+   * everything else rides over it: one control row across the top holding `Settings`,
+   * `The week` and `+`, and one band along the bottom holding the paragraph, the accuracy
+   * line and the live cards.
    *
    * Overlaid controls have failed here once already (PR #39: they "covered the furniture
    * and swallowed its clicks -- the phone was unreachable from 768px up"). Half of that
@@ -466,9 +466,12 @@ export function RoomShell({
    * 2. The band is translucent over a blur, so where it does cross the floor the room is
    *    still visibly behind it rather than replaced by a panel.
    *
-   * The controls sit in the band rather than in the top corners for the lower-half-primary
-   * rule -- the primary action belongs where a thumb is -- and they are pinned OUTSIDE the
-   * band's scrolling region, so a tall card can never push `+` off the screen.
+   * The three controls share the top row rather than being split between the top corner and
+   * the band. That trades the lower-half-primary rule -- the primary action belongs where a
+   * thumb is -- for a single place to look for a control; what it keeps is the reason they
+   * left the band's scrolling region in the first place, since a tall card can no longer
+   * push `The week` or `+` anywhere. `room.spec.ts` still hit-tests all three at four
+   * viewports, so the row may not drift under the band or off the screen in silence.
    *
    * Every one of these is a SIBLING of the `<svg>`, never a child: the drawing carries
    * `role="img"`, which hides its whole subtree from the accessibility tree, so a control
@@ -490,7 +493,20 @@ export function RoomShell({
 
       <Room model={model} frame="fill" />
 
-      <div className="absolute left-2 top-2">{settingsButton}</div>
+      {/* One control row across the top of the room, packed to the left: `Settings`, then
+          `The week`, then `+` beside it. The row stops where its buttons stop, leaving the
+          opposite corner to the gauge. */}
+      <div className="absolute left-2 top-2 flex items-center gap-2">
+        {settingsButton}
+        {!lowEnergy && (
+          <Button variant="secondary" data-testid="open-week" onClick={() => setView(toWeek())}>
+            The week
+          </Button>
+        )}
+        <Button data-testid="open-add" aria-label="Add something" onClick={() => setView(toAdd())}>
+          +
+        </Button>
+      </div>
 
       <section
         data-testid="room-band"
@@ -589,24 +605,6 @@ export function RoomShell({
             onBlockAnswer={answerBlock}
             onTodayDismiss={() => setTodayDismissed(true)}
           />
-        </div>
-
-        {/* Pinned below the scrolling region: a long card must never be able to scroll the
-            two permanent controls off the screen. */}
-        <div className="flex shrink-0 items-center justify-between gap-2">
-          {!lowEnergy && (
-            <Button variant="secondary" data-testid="open-week" onClick={() => setView(toWeek())}>
-              The week
-            </Button>
-          )}
-          <Button
-            data-testid="open-add"
-            aria-label="Add something"
-            onClick={() => setView(toAdd())}
-            className="ml-auto"
-          >
-            +
-          </Button>
         </div>
       </section>
 

@@ -6,6 +6,7 @@ import type { EngineParams } from '../engine'
 import type { Schedule } from '../optimizer'
 import { Button } from './kit/Button'
 import { Sheet } from './kit/Sheet'
+import { suggestRepeat } from '../domain/recurrence'
 import { PhotoImportScreen } from './planner/PhotoImportScreen'
 import { PlannerScreen } from './planner/PlannerScreen'
 import { RequestBoxScreen } from './request/RequestBoxScreen'
@@ -63,6 +64,7 @@ export function AddSheet({
   if (way === 'photo') {
     return (
       <PhotoImportScreen
+        suggestRepeat={(item) => suggestRepeat(item, schedule)}
         onAccept={(items) => {
           onAcceptItems(items)
           close()
@@ -75,6 +77,7 @@ export function AddSheet({
   if (way === 'type') {
     return (
       <PlannerScreen
+        suggestRepeat={(item) => suggestRepeat(item, schedule)}
         onAccept={(items) => {
           onAcceptItems(items)
           close()

@@ -11,7 +11,8 @@ import { RoomShell } from './room/RoomShell'
  * The room screen itself, rather than the components in isolation.
  *
  * §3 gives it a fixed shape: `<h1>`, `PreviewBanner`, `Room`, the `describeRoom` paragraph,
- * `AccuracyNote`, the live cards, then `The week` and `+`. §1.1's compact readout is the
+ * `AccuracyNote` and the live cards, with `Settings`, `The week` and `+` sharing one row
+ * across the top. §1.1's compact readout is the
  * room's corner gauge and nothing else (Ruling 53): the five-bar breakdown that Ruling 28
  * correctly rescued from orphanhood was parked here by mistake, giving the room two
  * capacity readings, and it now lives on the week screen. What this file proves: that the
@@ -378,19 +379,25 @@ describe('the room screen, with the controls inside the room', () => {
 
   /**
    * The band can hold two cards at 320px, which is taller than the space between the
-   * character's head and the bottom of the screen. Rather than let it grow over the
-   * character, the band scrolls -- and the two controls are pinned outside that scrolling
-   * region, so `The week` and `+` cannot be scrolled off by a long card. That pinning is
-   * the difference between "the controls are in the band" and "the controls are reachable".
+   * character's head and the bottom of the screen, so the band scrolls rather than grow
+   * over the character. The three controls now share one row across the top, clear of the
+   * band entirely: `Settings`, `The week` and `+` in the same row, so a long card cannot
+   * scroll any of them away and there is a single place to look for a control.
    */
-  it("pins the two controls outside the band's scrolling region", async () => {
+  it('gathers the three controls into one row, clear of the band', async () => {
     await renderWithErrand()
 
-    const scroller = screen.getByTestId('room-band-content')
+    const row = screen.getByTestId('open-settings').parentElement
+    expect(row).not.toBeNull()
+    expect(row).toContainElement(screen.getByTestId('open-week'))
+    expect(row).toContainElement(screen.getByTestId('open-add'))
 
-    expect(scroller).toContainElement(screen.getByTestId('room-text-equivalent'))
-    expect(scroller.contains(screen.getByTestId('open-week'))).toBe(false)
-    expect(scroller.contains(screen.getByTestId('open-add'))).toBe(false)
+    const band = screen.getByTestId('room-band')
+    expect(band.contains(screen.getByTestId('open-week'))).toBe(false)
+    expect(band.contains(screen.getByTestId('open-add'))).toBe(false)
+    expect(screen.getByTestId('room-band-content')).toContainElement(
+      screen.getByTestId('room-text-equivalent'),
+    )
   })
 
   /**

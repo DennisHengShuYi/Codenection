@@ -168,3 +168,92 @@ describe('neighbours', () => {
     }
   })
 })
+
+/**
+ * §13/§14: the solver's two remaining hardcoded hours.
+ *
+ * `REST_START_HOUR` and `SOCIAL_START_HOUR` placed every inserted block at 20:00 and 18:00
+ * whatever was already there. For rest that was merely wasteful -- inserted rest is
+ * `protectedRest`, so an overlap is a constraint violation and the candidate was thrown
+ * away, meaning the solver simply could not offer rest to anyone whose evening was busy.
+ * For social it was worse: inserted social is movable, and movable-movable overlap is
+ * deliberately not a violation, so it landed silently on top of existing work.
+ *
+ * The hours survive as preferences. A block still goes where that kind of block belongs
+ * when the day allows it.
+ */
+describe('neighbours placing what it inserts', () => {
+  const evening = (id: string, day: number, startHour: number, hours: number) => ({
+    ...studyItem(id, day, 2),
+    startHour,
+    hours,
+  })
+
+  const insertedRestOn = (schedule: Parameters<typeof neighbours>[0], day: number) => {
+    const move = neighbours(schedule, DEFAULT_PARAMS).find(
+      (m) => m.kind === 'insertRest' && m.itemId === `rest-${day}`,
+    )
+
+    return move === undefined
+      ? null
+      : (move.apply(schedule).items.find((item) => item.id === `rest-${day}`) ?? null)
+  }
+
+  it('still prefers the evening when the evening is free', () => {
+    const rest = insertedRestOn(makeSchedule([studyItem('a', 3, 2)]), 3)
+
+    expect(rest?.startHour).toBe(20)
+  })
+
+  /** The case the constant could not survive: an evening already spoken for. */
+  it('finds another hour when the evening is taken', () => {
+    const busyEvening = makeSchedule([evening('a', 3, 19, 5)])
+
+    const rest = insertedRestOn(busyEvening, 3)
+
+    expect(rest).not.toBeNull()
+    expect(rest?.startHour).toBeLessThan(19)
+    expect(rest?.startHour).toBeGreaterThanOrEqual(8)
+  })
+
+  /**
+   * The reason this mattered for rest specifically: inserted rest is `protectedRest`, so an
+   * overlapping candidate is a violation and gets discarded -- the solver was unable to
+   * suggest rest at all to the students who most needed it.
+   */
+  it('produces a rest insertion that does not violate the week it lands in', () => {
+    const busyEvening = makeSchedule([evening('a', 3, 19, 5)])
+    const move = neighbours(busyEvening, DEFAULT_PARAMS).find(
+      (m) => m.kind === 'insertRest' && m.itemId === 'rest-3',
+    )
+
+    expect(move).toBeDefined()
+    expect(violations(move!.apply(busyEvening), DEFAULT_PARAMS)).toEqual(
+      violations(busyEvening, DEFAULT_PARAMS),
+    )
+  })
+
+  /** §17: one candidate per insertion. A finder that returned a list here would multiply the
+   *  neighbourhood, and the search is already at four thousand evaluations on the crunch
+   *  fixture. */
+  it('still offers exactly one rest insertion per day', () => {
+    const moves = neighbours(makeSchedule([studyItem('a', 3, 2)]), DEFAULT_PARAMS)
+    const onDayThree = moves.filter((m) => m.kind === 'insertRest' && m.itemId === 'rest-3')
+
+    expect(onDayThree).toHaveLength(1)
+  })
+
+  it('places inserted social away from what is already on the day', () => {
+    const busyEvening = makeSchedule([evening('a', 3, 17, 6)])
+    const move = neighbours(busyEvening, DEFAULT_PARAMS).find(
+      (m) => m.kind === 'insertSocial' && m.itemId === 'social-3',
+    )
+
+    const social = move?.apply(busyEvening).items.find((item) => item.id === 'social-3')
+
+    expect(social).toBeDefined()
+    // Movable-movable overlap is legal, so nothing would have complained. It still must not
+    // be dropped on top of the student's evening.
+    expect(social!.startHour + social!.hours).toBeLessThanOrEqual(17)
+  })
+})

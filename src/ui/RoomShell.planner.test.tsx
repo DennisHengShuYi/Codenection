@@ -125,4 +125,74 @@ describe('RoomShell with the planner', () => {
       })),
     ).toEqual(settled)
   })
+
+  /**
+   * §37, end to end, and the regression that matters most here: `suggestRepeat` was written
+   * and tested and then wired to nothing, which is the same defect §9 and §11 were on the
+   * list for. A test at the domain proves the function works; only this proves it runs.
+   *
+   * The clock is pinned because the rules parser turns a named weekday into a day index
+   * using its own arithmetic, which does not line up with the real calendar -- so what
+   * "tuesday" resolves to depends on the day the suite runs. Pinning it makes the weekday
+   * the suggestion has to match a fact rather than a coincidence.
+   */
+  it('notices a class the student is entering one week at a time', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date('2026-09-07T09:00:00Z'))
+
+    try {
+      counter += 1
+      const repository = createLocalRepository(`planner-repeat-${counter}`)
+      await repository.clear()
+
+      // Day 2 of a week starting 2026-09-07 is 2026-09-09, a Wednesday -- which is what the
+      // parser's "tuesday" actually lands on. Day 9 is the Wednesday after it.
+      await repository.saveWeek({
+        ...emptyWeek(),
+        startedOn: '2026-09-07',
+        items: [
+          {
+            id: 'existing',
+            // The rules parser keeps the whole fragment as the title, so the block already
+            // in the week has to carry the same words the student types.
+            title: 'lecture tuesday',
+            type: 'mental',
+            kind: 'studyBlock',
+            hours: 2,
+            intensity: 1,
+            dayIndex: 9,
+            startHour: 9,
+            fixed: true,
+            deadlineDay: null,
+            protectedRest: false,
+          },
+        ],
+      })
+
+      render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+      await waitFor(() => expect(screen.getByTestId('open-add')).toBeVisible())
+      await userEvent.click(screen.getByTestId('open-add'))
+      await userEvent.click(screen.getByTestId('add-type'))
+
+      await userEvent.type(screen.getByLabelText(/on your mind/i), 'lecture tuesday')
+      await userEvent.click(screen.getByRole('button', { name: /read this/i }))
+
+      await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(1))
+      expect(screen.getByText(/repeats every week/i)).toBeVisible()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /** Suggested, not applied. §41: one tap says no, and the accept is what commits it. */
+  it('lets the student say it is a one-off after all', async () => {
+    await openPlanner()
+
+    await userEvent.type(screen.getByLabelText(/on your mind/i), 'laundry')
+    await userEvent.click(screen.getByRole('button', { name: /read this/i }))
+    await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(1))
+
+    // Nothing in the week to look like, so nothing is suggested.
+    expect(screen.queryByText(/repeats every week/i)).toBeNull()
+  })
 })

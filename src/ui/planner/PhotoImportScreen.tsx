@@ -19,9 +19,13 @@ import { ItemChip } from './ItemChip'
  */
 export function PhotoImportScreen({
   onAccept,
+  suggestRepeat = () => null,
   onCancel,
 }: {
   onAccept: (items: readonly ParsedItem[]) => void
+  /** §37, as `PlannerScreen` takes it: a timetable photo is the likeliest place a repeating
+   *  class arrives one instance at a time. */
+  suggestRepeat?: (item: ParsedItem) => ParsedItem['repeat']
   onCancel: () => void
 }) {
   const [items, setItems] = useState<ParsedItem[] | null>(null)
@@ -50,7 +54,9 @@ export function PhotoImportScreen({
       if (image.ok) setPreview(image.dataUrl)
 
       const outcome = await readPhoto(file)
-      if (outcome.ok) setItems([...outcome.items])
+      if (outcome.ok) {
+        setItems(outcome.items.map((item) => ({ ...item, repeat: item.repeat ?? suggestRepeat(item) })))
+      }
       else setProblem(outcome.reason)
     } finally {
       setReading(false)

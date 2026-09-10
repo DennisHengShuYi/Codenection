@@ -18,9 +18,21 @@ import { ItemChip } from './ItemChip'
 export function PlannerScreen({
   onAccept,
   onCancel,
+  suggestRepeat = () => null,
 }: {
   onAccept: (items: readonly ParsedItem[]) => void
   onCancel: () => void
+  /**
+   * §37: given a freshly parsed item, a weekly series it looks like another instance of.
+   *
+   * Injected rather than imported, because the answer depends on the week and this screen
+   * does not hold one. Applied as the chips land so the suggestion arrives *with* the row
+   * the student is already checking -- §41's whole point is that recurrence is confirmed on
+   * something they were adding anyway, and a suggestion made after the accept would be a
+   * change made behind them. Defaults to suggesting nothing, so a caller that has no week
+   * to compare against behaves exactly as before.
+   */
+  suggestRepeat?: (item: ParsedItem) => ParsedItem['repeat']
 }) {
   const [text, setText] = useState('')
   const [items, setItems] = useState<ParsedItem[] | null>(null)
@@ -38,7 +50,7 @@ export function PlannerScreen({
        */
       const { parseBrainDump } = await import('../../ai')
       const outcome = await parseBrainDump(text)
-      setItems([...outcome.items])
+      setItems(outcome.items.map((item) => ({ ...item, repeat: item.repeat ?? suggestRepeat(item) })))
     } finally {
       // In a finally block because parseBrainDump is built never to reject -- but if that
       // ever changes, the screen must not be left stuck on "Reading…" forever.

@@ -1,5 +1,6 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { readDataConfig } from './env'
+import { getSharedClient } from './supabaseClient'
 import {
   explainAuthError,
   MIN_PASSWORD_LENGTH,
@@ -7,16 +8,17 @@ import {
   type Session,
 } from './session'
 
-/** Lazily imported and memoised for the same reason as the repository's client: it is
- *  ~220KB, and a signed-out visitor running on browser storage never needs it. */
-let clientPromise: Promise<SupabaseClient> | null = null
-
 /**
  * Exported so that every module needing the *signed-in* client shares this one.
  *
- * A second client on the same storage key announces itself to the first, which arrives as
- * an auth change and, before the fix in supabaseRepository, drove a render loop that took
- * the app down. One client per concern is not a style preference here.
+ * The construction itself lives in supabaseClient, and deliberately not here: a memo per
+ * module is not the same thing as one client. Storage keeps its own module, but it talks to
+ * the same project and therefore the same `sb-<ref>-auth-token` key, and two clients on one
+ * key is exactly what the browser warns about -- "Multiple GoTrueClient instances detected
+ * in the same browser context" -- however tidily each was memoised.
+ *
+ * The configuration is read here rather than passed in because authentication has no caller
+ * that would know it; the repository does, so it supplies its own.
  */
 export function getClient(): Promise<SupabaseClient> {
   const { supabaseUrl, supabaseAnonKey } = readDataConfig()
@@ -25,11 +27,7 @@ export function getClient(): Promise<SupabaseClient> {
     return Promise.reject(new Error('Supabase is not configured'))
   }
 
-  clientPromise ??= import('@supabase/supabase-js').then((module) =>
-    module.createClient(supabaseUrl, supabaseAnonKey),
-  )
-
-  return clientPromise
+  return getSharedClient(supabaseUrl, supabaseAnonKey)
 }
 
 /** Blank and non-string metadata are both treated as absent. An empty name would render as

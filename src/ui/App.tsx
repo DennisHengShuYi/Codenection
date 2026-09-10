@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { createRepository, signOut, unlinkTelegram } from '../data'
 import { SignInScreen } from './auth/SignInScreen'
 import { useSession } from './auth/useSession'
+import { Button } from './kit/Button'
 import { RoomShell } from './room/RoomShell'
 import { useBlockLog } from './useBlockLog'
 
@@ -13,7 +14,12 @@ export function App() {
   // Ruling 12: `RoomShell.blockLog` is a required prop now, so something above it has to
   // load a real one -- this is that something, kept at the app's own top level next to
   // `repository` and `session` rather than inside the screen it feeds.
-  const { blockLog, recordAnswer, problem: blockLogProblem } = useBlockLog(repository)
+  const {
+    blockLog,
+    recordAnswer,
+    problem: blockLogProblem,
+    retry: retryBlockLog,
+  } = useBlockLog(repository)
 
   if (loading) {
     // One frame, and a sentence rather than a spinner -- a spinner says nothing about
@@ -37,6 +43,28 @@ export function App() {
         onSignedIn={signedIn}
         onSkip={() => setBrowsing(true)}
       />
+    )
+  }
+
+  // Ruling 49: the log could not be READ, which is not the same as nobody having answered.
+  // Every number on the room screen -- the gauge, the weather, the dial, the lapsed
+  // notice, the price of a request -- is projected from these answers and calibrated by
+  // them, so there is no honest subset of that screen to keep showing. `/ask` makes the
+  // same call on the other door (`handle.ts:264`): it refuses to price rather than quoting
+  // a number computed from an assumption nobody made. Refusing here is that answer, said
+  // in the same voice, so one student gets one answer whichever door they came through.
+  if (blockLog === null) {
+    return (
+      <main className="mx-auto flex max-w-screen-md flex-col items-start gap-3 p-4">
+        <p data-testid="block-log-problem" role="status" className="text-sm text-attention">
+          {blockLogProblem}
+        </p>
+        <p className="text-sm text-ink-soft">
+          Everything the room shows is worked out from those answers, so I would rather show
+          you nothing than a number I made up.
+        </p>
+        <Button onClick={retryBlockLog}>Try again</Button>
+      </main>
     )
   }
 

@@ -12,6 +12,16 @@ const repo = () => {
   return createLocalRepository(`use-block-log-${counter}`)
 }
 
+const broken = () => ({
+  loadWeek: () => Promise.reject(new Error('down')),
+  saveWeek: () => Promise.reject(new Error('down')),
+  loadSettings: () => Promise.reject(new Error('down')),
+  saveSettings: () => Promise.reject(new Error('down')),
+  loadBlockLog: () => Promise.reject(new Error('down')),
+  recordBlockAnswer: () => Promise.reject(new Error('down')),
+  clear: () => Promise.reject(new Error('down')),
+})
+
 const record = (over: Partial<BlockRecord> = {}): BlockRecord => ({
   blockId: 'essay',
   type: 'mental',
@@ -38,20 +48,61 @@ describe('useBlockLog', () => {
     await waitFor(() => expect(result.current.blockLog).toHaveLength(1))
   })
 
-  it('starts empty rather than throwing when storage cannot be read', async () => {
-    const broken = {
-      loadWeek: () => Promise.reject(new Error('down')),
-      saveWeek: () => Promise.reject(new Error('down')),
-      loadSettings: () => Promise.reject(new Error('down')),
-      saveSettings: () => Promise.reject(new Error('down')),
-      loadBlockLog: () => Promise.reject(new Error('down')),
-      recordBlockAnswer: () => Promise.reject(new Error('down')),
-      clear: () => Promise.reject(new Error('down')),
+  /**
+   * Ruling 49, replacing "starts empty rather than throwing": starting empty was the bug.
+   * `[]` is what the log looks like when the student has answered nothing, and the screens
+   * downstream price a whole week off it -- so a read that failed used to come out as a
+   * confident, optimistic, entirely invented number. Unreadable is `null` and says so, the
+   * same call `src/telegram/handle.ts` already makes on the other door.
+   */
+  it('reads as unreadable, not as empty, when storage cannot be read', async () => {
+    const { result } = renderHook(() => useBlockLog(broken()))
+
+    await waitFor(() => expect(result.current.blockLog).toBeNull())
+    expect(result.current.problem).toMatch(/could not read/i)
+  })
+
+  // The refusal has to be recoverable: the read fails for a dropped connection as readily
+  // as for the table `0005_block_log.sql` warns is not created automatically.
+  it('reads again on request, and takes the message back down when it lands', async () => {
+    let failing = true
+    const repository = repo()
+    await repository.clear()
+    await repository.recordBlockAnswer(record())
+    const flaky = {
+      ...repository,
+      loadBlockLog: () => (failing ? Promise.reject(new Error('down')) : repository.loadBlockLog()),
     }
 
-    const { result } = renderHook(() => useBlockLog(broken))
+    const { result } = renderHook(() => useBlockLog(flaky))
+    await waitFor(() => expect(result.current.blockLog).toBeNull())
 
-    await waitFor(() => expect(result.current.blockLog).toEqual([]))
+    failing = false
+    act(() => result.current.retry())
+
+    await waitFor(() => expect(result.current.blockLog).toHaveLength(1))
+    expect(result.current.problem).toBeNull()
+  })
+
+  // One answer is not the log. Reporting it as the whole of what the student has answered
+  // would be exactly the collapse the null is there to refuse -- but the write still goes.
+  it('stays unreadable when an answer is recorded against a log it could not read', async () => {
+    const written: BlockRecord[] = []
+    const { result } = renderHook(() =>
+      useBlockLog({
+        ...broken(),
+        recordBlockAnswer: (entry: BlockRecord) => {
+          written.push(entry)
+          return Promise.resolve()
+        },
+      }),
+    )
+    await waitFor(() => expect(result.current.blockLog).toBeNull())
+
+    act(() => result.current.recordAnswer(record()))
+
+    expect(result.current.blockLog).toBeNull()
+    await waitFor(() => expect(written).toHaveLength(1))
   })
 
   /**
@@ -135,6 +186,6 @@ describe('useBlockLog', () => {
     act(() => result.current.recordAnswer(record({ answer: 'longer' })))
 
     expect(result.current.blockLog).toHaveLength(1)
-    expect(result.current.blockLog[0]?.answer).toBe('longer')
+    expect(result.current.blockLog?.[0]?.answer).toBe('longer')
   })
 })

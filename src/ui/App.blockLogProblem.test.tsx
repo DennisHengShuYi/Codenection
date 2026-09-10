@@ -13,7 +13,7 @@ const PROBLEM = 'I could not save that answer, so it may not be here next time y
  * wrong four times on this branch unchecked: a value computed, tested, and never rendered.
  */
 vi.mock('./useBlockLog', () => ({
-  useBlockLog: () => ({ blockLog: [], recordAnswer: vi.fn(), problem: PROBLEM }),
+  useBlockLog: () => ({ blockLog: [], recordAnswer: vi.fn(), problem: PROBLEM, retry: vi.fn() }),
 }))
 
 describe('App when a block answer cannot be written', () => {

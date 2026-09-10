@@ -1,4 +1,6 @@
 import type { MicroStart } from '../../domain/microStart'
+import { Button } from '../kit/Button'
+import { Card } from '../kit/Card'
 
 /**
  * §4.1: one concrete first action, time-boxed, offered without being asked for.
@@ -21,29 +23,24 @@ export function MicroStartCard({
   if (microStart === null) return null
 
   return (
-    <section
+    <Card
       data-testid="micro-start"
       role="status"
-      className="flex flex-col gap-3 rounded-lg border border-violet-300 bg-violet-50 p-4"
+      tone="attention"
+      className="flex flex-col gap-3"
     >
       <div>
         <h2 className="text-base font-medium">Stuck on this one?</h2>
         <p className="text-sm">{microStart.action}</p>
-        <p className="text-sm opacity-70">{microStart.minutes} minutes. That is the whole ask.</p>
+        <p className="text-sm text-ink-soft">{microStart.minutes} minutes. That is the whole ask.</p>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => onStarted(microStart)}
-          className="rounded-lg bg-slate-900 px-4 py-3 text-white"
-        >
-          I&apos;ll do that
-        </button>
-        <button type="button" onClick={onDismiss} className="px-4 py-3 text-sm underline">
+        <Button onClick={() => onStarted(microStart)}>I&apos;ll do that</Button>
+        <Button variant="quiet" onClick={onDismiss}>
           Not now
-        </button>
+        </Button>
       </div>
-    </section>
+    </Card>
   )
 }

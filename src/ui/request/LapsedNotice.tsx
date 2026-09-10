@@ -30,7 +30,7 @@ export function LapsedNotice({
     <section
       data-testid="lapsed-notice"
       role="status"
-      className="flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4"
+      className="flex flex-col gap-3 rounded-lg border border-attention bg-attention-soft p-4"
     >
       <div>
         <h2 className="text-lg font-medium">
@@ -38,7 +38,7 @@ export function LapsedNotice({
             ? 'One thing you said yes to has lapsed'
             : `${commitments.length} things you said yes to have lapsed`}
         </h2>
-        <p className="text-sm opacity-80">
+        <p className="text-sm text-ink-soft">
           You agreed to these provisionally, and your fortnight can no longer hold them. Here is
           what you could send.
         </p>
@@ -51,7 +51,7 @@ export function LapsedNotice({
             data-testid={`withdrawal-${commitment.id}`}
             defaultValue={withdrawalFor(commitment)}
             rows={3}
-            className="rounded border border-slate-300 p-2 text-sm"
+            className="rounded border border-line p-2 text-sm"
           />
         </div>
       ))}

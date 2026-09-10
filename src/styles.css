@@ -20,11 +20,15 @@
      be themed; a colour can be both. */
   --color-ink-soft: #6b635a;
 
-  /* The three accents, and nothing else. */
+  /* The accents, and nothing else. */
   --color-attention: #f59e0b; /* needs you: stuck, lapsed, deficit, unconfirmed */
   --color-attention-soft: #fffbeb;
   --color-calm: #0284c7; /* recovery, rest, protected blocks */
   --color-calm-soft: #f0f9ff;
+  /* One severity above attention, reserved for the reserve model's own worst read:
+     capacity over 100%, a domain bar past its ceiling. Kept singular rather than one-off
+     rose/red literals per component, which is exactly the drift this file exists to stop. */
+  --color-critical: #e11d48;
 
   /* Load-type hues, for calendar blocks only, and never carrying meaning alone (§1.5) --
      every block also shows its label and its type in words. Amber is deliberately not

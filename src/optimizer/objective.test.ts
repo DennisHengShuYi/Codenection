@@ -47,6 +47,14 @@ describe('toDayInputs', () => {
     expect(days[0]!.checkedIn).toBe(true)
   })
 
+  it('passes real check-in data through rather than asserting everyone checked in', () => {
+    // The third dead mechanism: this was hardcoded `true`, so §6.5's missing-data pessimism
+    // could never fire in the whole app.
+    const days = toDayInputs(makeSchedule([studyItem('a', 3, 2)]), [false, true, true])
+
+    expect(days[0]?.checkedIn).toBe(false)
+  })
+
   /**
    * The trap the brief calls out by name: wiring §6.5's missing-data pessimism up means
    * nothing unless it is verified to actually move the number a student is shown.

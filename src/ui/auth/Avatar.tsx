@@ -31,7 +31,7 @@ export function Avatar({
   const [failed, setFailed] = useState(false)
 
   const shared =
-    'flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-sm font-medium text-slate-700'
+    'flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-line text-sm font-medium text-ink'
 
   if (avatarUrl !== undefined && !failed) {
     return (

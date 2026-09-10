@@ -36,12 +36,10 @@ const SIGNALS: ReadonlyArray<{ type: LoadType; words: readonly string[] }> = [
   },
   {
     type: 'physical',
-    // `kindOf` below splits this by hardness: walk and yoga are light, everything else --
-    // including a sport this list names but does not sort into either bucket, like
-    // badminton -- defaults to hard. §6.6: a hard session and a walk are both physical
-    // load, but opposite in what they leave behind, and crediting recovery a student never
-    // got is worse than the reverse.
-    words: ['gym', 'run', 'walk', 'swim', 'football', 'training', 'exercise', 'yoga', 'badminton'],
+    // `kindOf` below splits this by hardness: walk and yoga are light, the rest are hard.
+    // §6.6: a hard session and a walk are both physical load, but opposite in what they
+    // leave behind.
+    words: ['gym', 'run', 'walk', 'swim', 'football', 'training', 'exercise', 'yoga'],
   },
   {
     type: 'social',
@@ -59,8 +57,7 @@ const SIGNALS: ReadonlyArray<{ type: LoadType; words: readonly string[] }> = [
 const REST_WORDS = ['nap', 'rest', 'break', 'downtime']
 
 /** The only physical words that leave the light residue (§6.6's `lightExercise` row).
- *  Everything else physical -- an explicit hard word or a sport this file has never heard
- *  of -- takes the dearer default in `kindOf`. */
+ *  Every other physical word takes the dearer `hardExercise` default in `kindOf`. */
 const PHYSICAL_LIGHT_WORDS = ['walk', 'yoga']
 
 /** Splits on the punctuation people actually use in a dump. */

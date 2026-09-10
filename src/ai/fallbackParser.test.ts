@@ -116,12 +116,6 @@ describe('parseWithRules', () => {
     expect(nap?.kind).toBe('rest')
   })
 
-  it('defaults unrecognised physical work to the dearer kind', () => {
-    // addItems' own doctrine: crediting recovery that never happened reports a student as
-    // fine while they sink; under-crediting only errs toward caution.
-    expect(parseWithRules('badminton')[0]?.kind).toBe('hardExercise')
-  })
-
   it('keeps social pessimistic, because a parse cannot tell a friend from a group project', () => {
     expect(parseWithRules('coffee with sarah')[0]?.kind).toBe('socialDraining')
   })

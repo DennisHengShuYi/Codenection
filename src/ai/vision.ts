@@ -1,11 +1,9 @@
 import { BLOCK_KINDS, HORIZON_DAYS } from '../engine'
+import { GROQ_VISION_MODEL } from './models'
 import { parseModelReply } from './schema'
 import { MAX_ITEMS, type ParsedItem } from './types'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
-
-/** Groq's current vision-capable model. */
-const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct'
 
 /** Longer than the planner's eight seconds, because an image is far more to process --
  *  still bounded, per §10's third constraint. */
@@ -60,7 +58,7 @@ export async function askVision(dataUrl: string, apiKey: string): Promise<Parsed
         authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: VISION_MODEL,
+        model: GROQ_VISION_MODEL,
         temperature: 0,
         response_format: { type: 'json_object' },
         messages: [

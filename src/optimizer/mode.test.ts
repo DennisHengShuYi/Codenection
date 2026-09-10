@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { HORIZON_DAYS } from '../engine'
-import type { Schedule, ScheduledItem } from '../optimizer'
+import type { Schedule, ScheduledItem } from './types'
 import { modeOf } from './mode'
 
 const block = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({

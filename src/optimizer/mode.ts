@@ -1,4 +1,4 @@
-import type { Schedule } from '../optimizer'
+import type { Schedule } from './types'
 
 /**
  * What kind of fortnight this is, read off its shape.
@@ -35,11 +35,10 @@ const SHIFT_HOURS = 6
  * empty-timetable notice: rest the optimizer pinned is fixed load the app put there itself,
  * and counting it would let the app infer a timetable from its own suggestions.
  *
- * Nothing reads this yet, and that is stated rather than hidden -- §21 is marked roadmap in
- * the list it came from. It is here as a pure, tested answer to "which kind of week is
- * this", ready for the objective to ask. Wiring it into the objective would change what the
- * solver optimises for, which is a decision to take deliberately rather than as a side
- * effect of adding a function.
+ * Read by `objective.score`, which uses it to choose between §21's two halves -- flattening
+ * peaks or defending a floor. It lives in `optimizer` rather than `domain` for the reason
+ * `gaps.ts` does: it needs nothing but a `Schedule`, and `domain` depends on `optimizer`
+ * and never the reverse.
  */
 export function modeOf(schedule: Schedule): Mode {
   const frame = schedule.items.filter((item) => item.fixed && !item.protectedRest)

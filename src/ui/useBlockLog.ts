@@ -29,13 +29,18 @@ export const UNREADABLE =
  * preference genuinely means "not set, infer it". A missing block log does not mean the
  * student answered nothing.
  *
- * A FAILED write is not treated the same way `useSchedule` treats its own. There, dropping
- * the error is defensible and says so: the week is rewritten on the next change, so a lost
- * save retries by itself. A block answer has no next change to ride along on. It is a
- * one-shot event, and it is the evidence §8's published accuracy figure is scored against,
- * so losing one silently means the app prints a number derived from data it only thinks it
- * kept. `problem` is that failure said out loud, per the project's own "never silently
- * swallow errors" rule.
+ * A FAILED write is said out loud rather than dropped. This file used to explain that
+ * `useSchedule` could get away with dropping its own -- "the week is rewritten on the next
+ * change, so a lost save retries by itself" -- and that reasoning turned out to have a hole
+ * in it: it holds for every change except the last one, and the last change is exactly the
+ * one a student makes before closing the tab. `useSchedule` now reports its failures too,
+ * so the two hooks agree.
+ *
+ * The argument was always weaker here anyway. A block answer has no next change to ride
+ * along on at all: it is a one-shot event, and it is the evidence §8's published accuracy
+ * figure is scored against, so losing one silently means the app prints a number derived
+ * from data it only thinks it kept. Per the project's own "never silently swallow errors"
+ * rule.
  *
  * The optimistic entry stays in local state when the write fails. Rolling it back would
  * erase what the student just said in order to be truthful about storage, which trades one

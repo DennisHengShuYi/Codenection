@@ -288,6 +288,32 @@ describe('RoomShell', () => {
       await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
     })
 
+    /**
+     * A failed week write used to be swallowed on the grounds that "the week is rewritten on
+     * the next change, so a lost save retries by itself" -- true of every change except the
+     * last one, which is exactly the one a student makes before closing the tab. Said out
+     * loud now, per the project's rule against swallowing errors.
+     */
+    it('says so when a change could not be saved', async () => {
+      const readOnly = {
+        loadWeek: () => Promise.resolve(null),
+        saveWeek: () => Promise.reject(new Error('network down')),
+        loadSettings: () => Promise.resolve({ lowEnergyOverride: 'auto' as const }),
+        saveSettings: () => Promise.reject(new Error('network down')),
+        loadBlockLog: () => Promise.resolve([]),
+        recordBlockAnswer: () => Promise.reject(new Error('network down')),
+        clear: () => Promise.resolve(),
+      }
+
+      render(<RoomShell repository={readOnly} blockLog={[]} onAnswerBlock={vi.fn()} />)
+      await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+      await userEvent.click(screen.getByTestId('open-week'))
+      await userEvent.click(screen.getByTestId('rebalance'))
+      await userEvent.click(await screen.findByTestId('approve-rebalance'))
+
+      expect(await screen.findByTestId('save-problem')).toHaveTextContent(/could not save/i)
+    }, 30_000)
+
     it('does not fall over when saving fails', async () => {
       const readOnly = {
         loadWeek: () => Promise.resolve(null),

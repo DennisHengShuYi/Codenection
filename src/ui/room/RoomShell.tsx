@@ -95,7 +95,7 @@ export function RoomShell({
   blockLog: readonly BlockRecord[]
   onAnswerBlock: (record: BlockRecord) => void
 }) {
-  const { schedule, setSchedule } = useSchedule(repository)
+  const { schedule, setSchedule, problem: saveProblem } = useSchedule(repository)
   const { profile, setProfile } = useProfile(repository, session)
   /**
    * Ruling 57: where the student is now lives in the address bar as well as in React.
@@ -704,6 +704,19 @@ export function RoomShell({
             <p data-testid="room-text-equivalent" aria-hidden="true" className="text-sm text-ink-soft">
               {paragraph}
             </p>
+
+            {/* A change that did not reach storage, said out loud.
+                Sits with the room's own running text rather than over the stage, because it
+                is about the week the student is looking at rather than about the app being
+                unusable -- `App` reserves the space above the stage for a block log it could
+                not READ, which is a state with nothing honest left to draw. Here the week on
+                screen is still theirs and still correct; what is in doubt is whether it will
+                be there tomorrow. */}
+            {saveProblem !== null && (
+              <p data-testid="save-problem" role="status" className="text-sm text-attention">
+                {saveProblem}
+              </p>
+            )}
 
             {/* §16: never silently reshuffle. What was added, where it went, and -- only when
                 something had to give -- the single move that would help, offered rather than

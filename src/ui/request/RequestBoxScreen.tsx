@@ -21,8 +21,14 @@ const TONE_LABELS: Record<Draft['tone'], string> = {
 }
 
 /** `today: 0` on purpose: both rooms are drawn from the same week at the same moment, so
- *  what differs between them is the request and nothing else. */
-const roomFor = (schedule: Schedule) => roomModel({ schedule, today: 0 })
+ *  what differs between them is the request and nothing else.
+ *
+ *  The block log is not: Ruling 51 made `roomModel`'s `blockLog` required, and this call
+ *  site was the one taking the old `[]` default -- so the gauge on both rooms quoted a
+ *  reserve computed as though the student had answered nothing, beside a request cost
+ *  computed from their real calibration. Two numbers for one week, on one screen. */
+const roomFor = (schedule: Schedule, blockLog: readonly BlockRecord[]) =>
+  roomModel({ schedule, today: 0, blockLog })
 
 /**
  * §2.3's request box.
@@ -182,7 +188,10 @@ export function RequestBoxScreen({
             </p>
 
             {/* §2.3, via §1.3: the warning is shown as two rooms. */}
-            <RoomComparison now={roomFor(schedule)} ifAccepted={roomFor(addItems(schedule, [item]))} />
+            <RoomComparison
+              now={roomFor(schedule, blockLog)}
+              ifAccepted={roomFor(addItems(schedule, [item]), blockLog)}
+            />
 
             {drafts.length > 0 && (
               <section className="flex flex-col gap-3">

@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_PARAMS, HORIZON_DAYS } from '../../engine'
+import type { BlockRecord } from '../../domain/blockLog'
 import type { Schedule } from '../../optimizer'
 import { RequestBoxScreen } from './RequestBoxScreen'
 
@@ -99,6 +100,61 @@ describe('RequestBoxScreen', () => {
     await ask()
 
     expect(screen.getByTestId('room-comparison')).toBeVisible()
+  })
+
+  /**
+   * Ruling 51: the two rooms in the comparison are priced from the student's own block log,
+   * the same as every other number on every other screen.
+   *
+   * `roomModel`'s `blockLog` was optional-with-default, and this screen's `roomFor` took the
+   * default -- so the request box showed a reserve percentage computed as though the student
+   * had answered nothing, beside a request cost computed from their real calibration. One
+   * week, two numbers, on one screen. The room's own description is where that shows: its
+   * weather is read off the projection, and the projection is what the bias moves.
+   */
+  it('draws the comparison rooms from the block log, not from a blank one', async () => {
+    const heavy = (): Schedule => ({
+      ...week(),
+      items: Array.from({ length: 13 }, (_, day) => ({
+        id: `i${day}`,
+        title: `i${day}`,
+        type: 'mental' as const,
+        kind: 'studyBlock' as const,
+        hours: 8,
+        intensity: 1.3,
+        dayIndex: day,
+        startHour: 9,
+        fixed: false,
+        deadlineDay: null,
+        protectedRest: false,
+      })),
+    })
+
+    // Every block took longer than planned: §2.4's estimate bias, learned from the student's
+    // own answers, and the one thing a blank log cannot know.
+    const alwaysLonger: BlockRecord[] = Array.from({ length: 13 }, (_, day) => ({
+      blockId: `i${day}`,
+      type: 'mental',
+      plannedHours: 8,
+      dayIndex: day,
+      answer: 'longer',
+      answeredAt: 0,
+    }))
+
+    const blank = setup({ schedule: heavy(), blockLog: [] })
+    await ask()
+    const uncalibrated = screen.getAllByTestId('room-scene')[0]?.getAttribute('aria-label')
+    blank.unmount()
+
+    setup({ schedule: heavy(), blockLog: alwaysLonger })
+    await ask()
+
+    expect(screen.getAllByTestId('room-scene')[0]?.getAttribute('aria-label')).not.toBe(
+      uncalibrated,
+    )
+    // Named rather than merely different: the calibrated room is the WORSE one, which is
+    // the direction a learned underestimate has to move a projection.
+    expect(screen.getAllByTestId('room-scene')[0]?.getAttribute('aria-label')).toMatch(/storm/i)
   })
 
   /**

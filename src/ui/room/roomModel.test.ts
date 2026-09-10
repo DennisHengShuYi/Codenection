@@ -15,6 +15,7 @@ const week = (over: Partial<Schedule> = {}): Schedule => ({
 const input = (over: Partial<RoomModelInput> = {}): RoomModelInput => ({
   schedule: week(),
   today: 0,
+  blockLog: [],
   ...over,
 })
 
@@ -110,8 +111,18 @@ describe('roomModel', () => {
       expect(atDayZero.state.weather).not.toBe('storm')
     })
 
-    it('defaults to an empty log when none is given, so every existing caller keeps working', () => {
-      expect(roomModel(input())).toEqual(roomModel({ ...input(), blockLog: [] }))
+    /**
+     * Ruling 51: the default this used to assert is gone. `blockLog` is required, so a
+     * caller with nothing to say has to say `[]` itself rather than have the model assume
+     * it -- the same removal Rulings 39 and 41 made in `toDayInputs` and `priceRequest`.
+     *
+     * Asserted through the type rather than a value, because the failure it guards against
+     * is a compile-time one: restore the default and this directive has nothing left to
+     * expect, and `tsc --noEmit` fails on the unused suppression.
+     */
+    it('refuses a caller that does not say what the student has answered', () => {
+      // @ts-expect-error blockLog is required: a caller with no log must pass [] itself.
+      expect(() => roomModel({ schedule: week(), today: 0 })).toBeTruthy()
     })
   })
 })

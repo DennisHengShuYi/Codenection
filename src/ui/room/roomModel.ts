@@ -11,10 +11,15 @@ export interface RoomModelInput {
   /**
    * §8b's durable record of what was scheduled and what became of it. Threaded in rather
    * than loaded here, so this stays pure -- the shell reads it from the repository and
-   * supplies it. Optional and defaulting to empty so every caller built before this
-   * existed keeps compiling and behaving exactly as it did.
+   * supplies it.
+   *
+   * Ruling 51: required, not optional-with-default. It was defaulted to `[]` so callers
+   * written before the log existed kept compiling, and that convenience is the exact
+   * mechanism Rulings 39 and 41 removed on either side of this one -- a call site that
+   * forgets the log compiles, looks reasonable, and quietly prices the week as though the
+   * student had answered nothing. A caller with no log must now say `[]` in its own words.
    */
-  readonly blockLog?: readonly BlockRecord[]
+  readonly blockLog: readonly BlockRecord[]
 }
 
 export interface RoomModel {
@@ -43,7 +48,7 @@ export interface RoomModel {
  * a prediction still to score" flag -- which is why `RequestBoxScreen` was passing
  * `DEFAULT_PROFILE` to a model that never looked at it.
  */
-export function roomModel({ schedule, today, blockLog = [] }: RoomModelInput): RoomModel {
+export function roomModel({ schedule, today, blockLog }: RoomModelInput): RoomModel {
   // §8b/Task 17: the durable log is the only source now. It used to be unioned with the
   // profile's own `confirmations` because nothing wrote a `BlockRecord` in the running app
   // yet -- `TodayCard` and the Telegram bot both do now, so the profile side is gone.

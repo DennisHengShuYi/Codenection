@@ -63,8 +63,11 @@ is what makes the button safe on every block (see Routing) without inverting §5
 structural protection of recovery, which the spec calls the most important design decision
 in the app.
 
-`microStart.ts` keeps `isStuck` and remains the automatic trigger. `firstAction` is
-subsumed by `ruleLadder` and removed once nothing calls it.
+`microStart.ts` keeps `isStuck` and remains the automatic trigger. `firstAction` keeps its
+name and its signature but is reimplemented as the first rung of `ruleLadder`, so there is
+one table rather than two that can disagree. It has a real consumer: the Telegram bot
+answers `/start <task>` with it, and that reply is a single message with no page to route
+to.
 
 ### 2. `api/micro-start.ts` — the model, server side only
 
@@ -116,9 +119,15 @@ else is in view.
 a protected rest block all offer it. The safety that used to come from hiding the control
 now comes from what the rest and sleep ladders say.
 
-`BlockSheet`'s inline reveal and its local `MicroStartCard` are **deleted**. There is one
-micro-start path, not two that can disagree about what a block's first move is. The orphaned
-`src/ui/microStart/MicroStartCard.tsx` — which nothing imports today — becomes the real page.
+`BlockSheet`'s inline reveal and its own local copy of `MicroStartCard` are **deleted**.
+There is one interactive micro-start path, not two that can disagree about a block's first
+move.
+
+`src/ui/microStart/MicroStartCard.tsx` is **kept**. It is not an orphan: `LiveCards` renders
+it as §3's "stuck" card, the automatic trigger's own surface in the room. What changes is
+where its call to action goes — to the page rather than to the block sheet — so the room
+offers the first rung and the page carries the rest of the chain. The page itself is a new
+file, `MicroStartPage.tsx`.
 
 The page shows the event title, "Step 3 of 6", the current rung and its time box, and four
 controls:

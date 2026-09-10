@@ -218,7 +218,7 @@ export function RoomShell({
   // §3's card precedence: recovery, then a lapsed commitment, then a stuck task, then the
   // day's own question -- capped to one below the low-energy threshold and two otherwise.
   const recoveryPrescription = prescribe(week)
-  const lapsedCommitments = lapsed(week, today, params)
+  const lapsedCommitments = lapsed(week, today, params, blockLog)
   const stuckItem = week.items.find(
     (item) => item.id !== stuckDismissedId && isStuck(item, Math.max(0, today - item.dayIndex)),
   )

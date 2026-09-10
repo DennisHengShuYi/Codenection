@@ -5,8 +5,15 @@
  * a fourteen-edit change and made it impossible to read the palette as a palette.
  *
  * The neutrals are warm because the room is somewhere a tired student is meant to want to
- * be. The *semantic* colours are not warmed: the weather stays cold, the plant stays green
- * and attention stays amber, because those carry meaning rather than mood.
+ * be. The *semantic* colours are not warmed: the weather stays cold and the plant stays
+ * green, because those carry meaning rather than mood.
+ *
+ * There was an `attention` amber here too, ported across from the source's `Halo`. The
+ * `Halo` deliberately did not come with it -- nothing on this branch computes attention any
+ * more (`scene/marks.tsx`) -- so the token had zero references and looked load-bearing while
+ * being nothing of the kind. Deleted rather than reserved (Ruling 57): the app-level
+ * `--color-attention` in `styles.css` is still there for anything that needs the hue, and a
+ * halo that comes back can add its own colour alongside the flag it would be driven by.
  */
 export const PALETTE = {
   wallTop: '#f8f2e7',
@@ -28,7 +35,6 @@ export const PALETTE = {
   leaf: '#4f9d5d',
   pot: '#b4643a',
   clutter: '#f0a02a',
-  attention: '#f59e0b',
   glow: '#fcd34d',
 } as const
 

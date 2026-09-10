@@ -190,3 +190,114 @@ describe('the low-energy override, reachable from the settings sheet', () => {
     await waitFor(() => expect(screen.queryByTestId('open-week')).toBeNull())
   })
 })
+
+/**
+ * Ruling 56. `fc58d99` dropped the room's `{!lowEnergy && <CapacityDial/>}` gate and argued,
+ * in the commit message and in the spec, that hiding `The week` already hides the dashboard
+ * -- "one act, not two". That is true of the main route and false of this one.
+ *
+ * At low energy `visibleCards` still shows one card, and `stuck` is among the likeliest to
+ * fire on a bad day. Its one button runs `onStuckStart -> setView(toBlock(id))`, which makes
+ * `isWeekScreen` true and renders the entire week screen behind the sheet; closing the sheet
+ * runs `back({kind:'block'}) === WEEK` and parks the student there. So a depleted student can
+ * reach §1.2's five-bar breakdown without `The week` ever having been pressed -- which is
+ * §1.5 ("a student at 12% reserve should not be handed a dashboard") inverted.
+ *
+ * These drive the real route rather than rendering `WeekScreen` with a prop: the whole defect
+ * was that nothing connected the mode to this screen, and a component-level test of the gate
+ * would have passed on the broken build.
+ */
+describe('the week screen reached from a live card in low energy', () => {
+  /**
+   * Errands alone below the threshold. That is what makes `stuck` the visible card: the
+   * floor is 10 so `useLowEnergy` activates and the cap falls to one, while mental, physical
+   * and social sit at 70 -- above `prescribe`'s PRESCRIBE_BELOW of 40 -- so `recovery`, which
+   * outranks `stuck`, does not apply. With no commitments, `lapsed` cannot apply either.
+   */
+  const drainedWithStuckTask = async (label: string) => {
+    counter += 1
+    const repository = createLocalRepository(`${label}-${counter}`)
+    await repository.clear()
+    const startedOn = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    await repository.saveWeek({
+      items: [
+        {
+          id: 'laundry',
+          title: 'Laundry',
+          type: 'errands',
+          kind: 'errands',
+          hours: 1,
+          intensity: 1,
+          dayIndex: 0,
+          startHour: 17,
+          fixed: false,
+          deadlineDay: null,
+          protectedRest: false,
+        },
+      ],
+      start: { mental: 70, physical: 70, social: 70, errands: 10 },
+      horizonDays: HORIZON_DAYS,
+      sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+      startedOn,
+    })
+
+    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+    // The premise, asserted rather than assumed. If precedence or the trigger ever changes
+    // so that no stuck card renders here, this fails loudly instead of the assertions below
+    // passing because the route was never walked.
+    expect(screen.queryByTestId('open-week')).toBeNull()
+    await screen.findByTestId('micro-start')
+
+    return repository
+  }
+
+  it('withholds the reserves breakdown when a stuck card opens a block', async () => {
+    await drainedWithStuckTask('low-energy-stuck')
+
+    await userEvent.click(screen.getByRole('button', { name: /i'll do that/i }))
+    // The week screen really is underneath -- so the absence below is a gate, not a screen
+    // that failed to render.
+    expect(await screen.findByRole('dialog', { name: /laundry/i })).toBeVisible()
+    expect(screen.getByTestId('rebalance')).toBeInTheDocument()
+
+    expect(screen.queryByTestId('week-reserves')).toBeNull()
+    expect(screen.queryAllByRole('meter')).toHaveLength(0)
+  })
+
+  it('still withholds it once the block sheet is closed and the student is left on the week', async () => {
+    await drainedWithStuckTask('low-energy-stuck-back')
+
+    await userEvent.click(screen.getByRole('button', { name: /i'll do that/i }))
+    await screen.findByRole('dialog', { name: /laundry/i })
+    await userEvent.click(screen.getByRole('button', { name: /close/i }))
+
+    // `back({kind:'block'})` is WEEK, not ROOM: this is where the student is parked.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByTestId('rebalance')).toBeVisible()
+
+    expect(screen.queryByTestId('week-reserves')).toBeNull()
+    expect(screen.queryAllByRole('meter')).toHaveLength(0)
+  })
+
+  /**
+   * The other direction, so the two tests above cannot both pass by the breakdown simply
+   * never rendering. Same route, same clicks, low-energy mode turned off by hand -- and the
+   * dashboard is there.
+   */
+  it('hands the same student the breakdown once low-energy mode is turned off', async () => {
+    await drainedWithStuckTask('low-energy-stuck-off')
+
+    await userEvent.click(screen.getByTestId('open-settings'))
+    await userEvent.click(await screen.findByRole('radio', { name: /full interface/i }))
+    await userEvent.click(screen.getByRole('button', { name: /close/i }))
+    await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+
+    await userEvent.click(await screen.findByRole('button', { name: /i'll do that/i }))
+    await screen.findByRole('dialog', { name: /laundry/i })
+
+    expect(screen.getByTestId('week-reserves')).toBeInTheDocument()
+    expect(screen.queryAllByRole('meter')).toHaveLength(5)
+  })
+})

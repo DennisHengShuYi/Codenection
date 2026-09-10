@@ -128,7 +128,7 @@ equivalent), and the accuracy line with §8.2's disclaimer beside it. The band i
 over a blur, so the floor it covers is still visibly the room.
 
 **Live cards appear only when they apply and are absent otherwise.** On a day when nothing has
-happened the room screen is a room, a number, a paragraph and two buttons.
+happened the room screen is a room, a number, a paragraph and the three controls below.
 
 **Three controls, all inside the room:** `Settings` in the top corner opposite the gauge, and
 `The week` and `+` pinned along the bottom of the band.
@@ -186,9 +186,14 @@ its element box rather than its viewBox, so those bands are more room rather tha
 `The week`, trims the paragraph to the character sentence and shows one card. It keeps `+` —
 logging something urgent should not require leaving the mode — and it keeps `Settings`, which is
 the only way back out of a collapsed interface and now floats over the drawing in a corner.
-"Hides the dial" is no longer one of its behaviours, and not because it was dropped: Ruling 53
-moved the five-bar breakdown to the week screen, so hiding `The week` already hides the
-dashboard §1.5 says a depleted student should not be handed. One act, not two.
+"Hides the dial" moved rather than disappeared. Ruling 53 put the five-bar breakdown on the
+week screen, so **the week screen withholds it below the threshold** and the room withholds
+`The week`. Two acts, not one, and the second is the load-bearing one: hiding the entry point
+is not the same as hiding the dashboard, because the week screen is also reached without
+pressing `The week` — a stuck card at low energy opens a block, which renders the week beneath
+the sheet and leaves the student on it when the sheet closes. Gating only the button would have
+handed a depleted student the dashboard by the one route most likely to fire on a bad day
+(Ruling 56). Driven end to end in `RoomShell.lowEnergy.test.tsx`.
 
 ### Card precedence
 

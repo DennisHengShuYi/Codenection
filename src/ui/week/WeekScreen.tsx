@@ -22,6 +22,9 @@ import { scheduleView, type LoadBand } from './scheduleView'
  * screen about how the fortnight spends it. Last rather than first because the horizon and
  * Rebalance are what §4 calls this screen's primary surface, and a dashboard above them
  * would push the fortnight's one action below the fold at 320px.
+ *
+ * It keeps the low-energy gate it had on the room, on the `lowEnergy` prop below -- moving
+ * content between screens must not quietly move it out from under §1.5 (Ruling 56).
  */
 
 const BAND_LABEL: Record<LoadBand, string> = {
@@ -96,6 +99,20 @@ export function WeekScreen(props: {
   readonly capacity: number
   readonly bars: readonly DomainBar[]
   readonly projection: Projection
+  /**
+   * §1.5's mode, threaded in rather than inferred here (Ruling 56).
+   *
+   * The gate this restores was on the room screen until `fc58d99`, which dropped it on the
+   * argument that hiding `The week` already hides the dashboard -- "one act, not two". It
+   * does not: a `stuck` card still renders at low energy, and its one button opens a block,
+   * which renders this whole screen and then parks the student on it when the sheet closes.
+   * So the breakdown has to be gated where it now lives.
+   *
+   * Required, not optional-with-a-default, for the same reason `capacity` is: a default of
+   * `false` would let a call site that forgets it render the dashboard to a depleted student
+   * and still compile.
+   */
+  readonly lowEnergy: boolean
 }) {
   const {
     schedule,
@@ -109,6 +126,7 @@ export function WeekScreen(props: {
     capacity,
     bars,
     projection,
+    lowEnergy,
   } = props
   const [openDay, setOpenDay] = useState<number | null>(null)
 
@@ -214,13 +232,20 @@ export function WeekScreen(props: {
 
       {/* Named, because an unlabelled gauge at the foot of a screen is reachable only by
           accident. This is the heading a student scrolling the week reads before deciding
-          whether the numbers below are worth their attention. */}
-      <section data-testid="week-reserves" className="flex flex-col gap-4">
-        <h2 className="text-sm font-semibold tracking-wide text-ink-soft">
-          Where your reserves stand
-        </h2>
-        <CapacityDial capacity={capacity} bars={bars} projection={projection} />
-      </section>
+          whether the numbers below are worth their attention.
+
+          Gated on §1.5 (Ruling 56): "a student at 12% reserve should not be handed a
+          dashboard", and five bars, five trends and a projection sentence is the dashboard
+          that sentence is about. Withheld here rather than only by hiding `The week`,
+          because a block opened from a live card renders this screen too. */}
+      {!lowEnergy && (
+        <section data-testid="week-reserves" className="flex flex-col gap-4">
+          <h2 className="text-sm font-semibold tracking-wide text-ink-soft">
+            Where your reserves stand
+          </h2>
+          <CapacityDial capacity={capacity} bars={bars} projection={projection} />
+        </section>
+      )}
     </div>
   )
 }

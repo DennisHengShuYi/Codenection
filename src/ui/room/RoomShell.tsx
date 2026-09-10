@@ -378,6 +378,11 @@ export function RoomShell({
           capacity={overallReserve(week.start)}
           bars={bars}
           projection={projection}
+          // Ruling 56. §1.5's gate travelled with the breakdown when Ruling 53 moved it
+          // here. Hiding `The week` is NOT enough on its own: a stuck card at low energy
+          // opens a block, `isWeekScreen` turns true, and `back({kind:'block'})` leaves the
+          // student standing on this screen without `The week` ever being pressed.
+          lowEnergy={lowEnergy}
         />
 
         {sheets}

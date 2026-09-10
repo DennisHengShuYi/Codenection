@@ -76,6 +76,7 @@ const setup = (schedule = week(), over: Partial<Parameters<typeof WeekScreen>[0]
       capacity={schedule.start.mental}
       bars={domainBars(schedule.start, projection, days(schedule))}
       projection={projection}
+      lowEnergy={false}
       {...over}
     />,
   )
@@ -116,6 +117,24 @@ describe('WeekScreen', () => {
     const reserves = screen.getByTestId('week-reserves')
 
     expect(rebalance.compareDocumentPosition(reserves) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  /**
+   * Ruling 56. §1.5's gate came with the breakdown when Ruling 53 moved it off the room.
+   * The route that matters is driven end to end in `RoomShell.lowEnergy.test.tsx`; this is
+   * the same rule read at the component, so a caller reading the props knows the gate is
+   * this screen's own responsibility rather than something the router does for it.
+   */
+  it('withholds the breakdown in low-energy mode, and keeps the week itself', () => {
+    setup(week(), { lowEnergy: true })
+
+    expect(screen.queryByTestId('week-reserves')).toBeNull()
+    expect(screen.queryAllByRole('meter')).toHaveLength(0)
+    expect(screen.queryByTestId('reserve-text-equivalent')).toBeNull()
+    // Only the dashboard goes. The horizon and the fortnight's one action stay, because
+    // §1.5 collapses the interface rather than removing the screen.
+    expect(screen.getAllByTestId(/^day-\d+$/)).toHaveLength(HORIZON_DAYS)
+    expect(screen.getByTestId('rebalance')).toBeVisible()
   })
 
   it('opens a day when it is tapped', async () => {

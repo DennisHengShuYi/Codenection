@@ -33,6 +33,35 @@ export const ACTIVITY_KINDS = [
 
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number]
 
+/**
+ * Every kind a scheduled *block* may carry -- which is every `ActivityKind` except `sleep`.
+ *
+ * Sleep is an activity the model reasons about, but it enters through `Schedule.sleepByDay`
+ * and never as a block on the grid; `engine/reachable.test.ts` records that as a deliberate
+ * decision rather than an omission. A sleep block would be charged nothing by `drain.ts`
+ * while `sleepByDay` counted the same hours again, so it is a block that quietly does not
+ * exist to the model.
+ *
+ * One list, used by both places that must agree about it: `ItemChip`'s picker and
+ * `ai/schema.ts`'s validation of a model reply (Ruling 46). Narrowing only the picker left
+ * the boundary still admitting what the UI had stopped offering -- and the project rule is
+ * that untrusted input never becomes trusted by passing through a layer.
+ *
+ * Written out rather than filtered so it can be a literal tuple, which `z.enum` needs.
+ * `types.test.ts` guards it against drifting from `ACTIVITY_KINDS`.
+ */
+export const BLOCK_KINDS = [
+  'hardExercise',
+  'lightExercise',
+  'studyBlock',
+  'socialDraining',
+  'socialRestorative',
+  'errands',
+  'rest',
+] as const satisfies readonly ActivityKind[]
+
+export type BlockKind = (typeof BLOCK_KINDS)[number]
+
 export interface Activity {
   readonly kind: ActivityKind
   readonly type: LoadType

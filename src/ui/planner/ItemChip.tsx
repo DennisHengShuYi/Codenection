@@ -1,5 +1,5 @@
 import type { ParsedItem } from '../../ai'
-import { ACTIVITY_KINDS, LOAD_TYPES, type ActivityKind, type LoadType } from '../../engine'
+import { BLOCK_KINDS, LOAD_TYPES, type ActivityKind, type LoadType } from '../../engine'
 import { Button } from '../kit/Button'
 import { CARD_TONES } from '../kit/Card'
 import { Field } from '../kit/Field'
@@ -28,17 +28,15 @@ const KIND_LABELS: Record<ActivityKind, string> = {
 }
 
 /**
- * Every kind a *block* may carry -- which is every `ActivityKind` except `sleep`.
+ * Every kind a *block* may carry, from the engine's own list rather than a local filter.
  *
- * `engine/reachable.test.ts` records sleep as intentionally absent from every producer:
- * "Enters through `Schedule.sleepByDay`, never as a scheduled activity." This select was
- * the one place in the app that contradicted that, and a student who used it got a block
- * `drain.ts` charges nothing for while `sleepByDay` counts the same hours again.
- *
- * Filtered from `ACTIVITY_KINDS` rather than listed out, so a kind added to the engine
- * appears here without anybody remembering to add it.
+ * It was `ACTIVITY_KINDS.filter(kind => kind !== 'sleep')` here, which was right and was
+ * also the only place the rule was written down -- so `ai/schema.ts` went on accepting
+ * `kind: 'sleep'` from a model reply after the picker stopped offering it. `BLOCK_KINDS`
+ * is now the single list both use (Ruling 46), guarded against drifting from
+ * `ACTIVITY_KINDS` by `engine/types.test.ts`.
  */
-const SELECTABLE_KINDS = ACTIVITY_KINDS.filter((kind) => kind !== 'sleep')
+const SELECTABLE_KINDS = BLOCK_KINDS
 
 export function ItemChip({
   item,

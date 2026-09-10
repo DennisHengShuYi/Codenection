@@ -1,4 +1,4 @@
-import { HORIZON_DAYS } from '../engine'
+import { BLOCK_KINDS, HORIZON_DAYS } from '../engine'
 import { parseModelReply } from './schema'
 import { MAX_ITEMS, type ParsedItem } from './types'
 
@@ -22,7 +22,11 @@ const SYSTEM_PROMPT = [
   'slide, a shift roster or a sticky note. Read whatever is actually there.',
   'Reply with JSON only, shaped {"items":[{"title","type","kind","hours","deadlineDay","hard"}]}.',
   'type is one of: mental, physical, social, errands.',
-  'kind is one of: hardExercise, lightExercise, studyBlock, socialDraining, socialRestorative, errands, rest, sleep.',
+  // Derived from `BLOCK_KINDS` rather than typed out, so the prompt cannot go on asking
+  // for a kind `ai/schema.ts` rejects. It used to offer `sleep`, which the boundary now
+  // refuses -- and `parseModelReply` is all-or-nothing, so one nap would have taken the
+  // whole reply down with it (Ruling 46).
+  `kind is one of: ${BLOCK_KINDS.join(', ')}.`,
   'Choose kind by what the activity actually is, not by its type: a gym session is hardExercise, a walk is lightExercise, a nap is rest.',
   'When unsure about physical work choose hardExercise, and for anything social choose socialDraining.',
   'hours is your estimate of effort, between 0 and 24. Use stated word counts or weightings',

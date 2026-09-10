@@ -8,9 +8,11 @@
  */
 export {
   ACTIVITY_KINDS,
+  BLOCK_KINDS,
   LOAD_TYPES,
   type Activity,
   type ActivityKind,
+  type BlockKind,
   type CouplingMatrix,
   type CrossEffect,
   type DayInput,

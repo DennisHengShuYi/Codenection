@@ -246,3 +246,81 @@ describe('rebalance, which now asks first', () => {
     expect(window.location.pathname).toBe('/week')
   })
 })
+
+/**
+ * The picker `blockActions` recorded as missing, reached from both its doors.
+ *
+ * Run against the whole shell rather than the form alone: what is being tested is that the
+ * change reaches the schedule and comes back out on the grid, which is the half a
+ * component-level test cannot see.
+ */
+describe('editing the week by hand', () => {
+  const openTheOnlyBlock = async () => {
+    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(await screen.findByTestId('day-2'))
+    await userEvent.click(await screen.findByTestId('block-laundry'))
+  }
+
+  it('opens the edit form at its own address', async () => {
+    await renderShell()
+    await openTheOnlyBlock()
+    await userEvent.click(screen.getByTestId('edit-block'))
+
+    expect(await screen.findByRole('dialog', { name: /edit this block/i })).toBeVisible()
+    expect(window.location.pathname).toBe('/week/block/laundry/edit')
+  })
+
+  it('writes the change back into the week', async () => {
+    await renderShell()
+    await openTheOnlyBlock()
+    await userEvent.click(screen.getByTestId('edit-block'))
+
+    const name = await screen.findByLabelText('What')
+    await userEvent.clear(name)
+    await userEvent.type(name, 'Renamed by hand')
+    await userEvent.click(screen.getByTestId('save-block'))
+
+    expect(await screen.findByRole('dialog', { name: /the week/i })).toBeVisible()
+    await userEvent.click(await screen.findByTestId('day-2'))
+    expect(await screen.findByTestId('block-laundry')).toHaveTextContent('Renamed by hand')
+  })
+
+  it('takes a removed block out of the week', async () => {
+    await renderShell()
+    await openTheOnlyBlock()
+
+    await userEvent.click(screen.getByTestId('remove-block'))
+    await userEvent.click(screen.getByTestId('confirm-remove-yes'))
+
+    expect(await screen.findByRole('dialog', { name: /the week/i })).toBeVisible()
+    await userEvent.click(await screen.findByTestId('day-2'))
+    expect(screen.queryByTestId('block-laundry')).toBeNull()
+  })
+
+  it('adds a block where the student put it', async () => {
+    await renderShell()
+    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(await screen.findByTestId('day-4'))
+    await userEvent.click(await screen.findByTestId('add-block'))
+
+    expect(await screen.findByRole('dialog', { name: /add a block/i })).toBeVisible()
+    expect(window.location.pathname).toBe('/week/new/4')
+
+    await userEvent.type(screen.getByLabelText('What'), 'Coffee with Sam')
+    await userEvent.click(screen.getByTestId('save-block'))
+
+    expect(await screen.findByRole('dialog', { name: /the week/i })).toBeVisible()
+    await userEvent.click(await screen.findByTestId('day-4'))
+    expect(await screen.findByText('Coffee with Sam')).toBeVisible()
+  })
+
+  // The same stale-id case `blockSheet` already handles by closing: land somewhere real
+  // rather than render a form over a block that is not there.
+  it('lands on the week when an edit address names a block that is gone', async () => {
+    window.history.replaceState(null, '', '/week/block/no-such-block/edit')
+    await renderShell()
+
+    expect(await screen.findByRole('dialog', { name: /the week/i })).toBeVisible()
+    expect(window.location.pathname).toBe('/week')
+  })
+})

@@ -11,7 +11,7 @@ import { paramsFor } from '../../domain/engineParams'
 import { firstAction, isStuck } from '../../domain/microStart'
 import { predictionsAfter, resolvePrediction } from '../../domain/predictions'
 import { prescribe } from '../../domain/prescribe'
-import { completeItem, deferItem } from '../../domain/scheduleEdits'
+import { addBlock, completeItem, deferItem, editItem, removeItem } from '../../domain/scheduleEdits'
 import { scheduleRecovery } from '../../domain/scheduleRecovery'
 import { overallReserve, project } from '../../engine'
 import type { Fix } from '../../optimizer'
@@ -35,6 +35,7 @@ import { AccuracyNote } from '../validation/AccuracyNote'
 import { BlockSheet } from '../week/BlockSheet'
 import { blockSheet } from '../week/blockActions'
 import { runRebalance, type RebalanceOutcome } from '../../domain/rebalanceOutcome'
+import { EventForm } from '../week/EventForm'
 import { RebalancePreview } from '../week/RebalancePreview'
 import { WeekScreen } from '../week/WeekScreen'
 import { visibleCards } from './cardPrecedence'
@@ -42,7 +43,17 @@ import { LiveCards } from './LiveCards'
 import { roomModel } from './roomModel'
 import { describeRoom } from './roomText'
 import { Room } from './Room'
-import { ROOM, toAdd, toBlock, toRebalance, toReserves, toSettings, toWeek } from './view'
+import {
+  ROOM,
+  toAdd,
+  toBlock,
+  toEditBlock,
+  toNewBlock,
+  toRebalance,
+  toReserves,
+  toSettings,
+  toWeek,
+} from './view'
 import { useUrlView } from './useUrlView'
 import { useTidyUp } from './useTidyUp'
 
@@ -116,11 +127,25 @@ export function RoomShell({
    */
   const proposalIsStale = view.kind === 'rebalance' && proposal === null
 
+  /**
+   * The block an edit address names, or null.
+   *
+   * Resolved here rather than inside the form, so a stale id -- a block completed in another
+   * tab, a pasted link to something since removed -- is handled the way `blockSheet` already
+   * handles it, by landing somewhere real, rather than by the form rendering an empty shape.
+   */
+  const editing =
+    schedule !== null && view.kind === 'editBlock'
+      ? (schedule.items.find((candidate) => candidate.id === view.itemId) ?? null)
+      : null
+
+  const editTargetIsGone = schedule !== null && view.kind === 'editBlock' && editing === null
+
   useEffect(() => {
-    if (proposalIsStale) setView(toWeek())
+    if (proposalIsStale || editTargetIsGone) setView(toWeek())
     // `setView` is rebuilt on every render, so listing it here would re-run this effect on
-    // every render. Whether it should fire is decided entirely by the flag above.
-  }, [proposalIsStale]) // eslint-disable-line react-hooks/exhaustive-deps
+    // every render. Whether it should fire is decided entirely by the two flags above.
+  }, [proposalIsStale, editTargetIsGone]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Session-scoped dismissals for the four live cards, none of which has a domain-level
   // "not today" of its own any more. §7 retired the recovery card's permanent
@@ -398,6 +423,11 @@ export function RoomShell({
             answerBlock(itemId, rested ? 'right' : 'didnt')
             closeToRoom()
           }}
+          onEdit={(itemId) => setView(toEditBlock(itemId))}
+          onRemove={(itemId) => {
+            setSchedule(removeItem(week, itemId))
+            setView(toWeek())
+          }}
         />
       )}
 
@@ -428,6 +458,7 @@ export function RoomShell({
             fallback={fallback}
             onRebalance={() => void onRebalance()}
             onSelectBlock={(itemId) => setView(toBlock(itemId))}
+            onAddBlock={(day) => setView(toNewBlock(day))}
             blockLog={blockLog}
           />
         </Sheet>
@@ -444,6 +475,43 @@ export function RoomShell({
             setProposal(null)
             closeToRoom()
           }}
+        />
+      )}
+
+      {/*
+        Both forms return to the WEEK rather than the room. The student is managing their
+        fortnight; landing back on the room after every save would make editing three blocks
+        a six-step journey.
+      */}
+      {view.kind === 'editBlock' && editing !== null && (
+        <EventForm
+          key={`edit-${view.itemId}`}
+          schedule={week}
+          params={params}
+          item={editing}
+          dayIndex={editing.dayIndex}
+          onSave={(fields) => {
+            setSchedule(editItem(week, view.itemId, fields))
+            setView(toWeek())
+          }}
+          onBack={goBack}
+          onClose={closeToRoom}
+        />
+      )}
+
+      {view.kind === 'newBlock' && (
+        <EventForm
+          key={`new-${view.dayIndex}`}
+          schedule={week}
+          params={params}
+          item={null}
+          dayIndex={view.dayIndex}
+          onSave={(fields) => {
+            setSchedule(addBlock(week, fields))
+            setView(toWeek())
+          }}
+          onBack={goBack}
+          onClose={closeToRoom}
         />
       )}
 

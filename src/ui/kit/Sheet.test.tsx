@@ -243,6 +243,8 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         onLater={vi.fn()}
         onConfirm={vi.fn()}
         onRested={vi.fn()}
+        onEdit={vi.fn()}
+        onRemove={vi.fn()}
       />,
     )
 

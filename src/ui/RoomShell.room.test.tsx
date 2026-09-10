@@ -193,19 +193,26 @@ describe('RoomShell with the room', () => {
   })
 
   /**
-   * Coordinator review: "Move" offered no real picker and was indistinguishable in effect
-   * from "Later" -- a silent stub. Dropped from `blockActions.ts` rather than left half-real
-   * (see its doc comment). This is the regression guard: a movable block's sheet must not
-   * offer it.
+   * Was "does not offer Move -- there is no picker behind it".
+   *
+   * "Move" was dropped because it offered no real picker and was indistinguishable in effect
+   * from "Later" -- a silent stub. The picker exists now, so the guard changes rather than
+   * disappears: what must not come back is a control that PROMISES to move a block without
+   * one behind it. Edit is that picker, and it is not called Move.
+   *
+   * Anchored on the exact name. The old `/move/i` also matched "Remove", which is a real
+   * control now, so the loose pattern would fail for a reason that has nothing to do with
+   * what this test is about.
    */
-  it('does not offer Move -- there is no picker behind it', async () => {
+  it('offers a real picker rather than a Move that only defers', async () => {
     await renderWithErrand()
 
     await userEvent.click(screen.getByTestId('open-week'))
     await userEvent.click(await screen.findByTestId('day-2'))
     await userEvent.click(await screen.findByTestId('block-laundry'))
 
-    expect(screen.queryByRole('button', { name: /move/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^move$/i })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeVisible()
     expect(screen.getByRole('button', { name: /^later$/i })).toBeVisible()
   })
 

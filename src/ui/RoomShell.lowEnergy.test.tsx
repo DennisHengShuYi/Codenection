@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
 import { HORIZON_DAYS } from '../engine'
@@ -96,5 +97,78 @@ describe('RoomShell in low energy', () => {
     ].filter((card) => card !== null)
 
     expect(cards).toHaveLength(1)
+  })
+})
+
+/**
+ * Ruling 45's reachability tests, and the reason this file's other cases are not enough.
+ *
+ * §1.5's rule is bidirectional -- "the manual setting wins in both directions" -- and until
+ * now `useLowEnergy.setOverride` was wired to no control anywhere in the app, so the reading
+ * side was live while the writing side was orphaned. A unit test of `shouldUseLowEnergy`
+ * passes happily in that state, which is exactly how the mechanism died unnoticed.
+ *
+ * These two prove the whole path end to end: the collapsed surfaces really are collapsed,
+ * the door to Settings really is reachable from inside the collapsed interface, the control
+ * really is in there, and pressing it really does change what the room renders.
+ */
+describe('the low-energy override, reachable from the settings sheet', () => {
+  it('lets a depleted student turn the collapsed interface off', async () => {
+    await renderDrained()
+
+    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+    // Collapsed to begin with: this is the state the student is stuck in today.
+    expect(screen.queryByTestId('open-week')).toBeNull()
+    expect(screen.queryByTestId('dial-gauge')).toBeNull()
+
+    // The door itself, asserted rather than assumed: a control in Settings is no fix at all
+    // if `open-settings` is one of the things low-energy mode hides.
+    await userEvent.click(screen.getByTestId('open-settings'))
+    await userEvent.click(await screen.findByRole('radio', { name: /full interface/i }))
+
+    await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+    expect(screen.getByTestId('dial-gauge')).toBeVisible()
+  })
+
+  it('lets a rested student turn the simplified interface on', async () => {
+    counter += 1
+    const repository = createLocalRepository(`low-energy-on-${counter}`)
+    await repository.clear()
+    // Well above the threshold, so nothing infers low energy: only the manual setting can
+    // produce it. §1.5's documented fallback "for any screen that cannot be made to work at
+    // 320px", and the accessibility case -- wanting less is a legitimate preference at any
+    // reserve, not only a symptom of being depleted.
+    await repository.saveWeek({
+      items: [],
+      start: { mental: 80, physical: 80, social: 80, errands: 80 },
+      horizonDays: HORIZON_DAYS,
+      sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 8),
+    })
+
+    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+
+    await userEvent.click(screen.getByTestId('open-settings'))
+    await userEvent.click(await screen.findByRole('radio', { name: /simplified interface/i }))
+
+    await waitFor(() => expect(screen.queryByTestId('open-week')).toBeNull())
+    expect(screen.queryByTestId('dial-gauge')).toBeNull()
+  })
+
+  // Three states, not a toggle. Dropping `auto` strands anyone who touches the control away
+  // from inferred behaviour with no way back to it.
+  it('offers a way back to the inferred setting', async () => {
+    await renderDrained()
+
+    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-settings'))
+    await userEvent.click(await screen.findByRole('radio', { name: /full interface/i }))
+    await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+
+    await userEvent.click(screen.getByRole('radio', { name: /decide for me/i }))
+
+    // Back to inferred, which for this drained week means collapsed again.
+    await waitFor(() => expect(screen.queryByTestId('open-week')).toBeNull())
   })
 })

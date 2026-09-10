@@ -14,10 +14,16 @@ export const LOW_ENERGY_THRESHOLD = 20
  * The manual setting wins in both directions. An interface a struggling student cannot
  * dismiss is one more thing being done to them, which is the opposite of the point.
  *
- * That rule is currently UNMET in the running app, and this comment says so rather than
- * describing an intention. `useLowEnergy.setOverride` is the only writer of the preference
- * and no control calls it -- the toggle lived on `LowEnergyView`, deleted in Task 17. The
- * reading side below is live and correct; what is missing is somewhere to say it.
+ * Both directions are live in the running app (Ruling 45). `useLowEnergy.setOverride` is
+ * the only writer of the preference, and `settings/LowEnergyControl.tsx` -- three states,
+ * `auto` / `on` / `off` -- is what calls it, from the settings sheet. That sheet is
+ * reachable from inside the collapsed interface because `open-settings` sits in
+ * `RoomShell`'s always-rendered header, ungated by this mode.
+ *
+ * This comment used to record the rule as UNMET, which it was between Task 17 deleting
+ * `LowEnergyView` and the control being rebuilt. Kept accurate in both directions: a
+ * comment claiming a compliance that does not exist is a defect this branch shipped once
+ * already, and the inverse is no better.
  */
 export function shouldUseLowEnergy(
   floorReserve: number,

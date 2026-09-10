@@ -21,6 +21,7 @@ import { domainBars } from '../dial/domainBars'
 import { Button } from '../kit/Button'
 import { Sheet } from '../kit/Sheet'
 import { LinkTelegram } from '../settings/LinkTelegram'
+import { LowEnergyControl } from '../settings/LowEnergyControl'
 import { blockToAsk, withSleep } from '../today/checkIn'
 import { useLowEnergy } from '../useLowEnergy'
 import { useProfile } from '../useProfile'
@@ -103,18 +104,13 @@ export function RoomShell({
   const floor = schedule
     ? Math.min(schedule.start.mental, schedule.start.physical, schedule.start.social, schedule.start.errands)
     : 100
-  // KNOWN GAP, deliberately left rather than tidied away (batch D). `setOverride` is wired
-  // to no control anywhere in the app -- the toggle it was built for lived on
-  // `LowEnergyView`, which Task 17 deleted -- and `useLowEnergy` has no test file either,
-  // despite an earlier comment here claiming it "keeps the capability (and its own tests)".
-  //
-  // It was NOT swept as dead code, because `lowEnergy.ts`'s own docstring records the
-  // product rule it serves: "An interface a struggling student cannot dismiss is one more
-  // thing being done to them." A student below 20% reserve currently cannot dismiss it. The
-  // stored preference is still honoured, so the capability is one control away; deleting the
-  // setter would make it a rewrite instead. Same shape as Ruling 28's `CapacityDial`, and it
-  // wants the same judgement rather than an implementer's guess.
-  const { active: lowEnergy } = useLowEnergy(repository, floor)
+  // §1.5's mode, read AND written. `setOverride` reaches `LowEnergyControl` in the settings
+  // sheet below, which is the whole of Ruling 45: the preference was honoured here while
+  // nothing in the app could set it, because the control lived on `LowEnergyView` and Task
+  // 17 deleted the view. Both directions matter -- a depleted student turning the collapsed
+  // interface off, and a rested student turning it on -- and both are asserted end to end in
+  // `RoomShell.lowEnergy.test.tsx` rather than only at the hook.
+  const { active: lowEnergy, override: lowEnergyOverride, setOverride } = useLowEnergy(repository, floor)
 
   /**
    * §8.1's two prerequisites: anchor the fortnight to a real day, and claim something about a
@@ -412,6 +408,13 @@ export function RoomShell({
           }
         >
           <div className="flex flex-col gap-4">
+            {/* First, and above the account rows on purpose. This is the one setting that
+                changes what the student can see, and the one a student in low-energy mode
+                came here for -- putting it under sign-in and Telegram would make the way
+                out of a collapsed interface the last thing on the page. It is also the
+                only part of this sheet that works signed out. */}
+            <LowEnergyControl value={lowEnergyOverride} onChange={setOverride} />
+
             {session !== null ? (
               <>
                 <AccountBar session={session} />

@@ -9,6 +9,15 @@ export function useLowEnergy(
   floorReserve: number,
 ): {
   active: boolean
+  /**
+   * The stored preference itself, not only what it resolved to.
+   *
+   * A three-state control has to show which of the three is selected, and `active` cannot
+   * answer that: `auto` at 12% reserve and `on` at 80% both resolve to true. Reporting it
+   * here keeps one source of truth -- without it the control would have to hold its own
+   * copy of the preference and the two would drift the first time either changed.
+   */
+  override: StoredSettings['lowEnergyOverride']
   setOverride: (override: StoredSettings['lowEnergyOverride']) => void
 } {
   const [settings, setSettings] = useState<StoredSettings>(DEFAULT_SETTINGS)
@@ -39,5 +48,9 @@ export function useLowEnergy(
     repo.saveSettings(next).catch(() => undefined)
   }
 
-  return { active: shouldUseLowEnergy(floorReserve, settings.lowEnergyOverride), setOverride }
+  return {
+    active: shouldUseLowEnergy(floorReserve, settings.lowEnergyOverride),
+    override: settings.lowEnergyOverride,
+    setOverride,
+  }
 }

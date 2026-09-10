@@ -144,7 +144,27 @@ export function RoomShell({
 
   const week = schedule
   const now = new Date()
-  const today = todayIndex(week, now) ?? 0
+  const today = todayIndex(week, now)
+
+  // `todayIndex` returns `null` on purpose (see `calendar.ts`): an unanchored week has no
+  // real day to be on, and a week whose fortnight has already elapsed is not "day 0" of a
+  // new one either. Collapsing either case to 0 would re-mark every genuinely silent day as
+  // checked in (§6.5) and point the whole room at the wrong day -- confidently wrong is
+  // worse than honestly unsure. The anchoring effect above already resolves the first case
+  // on the next render for a fresh week; what is left here is the elapsed-fortnight case,
+  // which this app does not yet have a "start the next one" flow for, so it says so rather
+  // than pretending.
+  if (today === null) {
+    return (
+      <main className="mx-auto max-w-screen-md p-4">
+        <p data-testid="day-unlocated">
+          This fortnight has run its course and the app cannot tell which day you are on.
+          Reopen once a new one has started.
+        </p>
+      </main>
+    )
+  }
+
   // Threaded alongside `today` from the same clock read -- see the comment above this
   // effect block: the clock enters here and nowhere deeper, so `checkIn.ts` takes it as a
   // parameter rather than reading one itself.

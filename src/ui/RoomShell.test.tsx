@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
+import { HORIZON_DAYS } from '../engine'
+import type { Schedule } from '../optimizer'
 import { RoomShell } from './room/RoomShell'
 
 /** A real repository rather than a stand-in: several of these cases are *about* the
@@ -155,6 +157,37 @@ describe('RoomShell', () => {
 
       await waitFor(async () => expect(await repository.loadWeek()).not.toBeNull())
     }, 30_000)
+  })
+
+  describe('a fortnight the app cannot locate the student within', () => {
+    /**
+     * §6.5/`calendar.ts`'s own rule: `todayIndex` returns `null` on purpose for a week
+     * whose fortnight has already elapsed, rather than guessing. Collapsing that to day 0
+     * (the old `?? 0` fallback) would re-mark every genuinely silent day as checked in and
+     * point the whole room at the wrong day. The honest surface is to say so, the same way
+     * the app already says so while it is still loading.
+     */
+    it('says it cannot place the day, rather than silently assuming day zero', async () => {
+      const repository = createLocalRepository('roomshell-elapsed-fortnight')
+      await repository.clear()
+
+      const longAgo = new Date(Date.now() - (HORIZON_DAYS + 10) * 24 * 60 * 60 * 1000)
+      const startedOn = longAgo.toISOString().split('T')[0]
+
+      const elapsed: Schedule = {
+        items: [],
+        start: { mental: 70, physical: 70, social: 70, errands: 70 },
+        horizonDays: HORIZON_DAYS,
+        sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+        startedOn,
+      }
+      await repository.saveWeek(elapsed)
+
+      render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+
+      await waitFor(() => expect(screen.getByTestId('day-unlocated')).toBeVisible())
+      expect(screen.queryByTestId('room-scene')).toBeNull()
+    })
   })
 
   describe('resilience', () => {

@@ -1235,3 +1235,61 @@ describe('answering from chat', () => {
     expect(h.saved).toEqual([])
   })
 })
+
+/**
+ * §24: navigation without a session table. Nothing is remembered between presses -- the day
+ * travels in the callback -- and each step replaces the message it came from rather than
+ * leaving a trail of menus that no longer mean anything.
+ */
+describe('moving between the fortnight and a day', () => {
+  const onDayFour = {
+    id: 'b1',
+    title: 'Ethics essay',
+    type: 'mental',
+    kind: 'studyBlock',
+    hours: 2,
+    intensity: 1,
+    dayIndex: 4,
+    startHour: 9,
+    fixed: true,
+    deadlineDay: null,
+    protectedRest: false,
+  }
+
+  const weekWith = (items: unknown[]) => ({ ...week(), items }) as never
+
+  it('opens a day in place of the fortnight', async () => {
+    const h = harness({ loadWeek: async () => weekWith([onDayFour]) })
+
+    const reply = await handleIntent({ kind: 'openDay', chatId: 7, dayIndex: 4 } as never, h.store, 1000)
+
+    expect(reply?.replaceMessage).toBe(true)
+    expect(reply?.text).toContain('Ethics essay')
+  })
+
+  it('offers the way back out of a day', async () => {
+    const h = harness({ loadWeek: async () => weekWith([onDayFour]) })
+
+    const reply = await handleIntent({ kind: 'openDay', chatId: 7, dayIndex: 4 } as never, h.store, 1000)
+
+    expect(reply?.buttons?.flat().some((b) => b.data === 'back:schedule')).toBe(true)
+  })
+
+  it('goes back to the fortnight in place of the day', async () => {
+    const h = harness()
+
+    const reply = await handleIntent({ kind: 'backToSchedule', chatId: 7 } as never, h.store, 1000)
+
+    expect(reply?.replaceMessage).toBe(true)
+    expect(reply?.buttons?.flat().some((b) => b.data.startsWith('open:'))).toBe(true)
+  })
+
+  /** A day index from a callback is still input from the internet. */
+  it('refuses a day outside the fortnight', async () => {
+    const h = harness()
+
+    const reply = await handleIntent({ kind: 'openDay', chatId: 7, dayIndex: 99 } as never, h.store, 1000)
+
+    expect(reply?.text).toMatch(/which day/i)
+  })
+})

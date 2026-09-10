@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { callbackIdOf, readUpdate } from './update'
+import { callbackIdOf, messageIdOf, readUpdate } from './update'
 
 const chat = { id: 4242 }
 
@@ -334,5 +334,35 @@ describe('callbackIdOf', () => {
     ['a string', 'callback_query'],
   ])('refuses %s', (_name, update) => {
     expect(callbackIdOf(update)).toBeNull()
+  })
+})
+
+/**
+ * §24: navigation without a session table.
+ *
+ * Telegram lets a message's text and keyboard be replaced in place, so `/schedule` can
+ * become a day view and then go back without leaving a trail of dead menus in the chat.
+ * Editing needs the id of the message whose button was pressed, and that id lives on the
+ * callback query rather than on the intent -- so it is read the same way the callback id is,
+ * beside `readUpdate` rather than inside it.
+ */
+describe('messageIdOf', () => {
+  it('finds the message a button press came from', () => {
+    expect(messageIdOf({ callback_query: { id: '1', message: { chat, message_id: 55 } } })).toBe(55)
+  })
+
+  it('has nothing to edit for an ordinary message', () => {
+    expect(messageIdOf({ message: { chat, text: 'gym', message_id: 55 } })).toBeNull()
+  })
+
+  /** Anyone can post to the webhook, and this value is interpolated into an outbound API
+   *  call, so it is validated rather than trusted -- exactly as the callback id is. */
+  it.each([
+    ['a missing id', { callback_query: { id: '1', message: { chat } } }],
+    ['an id that is not a number', { callback_query: { id: '1', message: { chat, message_id: 'x' } } }],
+    ['no message at all', { callback_query: { id: '1' } }],
+    ['nothing', null],
+  ])('refuses %s', (_name, update) => {
+    expect(messageIdOf(update)).toBeNull()
   })
 })

@@ -567,6 +567,37 @@ export async function handleIntent(
    * the reserve can still hold it. Nothing is sent to anybody -- the student still answers
    * the other person themselves, in their own words, from one of the drafts.
    */
+  /**
+   * §24: the fortnight and a day, in one message that changes rather than a chat filling
+   * with dead menus. Nothing is remembered between presses -- the day travels in the
+   * callback, which is what makes this navigation without a session table.
+   */
+  if (intent.kind === 'openDay' || intent.kind === 'backToSchedule') {
+    const week = await store.loadWeek(accountId)
+    const blockLog = await store.loadBlockLog(accountId).catch(() => null)
+    if (blockLog === null) return askUnavailableReply()
+
+    if (intent.kind === 'backToSchedule') {
+      const predictions = await store.loadPredictions(accountId).catch(() => [])
+
+      return scheduleReply(
+        scheduleView({ schedule: week, today: todayFor(week, now), blockLog, predictions }),
+        { replacing: true },
+      )
+    }
+
+    if (intent.dayIndex < 0 || intent.dayIndex >= week.horizonDays) {
+      return needDayReply(week.horizonDays)
+    }
+
+    return blocksReply(
+      'today',
+      blocksOnDay(week, intent.dayIndex),
+      answeredIds(blockLog),
+      { replacing: true },
+    )
+  }
+
   if (intent.kind === 'takeOn') {
     const stored = await store.findPending(accountId, intent.askId)
     const asked = stored?.items[0]

@@ -29,6 +29,18 @@ export interface Reply {
    * produce a mangled or misleading message -- and cannot be used to fake one either.
    */
   readonly parseMode?: undefined
+  /**
+   * §24: replace the message the button was pressed on, rather than sending a new one.
+   *
+   * Set only by replies that are *navigation* -- a day opened from the fortnight, a step
+   * back out of it. Everything else stays an ordinary new message, because a reply that
+   * answers a question should sit in the log where the student can scroll back to it.
+   *
+   * A reply is not required to know whether it can be edited: `api/telegram.ts` falls back
+   * to sending when there is no message to replace, so this is a preference rather than an
+   * instruction.
+   */
+  readonly replaceMessage?: true
 }
 
 /** Telegram's own limit is far higher; this keeps one absurd item from filling the screen
@@ -165,9 +177,19 @@ export function blocksReply(
   day: 'today' | 'yesterday',
   blocks: readonly BlockLine[],
   answered: readonly string[] = [],
+  /** §24: set when this day was opened from the fortnight, so it replaces that message and
+   *  offers a way back instead of stranding the student in a dead end. */
+  nav: { readonly replacing: true } | undefined = undefined,
 ): Reply {
+  const navigation = nav === undefined ? {} : { replaceMessage: true as const }
+  const backRow = nav === undefined ? [] : [[{ label: '‹ The fortnight', data: 'back:schedule' }]]
+
   if (blocks.length === 0) {
-    return { text: `Nothing was scheduled ${day}.` }
+    return {
+      text: `Nothing was scheduled ${day}.`,
+      ...navigation,
+      ...(backRow.length === 0 ? {} : { buttons: backRow }),
+    }
   }
 
   const listed = blocks.map((block) => `• ${clockOf(block.startHour)} ${shorten(block.title)}`)
@@ -185,6 +207,7 @@ export function blocksReply(
     text: [heading, '', ...listed, '', `Did ${shorten(ask.title)} happen?`].join('\n'),
     // §8b②'s four answers, matching the today card exactly: a student who answers in both
     // places must not meet two different questions.
+    ...navigation,
     buttons: [
       [
         { label: "Didn't happen", data: blockAnswerData(ask, 'didnt') },
@@ -192,6 +215,7 @@ export function blocksReply(
         { label: 'About right', data: blockAnswerData(ask, 'right') },
         { label: 'Took longer', data: blockAnswerData(ask, 'longer') },
       ],
+      ...backRow,
     ],
   }
 }
@@ -325,6 +349,10 @@ export const checkInUnavailableReply = (): Reply => ({
 
 /** One line per day of the horizon. §1.5: a chat message has no colour, so the band is a
  *  word rather than a shade -- the same rule the week grid follows for a different reason. */
+/** A phone keyboard cannot read twenty-one buttons on one line. Seven to a row makes each
+ *  row a week, which is also how a fortnight is actually read. */
+const DAYS_PER_ROW = 7
+
 export function scheduleReply(
   cells: readonly {
     dayIndex: number
@@ -333,10 +361,24 @@ export function scheduleReply(
     deficit: boolean
     unconfirmed: boolean
   }[],
+  /** §24: set when this is a step *back* from a day, so it replaces that message rather
+   *  than leaving the day view behind as a dead menu. */
+  nav: { readonly replacing: true } | undefined = undefined,
 ): Reply {
   const crossing = cells.find((cell) => cell.deficit)
 
+  const rows = Array.from({ length: Math.ceil(cells.length / DAYS_PER_ROW) }, (_, row) =>
+    cells.slice(row * DAYS_PER_ROW, (row + 1) * DAYS_PER_ROW).map((cell) => ({
+      // §1.5 again: the marker is a glyph beside the number, not a colour, because a chat
+      // message has none.
+      label: `${cell.dayIndex}${cell.deficit ? '!' : ''}`,
+      data: `open:${cell.dayIndex}`,
+    })),
+  )
+
   return {
+    ...(nav === undefined ? {} : { replaceMessage: true as const }),
+    buttons: rows,
     text: [
       'Your fortnight:',
       '',

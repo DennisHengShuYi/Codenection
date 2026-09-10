@@ -617,3 +617,62 @@ describe('askReply offering a provisional yes', () => {
     expect(askReply(cost, drafts).buttons).toBeUndefined()
   })
 })
+
+/**
+ * §24: navigation without a session table. The fortnight offers its days; opening one
+ * replaces the message rather than adding to the log, and stepping back replaces it again.
+ * Nothing is remembered between messages -- the day index travels in the callback.
+ */
+describe('scheduleReply as navigation', () => {
+  const cells = Array.from({ length: 21 }, (_, dayIndex) => ({
+    dayIndex,
+    date: null,
+    band: 'light' as const,
+    deficit: false,
+    unconfirmed: false,
+  }))
+
+  it('offers a way into each day', () => {
+    const data = scheduleReply(cells).buttons?.flat().map((button) => button.data) ?? []
+
+    expect(data).toContain('open:3')
+  })
+
+  /** Telegram caps a keyboard's usable width, and twenty-one buttons in one row is
+   *  unreadable on a phone. */
+  it('lays the fortnight out in rows rather than one long line', () => {
+    const rows = scheduleReply(cells).buttons ?? []
+
+    expect(rows.length).toBeGreaterThan(1)
+    for (const row of rows) expect(row.length).toBeLessThanOrEqual(7)
+  })
+
+  it('replaces the message it came from when it is a step back', () => {
+    expect(scheduleReply(cells, { replacing: true }).replaceMessage).toBe(true)
+  })
+
+  it('is an ordinary message when it was asked for directly', () => {
+    expect(scheduleReply(cells).replaceMessage).toBeUndefined()
+  })
+})
+
+describe('blocksReply as a day opened from the fortnight', () => {
+  const blocks = [
+    { id: 'b1', title: 'Ethics essay', startHour: 9, type: 'mental' as const, hours: 2, dayIndex: 1 },
+  ]
+
+  it('offers a way back to the fortnight', () => {
+    const data = blocksReply('today', blocks, [], { replacing: true }).buttons?.flat().map((b) => b.data) ?? []
+
+    expect(data).toContain('back:schedule')
+  })
+
+  it('replaces the fortnight it was opened from', () => {
+    expect(blocksReply('today', blocks, [], { replacing: true }).replaceMessage).toBe(true)
+  })
+
+  it('stays an ordinary message for a plain /today', () => {
+    expect(blocksReply('today', blocks).replaceMessage).toBeUndefined()
+    expect(blocksReply('today', blocks).buttons?.flat().some((b) => b.data === 'back:schedule')).toBe(false)
+  })
+})

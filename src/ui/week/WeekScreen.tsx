@@ -151,6 +151,15 @@ export function WeekScreen(props: {
    * student did not put there, and counting it would let the app fall silent about a
    * timetable it still has never seen.
    */
+  /**
+   * Deliberately *not* `modeOf`, which asks a different question.
+   *
+   * This sentence claims the week has no classes or shifts in it, so the predicate has to be
+   * "none at all" -- one timetabled lecture makes it false. `modeOf` asks whether there is
+   * enough fixed load to call the fortnight a *frame*, and answers `lowStructure` for a
+   * student with two classes, who does have classes. Sharing one predicate between the two
+   * would make this line lie to exactly the student it is least useful to.
+   */
   const hasFixedLoad = schedule.items.some((item) => item.fixed && !item.protectedRest)
 
   const grid = openDay === null ? null : dayGrid(schedule, openDay)

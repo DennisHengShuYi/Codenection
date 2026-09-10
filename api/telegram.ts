@@ -13,7 +13,7 @@ import { handleIntent, type ChatServices, type ChatStore } from '../src/telegram
 import { hasExpired } from '../src/telegram/linkCode'
 import { priceAskWith } from '../src/telegram/priceAsk'
 import type { Reply } from '../src/telegram/render'
-import { callbackIdOf, readUpdate } from '../src/telegram/update'
+import { callbackIdOf, messageIdOf, readUpdate } from '../src/telegram/update'
 
 /**
  * The chat channel's front door (§13.6), and the only file that reads
@@ -256,7 +256,46 @@ async function fetchTelegramFile(botToken: string, fileId: string): Promise<Blob
   return file.ok ? await file.blob() : null
 }
 
-async function say(botToken: string, chatId: number, reply: Reply): Promise<void> {
+/**
+ * §24: replaces a message in place when the reply asks for it and there is one to replace.
+ *
+ * Falls back to sending, always. An edit can fail for reasons that are nobody's fault -- the
+ * message is too old, or its content is unchanged, which Telegram treats as an error -- and
+ * a student who pressed a button must see *something* happen either way.
+ */
+async function say(
+  botToken: string,
+  chatId: number,
+  reply: Reply,
+  replacing: number | null = null,
+): Promise<void> {
+  const markup = reply.buttons
+    ? {
+        reply_markup: {
+          inline_keyboard: reply.buttons.map((row) =>
+            row.map((button) => ({ text: button.label, callback_data: button.data })),
+          ),
+        },
+      }
+    : {}
+
+  if (reply.replaceMessage === true && replacing !== null) {
+    const edited = await fetch(`${TELEGRAM_API}/bot${botToken}/editMessageText`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        message_id: replacing,
+        text: reply.text,
+        // An edit with no keyboard has to say so explicitly, or the old buttons survive on
+        // a message that no longer means what they did.
+        reply_markup: markup.reply_markup ?? { inline_keyboard: [] },
+      }),
+    })
+
+    if (edited.ok) return
+  }
+
   await fetch(`${TELEGRAM_API}/bot${botToken}/sendMessage`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -264,16 +303,8 @@ async function say(botToken: string, chatId: number, reply: Reply): Promise<void
       chat_id: chatId,
       text: reply.text,
       // No parse_mode, ever. Every reply echoes something a student typed, and with no
-      // formatting there is nothing for their text to break or forge. See send.ts.
-      ...(reply.buttons
-        ? {
-            reply_markup: {
-              inline_keyboard: reply.buttons.map((row) =>
-                row.map((button) => ({ text: button.label, callback_data: button.data })),
-              ),
-            },
-          }
-        : {}),
+      // formatting there is nothing for their text to break or forge. See render.ts.
+      ...markup,
     }),
   })
 }
@@ -321,6 +352,7 @@ export default async function handler(request: Request): Promise<Response> {
     const update: unknown = await request.json()
     const intent = readUpdate(update)
     const callbackId = callbackIdOf(update)
+    const pressedOn = messageIdOf(update)
 
     const client = createClient(config.supabaseUrl as string, config.serviceRoleKey as string, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -374,7 +406,7 @@ export default async function handler(request: Request): Promise<Response> {
     const reply = await handleIntent(intent, createStore(client), Date.now(), services)
 
     if (reply !== null && intent.chatId !== null) {
-      await say(config.botToken as string, intent.chatId, reply)
+      await say(config.botToken as string, intent.chatId, reply, pressedOn)
     }
   } catch {
     // Deliberately silent to the caller. Anyone can post here, and an error message would

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { HORIZON_DAYS, LOAD_TYPES } from '../engine'
+import { ACTIVITY_KINDS, HORIZON_DAYS, LOAD_TYPES } from '../engine'
 import { MAX_ITEMS, type ParsedItem } from './types'
 
 /**
@@ -16,6 +16,7 @@ const replySchema = z.object({
       z.object({
         title: z.string().trim().min(1).max(200),
         type: z.enum(LOAD_TYPES),
+        kind: z.enum(ACTIVITY_KINDS),
         hours: z.number().positive().max(24),
         deadlineDay: z
           .number()

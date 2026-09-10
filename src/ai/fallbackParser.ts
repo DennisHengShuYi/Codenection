@@ -1,4 +1,4 @@
-import { HORIZON_DAYS, type LoadType } from '../engine'
+import { HORIZON_DAYS, type ActivityKind, type LoadType } from '../engine'
 import { DEFAULT_EFFORT_HOURS, MAX_ITEMS, type ParsedItem } from './types'
 
 /**
@@ -36,7 +36,12 @@ const SIGNALS: ReadonlyArray<{ type: LoadType; words: readonly string[] }> = [
   },
   {
     type: 'physical',
-    words: ['gym', 'run', 'walk', 'swim', 'football', 'training', 'exercise', 'yoga'],
+    // `kindOf` below splits this by hardness: walk and yoga are light, everything else --
+    // including a sport this list names but does not sort into either bucket, like
+    // badminton -- defaults to hard. §6.6: a hard session and a walk are both physical
+    // load, but opposite in what they leave behind, and crediting recovery a student never
+    // got is worse than the reverse.
+    words: ['gym', 'run', 'walk', 'swim', 'football', 'training', 'exercise', 'yoga', 'badminton'],
   },
   {
     type: 'social',
@@ -47,6 +52,16 @@ const SIGNALS: ReadonlyArray<{ type: LoadType; words: readonly string[] }> = [
     words: ['laundry', 'shopping', 'groceries', 'bank', 'post', 'clean', 'tidy', 'bills'],
   },
 ]
+
+/** Words that mean the student is describing recovery, not work. Checked ahead of
+ *  `SIGNALS` because none of these overlap it -- "nap" and "downtime" say nothing about
+ *  mental, physical, social or errand load. */
+const REST_WORDS = ['nap', 'rest', 'break', 'downtime']
+
+/** The only physical words that leave the light residue (§6.6's `lightExercise` row).
+ *  Everything else physical -- an explicit hard word or a sport this file has never heard
+ *  of -- takes the dearer default in `kindOf`. */
+const PHYSICAL_LIGHT_WORDS = ['walk', 'yoga']
 
 /** Splits on the punctuation people actually use in a dump. */
 const splitFragments = (text: string): string[] =>
@@ -66,6 +81,25 @@ function typeOf(lower: string): { type: LoadType; confident: boolean } {
   // load type, so a wrong guess distorts the projection least -- and it is flagged so the
   // student can correct it before it counts.
   return { type: 'errands', confident: false }
+}
+
+/**
+ * What residue the activity leaves (§6.6), derived from the same words `typeOf` already
+ * read rather than a separate guess.
+ *
+ * The doctrine `addItems` states outright, applied here at the source: crediting recovery
+ * that never happened reports a student as fine while they sink, whereas under-crediting
+ * only errs toward caution. So physical work defaults to the dearer `hardExercise` unless
+ * a light word says otherwise, and social stays pessimistic at `socialDraining` -- a parse
+ * cannot tell a restorative coffee from an obligation.
+ */
+function kindOf(type: LoadType, lower: string): ActivityKind {
+  if (type === 'physical') {
+    return PHYSICAL_LIGHT_WORDS.some((word) => lower.includes(word)) ? 'lightExercise' : 'hardExercise'
+  }
+  if (type === 'social') return 'socialDraining'
+  if (type === 'errands') return 'errands'
+  return 'studyBlock'
 }
 
 function deadlineOf(lower: string, today: number): number | null {
@@ -98,7 +132,12 @@ export function parseWithRules(text: string, today = 0): ParsedItem[] {
     .slice(0, MAX_ITEMS)
     .map((fragment) => {
       const lower = fragment.toLowerCase()
-      const { type, confident } = typeOf(lower)
+      const isRest = REST_WORDS.some((word) => lower.includes(word))
+      // A stated rest word is its own signal, read ahead of `typeOf`: "nap" and "downtime"
+      // say nothing about mental, physical, social or errand load, but they say everything
+      // about kind.
+      const { type, confident } = isRest ? { type: 'mental' as const, confident: true } : typeOf(lower)
+      const kind: ActivityKind = isRest ? 'rest' : kindOf(type, lower)
       const deadlineDay = deadlineOf(lower, today)
 
       counter += 1
@@ -107,6 +146,7 @@ export function parseWithRules(text: string, today = 0): ParsedItem[] {
         id: `rule-${counter}`,
         title: fragment,
         type,
+        kind,
         hours: hoursOf(lower),
         deadlineDay,
         // A stated day is the student saying it is fixed. Everything else stays soft until

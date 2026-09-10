@@ -17,7 +17,7 @@ const reply = (content: string) => ({
 })
 
 const good = JSON.stringify({
-  items: [{ title: 'Essay', type: 'mental', hours: 4, deadlineDay: 3, hard: true }],
+  items: [{ title: 'Essay', type: 'mental', kind: 'studyBlock', hours: 4, deadlineDay: 3, hard: true }],
 })
 
 afterEach(() => vi.unstubAllGlobals())

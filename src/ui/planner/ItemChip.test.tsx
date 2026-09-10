@@ -8,6 +8,7 @@ const item = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   id: 'a',
   title: 'WIA3001 essay',
   type: 'mental',
+  kind: 'studyBlock',
   hours: 4,
   deadlineDay: 5,
   hard: true,
@@ -48,6 +49,19 @@ describe('ItemChip', () => {
     await userEvent.selectOptions(screen.getByLabelText(/kind/i), 'physical')
 
     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ type: 'physical' }))
+  })
+
+  /**
+   * The gym bug: a parse cannot always tell a hard session from a walk, and the wrong kind
+   * silently flips whether the engine believes the next study block was helped or hurt.
+   * §3.2 requires this to be correctable with one tap, the same as type.
+   */
+  it('lets the kind be corrected', async () => {
+    const props = setup({ type: 'physical', kind: 'lightExercise' })
+
+    await userEvent.selectOptions(screen.getByLabelText(/detail/i), 'hardExercise')
+
+    expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ kind: 'hardExercise' }))
   })
 
   it('lets the effort be corrected', async () => {

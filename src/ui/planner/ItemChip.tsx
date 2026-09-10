@@ -1,5 +1,5 @@
 import type { ParsedItem } from '../../ai'
-import { LOAD_TYPES, type LoadType } from '../../engine'
+import { ACTIVITY_KINDS, LOAD_TYPES, type ActivityKind, type LoadType } from '../../engine'
 
 /** The engine's vocabulary in a student's words. "Mental load" is a modelling term; "study
  *  and thinking" is what someone recognises as their own week. */
@@ -8,6 +8,20 @@ const LABELS: Record<LoadType, string> = {
   physical: 'Body & movement',
   social: 'People',
   errands: 'Life admin',
+}
+
+/** §6.6's kinds in a student's words -- what the activity leaves behind, not the modelling
+ *  term for it. A gym session and a walk are both "Body & movement" above, but this is
+ *  where the student says which one it actually was. */
+const KIND_LABELS: Record<ActivityKind, string> = {
+  hardExercise: 'Hard exercise',
+  lightExercise: 'Light exercise',
+  studyBlock: 'Study',
+  socialDraining: 'Seeing people (draining)',
+  socialRestorative: 'Seeing people (restorative)',
+  errands: 'Life admin',
+  rest: 'Rest',
+  sleep: 'Sleep',
 }
 
 export function ItemChip({
@@ -41,6 +55,21 @@ export function ItemChip({
             {LOAD_TYPES.map((type) => (
               <option key={type} value={type}>
                 {LABELS[type]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-xs">
+          Detail
+          <select
+            value={item.kind}
+            onChange={(event) => onChange({ ...item, kind: event.target.value as ActivityKind })}
+            className="rounded border border-slate-300 px-2 py-1 text-sm"
+          >
+            {ACTIVITY_KINDS.map((kind) => (
+              <option key={kind} value={kind}>
+                {KIND_LABELS[kind]}
               </option>
             ))}
           </select>

@@ -16,6 +16,7 @@ const parsed = (title: string): ParsedItem => ({
   id: `id-${title}`,
   title,
   type: 'mental',
+  kind: 'studyBlock',
   hours: 2,
   deadlineDay: null,
   hard: false,

@@ -5,8 +5,15 @@ import { PhotoImportScreen } from './PhotoImportScreen'
 
 const good = {
   items: [
-    { title: 'WIA3001 report', type: 'mental', hours: 8, deadlineDay: 9, hard: true },
-    { title: 'Group presentation', type: 'social', hours: 3, deadlineDay: 5, hard: true },
+    { title: 'WIA3001 report', type: 'mental', kind: 'studyBlock', hours: 8, deadlineDay: 9, hard: true },
+    {
+      title: 'Group presentation',
+      type: 'social',
+      kind: 'socialDraining',
+      hours: 3,
+      deadlineDay: 5,
+      hard: true,
+    },
   ],
 }
 

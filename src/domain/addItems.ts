@@ -11,28 +11,14 @@ const DEFAULT_START_HOUR = 19
 const DEFAULT_DAY = 2
 
 /**
- * Social maps to draining, not restorative, and the asymmetry is deliberate.
- *
- * A parse cannot reliably tell "coffee with Sarah" from "group meeting", so one of the two
- * errors has to be chosen. Treating an obligation as restorative would credit a student
- * with recovery they never got and report them as fine while they sink -- the same class of
- * failure as sleep curing loneliness, which the engine already refuses. Treating a genuine
- * restorative coffee as draining only under-reports recovery, which errs toward caution. A
- * student who disagrees changes the kind on the chip before accepting it.
- */
-const KIND_FOR = {
-  mental: 'studyBlock',
-  physical: 'lightExercise',
-  social: 'socialDraining',
-  errands: 'errands',
-} as const
-
-/**
  * Turns accepted chips into real schedule items.
  *
  * Everything here arrives from a parse, and a parse is a proposal. Nothing it produces may
  * be fixed or protected: a model able to create protected rest could pin a block the
  * optimizer is forbidden to move, and that guarantee is what §5.1's whole stance rests on.
+ * That guarantee is unrelated to `kind` -- a movable rest block is a different thing from
+ * `protectedRest` and is safe -- so `kind` is carried straight through from the parse
+ * rather than re-derived from `type` the way it used to be.
  */
 export function addItems(schedule: Schedule, items: readonly ParsedItem[]): Schedule {
   const stamp = Date.now()
@@ -41,7 +27,7 @@ export function addItems(schedule: Schedule, items: readonly ParsedItem[]): Sche
     id: `added-${stamp}-${index}-${item.id}`,
     title: item.title,
     type: item.type,
-    kind: KIND_FOR[item.type],
+    kind: item.kind,
     hours: item.hours,
     intensity: 1,
     dayIndex:

@@ -28,7 +28,14 @@ beforeEach(() =>
       json: () =>
         Promise.resolve({
           items: [
-            { title: 'WIA3001 report', type: 'mental', hours: 8, deadlineDay: 9, hard: true },
+            {
+              title: 'WIA3001 report',
+              type: 'mental',
+              kind: 'studyBlock',
+              hours: 8,
+              deadlineDay: 9,
+              hard: true,
+            },
           ],
         }),
     }),

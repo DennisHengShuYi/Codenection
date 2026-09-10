@@ -7,6 +7,7 @@
  * whole model be tested without a single mock.
  */
 export {
+  ACTIVITY_KINDS,
   LOAD_TYPES,
   type Activity,
   type ActivityKind,

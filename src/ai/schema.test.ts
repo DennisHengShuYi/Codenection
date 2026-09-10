@@ -3,8 +3,8 @@ import { parseModelReply } from './schema'
 
 const good = {
   items: [
-    { title: 'WIA3001 essay', type: 'mental', hours: 4, deadlineDay: 5, hard: true },
-    { title: 'Laundry', type: 'errands', hours: 1, deadlineDay: null, hard: false },
+    { title: 'WIA3001 essay', type: 'mental', kind: 'studyBlock', hours: 4, deadlineDay: 5, hard: true },
+    { title: 'Laundry', type: 'errands', kind: 'errands', hours: 1, deadlineDay: null, hard: false },
   ],
 }
 
@@ -71,5 +71,21 @@ describe('parseModelReply', () => {
   // data rather than a habit of the interface.
   it('marks everything from the model as needing confirmation', () => {
     expect(parseModelReply(good)?.every((item) => item.confident)).toBe(false)
+  })
+
+  it('rejects a kind the engine does not have', () => {
+    const reply = {
+      items: [{ title: 'gym', type: 'physical', kind: 'crossfit', hours: 2, deadlineDay: null, hard: false }],
+    }
+
+    expect(parseModelReply(reply)).toBeNull()
+  })
+
+  it('keeps a kind the engine does have', () => {
+    const reply = {
+      items: [{ title: 'gym', type: 'physical', kind: 'hardExercise', hours: 2, deadlineDay: null, hard: false }],
+    }
+
+    expect(parseModelReply(reply)?.[0]?.kind).toBe('hardExercise')
   })
 })

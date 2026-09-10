@@ -104,4 +104,25 @@ describe('parseWithRules', () => {
 
     expect(parseWithRules(huge).length).toBeLessThanOrEqual(25)
   })
+
+  it('tells hard training from a walk, using signal words it already has', () => {
+    expect(parseWithRules('gym')[0]?.kind).toBe('hardExercise')
+    expect(parseWithRules('walk')[0]?.kind).toBe('lightExercise')
+  })
+
+  it('lets a student type rest and get rest, rather than a study block', () => {
+    const [nap] = parseWithRules('nap for an hour')
+
+    expect(nap?.kind).toBe('rest')
+  })
+
+  it('defaults unrecognised physical work to the dearer kind', () => {
+    // addItems' own doctrine: crediting recovery that never happened reports a student as
+    // fine while they sink; under-crediting only errs toward caution.
+    expect(parseWithRules('badminton')[0]?.kind).toBe('hardExercise')
+  })
+
+  it('keeps social pessimistic, because a parse cannot tell a friend from a group project', () => {
+    expect(parseWithRules('coffee with sarah')[0]?.kind).toBe('socialDraining')
+  })
 })

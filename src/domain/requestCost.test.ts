@@ -16,6 +16,7 @@ const request = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   id: 'r1',
   title: 'FYP presentation help',
   type: 'mental',
+  kind: 'studyBlock',
   hours: 3,
   deadlineDay: 4,
   hard: false,

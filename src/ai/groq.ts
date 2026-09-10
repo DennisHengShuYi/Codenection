@@ -11,8 +11,11 @@ const GROQ_TIMEOUT_MS = 8000
 
 const SYSTEM_PROMPT = [
   "You turn a student's unstructured notes into a task list.",
-  'Reply with JSON only, shaped {"items":[{"title","type","hours","deadlineDay","hard"}]}.',
+  'Reply with JSON only, shaped {"items":[{"title","type","kind","hours","deadlineDay","hard"}]}.',
   'type is one of: mental, physical, social, errands.',
+  'kind is one of: hardExercise, lightExercise, studyBlock, socialDraining, socialRestorative, errands, rest, sleep.',
+  'Choose kind by what the activity actually is, not by its type: a gym session is hardExercise, a walk is lightExercise, a nap is rest.',
+  'When unsure about physical work choose hardExercise, and for anything social choose socialDraining.',
   'hours is your estimate of effort, between 0 and 24.',
   `deadlineDay is a day index from 0 (today) to ${HORIZON_DAYS - 1}, or null if none is implied.`,
   'hard is true only when the student stated a fixed date or deadline.',

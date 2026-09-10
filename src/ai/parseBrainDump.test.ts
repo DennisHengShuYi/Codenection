@@ -18,7 +18,7 @@ afterEach(() => vi.unstubAllGlobals())
 describe('parseBrainDump', () => {
   it('uses the model when the endpoint answers', async () => {
     respondWith(200, {
-      items: [{ title: 'Essay', type: 'mental', hours: 4, deadlineDay: 3, hard: true }],
+      items: [{ title: 'Essay', type: 'mental', kind: 'studyBlock', hours: 4, deadlineDay: 3, hard: true }],
     })
 
     const outcome = await parseBrainDump('essay due wednesday')

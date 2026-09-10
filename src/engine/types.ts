@@ -20,15 +20,18 @@ export type Reserves = Readonly<Record<LoadType, number>>
  * bucket it drained: a hard session and a walk are both physical load, and they have
  * opposite effects on the study block that follows.
  */
-export type ActivityKind =
-  | 'hardExercise'
-  | 'lightExercise'
-  | 'studyBlock'
-  | 'socialDraining'
-  | 'socialRestorative'
-  | 'errands'
-  | 'rest'
-  | 'sleep'
+export const ACTIVITY_KINDS = [
+  'hardExercise',
+  'lightExercise',
+  'studyBlock',
+  'socialDraining',
+  'socialRestorative',
+  'errands',
+  'rest',
+  'sleep',
+] as const
+
+export type ActivityKind = (typeof ACTIVITY_KINDS)[number]
 
 export interface Activity {
   readonly kind: ActivityKind

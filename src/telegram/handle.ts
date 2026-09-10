@@ -1,8 +1,10 @@
 import { MAX_IMAGE_BYTES, MAX_INPUT_LENGTH, parseBrainDump, type ParsedItem } from '../ai'
 import { todayIndex } from '../domain/calendar'
 import { blocksOnDay } from '../domain/dayBlocks'
+import type { BlockAnswer } from '../domain/blockLog'
 import { firstAction } from '../domain/microStart'
 import { prescribe } from '../domain/prescribe'
+import type { LoadType } from '../engine'
 import type { Schedule } from '../optimizer'
 import { tooLongToTranscribe } from './audio'
 import { resolveConfirmation, summarise, type PendingDump } from './brainDump'
@@ -107,14 +109,22 @@ export interface ChatStore {
   savePending(accountId: string, pending: PendingDump): Promise<void>
   findPending(accountId: string, dumpId: string): Promise<PendingDump | null>
   markAnswered(accountId: string, dumpId: string, now: number): Promise<void>
-  /** §7.9's evidence. Recorded, never acted on: Reality Check (§2.4) and the carryover
-   *  matrix (§6.6) will read this, and neither exists yet. */
-  recordBlockAnswer(
-    accountId: string,
-    blockId: string,
-    answer: 'yes' | 'no' | 'partly',
-    now: number,
-  ): Promise<void>
+  /** §8b②'s evidence, at last read by something: Reality Check (§2.4) and the carryover
+   *  matrix (§6.6) both consume the durable block log this writes into. */
+  recordBlockAnswer(accountId: string, answer: BlockAnswerInput, now: number): Promise<void>
+}
+
+/**
+ * What `recordBlockAnswer` needs to write a `BlockRecord` (minus `answeredAt`, which is
+ * `now`) -- §8b②'s evidence, carried through the callback because a week is one jsonb blob
+ * and `blockId` has nothing else to join against.
+ */
+export interface BlockAnswerInput {
+  readonly blockId: string
+  readonly type: LoadType
+  readonly plannedHours: number
+  readonly dayIndex: number
+  readonly answer: BlockAnswer
 }
 
 /** Distinct per dump so a button can only ever answer the parse it was attached to. */
@@ -235,7 +245,17 @@ export async function handleIntent(
   }
 
   if (intent.kind === 'blockAnswer') {
-    await store.recordBlockAnswer(accountId, intent.blockId, intent.answer, now)
+    await store.recordBlockAnswer(
+      accountId,
+      {
+        blockId: intent.blockId,
+        type: intent.type,
+        plannedHours: intent.plannedHours,
+        dayIndex: intent.dayIndex,
+        answer: intent.answer,
+      },
+      now,
+    )
 
     // The week is deliberately untouched. These answers are evidence for §2.4 and §6.6,
     // and a check-in that quietly edited the schedule would be acting on data nobody has

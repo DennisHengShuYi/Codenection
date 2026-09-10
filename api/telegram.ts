@@ -45,7 +45,7 @@ const emptyWeek = (): Schedule => ({
  * Every method takes the account explicitly, and the account is resolved from the chat
  * exactly once inside `handleIntent`. A chat id is never treated as an identity.
  */
-function createStore(client: SupabaseClient): ChatStore {
+export function createStore(client: SupabaseClient): ChatStore {
   return {
     async accountForChat(chatId) {
       const { data } = await client
@@ -122,18 +122,24 @@ function createStore(client: SupabaseClient): ChatStore {
     },
 
     /**
-     * §7.9's evidence, recorded and not acted on.
+     * §8b②'s evidence, now readable: the same four-answer vocabulary and the same three
+     * columns (`load_type`, `planned_hours`, `day_index`) the today card writes through
+     * `supabaseRepository.ts`, so a record written from either place produces the same
+     * `BlockOutcome` once `outcomesFrom` reads it back.
      *
      * Upserted on the account and block together, so answering the same block twice
      * records once -- a student can press a button twice, and Telegram re-sends an update
      * it was not acknowledged for.
      */
-    async recordBlockAnswer(accountId, blockId, answer, now) {
+    async recordBlockAnswer(accountId, answer, now) {
       await client.from('block_answers').upsert(
         {
           account_id: accountId,
-          block_id: blockId,
-          answer,
+          block_id: answer.blockId,
+          load_type: answer.type,
+          planned_hours: answer.plannedHours,
+          day_index: answer.dayIndex,
+          answer: answer.answer,
           answered_at: new Date(now).toISOString(),
         },
         { onConflict: 'account_id,block_id' },

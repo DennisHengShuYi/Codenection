@@ -1,5 +1,6 @@
 import type { EngineParams } from '../engine'
 import { violations } from './constraints'
+import { hourNear } from './gaps'
 import type { Move, Schedule, ScheduledItem } from './types'
 
 /** How far a single move may shift a task. Small on purpose: §2.2 observes that a
@@ -103,7 +104,12 @@ function restMoves(schedule: Schedule): Move[] {
             hours: REST_HOURS,
             intensity: 1,
             dayIndex: day,
-            startHour: REST_START_HOUR,
+            // Computed inside `apply` rather than at generation, deliberately. The
+            // neighbourhood size is unchanged -- still one insertion per day (§17) -- and a
+            // move's effect stays a function of the schedule it is applied to, which is what
+            // makes `smallestFixes` able to measure `apply(s)` against a schedule that may
+            // have moved on since the move was generated.
+            startHour: hourNear(s, day, REST_HOURS, REST_START_HOUR) ?? REST_START_HOUR,
             fixed: true,
             deadlineDay: null,
             protectedRest: true,
@@ -152,7 +158,7 @@ function socialMoves(schedule: Schedule): Move[] {
             hours: SOCIAL_HOURS,
             intensity: 1,
             dayIndex: day,
-            startHour: SOCIAL_START_HOUR,
+            startHour: hourNear(s, day, SOCIAL_HOURS, SOCIAL_START_HOUR) ?? SOCIAL_START_HOUR,
             fixed: false,
             deadlineDay: null,
             protectedRest: false,

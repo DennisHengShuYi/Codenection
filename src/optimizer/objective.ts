@@ -1,4 +1,5 @@
 import { summarise, type DayInput, type EngineParams } from '../engine'
+import { modeOf, type Mode } from './mode'
 import type { Schedule, ScheduledItem } from './types'
 
 /** §2.1's two penalty weights. They live here rather than in the engine's params: they
@@ -221,6 +222,44 @@ function fragmentationOf(byDay: readonly ScheduledItem[][]): number {
  * wrecked mind for a rested body and call it an improvement, which is the single-number
  * failure §6.3 exists to prevent.
  */
+/**
+ * §21: how much each penalty counts, given the shape of the fortnight.
+ *
+ * The list's own phrasing is that a low-structure week should invert "from flattening peaks
+ * to defending a floor", and these are those two halves as the objective already expresses
+ * them. Fragmentation is the peak-flattening term -- it pushes work off a heavy day and onto
+ * a lighter one. Deficit area is the floor-defending one: how far below the threshold the
+ * week actually falls.
+ *
+ * A student with a timetable burns out from overload, crammed against a frame they cannot
+ * move, so spreading the load is the useful thing to ask for. A student with almost nothing
+ * fixed burns out from drift: nothing forces a heavy day, and tidying their fortnight into
+ * one block per day solves a problem they do not have while saying nothing about how low it
+ * gets. So the tidying term falls silent and depth counts for more.
+ *
+ * `worstFloor` is untouched in every mode. §2.1's ordering is not up for negotiation: the
+ * solver may never trade a genuinely higher worst day for a better-arranged week.
+ */
+const MODE_WEIGHTS: Record<Mode, { fragmentation: number; deficitArea: number }> = {
+  studying: { fragmentation: FRAGMENTATION_WEIGHT, deficitArea: DEFICIT_AREA_WEIGHT },
+  shifts: { fragmentation: FRAGMENTATION_WEIGHT, deficitArea: DEFICIT_AREA_WEIGHT },
+  /**
+   * Shifted, not switched off, and the difference matters more than it looks.
+   *
+   * The strong reading of "invert" is to zero the tidying term. Three existing invariants
+   * pushed back on that, and they were right to: a student who has not imported a timetable
+   * yet *is* a low-structure week by this measure -- §42 exists because that is common -- so
+   * zeroing it would quietly stop spreading anyone's work until they entered their classes.
+   * The direction is the point, not the extremity. Tidying yields to depth here; it does not
+   * stop speaking.
+   *
+   * Ten times a deliberately tiny number is still a tiebreaker rather than a fourth
+   * objective: deficit area runs to a few hundred on a bad fortnight, so this stays well
+   * under the value of a single deficit day.
+   */
+  lowStructure: { fragmentation: FRAGMENTATION_WEIGHT / 4, deficitArea: DEFICIT_AREA_WEIGHT * 10 },
+}
+
 export function score(schedule: Schedule, params: EngineParams): number {
   // Grouped once and shared. The search calls this for every candidate on every
   // iteration, so a second pass over the same items to count fragmentation is pure waste.
@@ -229,11 +268,15 @@ export function score(schedule: Schedule, params: EngineParams): number {
   // being explored, and it is not the search's place to invent any. `ALL_PRESENT` says so.
   const projection = summarise(schedule.start, dayInputsFrom(schedule, byDay, ALL_PRESENT), params)
 
+  // §21: read off the fixed load, which the student already stated by entering their
+  // timetable -- nobody is asked which kind of week they are having.
+  const weights = MODE_WEIGHTS[modeOf(schedule)]
+
   return (
     projection.worstFloor -
     DEFICIT_DAY_WEIGHT * projection.deficitDays -
-    FRAGMENTATION_WEIGHT * fragmentationOf(byDay) -
-    DEFICIT_AREA_WEIGHT * projection.deficitArea -
+    weights.fragmentation * fragmentationOf(byDay) -
+    weights.deficitArea * projection.deficitArea -
     DEADLINE_PRESSURE_WEIGHT * deadlinePressure(schedule, params)
   )
 }

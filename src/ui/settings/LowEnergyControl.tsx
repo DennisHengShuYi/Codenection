@@ -60,29 +60,51 @@ export function LowEnergyControl({
   // radios that overwrite each other.
   const name = useId()
 
+  /**
+   * Ruling 58: rows, not bare dots.
+   *
+   * These were three unstyled browser radios with their explanations beside them as loose
+   * text -- the only thing you could press was the 8px dot, and which option was in force
+   * had to be read off it. Each option is now a full-width row that is itself the target,
+   * and the chosen one carries a ring so the answer is visible at a glance.
+   *
+   * Still a real `<input type="radio">` inside a real `<label>`, in a `fieldset` with a
+   * `legend`. The presentation moved; arrow-key behaviour, the accessibility tree and the
+   * one-name-per-group rule did not.
+   */
   return (
-    <fieldset
-      data-testid="low-energy-control"
-      className="flex flex-col gap-2 rounded-lg border border-line p-3 text-sm"
-    >
-      <legend className="font-medium">How much to show</legend>
+    <fieldset data-testid="low-energy-control" className="flex flex-col gap-2 text-sm">
+      <legend className="mb-2 font-medium text-ink">How much to show</legend>
 
-      {OPTIONS.map((option) => (
-        <label key={option.value} className="flex items-start gap-2">
-          <input
-            type="radio"
-            name={name}
-            value={option.value}
-            checked={value === option.value}
-            onChange={() => onChange(option.value)}
-            className="mt-1"
-          />
-          <span>
-            <span className="block">{option.label}</span>
-            <span className="block text-xs text-ink-soft">{option.help}</span>
-          </span>
-        </label>
-      ))}
+      {OPTIONS.map((option) => {
+        const selected = value === option.value
+
+        return (
+          <label
+            key={option.value}
+            data-testid={`low-energy-option-${option.value}`}
+            data-selected={selected}
+            className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${
+              selected
+                ? 'border-ink bg-ground ring-1 ring-ink'
+                : 'border-line hover:border-ink-soft'
+            }`}
+          >
+            <input
+              type="radio"
+              name={name}
+              value={option.value}
+              checked={selected}
+              onChange={() => onChange(option.value)}
+              className="mt-0.5 size-4 accent-ink"
+            />
+            <span>
+              <span className="block font-medium text-ink">{option.label}</span>
+              <span className="block text-xs text-ink-soft">{option.help}</span>
+            </span>
+          </label>
+        )
+      })}
     </fieldset>
   )
 }

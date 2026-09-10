@@ -12,7 +12,7 @@ import {
 } from '../../engine'
 import { domainBars } from '../dial/domainBars'
 import type { Fix, Schedule, ScheduledItem } from '../../optimizer'
-import { BUSY_ABOVE_HOURS } from './scheduleView'
+import { BUSY_ABOVE_HOURS } from '../../domain/scheduleView'
 import { WeekScreen } from './WeekScreen'
 
 const item = (
@@ -45,10 +45,9 @@ const week = (items: ScheduledItem[] = [], over: Partial<Schedule> = {}): Schedu
 })
 
 /**
- * Ruling 53 moved §1.2's five-domain breakdown here from the room screen, so every render
- * of this component now needs a reserve, its bars and the projection behind them. They are
- * required props rather than defaulted ones, and this is where the real ones are built --
- * from the schedule under test, so the numbers on screen belong to that week.
+ * Ruling 59 moved §1.2's five-domain breakdown OFF this screen and behind the room's
+ * corner gauge, so nothing here needs a reserve, its bars or the projection any more.
+ * `days` survives because the schedule helpers below still build from it.
  */
 const days = (schedule: Schedule): DayInput[] =>
   Array.from({ length: schedule.horizonDays }, (_, dayIndex) => ({
@@ -73,10 +72,6 @@ const setup = (schedule = week(), over: Partial<Parameters<typeof WeekScreen>[0]
       report={null}
       onRebalance={onRebalance}
       onSelectBlock={onSelectBlock}
-      capacity={schedule.start.mental}
-      bars={domainBars(schedule.start, projection, days(schedule))}
-      projection={projection}
-      lowEnergy={false}
       {...over}
     />,
   )
@@ -91,51 +86,8 @@ describe('WeekScreen', () => {
     expect(screen.getAllByTestId(/^day-\d+$/)).toHaveLength(HORIZON_DAYS)
   })
 
-  /**
-   * Ruling 53's destination. The five-bar breakdown belongs to the screen about how the
-   * fortnight spends the reserve, not to the room, which reads capacity once through its
-   * corner gauge. Named as well as rendered: an unlabelled gauge at the foot of a screen
-   * is reachable only by accident.
-   */
-  it('carries the five-domain breakdown, under a heading', () => {
-    setup()
 
-    expect(screen.getAllByRole('meter')).toHaveLength(5)
-    expect(screen.getByTestId('reserve-text-equivalent')).toBeVisible()
-    expect(screen.getByRole('heading', { name: /where your reserves stand/i })).toBeVisible()
-  })
 
-  /**
-   * §4's ordering rule survives the arrival: the horizon and Rebalance are this screen's
-   * primary surface, and a dashboard above them would push the fortnight's one action below
-   * the fold at 320px. So the breakdown goes last, not first.
-   */
-  it('keeps the breakdown below Rebalance rather than above the week', () => {
-    setup()
-
-    const rebalance = screen.getByTestId('rebalance')
-    const reserves = screen.getByTestId('week-reserves')
-
-    expect(rebalance.compareDocumentPosition(reserves) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  })
-
-  /**
-   * Ruling 56. §1.5's gate came with the breakdown when Ruling 53 moved it off the room.
-   * The route that matters is driven end to end in `RoomShell.lowEnergy.test.tsx`; this is
-   * the same rule read at the component, so a caller reading the props knows the gate is
-   * this screen's own responsibility rather than something the router does for it.
-   */
-  it('withholds the breakdown in low-energy mode, and keeps the week itself', () => {
-    setup(week(), { lowEnergy: true })
-
-    expect(screen.queryByTestId('week-reserves')).toBeNull()
-    expect(screen.queryAllByRole('meter')).toHaveLength(0)
-    expect(screen.queryByTestId('reserve-text-equivalent')).toBeNull()
-    // Only the dashboard goes. The horizon and the fortnight's one action stay, because
-    // §1.5 collapses the interface rather than removing the screen.
-    expect(screen.getAllByTestId(/^day-\d+$/)).toHaveLength(HORIZON_DAYS)
-    expect(screen.getByTestId('rebalance')).toBeVisible()
-  })
 
   it('opens a day when it is tapped', async () => {
     setup(week([item('essay', 3)]))
@@ -392,5 +344,18 @@ describe('WeekScreen with no fixed commitments', () => {
     setup(week([rest]))
 
     expect(screen.getByTestId('no-fixed-load')).toBeVisible()
+  })
+  /**
+   * Ruling 59. The week means the calendar and the one action on it; the dashboard that
+   * used to sit underneath is behind the room's gauge now, covered by
+   * `RoomShell.weekModal.test.tsx`. Asserted here so a future change cannot quietly put a
+   * second capacity reading back on this screen.
+   */
+  it('carries no capacity reading of its own', () => {
+    setup()
+
+    expect(screen.queryByTestId('week-reserves')).toBeNull()
+    expect(screen.queryAllByRole('meter')).toHaveLength(0)
+    expect(screen.queryByTestId('reserve-text-equivalent')).toBeNull()
   })
 })

@@ -12,7 +12,7 @@ beforeEach(() => vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no 
 afterEach(() => vi.unstubAllGlobals())
 
 const setup = () => {
-  const props = { onAccept: vi.fn(), onCancel: vi.fn() }
+  const props = { onAccept: vi.fn(), onBack: vi.fn(), onClose: vi.fn() }
   render(<PlannerScreen {...props} />)
   return props
 }
@@ -88,12 +88,28 @@ describe('PlannerScreen', () => {
     expect(await screen.findByText(/could not find anything/i)).toBeVisible()
   })
 
-  it('can be left without accepting anything', async () => {
+  /**
+   * Ruling 60 split the one `Cancel` into two: Back goes up to the chooser, close is done
+   * with the whole thing. Both are the container's own controls now, so both are asserted
+   * here -- the screen's job is only to hand them somewhere to go.
+   */
+  it('can be stepped back to the chooser without accepting anything', async () => {
     const props = setup()
 
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    await userEvent.click(screen.getByTestId('sheet-back'))
 
-    expect(props.onCancel).toHaveBeenCalledOnce()
+    expect(props.onBack).toHaveBeenCalledOnce()
+    expect(props.onClose).not.toHaveBeenCalled()
+    expect(props.onAccept).not.toHaveBeenCalled()
+  })
+
+  it('can be closed outright without accepting anything', async () => {
+    const props = setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /close/i }))
+
+    expect(props.onClose).toHaveBeenCalledOnce()
+    expect(props.onBack).not.toHaveBeenCalled()
     expect(props.onAccept).not.toHaveBeenCalled()
   })
 })

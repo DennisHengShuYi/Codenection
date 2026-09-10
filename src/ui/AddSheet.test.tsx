@@ -1,9 +1,11 @@
-import { render, screen } from '@testing-library/react'
+import { useState, type ComponentProps } from 'react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_PARAMS, HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
 import { AddSheet } from './AddSheet'
+import type { AddWay } from './room/view'
 
 /**
  * §6's `+` sheet, the single control behind "photograph something · type it out · someone
@@ -24,6 +26,21 @@ const emptySchedule = (): Schedule => ({
   sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
 })
 
+/**
+ * Since Ruling 57 the chosen way is not `AddSheet`'s own state -- it is part of the view,
+ * so that `/add/photo` can be an address. `RoomShell` holds it in the real app; this
+ * harness stands in for that here, which keeps every assertion below about what the sheet
+ * DOES rather than about where the value happens to live.
+ */
+function Harness(props: Omit<ComponentProps<typeof AddSheet>, 'way' | 'onWay' | 'onBack'>) {
+  const [way, setWay] = useState<AddWay | null>(null)
+
+  // Ruling 60: Back is one level up, which from a sub-flow is the chooser. `RoomShell`
+  // walks the real history for this; here the harness stands in for it, the same way it
+  // stands in for `way`.
+  return <AddSheet {...props} way={way} onWay={setWay} onBack={() => setWay(null)} />
+}
+
 const setup = () => {
   const props = {
     schedule: emptySchedule(),
@@ -35,7 +52,7 @@ const setup = () => {
     onAcceptRequest: vi.fn(),
     onClose: vi.fn(),
   }
-  render(<AddSheet {...props} />)
+  render(<Harness {...props} />)
   return props
 }
 
@@ -65,31 +82,56 @@ describe('AddSheet', () => {
     await userEvent.click(screen.getByTestId('add-photo'))
     expect(screen.getByTestId('photo-input')).toBeVisible()
 
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    await userEvent.click(screen.getByTestId('sheet-back'))
     await userEvent.click(screen.getByTestId('add-type'))
     expect(screen.getByLabelText(/on your mind/i)).toBeVisible()
     expect(screen.queryByTestId('photo-input')).toBeNull()
 
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    await userEvent.click(screen.getByTestId('sheet-back'))
     await userEvent.click(screen.getByTestId('add-request'))
     expect(screen.getByLabelText(/what.*asked/i)).toBeVisible()
     expect(screen.queryByLabelText(/on your mind/i)).toBeNull()
   })
 
-  it('returns to the choice when a path is cancelled, rather than closing outright', async () => {
+  /**
+   * Ruling 60. `Cancel` used to do both of these and you could not tell which from the
+   * button: inside a path it meant the chooser, at the chooser it meant close. Back means
+   * one level up and close means done, at every depth.
+   */
+  it('returns to the choice when a path is stepped back from, rather than closing outright', async () => {
     const props = setup()
 
     await userEvent.click(screen.getByTestId('add-type'))
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    await userEvent.click(screen.getByTestId('sheet-back'))
 
     expect(screen.getByTestId('add-type')).toBeVisible()
     expect(props.onClose).not.toHaveBeenCalled()
   })
 
-  it('closes on Cancel from the choice screen itself', async () => {
+  it('closes outright from a path, rather than dropping back to the choice', async () => {
     const props = setup()
 
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    await userEvent.click(screen.getByTestId('add-type'))
+    await userEvent.click(screen.getByRole('button', { name: /close/i }))
+
+    expect(props.onClose).toHaveBeenCalledOnce()
+  })
+
+  /** The chooser opens straight from the room, so it has nothing above it to go back to. */
+  it('offers no Back on the choice screen itself, and no Cancel anywhere', async () => {
+    setup()
+
+    expect(screen.queryByTestId('sheet-back')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^cancel$/i })).toBeNull()
+
+    await userEvent.click(screen.getByTestId('add-type'))
+    expect(screen.queryByRole('button', { name: /^cancel$/i })).toBeNull()
+  })
+
+  it('closes from the choice screen itself', async () => {
+    const props = setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /close/i }))
 
     expect(props.onClose).toHaveBeenCalledOnce()
   })
@@ -105,5 +147,19 @@ describe('AddSheet', () => {
 
     expect(props.onAcceptItems).toHaveBeenCalledOnce()
     expect(props.onClose).toHaveBeenCalledOnce()
+  })
+  /**
+   * Ruling 58. The three ways in were centred labels and nothing else, so "Someone asked me
+   * for something" had to carry the whole idea -- that the request gets PRICED against the
+   * week before you answer -- in six words. Each row now says what it does underneath.
+   */
+  it.each([
+    ['add-photo', /timetable/i],
+    ['add-type', /own words/i],
+    ['add-request', /before you answer/i],
+  ])('says what %s actually does, under its label', (testid, description) => {
+    setup()
+
+    expect(within(screen.getByTestId(testid)).getByText(description)).toBeVisible()
   })
 })

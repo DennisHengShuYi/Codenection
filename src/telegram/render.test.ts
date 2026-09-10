@@ -6,6 +6,8 @@ import {
   askReply,
   blockAnsweredReply,
   blocksReply,
+  checkInReply,
+  scheduleReply,
   lapsedReply,
   rebalanceReply,
   weekReply,
@@ -22,7 +24,7 @@ import {
   nothingUnderstoodReply,
   tooLongReply,
   unhandledReply,
-} from './send'
+} from './render'
 
 const item = (title: string): ParsedItem => ({
   id: `item-${title}`,
@@ -157,6 +159,8 @@ describe('helpReply', () => {
       'stuck',
       'ask',
       'lapsed',
+      'schedule',
+      'checkin',
     ]) {
       expect(text).toContain(`/${command}`)
     }
@@ -521,5 +525,154 @@ describe('lapsedReply', () => {
 
   it('says so plainly when nothing has', () => {
     expect(lapsedReply([]).text).toMatch(/nothing|still standing|all good/i)
+  })
+})
+
+/**
+ * §22's last three gaps: the fortnight at a glance, the daily check-in, and the provisional
+ * yes. All three existed in the app and none was reachable from chat.
+ */
+describe('scheduleReply', () => {
+  const cells = Array.from({ length: 21 }, (_, dayIndex) => ({
+    dayIndex,
+    date: null,
+    band: dayIndex % 3 === 0 ? ('heavy' as const) : ('light' as const),
+    deficit: dayIndex === 6,
+    unconfirmed: false,
+  }))
+
+  it('shows the whole horizon, not a slice of it', () => {
+    const text = scheduleReply(cells).text
+
+    expect(text).toContain('0')
+    expect(text).toContain('20')
+  })
+
+  /** §1.5: never shade alone. A chat message has no colour at all, so the band is a word. */
+  it('names each day s load in words', () => {
+    expect(scheduleReply(cells).text).toMatch(/heavy/i)
+    expect(scheduleReply(cells).text).toMatch(/light/i)
+  })
+
+  it('marks the day the fortnight stops holding', () => {
+    expect(scheduleReply(cells).text).toMatch(/day 6/i)
+  })
+
+  it('says so plainly when there is no deficit at all', () => {
+    const clear = cells.map((cell) => ({ ...cell, deficit: false }))
+
+    expect(scheduleReply(clear).text).toMatch(/holds|clear/i)
+  })
+})
+
+describe('checkInReply', () => {
+  it('asks for energy in the same five bands the today card offers', () => {
+    const labels = checkInReply('energy').buttons?.flat().map((button) => button.label) ?? []
+
+    expect(labels).toHaveLength(5)
+    expect(labels.join(' ')).toMatch(/empty/i)
+  })
+
+  it('asks for sleep in the same four buckets', () => {
+    const labels = checkInReply('sleep').buttons?.flat().map((button) => button.label) ?? []
+
+    expect(labels).toHaveLength(4)
+  })
+
+  /** A student who answers in both places must not meet two different questions (§8b②). */
+  it('carries the answer in the callback, so nothing has to be remembered between messages', () => {
+    const data = checkInReply('energy').buttons?.flat().map((button) => button.data) ?? []
+
+    expect(data.every((entry) => entry.startsWith('energy:'))).toBe(true)
+  })
+})
+
+describe('askReply offering a provisional yes', () => {
+  const cost = { firstDeficitDayBefore: null, firstDeficitDayAfter: 6, eveningsEquivalent: 2 }
+  const drafts = [
+    { tone: 'decline' as const, text: 'no' },
+    { tone: 'defer' as const, text: 'later' },
+    { tone: 'accept' as const, text: 'yes' },
+  ]
+
+  /**
+   * The existing "deliberately no buttons" note is about never sending anything to anybody
+   * on the student's behalf, and that still holds -- this writes only to their own week.
+   * §2.3's provisional yes is the whole mechanism: saying yes is reversible by default, and
+   * it lapses on its own unless the reserve can still hold it.
+   */
+  it('offers to take it on provisionally', () => {
+    const data = askReply(cost, drafts, 'ask-1').buttons?.flat().map((b) => b.data) ?? []
+
+    expect(data).toContain('takeon:ask-1')
+  })
+
+  it('still sends nothing to anybody', () => {
+    const labels = askReply(cost, drafts, 'ask-1').buttons?.flat().map((b) => b.label) ?? []
+
+    expect(labels.join(' ')).not.toMatch(/send|reply to them|message them/i)
+  })
+
+  it('offers nothing when there is no pending ask to accept', () => {
+    expect(askReply(cost, drafts).buttons).toBeUndefined()
+  })
+})
+
+/**
+ * §24: navigation without a session table. The fortnight offers its days; opening one
+ * replaces the message rather than adding to the log, and stepping back replaces it again.
+ * Nothing is remembered between messages -- the day index travels in the callback.
+ */
+describe('scheduleReply as navigation', () => {
+  const cells = Array.from({ length: 21 }, (_, dayIndex) => ({
+    dayIndex,
+    date: null,
+    band: 'light' as const,
+    deficit: false,
+    unconfirmed: false,
+  }))
+
+  it('offers a way into each day', () => {
+    const data = scheduleReply(cells).buttons?.flat().map((button) => button.data) ?? []
+
+    expect(data).toContain('open:3')
+  })
+
+  /** Telegram caps a keyboard's usable width, and twenty-one buttons in one row is
+   *  unreadable on a phone. */
+  it('lays the fortnight out in rows rather than one long line', () => {
+    const rows = scheduleReply(cells).buttons ?? []
+
+    expect(rows.length).toBeGreaterThan(1)
+    for (const row of rows) expect(row.length).toBeLessThanOrEqual(7)
+  })
+
+  it('replaces the message it came from when it is a step back', () => {
+    expect(scheduleReply(cells, { replacing: true }).replaceMessage).toBe(true)
+  })
+
+  it('is an ordinary message when it was asked for directly', () => {
+    expect(scheduleReply(cells).replaceMessage).toBeUndefined()
+  })
+})
+
+describe('blocksReply as a day opened from the fortnight', () => {
+  const blocks = [
+    { id: 'b1', title: 'Ethics essay', startHour: 9, type: 'mental' as const, hours: 2, dayIndex: 1 },
+  ]
+
+  it('offers a way back to the fortnight', () => {
+    const data = blocksReply('today', blocks, [], { replacing: true }).buttons?.flat().map((b) => b.data) ?? []
+
+    expect(data).toContain('back:schedule')
+  })
+
+  it('replaces the fortnight it was opened from', () => {
+    expect(blocksReply('today', blocks, [], { replacing: true }).replaceMessage).toBe(true)
+  })
+
+  it('stays an ordinary message for a plain /today', () => {
+    expect(blocksReply('today', blocks).replaceMessage).toBeUndefined()
+    expect(blocksReply('today', blocks).buttons?.flat().some((b) => b.data === 'back:schedule')).toBe(false)
   })
 })

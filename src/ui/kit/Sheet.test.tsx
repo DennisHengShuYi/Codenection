@@ -158,7 +158,12 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
 
   const actionBar = () => screen.getByTestId('sheet-actions')
 
-  it('AddSheet: Cancel is in the bar', () => {
+  /**
+   * Ruling 60 removed `Cancel` from the chooser: it opens straight from the room, so the
+   * close control is the only way out and there is nothing above it to go back to. With no
+   * actions of its own left, it has no bar at all.
+   */
+  it('AddSheet: no bar at all, since Cancel went and nothing replaced it', () => {
     render(
       <AddSheet
         schedule={emptySchedule()}
@@ -169,26 +174,29 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         onAcceptItems={vi.fn()}
         onAcceptRequest={vi.fn()}
         onClose={vi.fn()}
+        way={null}
+        onWay={vi.fn()}
+        onBack={vi.fn()}
       />,
     )
 
-    expect(within(actionBar()).getByRole('button', { name: /cancel/i })).toBeVisible()
+    expect(screen.queryByTestId('sheet-actions')).toBeNull()
   })
 
-  it('PhotoImportScreen: Cancel is in the bar', () => {
-    render(<PhotoImportScreen onAccept={vi.fn()} onCancel={vi.fn()} />)
+  it('PhotoImportScreen: Back is in the bar', () => {
+    render(<PhotoImportScreen onAccept={vi.fn()} onBack={vi.fn()} onClose={vi.fn()} />)
 
-    expect(within(actionBar()).getByRole('button', { name: /cancel/i })).toBeVisible()
+    expect(within(actionBar()).getByTestId('sheet-back')).toBeVisible()
   })
 
-  it('PlannerScreen: Cancel and Read this are in the bar', () => {
-    render(<PlannerScreen onAccept={vi.fn()} onCancel={vi.fn()} />)
+  it('PlannerScreen: Back and Read this are in the bar', () => {
+    render(<PlannerScreen onAccept={vi.fn()} onBack={vi.fn()} onClose={vi.fn()} />)
 
-    expect(within(actionBar()).getByRole('button', { name: /cancel/i })).toBeVisible()
+    expect(within(actionBar()).getByTestId('sheet-back')).toBeVisible()
     expect(within(actionBar()).getByRole('button', { name: /read this/i })).toBeVisible()
   })
 
-  it('RequestBoxScreen: Cancel and the pricing action are in the bar', () => {
+  it('RequestBoxScreen: Back and the pricing action are in the bar', () => {
     render(
       <RequestBoxScreen
         schedule={emptySchedule()}
@@ -197,11 +205,12 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         blockLog={[]}
         predictions={[]}
         onAccept={vi.fn()}
-        onCancel={vi.fn()}
+        onBack={vi.fn()}
+        onClose={vi.fn()}
       />,
     )
 
-    expect(within(actionBar()).getByRole('button', { name: /cancel/i })).toBeVisible()
+    expect(within(actionBar()).getByTestId('sheet-back')).toBeVisible()
     expect(within(actionBar()).getByRole('button', { name: /what would this cost/i })).toBeVisible()
   })
 
@@ -229,6 +238,7 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
       <BlockSheet
         model={model}
         onClose={vi.fn()}
+        onBack={vi.fn()}
         onDone={vi.fn()}
         onLater={vi.fn()}
         onConfirm={vi.fn()}

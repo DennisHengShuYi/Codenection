@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ParsedItem } from '../ai'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
-import { expandRecurring, looksRecurring } from './recurrence'
+import { expandRecurring, suggestRepeat } from './recurrence'
 
 const week = (startedOn?: string): Schedule => ({
   items: [],
@@ -161,7 +161,7 @@ describe('expandRecurring', () => {
  * available for part-time shifts, which arrive as photos in group chats and change week to
  * week, so they never come with the word "every" attached.
  */
-describe('looksRecurring', () => {
+describe('suggestRepeat', () => {
   const block = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
     id: 'existing',
     title: 'WIA3001 lecture',
@@ -182,42 +182,57 @@ describe('looksRecurring', () => {
   it('spots the same class a week later at the same hour', () => {
     const existing = anchored([block({ dayIndex: 1, startHour: 9 })])
 
-    expect(looksRecurring(parsed({ deadlineDay: 8 }), existing, 9)).toBe(true)
+    expect(suggestRepeat(parsed({ deadlineDay: 8 }), existing)?.weekdays).toEqual([2])
   })
 
   it('says nothing about a different day of the week', () => {
     const existing = anchored([block({ dayIndex: 1, startHour: 9 })])
 
-    expect(looksRecurring(parsed({ deadlineDay: 9 }), existing, 9)).toBe(false)
+    expect(suggestRepeat(parsed({ deadlineDay: 9 }), existing)).toBeNull()
   })
 
-  it('says nothing about the same weekday at a different hour', () => {
+  /**
+   * The hour deliberately plays no part, and it is worth saying why: a parsed item has no
+   * start hour at all until placement chooses one, so a match on the hour is not something
+   * this could ask about. The list's original phrasing assumed an hour that does not exist
+   * yet. Title and weekday together are what remain, and they are still a conjunction
+   * rather than either alone.
+   */
+  it('matches on title and weekday, since a parsed item has no hour yet', () => {
+    const existing = anchored([block({ dayIndex: 1, startHour: 14 })])
+
+    expect(suggestRepeat(parsed({ deadlineDay: 8 }), existing)?.weekdays).toEqual([2])
+  })
+
+  /** Suggested, never applied. §41: it is a question put on the chip, and the returned
+   *  repeat runs to the end of the horizon rather than inventing an end date nobody gave. */
+  it('suggests a weekly series with no invented end date', () => {
     const existing = anchored([block({ dayIndex: 1, startHour: 9 })])
 
-    expect(looksRecurring(parsed({ deadlineDay: 8 }), existing, 14)).toBe(false)
+    expect(suggestRepeat(parsed({ deadlineDay: 8 }), existing)?.untilDay).toBeNull()
   })
 
   /** The title is what makes it the same thing rather than a coincidence of timetabling. */
   it('says nothing about an unrelated block that happens to share the slot', () => {
     const existing = anchored([block({ title: 'Gym', dayIndex: 1, startHour: 9 })])
 
-    expect(looksRecurring(parsed({ deadlineDay: 8 }), existing, 9)).toBe(false)
+    expect(suggestRepeat(parsed({ deadlineDay: 8 }), existing)).toBeNull()
   })
 
   it('is not fooled by capitals or stray spacing', () => {
     const existing = anchored([block({ title: '  wia3001 LECTURE ', dayIndex: 1, startHour: 9 })])
 
-    expect(looksRecurring(parsed({ deadlineDay: 8 }), existing, 9)).toBe(true)
+    expect(suggestRepeat(parsed({ deadlineDay: 8 }), existing)?.weekdays).toEqual([2])
   })
 
   it('says nothing about an undated item, which has no weekday to match', () => {
     const existing = anchored([block({ dayIndex: 1, startHour: 9 })])
 
-    expect(looksRecurring(parsed({ deadlineDay: null }), existing, 9)).toBe(false)
+    expect(suggestRepeat(parsed({ deadlineDay: null }), existing)).toBeNull()
   })
 
   it('says nothing when the week does not know what day it starts on', () => {
-    expect(looksRecurring(parsed({ deadlineDay: 8 }), { ...week(), items: [block()] }, 9)).toBe(false)
+    expect(suggestRepeat(parsed({ deadlineDay: 8 }), { ...week(), items: [block()] })).toBeNull()
   })
 
   /** Something already declared as repeating needs no offer. */
@@ -225,6 +240,6 @@ describe('looksRecurring', () => {
     const existing = anchored([block({ dayIndex: 1, startHour: 9 })])
     const already = parsed({ deadlineDay: 8, repeat: { weekdays: [2], untilDay: null } })
 
-    expect(looksRecurring(already, existing, 9)).toBe(false)
+    expect(suggestRepeat(already, existing)).toBeNull()
   })
 })

@@ -1,14 +1,16 @@
 import { MAX_IMAGE_BYTES, MAX_INPUT_LENGTH, parseBrainDump, type ParsedItem } from '../ai'
-import { todayIndex } from '../domain/calendar'
+import { dateFor, todayIndex } from '../domain/calendar'
 import { blocksOnDay } from '../domain/dayBlocks'
 import { answeredIds, checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../domain/blockLog'
 import type { BlockOutcome } from '../domain/calibration'
-import { lapsed } from '../domain/commitments'
+import { accept, lapsed } from '../domain/commitments'
 import { paramsFor } from '../domain/engineParams'
 import type { EnergyPrediction } from '../domain/predictions'
-import { accuracyLine } from '../domain/predictions'
+import { accuracyLine, resolvePrediction } from '../domain/predictions'
 import { biasLine } from '../domain/realityCheck'
 import { runRebalance } from '../domain/rebalanceOutcome'
+import { scheduleView } from '../domain/scheduleView'
+import { withSleep } from '../ui/today/checkIn'
 import { firstAction } from '../domain/microStart'
 import { prescribe } from '../domain/prescribe'
 import { overallReserve, project, type LoadType } from '../engine'
@@ -22,8 +24,13 @@ import {
   blockAnsweredReply,
   blocksReply,
   discardedReply,
+  checkedInReply,
+  checkInReply,
+  checkInUnavailableReply,
   lapsedReply,
   needDayReply,
+  scheduleReply,
+  takenOnReply,
   rebalanceReply,
   weekReply,
   helpReply,
@@ -46,7 +53,7 @@ import {
   unhandledReply,
   yesterdayUnavailableReply,
   type Reply,
-} from './send'
+} from './render'
 import type { Intent } from './update'
 
 /**
@@ -96,6 +103,9 @@ export interface ChatServices {
       eveningsEquivalent: number
     }
     drafts: readonly { tone: 'decline' | 'defer' | 'accept'; text: string }[]
+    /** The request as read, so §2.3's provisional yes has something real to accept without
+     *  re-reading the text and risking a different answer. */
+    item: ParsedItem
   } | null>
 }
 
@@ -178,6 +188,13 @@ export interface ChatStore {
    * answered nothing is an ordinary state, unlike an unreadable block log.
    */
   loadPredictions(accountId: string): Promise<readonly EnergyPrediction[]>
+  /**
+   * Writes §8.1's predictions back, for a check-in answered in chat.
+   *
+   * Only the predictions, never the whole settings blob: the app writes that whole and a
+   * bot writing it too would race the browser and lose whichever wrote first.
+   */
+  savePredictions(accountId: string, predictions: readonly EnergyPrediction[]): Promise<void>
 }
 
 /**
@@ -319,6 +336,28 @@ export async function handleIntent(
         })
       }
 
+      /**
+       * §22: the fortnight at a glance, which chat could not see at all.
+       *
+       * The same `scheduleView` the week grid renders, so the two doors cannot disagree
+       * about which days are heavy or where the deficit starts.
+       */
+      case 'schedule': {
+        const week = await store.loadWeek(accountId)
+        const blockLog = await store.loadBlockLog(accountId).catch(() => null)
+        if (blockLog === null) return askUnavailableReply()
+
+        const predictions = await store.loadPredictions(accountId).catch(() => [])
+
+        return scheduleReply(
+          scheduleView({ schedule: week, today: todayFor(week, now), blockLog, predictions }),
+        )
+      }
+
+      /** §8's daily check-in, in two taps rather than a screen. */
+      case 'checkin':
+        return checkInReply(intent.argument.trim() === 'sleep' ? 'sleep' : 'energy')
+
       /** §22: any day of the fortnight, not only today and yesterday. */
       case 'day': {
         const asked = Number.parseInt(intent.argument, 10)
@@ -410,9 +449,18 @@ export async function handleIntent(
           .priceAsk(intent.argument, week, todayFor(week, now), blockLog)
           .catch(() => null)
 
-        // Nothing is ever written here. §2.3 prices a request; agreeing to it is a separate
-        // act the student takes in their own words, in their own messaging app.
-        return priced === null ? askUnreadableReply() : askReply(priced.cost, priced.drafts)
+        if (priced === null) return askUnreadableReply()
+
+        /**
+         * Still nothing sent to anybody: §2.3 prices a request, and answering the other
+         * person stays the student's own act in their own words. What is stored is the
+         * request as read, so the "take it on" button has something real to accept -- and
+         * the accept writes only to their own week, as a commitment with a review day.
+         */
+        const askId = newDumpId()
+        await store.savePending(accountId, { id: askId, items: [priced.item], answeredAt: null })
+
+        return askReply(priced.cost, priced.drafts, askId)
       }
     }
   }
@@ -509,6 +557,87 @@ export async function handleIntent(
     if (intent.text.length > MAX_INPUT_LENGTH) return tooLongReply()
 
     return offerParse(store, accountId, (await parseBrainDump(intent.text)).items)
+  }
+
+  /**
+   * §2.3's provisional yes, reachable from chat at last.
+   *
+   * The same `accept` the request box calls: it adds the block *and* records a commitment
+   * with a review day, so saying yes is reversible by default and lapses on its own unless
+   * the reserve can still hold it. Nothing is sent to anybody -- the student still answers
+   * the other person themselves, in their own words, from one of the drafts.
+   */
+  /**
+   * §24: the fortnight and a day, in one message that changes rather than a chat filling
+   * with dead menus. Nothing is remembered between presses -- the day travels in the
+   * callback, which is what makes this navigation without a session table.
+   */
+  if (intent.kind === 'openDay' || intent.kind === 'backToSchedule') {
+    const week = await store.loadWeek(accountId)
+    const blockLog = await store.loadBlockLog(accountId).catch(() => null)
+    if (blockLog === null) return askUnavailableReply()
+
+    if (intent.kind === 'backToSchedule') {
+      const predictions = await store.loadPredictions(accountId).catch(() => [])
+
+      return scheduleReply(
+        scheduleView({ schedule: week, today: todayFor(week, now), blockLog, predictions }),
+        { replacing: true },
+      )
+    }
+
+    if (intent.dayIndex < 0 || intent.dayIndex >= week.horizonDays) {
+      return needDayReply(week.horizonDays)
+    }
+
+    return blocksReply(
+      'today',
+      blocksOnDay(week, intent.dayIndex),
+      answeredIds(blockLog),
+      { replacing: true },
+    )
+  }
+
+  if (intent.kind === 'takeOn') {
+    const stored = await store.findPending(accountId, intent.askId)
+    const asked = stored?.items[0]
+    if (stored === null || stored === undefined || asked === undefined) return taskNotFoundReply()
+
+    // Marked before the write, so a double tap -- or Telegram re-sending an update it was
+    // not acknowledged for -- cannot take the same thing on twice.
+    if (stored.answeredAt !== null) return takenOnReply()
+    await store.markAnswered(accountId, stored.id, now)
+
+    const week = await store.loadWeek(accountId)
+    await store.saveWeek(accountId, accept(week, asked, todayFor(week, now)))
+
+    return takenOnReply()
+  }
+
+  if (intent.kind === 'energyAnswer' || intent.kind === 'sleepAnswer') {
+    const week = await store.loadWeek(accountId)
+    const today = todayFor(week, now)
+
+    if (intent.kind === 'sleepAnswer') {
+      // §8's sleep row, written into the week exactly as the today card writes it -- the
+      // same `withSleep`, so a night reported on the phone and one reported in the app
+      // reach the model identically.
+      await store.saveWeek(accountId, withSleep(week, today, intent.bucket))
+      return checkedInReply()
+    }
+
+    const forDate = dateFor(week, today)
+    // §8.1 scores a claim about a *real date*. An unanchored week has none, so there is
+    // nothing this answer could be attached to and saying so beats recording it against
+    // a day index that means something different tomorrow.
+    if (forDate === null) return checkInUnavailableReply()
+
+    const predictions = await store.loadPredictions(accountId).catch(() => null)
+    if (predictions === null) return checkInUnavailableReply()
+
+    await store.savePredictions(accountId, resolvePrediction(predictions, forDate, intent.energy))
+
+    return checkedInReply()
   }
 
   const pending = await store.findPending(accountId, intent.dumpId)

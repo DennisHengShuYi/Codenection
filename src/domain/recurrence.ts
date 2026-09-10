@@ -28,39 +28,37 @@ const sameTitle = (a: string, b: string): boolean =>
   a.trim().toLowerCase() === b.trim().toLowerCase()
 
 /**
- * Whether this looks like another instance of something already in the week.
+ * A weekly series this item looks like another instance of, or null.
  *
- * §37: the same class, noticed rather than declared. A student adding a block whose title
- * matches one already sitting on the same weekday at the same hour is typing out a series
- * one instance at a time, and offering to fill the horizon costs no new screen and no new
- * input path.
+ * §37: the same class, noticed rather than declared. A student adding something whose title
+ * matches a block already sitting on the same weekday is entering a series one instance at a
+ * time, and spotting it costs no new screen and no new input path. It is also the only
+ * answer available for part-time shifts, which arrive as photos in group chats and change
+ * week to week, so they never carry the word "every" for a parser to find.
  *
- * It is also the best answer available for part-time shifts, which arrive as photos in
- * group chats and change week to week -- so they never come with the word "every" attached
- * for a parser to find.
+ * The hour plays no part, and the reason is worth stating: a parsed item has no start hour
+ * until placement chooses one, so matching on it is not a question this can ask. An earlier
+ * version took an hour parameter, which is exactly why it fitted no call site and sat wired
+ * to nothing. Title and weekday together are what remain -- still a conjunction, because
+ * title alone matches two unrelated essays and a weekday alone matches half the timetable.
  *
- * All three signals are required together. Title alone matches two unrelated essays; the
- * slot alone matches whatever else happens to be timetabled at nine on a Tuesday. Only the
- * conjunction is evidence, and the answer here is a question to put to the student rather
- * than a change to make on their behalf.
+ * A suggestion, never an application. §41 puts it on the chip as a question the student
+ * confirms or dismisses in one tap, and `expandRecurring` still only ever runs on a repeat
+ * they kept. It runs to the end of the horizon rather than inventing an end date nobody gave.
  */
-export function looksRecurring(
-  item: ParsedItem,
-  schedule: Schedule,
-  startHour: number,
-): boolean {
-  // Already declared as repeating: there is nothing to offer.
-  if (item.repeat !== null || item.deadlineDay === null) return false
+export function suggestRepeat(item: ParsedItem, schedule: Schedule): Repeat | null {
+  // Already declared as repeating: there is nothing left to offer.
+  if (item.repeat !== null || item.deadlineDay === null) return null
 
   const weekday = weekdayOf(schedule, item.deadlineDay)
-  if (weekday === null) return false
+  if (weekday === null) return null
 
-  return schedule.items.some(
+  const matches = schedule.items.some(
     (existing) =>
-      existing.startHour === startHour &&
-      sameTitle(existing.title, item.title) &&
-      weekdayOf(schedule, existing.dayIndex) === weekday,
+      sameTitle(existing.title, item.title) && weekdayOf(schedule, existing.dayIndex) === weekday,
   )
+
+  return matches ? { weekdays: [weekday], untilDay: null } : null
 }
 
 let series = 0

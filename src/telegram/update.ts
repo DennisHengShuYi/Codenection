@@ -1,4 +1,5 @@
 import type { BlockAnswer } from '../domain/blockLog'
+import type { SleepBucket } from '../ui/today/checkIn'
 import type { LoadType } from '../engine'
 import { readCommand, type CommandName } from './commands'
 import { readStartCode } from './linkCode'
@@ -28,6 +29,11 @@ export type Intent =
       answer: BlockAnswer
     }
   | { kind: 'restAnswer'; chatId: number; startHour: number | null; accepted: boolean }
+  | { kind: 'takeOn'; chatId: number; askId: string }
+  | { kind: 'openDay'; chatId: number; dayIndex: number }
+  | { kind: 'backToSchedule'; chatId: number }
+  | { kind: 'energyAnswer'; chatId: number; energy: number }
+  | { kind: 'sleepAnswer'; chatId: number; bucket: SleepBucket }
   | { kind: 'photo'; chatId: number; fileId: string; bytes: number }
   | { kind: 'voice'; chatId: number; fileId: string; seconds: number; bytes: number }
   | { kind: 'unhandled'; chatId: number | null }
@@ -140,6 +146,30 @@ export function callbackIdOf(update: unknown): string | null {
   return typeof id === 'string' ? id : null
 }
 
+/**
+ * The message a button press came from, so the reply can replace it in place.
+ *
+ * §24: Telegram allows a message's text and keyboard to be swapped, which turns `/schedule`
+ * into navigation -- tap day 3, the same message becomes the day view, tap back and it
+ * returns -- without a session table anywhere, and without filling the chat log with dead
+ * menus nobody can act on any more.
+ *
+ * Beside `readUpdate` rather than inside it, for the same reason `callbackIdOf` is: this is
+ * a fact about the transport, not about what the student meant, and every intent that comes
+ * from a press can use it including the ones that read as `unhandled`.
+ *
+ * Validated rather than trusted -- anyone can post to the webhook and this is interpolated
+ * into an outbound API call.
+ */
+export function messageIdOf(update: unknown): number | null {
+  if (!isObject(update) || !isObject(update.callback_query)) return null
+  if (!isObject(update.callback_query.message)) return null
+
+  const id = update.callback_query.message.message_id
+
+  return typeof id === 'number' ? id : null
+}
+
 export function readUpdate(update: unknown): Intent {
   if (!isObject(update)) return { kind: 'unhandled', chatId: null }
 
@@ -171,6 +201,35 @@ export function readUpdate(update: unknown): Intent {
         dayIndex: Number(block[4]),
         answer: ANSWER_BY_CODE[block[5] as string] as BlockAnswer,
       }
+    }
+
+    // §24's navigation. The day index travels in the callback, so moving between the
+    // fortnight and a day needs nothing remembered between one message and the next.
+    const open = /^open:(\d{1,2})$/.exec(data)
+    if (open !== null) {
+      return { kind: 'openDay', chatId, dayIndex: Number(open[1]) }
+    }
+
+    if (data === 'back:schedule') {
+      return { kind: 'backToSchedule', chatId }
+    }
+
+    // §2.3's provisional yes: writes to the student's own week, sends nothing to anybody.
+    const takeOn = /^takeon:(.+)$/.exec(data)
+    if (takeOn !== null) {
+      return { kind: 'takeOn', chatId, askId: takeOn[1] as string }
+    }
+
+    // §8's check-in, answered in one tap. Everything the answer needs travels in the
+    // callback, so nothing has to be remembered between one message and the next.
+    const energy = /^energy:(\d{1,3})$/.exec(data)
+    if (energy !== null) {
+      return { kind: 'energyAnswer', chatId, energy: Number(energy[1]) }
+    }
+
+    const sleep = /^sleep:(under5|six|seven|eightPlus)$/.exec(data)
+    if (sleep !== null) {
+      return { kind: 'sleepAnswer', chatId, bucket: sleep[1] as SleepBucket }
     }
 
     if (data === 'rest:decline') {

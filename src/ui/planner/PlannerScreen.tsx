@@ -17,10 +17,28 @@ import { ItemChip } from './ItemChip'
  */
 export function PlannerScreen({
   onAccept,
-  onCancel,
+  onBack,
+  onClose,
+  suggestRepeat = () => null,
 }: {
   onAccept: (items: readonly ParsedItem[]) => void
-  onCancel: () => void
+  /** Ruling 60: one level up, to the chooser this was chosen from. */
+  onBack: () => void
+  /** Done entirely -- straight to the room, whatever depth this was opened to.
+   *  Wired to `onCancel` before Ruling 60, which meant the sheet's own close control
+   *  quietly dropped the student at the chooser instead of closing. */
+  onClose: () => void
+  /**
+   * §37: given a freshly parsed item, a weekly series it looks like another instance of.
+   *
+   * Injected rather than imported, because the answer depends on the week and this screen
+   * does not hold one. Applied as the chips land so the suggestion arrives *with* the row
+   * the student is already checking -- §41's whole point is that recurrence is confirmed on
+   * something they were adding anyway, and a suggestion made after the accept would be a
+   * change made behind them. Defaults to suggesting nothing, so a caller that has no week
+   * to compare against behaves exactly as before.
+   */
+  suggestRepeat?: (item: ParsedItem) => ParsedItem['repeat']
 }) {
   const [text, setText] = useState('')
   const [items, setItems] = useState<ParsedItem[] | null>(null)
@@ -38,7 +56,7 @@ export function PlannerScreen({
        */
       const { parseBrainDump } = await import('../../ai')
       const outcome = await parseBrainDump(text)
-      setItems([...outcome.items])
+      setItems(outcome.items.map((item) => ({ ...item, repeat: item.repeat ?? suggestRepeat(item) })))
     } finally {
       // In a finally block because parseBrainDump is built never to reject -- but if that
       // ever changes, the screen must not be left stuck on "Reading…" forever.
@@ -50,9 +68,6 @@ export function PlannerScreen({
 
   const actions = (
     <>
-      <Button variant="quiet" onClick={onCancel}>
-        Cancel
-      </Button>
       <Button onClick={() => void onRead()} disabled={reading}>
         {reading ? 'Reading…' : 'Read this'}
       </Button>
@@ -65,7 +80,7 @@ export function PlannerScreen({
   )
 
   return (
-    <Sheet title="What are you carrying?" onClose={onCancel} actions={actions}>
+    <Sheet title="What are you carrying?" onClose={onClose} onBack={onBack} actions={actions}>
       <div className="flex flex-col gap-4">
         <p className="text-sm text-ink-soft">Type it however it comes out. Any order, no formatting.</p>
 

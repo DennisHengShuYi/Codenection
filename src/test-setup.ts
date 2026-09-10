@@ -24,3 +24,14 @@ configure({ asyncUtilTimeout: 5000 })
 // second test in a file fails with "found multiple elements" -- a failure that looks
 // like a bug in the component and is not.
 afterEach(cleanup)
+
+/**
+ * The same problem one layer down, since Ruling 57 put the view in the address.
+ *
+ * jsdom gives every test in a file ONE `history`, so a test that opens settings leaves the
+ * next one starting at `/settings` -- and `RoomShell` now reads the address on mount, so
+ * that test renders a screen it never asked for. The failure would look like a bug in the
+ * component rather than leakage from its neighbour, which is exactly the kind of flake
+ * worth spending four lines to make impossible.
+ */
+afterEach(() => window.history.replaceState(null, '', '/'))

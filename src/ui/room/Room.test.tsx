@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
 import { Room } from './Room'
 import { describeRoomFully } from './roomText'
 import type { RoomModel } from './roomModel'
@@ -194,5 +195,34 @@ describe('Room', () => {
 
   it('renders an empty room without throwing', () => {
     expect(() => render(<Room model={modelOf(state())} frame="inline" />)).not.toThrow()
+  })
+  /**
+   * Ruling 59. The gauge was a readout and nothing else; the five-bar breakdown behind it
+   * sat at the foot of the week screen, where a student looking for "how am I doing" had no
+   * reason to go. The corner readout is now the door to it.
+   */
+  it('opens the reserves when the gauge is pressed, if it has somewhere to open', async () => {
+    const onOpenReserves = vi.fn()
+    render(<Room model={modelOf()} frame="inline" onOpenReserves={onOpenReserves} />)
+
+    await userEvent.click(screen.getByTestId('room-gauge'))
+
+    expect(onOpenReserves).toHaveBeenCalledOnce()
+  })
+
+  it('names what the gauge opens, rather than reading out as a bare percentage', () => {
+    render(<Room model={modelOf(state({ lightLevel: 0.43 }))} frame="inline" onOpenReserves={vi.fn()} />)
+
+    expect(screen.getByTestId('room-gauge')).toHaveAccessibleName(/reserves/i)
+  })
+
+  /**
+   * `RoomComparison` and the low-energy interface both draw a room with nowhere for the
+   * gauge to go. It stays a readout there rather than becoming a button that does nothing.
+   */
+  it('stays a plain readout when it is given nowhere to open', () => {
+    render(<Room model={modelOf()} frame="inline" />)
+
+    expect(screen.getByTestId('room-gauge').tagName).not.toBe('BUTTON')
   })
 })

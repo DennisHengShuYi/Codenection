@@ -41,7 +41,7 @@ export async function priceAskWith(
   week: Schedule,
   today: number,
   blockLog: readonly BlockRecord[],
-): Promise<{ cost: RequestCost; drafts: readonly Draft[] } | null> {
+): Promise<{ cost: RequestCost; drafts: readonly Draft[]; item: ParsedItem } | null> {
   // Null means the request could not be read, which is said plainly rather than priced as
   // something invented.
   const item = await model.readRequest(text)
@@ -53,5 +53,8 @@ export async function priceAskWith(
   const cost = priceRequest(week, item, paramsFor(outcomesFrom(blockLog)), today, blockLog)
   const { drafts } = await model.draftReplies(item, cost)
 
-  return { cost, drafts }
+  // The item travels back with the price so §2.3's provisional yes has something real to
+  // accept. Re-reading the text at accept time would risk pricing one thing and adding
+  // another -- the model is not guaranteed to answer twice the same way.
+  return { cost, drafts, item }
 }

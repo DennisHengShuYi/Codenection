@@ -104,12 +104,25 @@ describe('paramsFor and what the prediction loop has learned', () => {
     expect(learned.kRest.social).toBe(0)
   })
 
-  it('leaves every other parameter alone', () => {
+  /**
+   * §18 draws a line, and this is it. `typeIntensity` is four numbers a single scalar
+   * residual cannot separate, and `socialFloorHoursPerDay` is a threshold whose derivative
+   * is zero everywhere but a cliff. Both stay population constants on purpose -- learning
+   * them from this evidence would be inventing precision.
+   */
+  it('leaves the parameters it cannot honestly identify alone', () => {
+    const learned = paramsFor([], sleepSamples(6, 8))
+
+    expect(learned.typeIntensity).toEqual(DEFAULT_PARAMS.typeIntensity)
+    expect(learned.socialFloorHoursPerDay).toBe(DEFAULT_PARAMS.socialFloorHoursPerDay)
+    expect(learned.sleepBaselineHours).toBe(DEFAULT_PARAMS.sleepBaselineHours)
+  })
+
+  /** A sample about sleep must not disturb the social coefficients either. */
+  it('leaves the social coefficients alone when the evidence is about sleep', () => {
     const learned = paramsFor([], sleepSamples(6, 8))
 
     expect(learned.kSocialContact).toBe(DEFAULT_PARAMS.kSocialContact)
-    expect(learned.typeIntensity).toEqual(DEFAULT_PARAMS.typeIntensity)
-    expect(learned.sleepBaselineHours).toBe(DEFAULT_PARAMS.sleepBaselineHours)
     expect(learned.isolationDrainPerDay).toBe(DEFAULT_PARAMS.isolationDrainPerDay)
   })
 

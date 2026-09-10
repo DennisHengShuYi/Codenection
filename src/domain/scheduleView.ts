@@ -1,9 +1,9 @@
-import { answeredIds, checkedInDays, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
-import { dateFor } from '../../domain/calendar'
-import { paramsFor } from '../../domain/engineParams'
-import type { EnergyPrediction } from '../../domain/predictions'
-import { DEFICIT_THRESHOLD, HORIZON_DAYS, overallReserve, project } from '../../engine'
-import { toDayInputs, type Schedule } from '../../optimizer'
+import { answeredIds, checkedInDays, outcomesFrom, type BlockRecord } from './blockLog'
+import { dateFor } from './calendar'
+import { paramsFor } from './engineParams'
+import type { EnergyPrediction } from './predictions'
+import { DEFICIT_THRESHOLD, HORIZON_DAYS, overallReserve, project } from '../engine'
+import { toDayInputs, type Schedule } from '../optimizer'
 
 /**
  * §4's overview: the whole horizon as 21 cells.

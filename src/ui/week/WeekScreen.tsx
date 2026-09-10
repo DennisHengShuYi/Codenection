@@ -7,7 +7,7 @@ import { CapacityDial } from '../dial/CapacityDial'
 import type { DomainBar } from '../dial/domainBars'
 import { Button } from '../kit/Button'
 import { dayGrid } from './dayGrid'
-import { scheduleView, type LoadBand } from './scheduleView'
+import { scheduleView, type LoadBand } from '../../domain/scheduleView'
 
 /**
  * §4's primary surface: the whole horizon, one day expanded beneath it, and Rebalance.
@@ -91,37 +91,6 @@ export function WeekScreen(props: {
    * caller built before the log existed keeps compiling and behaving exactly as it did.
    */
   readonly blockLog?: readonly BlockRecord[]
-  /**
-   * §1.1's reserve and §1.2's five bars, each against its own ceiling, plus the projection
-   * `describeDial` speaks. Required, not optional-with-a-default: this content has been
-   * orphaned once already (Ruling 28) and a default would let a call site that renders the
-   * week without it compile and look fine.
-   */
-  readonly capacity: number
-  /**
-   * §8b's reported energy, oldest first, for the trend under the gauge.
-   *
-   * It arrived here with the gauge: Ruling 53 moved the breakdown off the room, and the
-   * history belongs beside the number it is the history of. Optional and defaulting to
-   * empty so §0's no-cold-start rule holds for a student on day one.
-   */
-  readonly history?: readonly EnergyPoint[]
-  readonly bars: readonly DomainBar[]
-  readonly projection: Projection
-  /**
-   * §1.5's mode, threaded in rather than inferred here (Ruling 56).
-   *
-   * The gate this restores was on the room screen until `fc58d99`, which dropped it on the
-   * argument that hiding `The week` already hides the dashboard -- "one act, not two". It
-   * does not: a `stuck` card still renders at low energy, and its one button opens a block,
-   * which renders this whole screen and then parks the student on it when the sheet closes.
-   * So the breakdown has to be gated where it now lives.
-   *
-   * Required, not optional-with-a-default, for the same reason `capacity` is: a default of
-   * `false` would let a call site that forgets it render the dashboard to a depleted student
-   * and still compile.
-   */
-  readonly lowEnergy: boolean
 }) {
   const {
     schedule,
@@ -132,11 +101,6 @@ export function WeekScreen(props: {
     onRebalance,
     onSelectBlock,
     blockLog = [],
-    capacity,
-    history = [],
-    bars,
-    projection,
-    lowEnergy,
   } = props
   const [openDay, setOpenDay] = useState<number | null>(null)
 
@@ -150,6 +114,15 @@ export function WeekScreen(props: {
    * `protectedRest` is excluded deliberately: rest the optimizer pinned is fixed load the
    * student did not put there, and counting it would let the app fall silent about a
    * timetable it still has never seen.
+   */
+  /**
+   * Deliberately *not* `modeOf`, which asks a different question.
+   *
+   * This sentence claims the week has no classes or shifts in it, so the predicate has to be
+   * "none at all" -- one timetabled lecture makes it false. `modeOf` asks whether there is
+   * enough fixed load to call the fortnight a *frame*, and answers `lowStructure` for a
+   * student with two classes, who does have classes. Sharing one predicate between the two
+   * would make this line lie to exactly the student it is least useful to.
    */
   const hasFixedLoad = schedule.items.some((item) => item.fixed && !item.protectedRest)
 
@@ -256,23 +229,6 @@ export function WeekScreen(props: {
             </button>
           ))}
         </div>
-      )}
-
-      {/* Named, because an unlabelled gauge at the foot of a screen is reachable only by
-          accident. This is the heading a student scrolling the week reads before deciding
-          whether the numbers below are worth their attention.
-
-          Gated on §1.5 (Ruling 56): "a student at 12% reserve should not be handed a
-          dashboard", and five bars, five trends and a projection sentence is the dashboard
-          that sentence is about. Withheld here rather than only by hiding `The week`,
-          because a block opened from a live card renders this screen too. */}
-      {!lowEnergy && (
-        <section data-testid="week-reserves" className="flex flex-col gap-4">
-          <h2 className="text-sm font-semibold tracking-wide text-ink-soft">
-            Where your reserves stand
-          </h2>
-          <CapacityDial capacity={capacity} bars={bars} projection={projection} history={history} />
-        </section>
       )}
     </div>
   )

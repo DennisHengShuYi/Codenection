@@ -33,15 +33,20 @@ describe('RoomShell', () => {
   })
 
   describe('routing', () => {
-    it('opens the week and comes back to the room', async () => {
+    /**
+     * Ruling 59: the week is a sheet like every other destination, so it closes the way
+     * they all do -- its own close control -- rather than through a "Back to the room" link
+     * it had to carry because it was a page.
+     */
+    it('opens the week as a sheet over the room and closes back to it', async () => {
       renderHome()
       await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
 
       await userEvent.click(screen.getByTestId('open-week'))
-      expect(screen.getByTestId('week-back')).toBeVisible()
+      expect(await screen.findByRole('dialog', { name: /the week/i })).toBeVisible()
 
-      await userEvent.click(screen.getByTestId('week-back'))
-      await waitFor(() => expect(screen.queryByTestId('week-back')).toBeNull())
+      await userEvent.click(screen.getByRole('button', { name: /close/i }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
       expect(screen.getByTestId('room-scene')).toBeVisible()
     })
 
@@ -105,12 +110,59 @@ describe('RoomShell', () => {
       await userEvent.click(await screen.findByTestId('block-essay'))
       expect(await screen.findByRole('dialog', { name: /essay draft/i })).toBeVisible()
 
+      await userEvent.click(screen.getByTestId('sheet-back'))
+
+      // Back in the week, not the room. Since Ruling 59 the week is itself a sheet, so what
+      // stepping back out of a block leaves you looking at is the week's dialog rather than
+      // a page -- and only ever one dialog at a time, which is what keeps Escape
+      // unambiguous. Ruling 60 gave this rule to the Back button: `close` now means done
+      // with the lot, asserted below.
+      const week = await screen.findByRole('dialog', { name: /the week/i })
+      expect(week).toBeVisible()
+      expect(screen.queryByRole('dialog', { name: /essay draft/i })).toBeNull()
+      expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    })
+
+    /**
+     * The other half of Ruling 60, and the reason the two controls exist: from three levels
+     * in, close does not walk the student back out one sheet at a time.
+     */
+    it('closing a block goes to the room, past the week it was opened from', async () => {
+      const repository = createLocalRepository('roomshell-block-close')
+      await repository.clear()
+      const { HORIZON_DAYS } = await import('../engine')
+      await repository.saveWeek({
+        items: [
+          {
+            id: 'essay',
+            title: 'Essay draft',
+            type: 'mental',
+            kind: 'studyBlock',
+            hours: 2,
+            intensity: 1,
+            dayIndex: 5,
+            startHour: 10,
+            fixed: false,
+            deadlineDay: null,
+            protectedRest: false,
+          },
+        ],
+        start: { mental: 70, physical: 70, social: 70, errands: 70 },
+        horizonDays: HORIZON_DAYS,
+        sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+      })
+      render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+
+      await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+      await userEvent.click(screen.getByTestId('open-week'))
+      await userEvent.click(await screen.findByTestId('day-5'))
+      await userEvent.click(await screen.findByTestId('block-essay'))
+      await screen.findByRole('dialog', { name: /essay draft/i })
+
       await userEvent.click(screen.getByRole('button', { name: /close/i }))
 
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-      // Back in the week, not the room -- the day grid and Rebalance are still on screen.
-      expect(screen.getByTestId('week-back')).toBeVisible()
-      expect(screen.queryByTestId('room-scene')).toBeNull()
+      expect(screen.getByTestId('room-scene')).toBeVisible()
     })
   })
 

@@ -39,8 +39,21 @@ import { Ceiling, Floor, Wall } from './scene/Walls'
  */
 export type RoomFrame = 'inline' | 'fill'
 
-export function Room({ model, frame }: { model: RoomModel; frame: RoomFrame }) {
+export function Room({
+  model,
+  frame,
+  onOpenReserves,
+}: {
+  model: RoomModel
+  frame: RoomFrame
+  /** Ruling 59: what the corner gauge opens. Omitted where there is nowhere for it to go
+   *  -- `RoomComparison`, and the low-energy interface, which withholds the breakdown --
+   *  and the gauge stays the readout it has always been rather than becoming a button that
+   *  does nothing. */
+  onOpenReserves?: () => void
+}) {
   const { state } = model
+  const percent = Math.round(state.lightLevel * 100)
   const fills = frame === 'fill'
 
   return (
@@ -129,12 +142,27 @@ export function Room({ model, frame }: { model: RoomModel; frame: RoomFrame }) {
           siblings in one stacking context with no z-index between them, so CSS paints
           them in document order -- placed first, the gauge rendered correctly and was
           hidden behind the room's own opaque wall rect. */}
-      <div
-        data-testid="room-gauge"
-        className="absolute right-2 top-2 rounded-full bg-surface/90 px-3 py-1 text-sm font-semibold text-ink-soft shadow"
-      >
-        {Math.round(state.lightLevel * 100)}%
-      </div>
+      {onOpenReserves === undefined ? (
+        <div
+          data-testid="room-gauge"
+          className="absolute right-2 top-2 rounded-full bg-surface/90 px-3 py-1 text-sm font-semibold text-ink-soft shadow"
+        >
+          {percent}%
+        </div>
+      ) : (
+        /* Ruling 59: the same readout, now the door to the full one. Named for where it
+           goes as well as what it says -- "43%" alone tells a screen reader nothing about
+           being a way in. */
+        <button
+          type="button"
+          data-testid="room-gauge"
+          onClick={onOpenReserves}
+          aria-label={`Where your reserves stand: ${percent}%`}
+          className="absolute right-2 top-2 min-h-11 rounded-full bg-surface/90 px-3 py-1 text-sm font-semibold text-ink-soft shadow hover:text-ink focus-visible:outline focus-visible:outline-2"
+        >
+          {percent}%
+        </button>
+      )}
     </section>
   )
 }

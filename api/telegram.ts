@@ -12,8 +12,8 @@ import { checkRequest } from '../src/telegram/guard'
 import { handleIntent, type ChatServices, type ChatStore } from '../src/telegram/handle'
 import { hasExpired } from '../src/telegram/linkCode'
 import { priceAskWith } from '../src/telegram/priceAsk'
-import type { Reply } from '../src/telegram/send'
-import { callbackIdOf, readUpdate } from '../src/telegram/update'
+import type { Reply } from '../src/telegram/render'
+import { callbackIdOf, messageIdOf, readUpdate } from '../src/telegram/update'
 
 /**
  * The chat channel's front door (§13.6), and the only file that reads
@@ -206,6 +206,29 @@ export function createStore(client: SupabaseClient): ChatStore {
       return Array.isArray(predictions) ? (predictions as EnergyPrediction[]) : []
     },
 
+    /**
+     * Writes §8.1's predictions back after a check-in answered in chat.
+     *
+     * Reads the row and merges into it rather than upserting a whole settings blob: the app
+     * writes that blob entire from the browser, and a bot replacing it would drop whatever
+     * the student had changed there since. Only the predictions are ours to touch.
+     */
+    async savePredictions(accountId, predictions) {
+      const { data } = await client
+        .from('user_state')
+        .select('settings')
+        .eq('id', accountId)
+        .maybeSingle()
+
+      const settings = (data?.settings as Record<string, unknown> | null) ?? {}
+      const calibration = (settings.calibration as Record<string, unknown> | undefined) ?? {}
+
+      await client.from('user_state').upsert(
+        { id: accountId, settings: { ...settings, calibration: { ...calibration, predictions } } },
+        { onConflict: 'id' },
+      )
+    },
+
     async markAnswered(accountId, dumpId, now) {
       await client
         .from('telegram_pending')
@@ -233,7 +256,46 @@ async function fetchTelegramFile(botToken: string, fileId: string): Promise<Blob
   return file.ok ? await file.blob() : null
 }
 
-async function say(botToken: string, chatId: number, reply: Reply): Promise<void> {
+/**
+ * §24: replaces a message in place when the reply asks for it and there is one to replace.
+ *
+ * Falls back to sending, always. An edit can fail for reasons that are nobody's fault -- the
+ * message is too old, or its content is unchanged, which Telegram treats as an error -- and
+ * a student who pressed a button must see *something* happen either way.
+ */
+async function say(
+  botToken: string,
+  chatId: number,
+  reply: Reply,
+  replacing: number | null = null,
+): Promise<void> {
+  const markup = reply.buttons
+    ? {
+        reply_markup: {
+          inline_keyboard: reply.buttons.map((row) =>
+            row.map((button) => ({ text: button.label, callback_data: button.data })),
+          ),
+        },
+      }
+    : {}
+
+  if (reply.replaceMessage === true && replacing !== null) {
+    const edited = await fetch(`${TELEGRAM_API}/bot${botToken}/editMessageText`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        message_id: replacing,
+        text: reply.text,
+        // An edit with no keyboard has to say so explicitly, or the old buttons survive on
+        // a message that no longer means what they did.
+        reply_markup: markup.reply_markup ?? { inline_keyboard: [] },
+      }),
+    })
+
+    if (edited.ok) return
+  }
+
   await fetch(`${TELEGRAM_API}/bot${botToken}/sendMessage`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -241,16 +303,8 @@ async function say(botToken: string, chatId: number, reply: Reply): Promise<void
       chat_id: chatId,
       text: reply.text,
       // No parse_mode, ever. Every reply echoes something a student typed, and with no
-      // formatting there is nothing for their text to break or forge. See send.ts.
-      ...(reply.buttons
-        ? {
-            reply_markup: {
-              inline_keyboard: reply.buttons.map((row) =>
-                row.map((button) => ({ text: button.label, callback_data: button.data })),
-              ),
-            },
-          }
-        : {}),
+      // formatting there is nothing for their text to break or forge. See render.ts.
+      ...markup,
     }),
   })
 }
@@ -298,6 +352,7 @@ export default async function handler(request: Request): Promise<Response> {
     const update: unknown = await request.json()
     const intent = readUpdate(update)
     const callbackId = callbackIdOf(update)
+    const pressedOn = messageIdOf(update)
 
     const client = createClient(config.supabaseUrl as string, config.serviceRoleKey as string, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -351,7 +406,7 @@ export default async function handler(request: Request): Promise<Response> {
     const reply = await handleIntent(intent, createStore(client), Date.now(), services)
 
     if (reply !== null && intent.chatId !== null) {
-      await say(config.botToken as string, intent.chatId, reply)
+      await say(config.botToken as string, intent.chatId, reply, pressedOn)
     }
   } catch {
     // Deliberately silent to the caller. Anyone can post here, and an error message would

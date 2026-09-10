@@ -51,6 +51,7 @@ function MicroStartCard({ microStart }: { readonly microStart: MicroStart }): JS
 export function BlockSheet({
   model,
   onClose,
+  onBack,
   onDone,
   onLater,
   onConfirm,
@@ -58,6 +59,9 @@ export function BlockSheet({
 }: {
   readonly model: BlockSheetModel
   readonly onClose: () => void
+  /** Ruling 60: one level up, to the week this block was opened from. `onClose` means done
+   *  entirely, and goes to the room. */
+  readonly onBack: () => void
   readonly onDone: (itemId: string) => void
   readonly onLater: (itemId: string) => void
   readonly onConfirm: (itemId: string, answer: BlockAnswer) => void
@@ -121,7 +125,7 @@ export function BlockSheet({
   )
 
   return (
-    <Sheet title={item.title} onClose={onClose} actions={actionBar}>
+    <Sheet title={item.title} onClose={onClose} onBack={onBack} actions={actionBar}>
       <p data-testid="block-when">{whenText(item)}</p>
 
       {/*

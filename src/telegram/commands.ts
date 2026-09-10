@@ -11,7 +11,9 @@
  */
 export const COMMANDS = [
   'week',
+  'schedule',
   'day',
+  'checkin',
   'today',
   'yesterday',
   'rest',

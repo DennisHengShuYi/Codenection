@@ -3,7 +3,7 @@ import type { Repository, Session } from '../../data'
 import type { ParsedItem } from '../../ai'
 import { isDistressed } from '../../domain/distress'
 import { energyHistory } from '../../domain/energyHistory'
-import { describePlacement, placeItems } from '../../domain/placement'
+import { describePlacement, fixThatMakesRoom, placeItems } from '../../domain/placement'
 import { checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
 import { anchorTo, dateFor, isAnchored, todayIndex } from '../../domain/calendar'
 import { accept, lapsed } from '../../domain/commitments'
@@ -15,7 +15,7 @@ import { completeItem, deferItem } from '../../domain/scheduleEdits'
 import { scheduleRecovery } from '../../domain/scheduleRecovery'
 import { overallReserve, project } from '../../engine'
 import type { Fix } from '../../optimizer'
-import { smallestFixes, toDayInputs } from '../../optimizer'
+import { toDayInputs } from '../../optimizer'
 import { AddSheet } from '../AddSheet'
 import { AccountBar } from '../auth/AccountBar'
 import { PreviewBanner } from '../auth/PreviewBanner'
@@ -25,6 +25,7 @@ import { Card } from '../kit/Card'
 import { Sheet } from '../kit/Sheet'
 import { LinkTelegram } from '../settings/LinkTelegram'
 import { LowEnergyControl } from '../settings/LowEnergyControl'
+import { ReservesSheet } from '../reserves/ReservesSheet'
 import { blockToAsk, withSleep } from '../today/checkIn'
 import { useLowEnergy } from '../useLowEnergy'
 import { useProfile } from '../useProfile'
@@ -40,7 +41,8 @@ import { LiveCards } from './LiveCards'
 import { roomModel } from './roomModel'
 import { describeRoom } from './roomText'
 import { Room } from './Room'
-import { back, ROOM, toAdd, toBlock, toSettings, toWeek, type View } from './view'
+import { ROOM, toAdd, toBlock, toReserves, toSettings, toWeek } from './view'
+import { useUrlView } from './useUrlView'
 import { useTidyUp } from './useTidyUp'
 
 /** §2.1's search takes its randomness as a parameter; a fixed seed keeps what the student
@@ -83,7 +85,13 @@ export function RoomShell({
 }) {
   const { schedule, setSchedule } = useSchedule(repository)
   const { profile, setProfile } = useProfile(repository, session)
-  const [view, setView] = useState<View>(ROOM)
+  /**
+   * Ruling 57: where the student is now lives in the address bar as well as in React.
+   * `useUrlView` returns exactly what `useState<View>` returned before it, so everything
+   * below this line is unchanged -- the URL is a projection of this value, not a second
+   * place the app stores it.
+   */
+  const [view, setView, goBack] = useUrlView()
   const [report, setReport] = useState<string | null>(null)
   const [fallback, setFallback] = useState<Fix | null>(null)
   const [working, setWorking] = useState(false)
@@ -231,9 +239,19 @@ export function RoomShell({
     const moved = notes.filter((note) => note.movedFrom !== null || !note.fitted)
     setPlacementLines(notes.map((note) => describePlacement(note, next)))
 
-    // Only when something actually had to give. A week that simply absorbed the new work has
-    // nothing to offer and nothing to apologise for.
-    setPlacementFix(moved.length === 0 ? null : (smallestFixes(next, params, 1)[0] ?? null))
+    // Only when something actually had to give -- a week that simply absorbed the new work
+    // has nothing to offer and nothing to apologise for -- and only a move that opens room
+    // on the day that failed. `smallestFixes` ranks by deficit days and floor, which is a
+    // different question, so its top move was often true and entirely unrelated to what the
+    // student had just been told did not fit.
+    const first = moved[0]
+    const wanted = items.find((item) => first !== undefined && first.title === item.title)
+
+    setPlacementFix(
+      first === undefined || wanted === undefined
+        ? null
+        : fixThatMakesRoom(next, wanted, first.movedFrom ?? first.dayIndex, params),
+    )
   }
 
   function answerBlock(itemId: string, answer: BlockAnswer) {
@@ -250,7 +268,13 @@ export function RoomShell({
     })
   }
 
-  const closeToRoom = () => setView(back(view))
+  /**
+   * Done with whatever is open -- straight to the room, from any depth (Ruling 60). This
+   * is the close control's meaning and it never consults `back()`: that is the Back
+   * button's rule, and the two used to be the same function, which is why `Cancel` could
+   * not say which one it meant.
+   */
+  const closeToRoom = () => setView(ROOM)
 
   // §3's card precedence: recovery, then a lapsed commitment, then a stuck task, then the
   // day's own question -- capped to one below the low-energy threshold and two otherwise.
@@ -279,7 +303,6 @@ export function RoomShell({
     lowEnergy,
   })
 
-  const isWeekScreen = view.kind === 'week' || view.kind === 'block'
   const blockModel =
     view.kind === 'block' ? blockSheet({ schedule: week, itemId: view.itemId, today, blockLog }) : null
 
@@ -298,6 +321,7 @@ export function RoomShell({
           key={view.itemId}
           model={blockModel}
           onClose={closeToRoom}
+          onBack={goBack}
           onDone={(itemId) => {
             setSchedule(completeItem(week, itemId))
             closeToRoom()
@@ -320,6 +344,9 @@ export function RoomShell({
       {view.kind === 'add' && (
         <AddSheet
           key="add"
+          way={view.way}
+          onWay={(way) => setView(toAdd(way))}
+          onBack={goBack}
           schedule={week}
           params={params}
           today={today}
@@ -327,6 +354,36 @@ export function RoomShell({
           predictions={profile.predictions}
           onAcceptItems={(items) => acceptItems(items)}
           onAcceptRequest={(item) => setSchedule(accept(week, item, today))}
+          onClose={closeToRoom}
+        />
+      )}
+
+      {view.kind === 'week' && (
+        <Sheet key="week" title="The week" size="wide" onClose={closeToRoom}>
+          <WeekScreen
+            schedule={week}
+            today={today}
+            working={working}
+            report={report}
+            fallback={fallback}
+            onRebalance={() => void onRebalance()}
+            onSelectBlock={(itemId) => setView(toBlock(itemId))}
+            blockLog={blockLog}
+          />
+        </Sheet>
+      )}
+
+      {/* Ruling 56's gate, moved with what it guards. §1.5: "a student at 12% reserve
+          should not be handed a dashboard". In low-energy mode the gauge is not a door
+          either, so this is a path that does not exist rather than a door that refuses --
+          and an address typed by hand lands on the room. */}
+      {view.kind === 'reserves' && !lowEnergy && (
+        <ReservesSheet
+          key="reserves"
+          capacity={overallReserve(week.start)}
+          bars={bars}
+          projection={projection}
+          history={reportedEnergy}
           onClose={closeToRoom}
         />
       )}
@@ -361,7 +418,9 @@ export function RoomShell({
                 <LinkTelegram />
               </>
             ) : (
-              <p className="text-sm text-ink-soft">
+              // Ruling 58: a row rather than a sentence floating in an acre of white. Same
+              // words, given the same shape as the rows above it.
+              <p className="rounded-xl border border-line p-3 text-sm text-ink-soft">
                 Sign in to keep this week and link Telegram to it.
               </p>
             )}
@@ -387,56 +446,13 @@ export function RoomShell({
     </Button>
   )
 
-  if (isWeekScreen) {
-    return (
-      <main className="mx-auto flex min-h-dvh max-w-screen-md flex-col gap-4 p-4">
-        <div className="flex items-center justify-between gap-2">
-          <h1 className="text-sm font-semibold tracking-wide text-ink-soft">Codenection</h1>
-          {settingsButton}
-        </div>
-
-        <Button
-          variant="quiet"
-          size="sm"
-          data-testid="week-back"
-          onClick={() => setView(ROOM)}
-          className="self-start"
-        >
-          Back to the room
-        </Button>
-
-        <WeekScreen
-          schedule={week}
-          today={today}
-          working={working}
-          report={report}
-          fallback={fallback}
-          onRebalance={() => void onRebalance()}
-          onSelectBlock={(itemId) => setView(toBlock(itemId))}
-          blockLog={blockLog}
-          capacity={overallReserve(week.start)}
-          history={reportedEnergy}
-          bars={bars}
-          projection={projection}
-          // Ruling 56. §1.5's gate travelled with the breakdown when Ruling 53 moved it
-          // here. Hiding `The week` is NOT enough on its own: a stuck card at low energy
-          // opens a block, `isWeekScreen` turns true, and `back({kind:'block'})` leaves the
-          // student standing on this screen without `The week` ever being pressed.
-          lowEnergy={lowEnergy}
-        />
-
-        {sheets}
-      </main>
-    )
-  }
-
   /**
    * The room screen (Rulings 54 and 55).
    *
    * The room is the whole screen -- no title bar above it, no button row below it -- and
-   * everything else rides over it: `Settings` in the corner opposite the gauge, and one
-   * band along the bottom holding the paragraph, the accuracy line, the live cards and the
-   * two permanent controls.
+   * everything else rides over it: one control row across the top holding `Settings`,
+   * `The week` and `+`, and one band along the bottom holding the paragraph, the accuracy
+   * line and the live cards.
    *
    * Overlaid controls have failed here once already (PR #39: they "covered the furniture
    * and swallowed its clicks -- the phone was unreachable from 768px up"). Half of that
@@ -466,151 +482,171 @@ export function RoomShell({
    * 2. The band is translucent over a blur, so where it does cross the floor the room is
    *    still visibly behind it rather than replaced by a panel.
    *
-   * The controls sit in the band rather than in the top corners for the lower-half-primary
-   * rule -- the primary action belongs where a thumb is -- and they are pinned OUTSIDE the
-   * band's scrolling region, so a tall card can never push `+` off the screen.
+   * The three controls share the top row rather than being split between the top corner and
+   * the band. That trades the lower-half-primary rule -- the primary action belongs where a
+   * thumb is -- for a single place to look for a control; what it keeps is the reason they
+   * left the band's scrolling region in the first place, since a tall card can no longer
+   * push `The week` or `+` anywhere. `room.spec.ts` still hit-tests all three at four
+   * viewports, so the row may not drift under the band or off the screen in silence.
    *
    * Every one of these is a SIBLING of the `<svg>`, never a child: the drawing carries
    * `role="img"`, which hides its whole subtree from the accessibility tree, so a control
    * placed inside it would be invisible to a screen reader while looking perfectly correct.
    */
   return (
-    <main
-      data-testid="room-stage"
-      /* `h-dvh` standing alone -- 34 render sites drop this component straight into the
-         document body -- and `flex-1 min-h-0` when `App` puts it in a column beside the
-         degraded-storage notice, where it must take what is left of the viewport rather
-         than a second full one. In a non-flex parent the two flex declarations are inert,
-         so the standalone behaviour is unchanged. */
-      className="relative h-dvh w-full min-h-0 flex-1 overflow-hidden"
-    >
-      {/* The room screen has no visible title -- the room is the title. The heading stays
-          for the document outline and for anyone navigating by heading. */}
-      <h1 className="sr-only">Codenection</h1>
-
-      <Room model={model} frame="fill" />
-
-      <div className="absolute left-2 top-2">{settingsButton}</div>
-
-      <section
-        data-testid="room-band"
-        className="absolute inset-x-0 bottom-0 flex max-h-[calc(100%-min(52.33vw,60.38%)-1rem)] flex-col gap-3 border-t border-line bg-surface/85 p-3 backdrop-blur-sm"
+    <>
+      <main
+        data-testid="room-stage"
+        /**
+         * Ruling 59: every destination is now a sheet over a LIVE room, so the gauge, `+` and
+         * whatever the visible card offers are still in the document behind the panel. The
+         * backdrop stops the mouse; only this stops Tab and the screen reader, which is what
+         * `aria-modal="true"` on the panel claims. React renders the attribute only when it
+         * is true, so the room is ordinary again the moment the sheet closes.
+         */
+        inert={view.kind !== 'room'}
+        /* `h-dvh` standing alone -- 34 render sites drop this component straight into the
+           document body -- and `flex-1 min-h-0` when `App` puts it in a column beside the
+           degraded-storage notice, where it must take what is left of the viewport rather
+           than a second full one. In a non-flex parent the two flex declarations are inert,
+           so the standalone behaviour is unchanged. */
+        className="relative h-dvh w-full min-h-0 flex-1 overflow-hidden"
       >
-        <div
-          data-testid="room-band-content"
-          className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
-        >
-          {/* The one thing that is not furniture, and first in the band for that reason. A
-              student who does not know their week is not being saved will lose it, and a
-              warning about data loss must not be something they scroll to. */}
-          {session === null && <PreviewBanner onSignIn={onSignIn} />}
+        {/* The room screen has no visible title -- the room is the title. The heading stays
+            for the document outline and for anyone navigating by heading. */}
+        <h1 className="sr-only">Codenection</h1>
 
-          {/* Flagged by Task 12: the drawing's own `aria-label` (`describeRoomFully`) is
-              already the complete text equivalent a screen reader needs, and this capped
-              paragraph repeats a subset of the same sentences verbatim -- character and
-              weather always, in the same words. Left as visible-and-announced, the two
-              would read out back to back: the full version, then a partial repeat of it.
-              `aria-hidden` keeps it for sighted readers (still worth having as running text
-              rather than only inside an SVG's accessible name) without saying anything
-              twice to assistive tech. */}
-          <p data-testid="room-text-equivalent" aria-hidden="true" className="text-sm text-ink-soft">
-            {paragraph}
-          </p>
+        <Room
+          model={model}
+          frame="fill"
+          // Ruling 59: the compact readout is the way in to the full one. Withheld in
+          // low-energy mode, where the breakdown behind it is withheld too.
+          onOpenReserves={lowEnergy ? undefined : () => setView(toReserves())}
+        />
 
-          {/* §16: never silently reshuffle. What was added, where it went, and -- only when
-              something had to give -- the single move that would help, offered rather than
-              taken. "Leave it" is the healthy default: doing nothing keeps the week the
-              student decided on. */}
-          {placementLines.length > 0 && (
-            <Card role="status" data-testid="placement-note" className="flex flex-col gap-2">
-              {placementLines.map((line, index) => (
-                <p key={`${line}-${index}`} className="text-sm">
-                  {line}
-                </p>
-              ))}
-
-              {placementFix !== null && (
-                <>
-                  <p className="text-sm text-ink-soft">Or: {placementFix.move.description}.</p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      data-testid="placement-do"
-                      onClick={() => {
-                        setSchedule(placementFix.move.apply(week))
-                        setPlacementLines([])
-                        setPlacementFix(null)
-                      }}
-                    >
-                      Do that
-                    </Button>
-                    <Button
-                      variant="quiet"
-                      size="sm"
-                      data-testid="placement-leave"
-                      onClick={() => {
-                        setPlacementLines([])
-                        setPlacementFix(null)
-                      }}
-                    >
-                      Leave it
-                    </Button>
-                  </div>
-                </>
-              )}
-            </Card>
-          )}
-
-          <AccuracyNote predictions={profile.predictions} />
-
-          <LiveCards
-            cards={cards}
-            onDistressDismiss={() => setDistressDismissed(true)}
-            recoveryPrescription={recoveryPrescription}
-            onRecoveryAccept={(taken) => setSchedule(scheduleRecovery(week, taken))}
-            onRecoveryDismiss={() => setRecoveryDismissed(true)}
-            lapsedCommitments={lapsedCommitments}
-            onLapsedDismiss={() => setLapsedDismissed(true)}
-            stuckMicroStart={stuckItem === undefined ? null : firstAction(stuckItem)}
-            onStuckStart={() => stuckItem !== undefined && setView(toBlock(stuckItem.id))}
-            onStuckDismiss={() => stuckItem !== undefined && setStuckDismissedId(stuckItem.id)}
-            blockForToday={blockForToday}
-            askEnergy={askEnergy}
-            askSleep={askSleep}
-            outcomes={outcomes}
-            onEnergy={(energy) => {
-              if (todayDate === null) return
-              setProfile({ ...profile, predictions: resolvePrediction(profile.predictions, todayDate, energy) })
-            }}
-            onSleep={(bucket) => {
-              setSchedule(withSleep(week, today, bucket))
-              setSleepAnsweredToday(true)
-            }}
-            onBlockAnswer={answerBlock}
-            onTodayDismiss={() => setTodayDismissed(true)}
-          />
-        </div>
-
-        {/* Pinned below the scrolling region: a long card must never be able to scroll the
-            two permanent controls off the screen. */}
-        <div className="flex shrink-0 items-center justify-between gap-2">
+        {/* One control row across the top of the room, packed to the left: `Settings`, then
+            `The week`, then `+` beside it. The row stops where its buttons stop, leaving the
+            opposite corner to the gauge. */}
+        <div className="absolute left-2 top-2 flex items-center gap-2">
+          {settingsButton}
           {!lowEnergy && (
             <Button variant="secondary" data-testid="open-week" onClick={() => setView(toWeek())}>
               The week
             </Button>
           )}
-          <Button
-            data-testid="open-add"
-            aria-label="Add something"
-            onClick={() => setView(toAdd())}
-            className="ml-auto"
-          >
+          <Button data-testid="open-add" aria-label="Add something" onClick={() => setView(toAdd())}>
             +
           </Button>
         </div>
-      </section>
 
+        <section
+          data-testid="room-band"
+          className="absolute inset-x-0 bottom-0 flex max-h-[calc(100%-min(52.33vw,60.38%)-1rem)] flex-col gap-3 border-t border-line bg-surface/85 p-3 backdrop-blur-sm"
+        >
+          <div
+            data-testid="room-band-content"
+            className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
+          >
+            {/* The one thing that is not furniture, and first in the band for that reason. A
+                student who does not know their week is not being saved will lose it, and a
+                warning about data loss must not be something they scroll to. */}
+            {session === null && <PreviewBanner onSignIn={onSignIn} />}
+
+            {/* Flagged by Task 12: the drawing's own `aria-label` (`describeRoomFully`) is
+                already the complete text equivalent a screen reader needs, and this capped
+                paragraph repeats a subset of the same sentences verbatim -- character and
+                weather always, in the same words. Left as visible-and-announced, the two
+                would read out back to back: the full version, then a partial repeat of it.
+                `aria-hidden` keeps it for sighted readers (still worth having as running text
+                rather than only inside an SVG's accessible name) without saying anything
+                twice to assistive tech. */}
+            <p data-testid="room-text-equivalent" aria-hidden="true" className="text-sm text-ink-soft">
+              {paragraph}
+            </p>
+
+            {/* §16: never silently reshuffle. What was added, where it went, and -- only when
+                something had to give -- the single move that would help, offered rather than
+                taken. "Leave it" is the healthy default: doing nothing keeps the week the
+                student decided on. */}
+            {placementLines.length > 0 && (
+              <Card role="status" data-testid="placement-note" className="flex flex-col gap-2">
+                {placementLines.map((line, index) => (
+                  <p key={`${line}-${index}`} className="text-sm">
+                    {line}
+                  </p>
+                ))}
+
+                {placementFix !== null && (
+                  <>
+                    <p className="text-sm text-ink-soft">Or: {placementFix.move.description}.</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        data-testid="placement-do"
+                        onClick={() => {
+                          setSchedule(placementFix.move.apply(week))
+                          setPlacementLines([])
+                          setPlacementFix(null)
+                        }}
+                      >
+                        Do that
+                      </Button>
+                      <Button
+                        variant="quiet"
+                        size="sm"
+                        data-testid="placement-leave"
+                        onClick={() => {
+                          setPlacementLines([])
+                          setPlacementFix(null)
+                        }}
+                      >
+                        Leave it
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </Card>
+            )}
+
+            <AccuracyNote predictions={profile.predictions} />
+
+            <LiveCards
+              cards={cards}
+              onDistressDismiss={() => setDistressDismissed(true)}
+              recoveryPrescription={recoveryPrescription}
+              onRecoveryAccept={(taken) => setSchedule(scheduleRecovery(week, taken))}
+              onRecoveryDismiss={() => setRecoveryDismissed(true)}
+              lapsedCommitments={lapsedCommitments}
+              onLapsedDismiss={() => setLapsedDismissed(true)}
+              stuckMicroStart={stuckItem === undefined ? null : firstAction(stuckItem)}
+              onStuckStart={() => stuckItem !== undefined && setView(toBlock(stuckItem.id))}
+              onStuckDismiss={() => stuckItem !== undefined && setStuckDismissedId(stuckItem.id)}
+              blockForToday={blockForToday}
+              askEnergy={askEnergy}
+              askSleep={askSleep}
+              outcomes={outcomes}
+              onEnergy={(energy) => {
+                if (todayDate === null) return
+                setProfile({ ...profile, predictions: resolvePrediction(profile.predictions, todayDate, energy) })
+              }}
+              onSleep={(bucket) => {
+                setSchedule(withSleep(week, today, bucket))
+                setSleepAnsweredToday(true)
+              }}
+              onBlockAnswer={answerBlock}
+              onTodayDismiss={() => setTodayDismissed(true)}
+            />
+          </div>
+        </section>
+
+        </main>
+
+      {/* OUTSIDE the stage, deliberately. The stage goes `inert` while a sheet is open, and
+          `inert` applies to a whole subtree -- a sheet rendered inside it would be dimmed,
+          untabbable and unclickable, which is the modal refusing every click made at it.
+          jsdom does not implement `inert`, so only `room.spec.ts` and `dial.spec.ts` can
+          catch that; `RoomShell.weekModal.test.tsx` asserts the containment instead. */}
       {sheets}
-    </main>
+    </>
   )
 }

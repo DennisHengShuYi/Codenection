@@ -1,6 +1,7 @@
 import type { ParsedItem } from '../ai'
 import { HORIZON_DAYS } from '../engine'
-import type { Schedule, ScheduledItem } from '../optimizer'
+import type { EngineParams } from '../engine'
+import { smallestFixes, type Fix, type Schedule, type ScheduledItem } from '../optimizer'
 import { dateFor } from './calendar'
 import { expandRecurring } from './recurrence'
 import { slotOn } from './slotFinder'
@@ -159,4 +160,40 @@ export function describePlacement(note: PlacementNote, schedule: Schedule | null
   if (note.movedFrom === null) return 'Added.'
 
   return `Added. ${dayName(schedule, note.movedFrom)} has no room for ${note.title}, so it went to ${dayName(schedule, note.dayIndex)}.`
+}
+
+/** How many of the ranked fixes to look through for one that actually helps. Cheap: the
+ *  search has already evaluated every neighbour, and this only filters what it returned. */
+const FIXES_TO_CONSIDER = 8
+
+/**
+ * The one move worth offering when something could not go where it wanted.
+ *
+ * §15's second question -- "could it fit if something moved?" -- answered without building
+ * the second scheduler §16 forbids. `rebalance` and `smallestFixes` already do displacement,
+ * with chained moves and full 21-day scoring; this adds no search of its own. It filters
+ * what `smallestFixes` already returned down to a move that actually opens room on the day
+ * in question.
+ *
+ * The filter is the point. `smallestFixes` ranks by deficit days and floor, which is a
+ * different question from "does this make space on Tuesday" -- so its top move was often
+ * true, useful, and completely unrelated to the thing the student had just been told did not
+ * fit. Offering that reads as the app changing the subject.
+ *
+ * Null when nothing on the list helps, which is an honest answer: the day is full of things
+ * that cannot move, and saying so beats offering a move that will not work.
+ */
+export function fixThatMakesRoom(
+  schedule: Schedule,
+  item: ParsedItem,
+  dayIndex: number,
+  params: EngineParams,
+): Fix | null {
+  const need = { hours: item.hours, type: item.type, kind: item.kind }
+
+  return (
+    smallestFixes(schedule, params, FIXES_TO_CONSIDER).find(
+      (fix) => slotOn(fix.move.apply(schedule), dayIndex, need) !== null,
+    ) ?? null
+  )
 }

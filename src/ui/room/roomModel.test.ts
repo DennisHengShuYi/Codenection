@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BlockRecord } from '../../domain/blockLog'
-import { DEFAULT_PROFILE, type CalibrationProfile } from '../../domain/calibration'
+import { DEFAULT_PROFILE, type BlockOutcome, type CalibrationProfile } from '../../domain/calibration'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule, ScheduledItem } from '../../optimizer'
 import { CLUTTER_PLACEHOLDER, isClutterId, OBJECT_ORDER, type ObjectId } from './objects'
@@ -77,11 +77,6 @@ const SCENARIOS: ReadonlyArray<{ name: string; input: RoomModelInput }> = [
       schedule: { ...week(), startedOn: '2026-09-09' },
     }),
   },
-  { name: 'calibration untouched', input: input({ profile: DEFAULT_PROFILE }) },
-  {
-    name: 'calibration done',
-    input: input({ profile: profile({ modeChosen: true, painted: true }) }),
-  },
 ]
 
 describe('roomModel', () => {
@@ -114,9 +109,13 @@ describe('roomModel', () => {
     expect(marked(SCENARIOS[6]!.input)).toContain('character')
   })
 
-  it('marks the mirror while calibration is thin, and stops once it is not', () => {
-    expect(marked(SCENARIOS[7]!.input)).toContain('mirror')
-    expect(marked(SCENARIOS[8]!.input)).not.toContain('mirror')
+  // Task 17: the mirror's "% tuned" reading fed `calibrationProgress`, which fed only its
+  // own progress bar. Deleted along with the rest of calibration -- the mirror now renders
+  // no row at all, and never asks for attention.
+  it('never marks the mirror -- it has nothing left to report', () => {
+    for (const scenario of SCENARIOS) {
+      expect(marked(scenario.input), scenario.name).not.toContain('mirror')
+    }
   })
 
   /** These carry state and nothing more, so they must never ask for anybody. */
@@ -184,14 +183,14 @@ describe('roomModel', () => {
   })
 
   // Silence is a real answer: nothing wrong means nothing marked.
-  it('marks nothing in a calm, calibrated week', () => {
-    expect(marked({ profile: profile({ modeChosen: true, painted: true }) }).size).toBe(0)
+  it('marks nothing in a calm week', () => {
+    expect(marked().size).toBe(0)
   })
 
   /**
-   * §8b: the block log, not the calibration profile, now says which blocks have already
-   * been asked about. `confirmedItemIds` stays on the profile for now -- a later task
-   * deletes the calibration subsystem wholesale -- but nothing reads it any more.
+   * §8b/Task 17: the block log is the only record of which blocks have already been asked
+   * about. The profile's own `confirmedItemIds` was unioned with it until this task, when
+   * every caller pointed at the log became the only source.
    */
   describe('the block log', () => {
     const block: BlockRecord = {
@@ -211,6 +210,48 @@ describe('roomModel', () => {
 
     it('defaults to an empty log when none is given, so every existing caller keeps working', () => {
       expect(marked(input())).toEqual(marked({ ...input(), blockLog: [] }))
+    })
+
+    /**
+     * Ruling 10/16: `paramsFor` must read only the durable log. This used to be unioned
+     * with `profile.confirmations` -- a field the profile no longer has, but a stored
+     * settings blob saved before this task can still carry it (the loader ignores unknown
+     * keys, per `useProfile.test.tsx`). Casting it back on here proves the union is really
+     * gone rather than just untyped: reintroducing `...profile.confirmations` at this call
+     * site makes this fail, because five overrunning "confirmations" measure a 2x mental
+     * bias which -- against this heavy a mental schedule -- is enough to push the fortnight
+     * into deficit where the log-only figure does not.
+     */
+    it('ignores confirmations carried on the profile, even a legacy blob with real ones', () => {
+      const overrun: readonly BlockOutcome[] = Array.from({ length: 5 }, () => ({
+        type: 'mental' as const,
+        plannedHours: 2,
+        actualHours: 4,
+      }))
+      const legacyProfile = { ...DEFAULT_PROFILE, confirmations: overrun } as unknown as CalibrationProfile
+      const heavyMental = week({
+        items: Array.from({ length: HORIZON_DAYS }, (_, day): ScheduledItem => ({
+          id: `mental-${day}`,
+          title: `mental-${day}`,
+          type: 'mental',
+          kind: 'studyBlock',
+          hours: 6,
+          intensity: 1,
+          dayIndex: day,
+          startHour: 9,
+          fixed: false,
+          deadlineDay: null,
+          protectedRest: false,
+        })),
+      })
+
+      const withLegacyField = roomModel(input({ profile: legacyProfile, schedule: heavyMental }))
+      const withoutLegacyField = roomModel(input({ schedule: heavyMental }))
+
+      const ceiling = (model: ReturnType<typeof roomModel>) =>
+        model.rows.find((row) => row.id === 'ceiling')!.attention
+
+      expect(ceiling(withLegacyField)).toBe(ceiling(withoutLegacyField))
     })
   })
 

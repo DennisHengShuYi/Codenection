@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import type { BlockRecord } from '../../domain/blockLog'
-import type { CalibrationProfile } from '../../domain/calibration'
 import type { Fix, Schedule } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { dayGrid } from './dayGrid'
@@ -47,7 +46,6 @@ const dayLabel = (dayIndex: number, date: string | null): string => (date === nu
 
 export function WeekScreen(props: {
   readonly schedule: Schedule
-  readonly profile: CalibrationProfile
   readonly today: number
   readonly working: boolean
   readonly report: string | null
@@ -73,7 +71,6 @@ export function WeekScreen(props: {
 }) {
   const {
     schedule,
-    profile,
     today,
     working,
     report,
@@ -84,7 +81,7 @@ export function WeekScreen(props: {
   } = props
   const [openDay, setOpenDay] = useState<number | null>(null)
 
-  const cells = scheduleView({ schedule, profile, today, blockLog })
+  const cells = scheduleView({ schedule, today, blockLog })
 
   const grid = openDay === null ? null : dayGrid(schedule, openDay)
 

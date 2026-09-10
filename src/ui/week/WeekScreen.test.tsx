@@ -2,7 +2,6 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { BlockRecord } from '../../domain/blockLog'
-import { DEFAULT_PROFILE } from '../../domain/calibration'
 import { HORIZON_DAYS, LOAD_TYPES, type LoadType } from '../../engine'
 import type { Fix, Schedule, ScheduledItem } from '../../optimizer'
 import { BUSY_ABOVE_HOURS } from './scheduleView'
@@ -44,7 +43,6 @@ const setup = (schedule = week(), over: Partial<Parameters<typeof WeekScreen>[0]
   render(
     <WeekScreen
       schedule={schedule}
-      profile={DEFAULT_PROFILE}
       today={0}
       working={false}
       report={null}

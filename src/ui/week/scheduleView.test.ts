@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import type { BlockRecord } from '../../domain/blockLog'
-import { DEFAULT_PROFILE } from '../../domain/calibration'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule, ScheduledItem } from '../../optimizer'
 import { BUSY_ABOVE_HOURS, HEAVY_ABOVE_HOURS, scheduleView } from './scheduleView'
@@ -27,8 +26,8 @@ const week = (items: ScheduledItem[] = [], over: Partial<Schedule> = {}): Schedu
   ...over,
 })
 
-const view = (schedule = week(), profile = DEFAULT_PROFILE, today = 0, blockLog: readonly BlockRecord[] = []) =>
-  scheduleView({ schedule, profile, today, blockLog })
+const view = (schedule = week(), today = 0, blockLog: readonly BlockRecord[] = []) =>
+  scheduleView({ schedule, today, blockLog })
 
 describe('scheduleView', () => {
   it('returns one cell per day of the horizon', () => {
@@ -58,27 +57,19 @@ describe('scheduleView', () => {
   })
 
   it('marks the day the student is on', () => {
-    const cells = view(week(), DEFAULT_PROFILE, 5)
+    const cells = view(week(), 5)
 
     expect(cells.filter((cell) => cell.isToday).map((cell) => cell.dayIndex)).toEqual([5])
   })
 
   it('marks a day carrying a block that has not been confirmed', () => {
     // Only days at or before today can have been lived, so only those are marked.
-    const cells = view(week([item('a', 1, 2)]), DEFAULT_PROFILE, 3)
+    const cells = view(week([item('a', 1, 2)]), 3)
 
     expect(cells[1]?.unconfirmed).toBe(true)
   })
 
-  it('does not mark a confirmed block, or a day still ahead', () => {
-    const confirmed = { ...DEFAULT_PROFILE, confirmedItemIds: ['a'] }
-    const cells = view(week([item('a', 1, 2), item('b', 9, 2)]), confirmed, 3)
-
-    expect(cells[1]?.unconfirmed).toBe(false)
-    expect(cells[9]?.unconfirmed).toBe(false)
-  })
-
-  it('does not mark a block answered via the block log either', () => {
+  it('does not mark a block answered via the block log', () => {
     const block: BlockRecord = {
       blockId: 'a',
       type: 'mental',
@@ -87,13 +78,14 @@ describe('scheduleView', () => {
       answer: 'right',
       answeredAt: 0,
     }
-    const cells = view(week([item('a', 1, 2)]), DEFAULT_PROFILE, 3, [block])
+    const cells = view(week([item('a', 1, 2), item('b', 9, 2)]), 3, [block])
 
     expect(cells[1]?.unconfirmed).toBe(false)
+    expect(cells[9]?.unconfirmed).toBe(false)
   })
 
   it('does not mark a day still ahead even when the log has not answered its block', () => {
-    const cells = view(week([item('b', 9, 2)]), DEFAULT_PROFILE, 3, [])
+    const cells = view(week([item('b', 9, 2)]), 3, [])
 
     expect(cells[9]?.unconfirmed).toBe(false)
   })
@@ -114,8 +106,8 @@ describe('scheduleView', () => {
   it('defaults to an empty block log when none is given', () => {
     const schedule = week([item('a', 1, 2)])
 
-    expect(scheduleView({ schedule, profile: DEFAULT_PROFILE, today: 3 })).toEqual(
-      scheduleView({ schedule, profile: DEFAULT_PROFILE, today: 3, blockLog: [] }),
+    expect(scheduleView({ schedule, today: 3 })).toEqual(
+      scheduleView({ schedule, today: 3, blockLog: [] }),
     )
   })
 })

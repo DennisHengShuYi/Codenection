@@ -97,14 +97,9 @@ export function RoomShell({
   const reducedMotion = useReducedMotion()
   const { play } = useTidyUp(reducedMotion)
 
-  // §8b: outcomes come from the durable log and from the profile's own (soon-to-be-retired)
-  // record, combined -- see `roomModel`'s matching combination for why dropping either side
-  // would either lose calibration the room still shows elsewhere, or diverge from what
-  // `roomModel` computes for the same week.
-  const params = useMemo(
-    () => paramsFor([...outcomesFrom(blockLog), ...profile.confirmations]),
-    [blockLog, profile.confirmations],
-  )
+  // §8b/Task 17: the durable log is the only source `paramsFor` reads now -- see
+  // `roomModel.ts`'s matching call for why the profile's `confirmations` side is gone.
+  const params = useMemo(() => paramsFor(outcomesFrom(blockLog)), [blockLog])
   const floor = schedule
     ? Math.min(schedule.start.mental, schedule.start.physical, schedule.start.social, schedule.start.errands)
     : 100
@@ -129,7 +124,7 @@ export function RoomShell({
     const next = predictionsAfter(
       profile.predictions,
       schedule,
-      paramsFor([...outcomesFrom(blockLog), ...profile.confirmations]),
+      paramsFor(outcomesFrom(blockLog)),
       new Date(),
     )
     if (next.length !== profile.predictions.length) setProfile({ ...profile, predictions: next })
@@ -201,7 +196,7 @@ export function RoomShell({
   const stuckItem = week.items.find(
     (item) => item.id !== stuckDismissedId && isStuck(item, 0, Math.max(0, today - item.dayIndex)),
   )
-  const blockForToday = blockToAsk({ schedule: week, profile, today, blockLog })
+  const blockForToday = blockToAsk({ schedule: week, today, blockLog })
   const askEnergy = profile.predictions.some(
     (prediction) => prediction.forDate === todayDate && prediction.reported === null,
   )
@@ -218,7 +213,7 @@ export function RoomShell({
 
   const isWeekScreen = view.kind === 'week' || view.kind === 'block'
   const blockModel =
-    view.kind === 'block' ? blockSheet({ schedule: week, profile, itemId: view.itemId, today, blockLog }) : null
+    view.kind === 'block' ? blockSheet({ schedule: week, itemId: view.itemId, today, blockLog }) : null
 
   const paragraph = lowEnergy ? firstSentence(describeRoom(model.state)) : describeRoom(model.state)
 
@@ -243,7 +238,6 @@ export function RoomShell({
           </Button>
           <WeekScreen
             schedule={week}
-            profile={profile}
             today={today}
             working={working}
             report={report}

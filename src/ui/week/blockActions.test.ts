@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import type { BlockRecord } from '../../domain/blockLog'
-import { DEFAULT_PROFILE } from '../../domain/calibration'
 import { STUCK_AFTER_DAYS } from '../../domain/microStart'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule, ScheduledItem } from '../../optimizer'
@@ -28,12 +27,8 @@ const week = (items: ScheduledItem[]): Schedule => ({
   sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
 })
 
-const sheet = (
-  one: ScheduledItem,
-  profile = DEFAULT_PROFILE,
-  today = 5,
-  blockLog: readonly BlockRecord[] = [],
-) => blockSheet({ schedule: week([one]), profile, itemId: one.id, today, blockLog })
+const sheet = (one: ScheduledItem, today = 5, blockLog: readonly BlockRecord[] = []) =>
+  blockSheet({ schedule: week([one]), itemId: one.id, today, blockLog })
 
 const record = (over: Partial<BlockRecord> = {}): BlockRecord => ({
   blockId: 'essay',
@@ -75,10 +70,8 @@ describe('blockSheet', () => {
   // answered, with no way to undo it -- while every other block kind on the same screen does
   // offer that.
   it('offers Undo on a past protected-rest block already answered, not didRest again', () => {
-    const profile = { ...DEFAULT_PROFILE, confirmedItemIds: ['essay'] }
-
     expect(
-      sheet(item({ protectedRest: true, fixed: true, dayIndex: 2 }), profile)?.actions,
+      sheet(item({ protectedRest: true, fixed: true, dayIndex: 2 }), 5, [record()])?.actions,
     ).toEqual(['undo'])
   })
 
@@ -86,19 +79,10 @@ describe('blockSheet', () => {
     expect(sheet(item({ dayIndex: 2 }))?.actions).toEqual(['confirm'])
   })
 
-  it('offers Undo on a past block already answered via the profile', () => {
-    const profile = { ...DEFAULT_PROFILE, confirmedItemIds: ['essay'] }
-
-    expect(sheet(item({ dayIndex: 2 }), profile)?.actions).toEqual(['undo'])
-  })
-
-  // Ruling 3: the union of block log and legacy profile decides "answered", matching
-  // roomModel.ts and scheduleView.ts. Nothing writes a BlockRecord in the running app yet,
-  // but the check must already honour one when it does.
-  it('offers Undo on a past block already answered via the log, not just the profile', () => {
-    expect(sheet(item({ dayIndex: 2 }), DEFAULT_PROFILE, 5, [record()])?.actions).toEqual([
-      'undo',
-    ])
+  // §8b/Task 17: the durable log is the only record of "answered" left -- the legacy
+  // `profile.confirmedItemIds` union this used to include is gone.
+  it('offers Undo on a past block already answered via the log', () => {
+    expect(sheet(item({ dayIndex: 2 }), 5, [record()])?.actions).toEqual(['undo'])
   })
 
   it('opens the micro-start unasked once a task has sat three days', () => {
@@ -114,9 +98,7 @@ describe('blockSheet', () => {
   })
 
   it('returns null for an id that no longer exists', () => {
-    expect(
-      blockSheet({ schedule: week([]), profile: DEFAULT_PROFILE, itemId: 'gone', today: 0 }),
-    ).toBeNull()
+    expect(blockSheet({ schedule: week([]), itemId: 'gone', today: 0 })).toBeNull()
   })
 
   describe('recordedAnswer', () => {
@@ -127,18 +109,7 @@ describe('blockSheet', () => {
     it('carries what was actually said, for a block answered via the log', () => {
       const logged = record({ answer: 'longer' })
 
-      expect(sheet(item({ dayIndex: 2 }), DEFAULT_PROFILE, 5, [logged])?.recordedAnswer).toBe(
-        'longer',
-      )
-    })
-
-    // The legacy `profile.confirmedItemIds` path records that a block was answered, but not
-    // *what* was said -- only the log carries a `BlockAnswer`. Honest about not knowing
-    // rather than guessing.
-    it('is null for a block answered only via the legacy profile field', () => {
-      const profile = { ...DEFAULT_PROFILE, confirmedItemIds: ['essay'] }
-
-      expect(sheet(item({ dayIndex: 2 }), profile)?.recordedAnswer).toBeNull()
+      expect(sheet(item({ dayIndex: 2 }), 5, [logged])?.recordedAnswer).toBe('longer')
     })
   })
 })

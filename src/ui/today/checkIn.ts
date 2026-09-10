@@ -1,5 +1,4 @@
 import { answeredIds, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
-import type { CalibrationProfile } from '../../domain/calibration'
 import type { Schedule, ScheduledItem } from '../../optimizer'
 
 /**
@@ -33,26 +32,23 @@ export const SLEEP_HOURS: Record<SleepBucket, number> = {
  *
  * `blockLog` is §8b's durable record, threaded in optionally and defaulting to empty --
  * mirroring `scheduleView.ts` and `blockActions.ts` -- so every caller built before the log
- * existed keeps compiling and behaving exactly as it did. A block counts as already
- * answered if the log says so, or if the profile's own (soon-to-be-retired) record does;
- * sample counts are drawn from the same union, via `outcomesFrom`, or ordering would ignore
- * everything answered via the log and keep asking about a type it already knows well.
+ * existed keeps compiling and behaving exactly as it did. Task 17 dropped the profile's own
+ * `confirmedItemIds`/`confirmations`: they were unioned with the log only until something
+ * wrote a `BlockRecord` in the running app, which `TodayCard` and the Telegram bot now do,
+ * so the log is the only source left.
  */
 export function blockToAsk({
   schedule,
-  profile,
   today,
   blockLog = [],
 }: {
   readonly schedule: Schedule
-  readonly profile: CalibrationProfile
   readonly today: number
   readonly blockLog?: readonly BlockRecord[]
 }): ScheduledItem | null {
-  const alreadyAsked = (id: string) =>
-    answeredIds(blockLog).includes(id) || profile.confirmedItemIds.includes(id)
+  const alreadyAsked = (id: string) => answeredIds(blockLog).includes(id)
 
-  const outcomes = [...outcomesFrom(blockLog), ...profile.confirmations]
+  const outcomes = outcomesFrom(blockLog)
   const samples = (item: ScheduledItem): number =>
     outcomes.filter((outcome) => outcome.type === item.type).length
 

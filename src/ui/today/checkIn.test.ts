@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import type { BlockRecord } from '../../domain/blockLog'
-import { DEFAULT_PROFILE } from '../../domain/calibration'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule, ScheduledItem } from '../../optimizer'
 import { blockToAsk, SLEEP_HOURS, withSleep } from './checkIn'
@@ -37,57 +36,48 @@ const week = (items: ScheduledItem[]): Schedule => ({
 
 describe('blockToAsk', () => {
   it('asks nothing when there is nothing unconfirmed', () => {
-    const profile = { ...DEFAULT_PROFILE, confirmedItemIds: ['a'] }
+    const blockLog = [record('a', 'mental')]
 
-    expect(blockToAsk({ schedule: week([item('a', 'mental')]), profile, today: 0 })).toBeNull()
+    expect(
+      blockToAsk({ schedule: week([item('a', 'mental')]), today: 0, blockLog }),
+    ).toBeNull()
   })
 
   it('never asks about a day that has not happened', () => {
     const schedule = week([item('future', 'mental', 6)])
 
-    expect(blockToAsk({ schedule, profile: DEFAULT_PROFILE, today: 0 })).toBeNull()
+    expect(blockToAsk({ schedule, today: 0 })).toBeNull()
   })
 
   it('asks about the load type it knows least about, so the threshold is reached fastest', () => {
-    const profile = {
-      ...DEFAULT_PROFILE,
-      confirmations: [
-        { type: 'mental' as const, plannedHours: 2, actualHours: 2 },
-        { type: 'mental' as const, plannedHours: 2, actualHours: 2 },
-      ],
-    }
-    const schedule = week([item('study', 'mental'), item('gym', 'physical')])
+    // Two logged confirmations for 'mental', none for 'physical': the least-sampled type
+    // gets asked first.
+    const blockLog = [record('past-1', 'mental', 1), record('past-2', 'mental', 1)]
+    const schedule = week([item('study', 'mental', 2), item('gym', 'physical', 2)])
 
-    expect(blockToAsk({ schedule, profile, today: 0 })?.id).toBe('gym')
+    expect(blockToAsk({ schedule, today: 2, blockLog })?.id).toBe('gym')
   })
 
   it('breaks ties by the earlier block, so the day is walked as it was lived', () => {
     const early = { ...item('early', 'mental'), startHour: 8 }
     const late = { ...item('late', 'mental'), startHour: 20 }
 
-    expect(blockToAsk({ schedule: week([late, early]), profile: DEFAULT_PROFILE, today: 0 })?.id)
-      .toBe('early')
+    expect(blockToAsk({ schedule: week([late, early]), today: 0 })?.id).toBe('early')
   })
 
   it('does not ask again about a block already answered via the log', () => {
     const schedule = week([item('a', 'mental')])
     const blockLog = [record('a', 'mental')]
 
-    expect(
-      blockToAsk({ schedule, profile: DEFAULT_PROFILE, today: 0, blockLog }),
-    ).toBeNull()
+    expect(blockToAsk({ schedule, today: 0, blockLog })).toBeNull()
   })
 
-  it('counts log confirmations toward sample count, so a type answered only in the log is not re-asked about first', () => {
-    // Two log confirmations for 'mental', none in the profile: the union must count them,
-    // or ordering would ignore everything answered via the log and keep asking about the
-    // type it already knows well from there.
-    const blockLog = [record('past-1', 'mental', 0), record('past-2', 'mental', 0)]
-    const schedule = week([item('study', 'mental', 1), item('gym', 'physical', 1)])
+  it('defaults to an empty block log when none is given, so every existing caller keeps working', () => {
+    const schedule = week([item('a', 'mental')])
 
-    expect(
-      blockToAsk({ schedule, profile: DEFAULT_PROFILE, today: 1, blockLog })?.id,
-    ).toBe('gym')
+    expect(blockToAsk({ schedule, today: 0 })).toEqual(
+      blockToAsk({ schedule, today: 0, blockLog: [] }),
+    )
   })
 })
 

@@ -1,5 +1,4 @@
 import { answeredIds, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
-import type { CalibrationProfile } from '../../domain/calibration'
 import { firstAction, isStuck, type MicroStart } from '../../domain/microStart'
 import type { Schedule, ScheduledItem } from '../../optimizer'
 
@@ -23,10 +22,7 @@ export interface BlockSheetModel {
   readonly actions: readonly BlockAction[]
   readonly microStart: MicroStart | null
   /**
-   * What the student said, when `actions` is `['undo']`. Null otherwise, and also null for
-   * an already-answered block this can't identify an answer for -- a block answered only via
-   * the legacy `profile.confirmedItemIds` (never through the durable log) carries no
-   * `BlockAnswer` to show, since that field only ever recorded completion, not duration.
+   * What the student said, when `actions` is `['undo']`. Null otherwise.
    *
    * §5's table calls the past-and-confirmed case "what you recorded, and Undo". Since
    * `Repository.recordBlockAnswer` only upserts -- there is no operation to retract an
@@ -39,18 +35,13 @@ export interface BlockSheetModel {
 
 const actionsFor = (
   item: ScheduledItem,
-  profile: CalibrationProfile,
   blockLog: readonly BlockRecord[],
   today: number,
 ): readonly BlockAction[] => {
   if (item.dayIndex < today) {
-    // §8b: a block counts as already answered if the durable log says so, or if the
-    // profile's own (soon-to-be-retired) record does. Mirrors roomModel.ts and
-    // scheduleView.ts verbatim -- nothing writes a BlockRecord in the running app yet, so
-    // dropping the profile side would read as though every already-confirmed block had
-    // gone back to being unconfirmed.
-    const alreadyAsked =
-      answeredIds(blockLog).includes(item.id) || profile.confirmedItemIds.includes(item.id)
+    // §8b/Task 17: the durable log is the only record of what has already been answered.
+    // Mirrors roomModel.ts and scheduleView.ts.
+    const alreadyAsked = answeredIds(blockLog).includes(item.id)
 
     // Rest keeps its own question -- "did it happen", not "how did it go" -- but only while
     // unanswered. Once answered, confirm/undo is the only axis this model has for exposing
@@ -75,13 +66,11 @@ const actionsFor = (
 
 export function blockSheet({
   schedule,
-  profile,
   itemId,
   today,
   blockLog = [],
 }: {
   readonly schedule: Schedule
-  readonly profile: CalibrationProfile
   readonly itemId: string
   readonly today: number
   readonly blockLog?: readonly BlockRecord[]
@@ -95,7 +84,7 @@ export function blockSheet({
   // the wait *ahead* of a task, and using it reported a fortnight-out errand as sixteen days
   // overdue -- the same bug roomModel already had to fix.
   const daysWaiting = Math.max(0, today - item.dayIndex)
-  const actions = actionsFor(item, profile, blockLog, today)
+  const actions = actionsFor(item, blockLog, today)
 
   return {
     item,

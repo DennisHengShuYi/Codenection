@@ -39,13 +39,55 @@ describe('useProfile', () => {
   it('returns a saved profile untouched, rather than overwriting it with the seed', async () => {
     const repository = repo()
     await repository.clear()
-    const saved: CalibrationProfile = { ...DEFAULT_PROFILE, mode: 'working' }
+    const saved: CalibrationProfile = {
+      ...DEFAULT_PROFILE,
+      predictions: [{ forDate: '2026-09-01', predicted: 55, reported: null }],
+    }
     await repository.saveSettings({ ...DEFAULT_SETTINGS, calibration: saved })
 
     const { result } = renderHook(() => useProfile(repository))
 
-    await waitFor(() => expect(result.current.profile.mode).toBe('working'))
-    expect(result.current.profile.predictions).toEqual([])
+    await waitFor(() => expect(result.current.profile.predictions).toEqual(saved.predictions))
+  })
+
+  /**
+   * Task 17, "backwards compatibility that must hold": a profile saved before this task
+   * shrank `CalibrationProfile` still carries `mode`, `focus`, `semesterBreak`,
+   * `peakStartHour`, `painted`, `modeChosen` and `calibratedDays` in storage -- nobody
+   * migrates old settings blobs on write. The loader must keep working on that shape
+   * rather than reject it, because `DEFAULT_SETTINGS`/`useProfile` are the only place that
+   * shape is ever read back into the running app.
+   */
+  it('still loads a profile saved before the calibration shrink, unknown keys and all', async () => {
+    const repository = repo()
+    await repository.clear()
+    const legacy = {
+      predictions: [{ forDate: '2026-09-01', predicted: 40, reported: 35 }],
+      mode: 'working',
+      focus: 'longer',
+      semesterBreak: true,
+      peakStartHour: 9,
+      sleepBaselineHours: 7,
+      confirmations: [{ type: 'mental', plannedHours: 2, actualHours: 3 }],
+      confirmedItemIds: ['some-block'],
+      calibratedDays: 12,
+      modeChosen: true,
+      painted: true,
+    }
+    await repository.saveSettings({
+      ...DEFAULT_SETTINGS,
+      calibration: legacy as unknown as CalibrationProfile,
+    })
+
+    const { result } = renderHook(() => useProfile(repository))
+
+    // The app keeps working: the one field it still reads resolves correctly, and nothing
+    // throws trying to read the rest.
+    await waitFor(() =>
+      expect(result.current.profile.predictions).toEqual([
+        { forDate: '2026-09-01', predicted: 40, reported: 35 },
+      ]),
+    )
   })
 
   it('does not reseed the block log when one already exists', async () => {
@@ -73,8 +115,9 @@ describe('useProfile', () => {
     const { result } = renderHook(() => useProfile(repository))
     await waitFor(() => expect(result.current.profile.predictions.length).toBeGreaterThan(0))
 
-    result.current.setProfile({ ...result.current.profile, mode: 'working' })
+    const next = { ...result.current.profile, predictions: [] }
+    result.current.setProfile(next)
 
-    await waitFor(async () => expect((await repository.loadSettings()).calibration?.mode).toBe('working'))
+    await waitFor(async () => expect((await repository.loadSettings()).calibration?.predictions).toEqual([]))
   })
 })

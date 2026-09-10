@@ -1,6 +1,5 @@
 import { answeredIds, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
 import { dateFor } from '../../domain/calendar'
-import type { CalibrationProfile } from '../../domain/calibration'
 import { paramsFor } from '../../domain/engineParams'
 import { DEFICIT_THRESHOLD, HORIZON_DAYS, overallReserve, project } from '../../engine'
 import { toDayInputs, type Schedule } from '../../optimizer'
@@ -36,7 +35,6 @@ export interface DayCell {
 
 export interface ScheduleViewInput {
   readonly schedule: Schedule
-  readonly profile: CalibrationProfile
   /** Injected rather than read, so this stays pure. The shell supplies it. */
   readonly today: number
   /**
@@ -53,15 +51,13 @@ const bandFor = (hours: number): LoadBand =>
 
 export function scheduleView({
   schedule,
-  profile,
   today,
   blockLog = [],
 }: ScheduleViewInput): readonly DayCell[] {
-  const params = paramsFor([...outcomesFrom(blockLog), ...profile.confirmations])
+  const params = paramsFor(outcomesFrom(blockLog))
   const projection = project(schedule.start, toDayInputs(schedule), params)
 
-  const alreadyAsked = (id: string) =>
-    answeredIds(blockLog).includes(id) || profile.confirmedItemIds.includes(id)
+  const alreadyAsked = (id: string) => answeredIds(blockLog).includes(id)
 
   return Array.from({ length: HORIZON_DAYS }, (_, dayIndex): DayCell => {
     const onDay = schedule.items.filter((item) => item.dayIndex === dayIndex)

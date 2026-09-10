@@ -1,5 +1,5 @@
 import { answeredIds, checkedInDays, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
-import { calibrationProgress, type CalibrationProfile } from '../../domain/calibration'
+import type { CalibrationProfile } from '../../domain/calibration'
 import { lapsed } from '../../domain/commitments'
 import { dateFor } from '../../domain/calendar'
 import { paramsFor } from '../../domain/engineParams'
@@ -54,13 +54,10 @@ const percent = (value: number): string => `${Math.round(value * 100)}%`
  * every call and never stored, so no flag can get stuck showing a problem that has passed.
  */
 export function roomModel({ schedule, profile, today, blockLog = [] }: RoomModelInput): RoomModel {
-  // §8b: outcomes come from the durable log and from the profile's own (soon-to-be-retired)
-  // record, combined. Reading the log alone would silently drop every bias measured through
-  // the profile the moment this shipped, with nothing yet writing its replacement into the
-  // log (Task 9 does that) -- the room's own projection would go uncalibrated while the
-  // dial elsewhere in the app kept using it. Combining keeps this byte-for-byte identical
-  // to before while the log is still empty in practice.
-  const params = paramsFor([...outcomesFrom(blockLog), ...profile.confirmations])
+  // §8b/Task 17: the durable log is the only source now. It used to be unioned with the
+  // profile's own `confirmations` because nothing wrote a `BlockRecord` in the running app
+  // yet -- `TodayCard` and the Telegram bot both do now, so the profile side is gone.
+  const params = paramsFor(outcomesFrom(blockLog))
   // §8b/Ruling 11 amended: a past day carrying no answer is a day the student went quiet,
   // and the model should get more worried, not pretend it heard from them. Days from
   // `today` onward stay checked in -- there is nothing to check in about yet -- which is
@@ -75,14 +72,8 @@ export function roomModel({ schedule, profile, today, blockLog = [] }: RoomModel
   // below light up for it any more.
   const lapsedNow = lapsed(schedule, today, params)
 
-  // §8b: a block counts as already asked about if the durable log says so, or if the
-  // profile's own (soon-to-be-retired) record of it does. Only the log side is new; the
-  // profile side stays until the confirmation flow itself writes to the log instead (Task
-  // 9) and the calibration subsystem that owns the field is removed (a later task still).
-  // Dropping it here today would read as though every already-confirmed block had gone
-  // back to being unconfirmed, which is not what happened.
-  const alreadyAsked = (id: string) =>
-    answeredIds(blockLog).includes(id) || profile.confirmedItemIds.includes(id)
+  // §8b/Task 17: the durable log is the only record of what has already been asked about.
+  const alreadyAsked = (id: string) => answeredIds(blockLog).includes(id)
   const unconfirmed = schedule.items.find(
     (candidate) => candidate.dayIndex === today && !alreadyAsked(candidate.id),
   )
@@ -146,10 +137,10 @@ export function roomModel({ schedule, profile, today, blockLog = [] }: RoomModel
             attention: unscored,
           },
         ]
-      case 'mirror': {
-        const tuned = Math.round(calibrationProgress(profile) * 100)
-        return [{ id, label, reading: `${tuned}% tuned`, attention: tuned < 50 }]
-      }
+      // Task 17: the mirror used to report a "% tuned" figure fed by `calibrationProgress`,
+      // which fed only its own progress bar and nothing else. Deleted along with the rest
+      // of the calibration subsystem -- the mirror now falls through to `default` and
+      // renders no row, rather than a reading about a screen nothing routes to any more.
       case 'ceiling':
         return [
           {

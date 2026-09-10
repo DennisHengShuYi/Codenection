@@ -126,6 +126,7 @@ export function RoomShell({
       schedule,
       paramsFor(outcomesFrom(blockLog)),
       new Date(),
+      blockLog,
     )
     if (next.length !== profile.predictions.length) setProfile({ ...profile, predictions: next })
     // eslint-disable-next-line react-hooks/exhaustive-deps

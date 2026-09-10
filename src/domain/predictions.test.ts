@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS, HORIZON_DAYS } from '../engine'
-import type { Schedule } from '../optimizer'
+import type { Schedule, ScheduledItem } from '../optimizer'
+import type { BlockRecord } from './blockLog'
 import { anchorTo } from './calendar'
 import {
   accuracyLine,
@@ -19,6 +20,34 @@ const week = (over: Partial<Schedule> = {}): Schedule => ({
   sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
   ...over,
 })
+
+/** A heavy enough run of real load that missing-data pessimism over a silent stretch
+ *  measurably drags the two-day-out prediction down, not just the 21-day worst floor. */
+const dailyMentalLoad = (days: number, hours: number): ScheduledItem[] =>
+  Array.from({ length: days }, (_, dayIndex) => ({
+    id: `daily-${dayIndex}`,
+    title: `daily ${dayIndex}`,
+    type: 'mental' as const,
+    kind: 'studyBlock' as const,
+    hours,
+    intensity: 1,
+    dayIndex,
+    startHour: 9,
+    fixed: false,
+    deadlineDay: null,
+    protectedRest: false,
+  }))
+
+/** One answered block per day, so `checkedInDays` reads every day as checked in. */
+const fullyCheckedInLog = (days: number): BlockRecord[] =>
+  Array.from({ length: days }, (_, dayIndex) => ({
+    blockId: `daily-${dayIndex}`,
+    type: 'mental' as const,
+    plannedHours: 8,
+    dayIndex,
+    answer: 'right' as const,
+    answeredAt: 0,
+  }))
 
 const resolved = (pairs: ReadonlyArray<[number, number]>): EnergyPrediction[] =>
   pairs.map(([predicted, reported], index) => ({
@@ -198,5 +227,31 @@ describe('predictionsAfter', () => {
     expect(predictionsAfter(existing, anchored(), DEFAULT_PARAMS, at('2026-09-09'))[0]).toEqual(
       existing[0],
     )
+  })
+
+  /**
+   * §8.1's published claim is only honest if it is scored against what the student was
+   * actually shown -- and the room and the dial already read a silent past as a bad sign
+   * (§6.5). A predictor that skips that would be publishing an accuracy figure for a
+   * projection nobody saw.
+   *
+   * The direction matters more than the number: a silent student gets a *more pessimistic*
+   * prediction, which is *harder* to hit, so wiring this can only make the published error
+   * more honest, never flatter it.
+   */
+  it('predicts against the same silence-aware projection the room shows, not an optimistic one', () => {
+    const busyStart = anchorTo(
+      week({
+        start: { mental: 60, physical: 60, social: 60, errands: 60 },
+        items: dailyMentalLoad(10, 8),
+      }),
+      at('2026-09-01'),
+    )
+    const now = at('2026-09-11') // ten days later: today = 10, forDay = 12
+
+    const silent = predictionsAfter([], busyStart, DEFAULT_PARAMS, now)
+    const checkedIn = predictionsAfter([], busyStart, DEFAULT_PARAMS, now, fullyCheckedInLog(10))
+
+    expect(silent[0]?.predicted).toBeLessThan(checkedIn[0]?.predicted ?? Infinity)
   })
 })

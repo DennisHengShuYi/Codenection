@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { HORIZON_DAYS } from '../../engine'
+import { DEFAULT_PARAMS, HORIZON_DAYS } from '../../engine'
 import type { Schedule } from '../../optimizer'
 import { RequestBoxScreen } from './RequestBoxScreen'
 
@@ -20,10 +20,18 @@ const week = (): Schedule => ({
   sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
 })
 
-const setup = () => {
-  const props = { schedule: week(), onAccept: vi.fn(), onCancel: vi.fn() }
-  render(<RequestBoxScreen {...props} />)
-  return props
+const setup = (over: Partial<Parameters<typeof RequestBoxScreen>[0]> = {}) => {
+  const props = {
+    schedule: week(),
+    params: DEFAULT_PARAMS,
+    today: 0,
+    blockLog: [],
+    onAccept: vi.fn(),
+    onCancel: vi.fn(),
+    ...over,
+  }
+  const { unmount } = render(<RequestBoxScreen {...props} />)
+  return { ...props, unmount }
 }
 
 const ask = async (text = 'can you help with our group project, 6 hours, by friday') => {
@@ -54,6 +62,31 @@ describe('RequestBoxScreen', () => {
     await ask()
 
     expect(screen.getByTestId('request-cost').textContent).toMatch(/\d+/)
+  })
+
+  /**
+   * §2.4's whole point is that a student's own estimate bias, learned from Reality Check,
+   * is measurably different from the population default -- so the one screen pricing a
+   * commitment for them must price it with their own calibrated numbers, not everyone
+   * else's. Regression guard for the bug where this screen always priced against
+   * `DEFAULT_PARAMS` regardless of what was passed in.
+   */
+  it('prices the request with the calibrated params it is given, not the population default', async () => {
+    const heavilyBiased = {
+      ...DEFAULT_PARAMS,
+      estimateBias: { mental: 3, physical: 3, social: 3, errands: 3 },
+    }
+
+    const first = setup({ params: DEFAULT_PARAMS })
+    await ask()
+    const defaultText = screen.getByTestId('request-cost').textContent
+    first.unmount()
+
+    setup({ params: heavilyBiased })
+    await ask()
+    const biasedText = screen.getByTestId('request-cost').textContent
+
+    expect(biasedText).not.toBe(defaultText)
   })
 
   /**

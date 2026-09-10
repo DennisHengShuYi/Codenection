@@ -10,6 +10,7 @@ import {
 } from '../engine'
 import { toDayInputs, type Schedule } from '../optimizer'
 import { addItems } from './addItems'
+import { checkedInDays, type BlockRecord } from './blockLog'
 
 /**
  * Hours of restorative company that one "evening" stands for.
@@ -105,17 +106,33 @@ export function firstDeficitDay(projection: Projection): number | null {
  * §2.3: never "this takes 6 hours", always what it costs you. The work is done by adding it
  * to a *copy* of the week and reading the difference out of the projection that already
  * exists -- the model already knows the answer, because it has just been asked to carry it.
+ *
+ * `today` and `blockLog` default to `0` and `[]` -- the same "nothing has happened yet"
+ * state `checkedInDays` already treats as fully checked in when `today` is `0` -- so a
+ * caller with no check-in context (the Telegram `/ask` path, which has no durable log to
+ * read yet) keeps exactly the behaviour it had. `RequestBoxScreen` is not that caller: it
+ * has the student's own `today` and `blockLog` on hand and must thread them, the same way
+ * `roomModel` and `lapsed` do, so the price quoted here is judged against the fortnight the
+ * student is actually living -- including §6.5's missing-data pessimism -- rather than an
+ * optimistic stand-in for it.
  */
 export function priceRequest(
   schedule: Schedule,
   item: ParsedItem,
   params: EngineParams,
+  today = 0,
+  blockLog: readonly BlockRecord[] = [],
 ): RequestCost {
-  const before = project(schedule.start, toDayInputs(schedule), params)
+  const checkedIn = checkedInDays(blockLog, today, schedule.horizonDays)
+  const before = project(schedule.start, toDayInputs(schedule, checkedIn), params)
 
   // addItems returns a new week, so the caller's is never touched.
   const withRequest = addItems(schedule, [item])
-  const after = project(withRequest.start, toDayInputs(withRequest), params)
+  const after = project(
+    withRequest.start,
+    toDayInputs(withRequest, checkedInDays(blockLog, today, withRequest.horizonDays)),
+    params,
+  )
 
   const floorBefore = lowestOf(before, item.type)
   const floorAfter = lowestOf(after, item.type)

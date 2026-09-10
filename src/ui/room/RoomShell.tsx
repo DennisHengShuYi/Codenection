@@ -379,6 +379,9 @@ export function RoomShell({
         <AddSheet
           key="add"
           schedule={week}
+          params={params}
+          today={today}
+          blockLog={blockLog}
           onAcceptItems={(items) => setSchedule(addItems(week, items))}
           onAcceptRequest={(item) => setSchedule(accept(week, item, today))}
           onClose={closeToRoom}

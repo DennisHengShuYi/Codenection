@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import type { ParsedItem } from '../ai'
+import type { BlockRecord } from '../domain/blockLog'
+import type { EngineParams } from '../engine'
 import type { Schedule } from '../optimizer'
 import { Button } from './kit/Button'
 import { Sheet } from './kit/Sheet'
@@ -25,11 +27,21 @@ type AddWay = 'choose' | 'photo' | 'type' | 'request'
  */
 export function AddSheet({
   schedule,
+  params,
+  today,
+  blockLog,
   onAcceptItems,
   onAcceptRequest,
   onClose,
 }: {
   readonly schedule: Schedule
+  /** §2.4's calibrated params, threaded to the request path so it prices against the
+   *  student's own numbers rather than the population default. */
+  readonly params: EngineParams
+  readonly today: number
+  /** §6.5/§8b's check-in evidence, threaded to the request path so its price reflects the
+   *  same silence-aware projection the room and the dial already show. */
+  readonly blockLog: readonly BlockRecord[]
   readonly onAcceptItems: (items: readonly ParsedItem[]) => void
   readonly onAcceptRequest: (item: ParsedItem) => void
   readonly onClose: () => void
@@ -71,6 +83,9 @@ export function AddSheet({
     return (
       <RequestBoxScreen
         schedule={schedule}
+        params={params}
+        today={today}
+        blockLog={blockLog}
         onAccept={(item) => {
           onAcceptRequest(item)
           close()

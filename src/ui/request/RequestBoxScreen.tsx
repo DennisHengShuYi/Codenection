@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import type { Draft, ParsedItem } from '../../ai'
 import { addItems } from '../../domain/addItems'
+import type { BlockRecord } from '../../domain/blockLog'
 import { priceRequest, type RequestCost } from '../../domain/requestCost'
-import { DEFAULT_PARAMS, project } from '../../engine'
+import type { EngineParams } from '../../engine'
 import { toDayInputs, type Schedule } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { Card } from '../kit/Card'
@@ -40,10 +41,22 @@ const roomFor = (schedule: Schedule) =>
  */
 export function RequestBoxScreen({
   schedule,
+  params,
+  today,
+  blockLog,
   onAccept,
   onCancel,
 }: {
   schedule: Schedule
+  /** §2.4's calibrated params -- the student's own measured estimate bias, not the
+   *  population default. `RoomShell` already computes these from the durable block log for
+   *  every other screen; this one must be priced against the same numbers. */
+  params: EngineParams
+  /** Injected rather than read, so this stays pure -- `RoomShell` supplies it. */
+  today: number
+  /** §6.5/§8b's check-in evidence, threaded through so the price shown here is judged
+   *  against the same silence-aware projection the room and the dial already show. */
+  blockLog: readonly BlockRecord[]
   onAccept: (item: ParsedItem) => void
   onCancel: () => void
 }) {
@@ -73,7 +86,7 @@ export function RequestBoxScreen({
         return
       }
 
-      const priced = priceRequest(schedule, read, DEFAULT_PARAMS)
+      const priced = priceRequest(schedule, read, params, today, blockLog)
       setItem(read)
       setCost(priced)
       setEdited({})

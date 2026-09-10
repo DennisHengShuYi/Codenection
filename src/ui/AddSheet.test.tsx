@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { HORIZON_DAYS } from '../engine'
+import { DEFAULT_PARAMS, HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
 import { AddSheet } from './AddSheet'
 
@@ -27,6 +27,9 @@ const emptySchedule = (): Schedule => ({
 const setup = () => {
   const props = {
     schedule: emptySchedule(),
+    params: DEFAULT_PARAMS,
+    today: 0,
+    blockLog: [],
     onAcceptItems: vi.fn(),
     onAcceptRequest: vi.fn(),
     onClose: vi.fn(),

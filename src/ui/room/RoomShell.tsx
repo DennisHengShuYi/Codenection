@@ -389,11 +389,25 @@ export function RoomShell({
       )}
 
       {view.kind === 'settings' && (
-        <Sheet key="settings" title="Settings" onClose={closeToRoom}>
+        <Sheet
+          key="settings"
+          title="Settings"
+          onClose={closeToRoom}
+          // §0.2's lower-half-primary rule: sign-out is the one real action this sheet
+          // offers, so it belongs in the pinned bar rather than inside `AccountBar`'s own
+          // scrolling body -- the same place every other sheet puts its actions.
+          actions={
+            session !== null ? (
+              <Button variant="quiet" onClick={onSignOut}>
+                Sign out
+              </Button>
+            ) : undefined
+          }
+        >
           <div className="flex flex-col gap-4">
             {session !== null ? (
               <>
-                <AccountBar session={session} onSignOut={onSignOut} />
+                <AccountBar session={session} />
                 <LinkTelegram />
               </>
             ) : (

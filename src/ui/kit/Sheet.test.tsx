@@ -1,8 +1,27 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createLocalRepository } from '../../data'
+import { HORIZON_DAYS, DEFAULT_PARAMS } from '../../engine'
+import type { Schedule } from '../../optimizer'
+import { AddSheet } from '../AddSheet'
+import { PhotoImportScreen } from '../planner/PhotoImportScreen'
+import { PlannerScreen } from '../planner/PlannerScreen'
+import { RequestBoxScreen } from '../request/RequestBoxScreen'
+import { RoomShell } from '../room/RoomShell'
+import type { BlockSheetModel } from '../week/blockActions'
+import { BlockSheet } from '../week/BlockSheet'
 import { Button } from './Button'
 import { Sheet } from './Sheet'
+
+// Only the settings-sheet coverage below needs this: `LinkTelegram` calls out to Supabase on
+// mount, and a real network round trip has no place in this suite. `vi.mock` is hoisted, so
+// it applies module-wide rather than only within that one test -- harmless, since nothing
+// else here touches `../../data`.
+vi.mock('../../data', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  hasTelegramLink: () => Promise.resolve(false),
+}))
 
 const setup = (actions?: React.ReactNode) => {
   const onClose = vi.fn()
@@ -111,5 +130,128 @@ describe('Sheet', () => {
 
     expect(screen.getByRole('dialog')).toHaveFocus()
     document.body.removeChild(outside)
+  })
+})
+
+/**
+ * §0.2 requires primary actions in the lower half on mobile, which is why `Sheet` pins an
+ * action bar at all -- before it existed, panels scattered their own buttons wherever they
+ * fell: mid-screen in one, after a paragraph in another, under a textarea in a third. That
+ * rule is only actually enforced if every sheet the app renders threads its buttons through
+ * `actions` rather than dropping them into the scrolling body, and nothing checked that.
+ *
+ * This covers all six: `AddSheet`'s own choice screen and the three screens it opens
+ * (`PhotoImportScreen`, `PlannerScreen`, `RequestBoxScreen`), `BlockSheet`, and the settings
+ * sheet `RoomShell` renders inline. A structural assertion is enough -- each primary button
+ * is inside `sheet-actions`, not merely present somewhere on screen.
+ */
+describe('every sheet in the app puts its actions in the pinned bar', () => {
+  beforeEach(() => vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no endpoint'))))
+  afterEach(() => vi.unstubAllGlobals())
+
+  const emptySchedule = (): Schedule => ({
+    items: [],
+    start: { mental: 70, physical: 70, social: 70, errands: 70 },
+    horizonDays: HORIZON_DAYS,
+    sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+  })
+
+  const actionBar = () => screen.getByTestId('sheet-actions')
+
+  it('AddSheet: Cancel is in the bar', () => {
+    render(
+      <AddSheet
+        schedule={emptySchedule()}
+        params={DEFAULT_PARAMS}
+        today={0}
+        blockLog={[]}
+        onAcceptItems={vi.fn()}
+        onAcceptRequest={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    expect(within(actionBar()).getByRole('button', { name: /cancel/i })).toBeVisible()
+  })
+
+  it('PhotoImportScreen: Cancel is in the bar', () => {
+    render(<PhotoImportScreen onAccept={vi.fn()} onCancel={vi.fn()} />)
+
+    expect(within(actionBar()).getByRole('button', { name: /cancel/i })).toBeVisible()
+  })
+
+  it('PlannerScreen: Cancel and Read this are in the bar', () => {
+    render(<PlannerScreen onAccept={vi.fn()} onCancel={vi.fn()} />)
+
+    expect(within(actionBar()).getByRole('button', { name: /cancel/i })).toBeVisible()
+    expect(within(actionBar()).getByRole('button', { name: /read this/i })).toBeVisible()
+  })
+
+  it('RequestBoxScreen: Cancel and the pricing action are in the bar', () => {
+    render(
+      <RequestBoxScreen
+        schedule={emptySchedule()}
+        params={DEFAULT_PARAMS}
+        today={0}
+        blockLog={[]}
+        onAccept={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+
+    expect(within(actionBar()).getByRole('button', { name: /cancel/i })).toBeVisible()
+    expect(within(actionBar()).getByRole('button', { name: /what would this cost/i })).toBeVisible()
+  })
+
+  it('BlockSheet: Done is in the bar', () => {
+    const model: BlockSheetModel = {
+      item: {
+        id: 'essay',
+        title: 'Essay draft',
+        type: 'mental',
+        kind: 'studyBlock',
+        hours: 3,
+        intensity: 1,
+        dayIndex: 5,
+        startHour: 20,
+        fixed: false,
+        deadlineDay: null,
+        protectedRest: false,
+      },
+      actions: ['done', 'later', 'cantStart'],
+      microStart: null,
+      recordedAnswer: null,
+    }
+
+    render(
+      <BlockSheet
+        model={model}
+        onClose={vi.fn()}
+        onDone={vi.fn()}
+        onLater={vi.fn()}
+        onConfirm={vi.fn()}
+        onRested={vi.fn()}
+      />,
+    )
+
+    expect(within(actionBar()).getByRole('button', { name: 'Done' })).toBeVisible()
+  })
+
+  it('the settings sheet: Sign out is in the bar, not loose in the body', async () => {
+    const repository = createLocalRepository()
+    render(
+      <RoomShell
+        repository={repository}
+        session={{ userId: 'u1', email: 'ada@um.edu.my' }}
+        blockLog={[]}
+        onAnswerBlock={vi.fn()}
+      />,
+    )
+
+    await waitFor(() => expect(screen.getByTestId('open-settings')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-settings'))
+    await screen.findByRole('dialog', { name: /settings/i })
+
+    expect(within(actionBar()).getByRole('button', { name: /sign out/i })).toBeVisible()
   })
 })

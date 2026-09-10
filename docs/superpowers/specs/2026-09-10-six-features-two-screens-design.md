@@ -182,6 +182,25 @@ w3   ░░  ░░  ▓▓  ▓▓  ░░  ░░  ░░
 A day carrying an unconfirmed block is marked, so the confirmation prompt is discoverable from
 the overview rather than only from the card.
 
+### Where your reserves stand
+
+§1.2's five-domain breakdown — each domain against its own ceiling, with its trend glyph and,
+where it applies, its written warning — sits at the **foot of this screen**, under a heading,
+beneath the day grid.
+
+It is here rather than on the room because the room reads capacity exactly once, as the corner
+gauge §1.1 asks for. Two readings of the same number on the landing screen is the duplication
+this whole design exists to remove, and the louder of the two was the "dashboard a student at
+12% reserve should not be handed". The week is the screen about how the fortnight spends the
+reserve, so the breakdown of where it is going belongs to it.
+
+Last on the screen, not first: the overview and Rebalance are §4's primary surface, and a
+dashboard above them would push the fortnight's one action below the fold at 320px.
+
+The low-social warning — "You have been spending a lot of time alone" — lives in this
+breakdown. It is the single clearest evidence the model understands burnout rather than
+summing hours, and it must stay reachable wherever the breakdown goes.
+
 ### Day
 
 Tapping a cell opens that day as an hour grid **beneath** the overview. One column, so it

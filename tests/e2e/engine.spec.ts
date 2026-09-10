@@ -22,17 +22,24 @@ async function openApp(page: Page, path = '/') {
  * widths moved to dial.spec.ts when those elements moved into components. What stays
  * here is what is specifically about the *model* running in a browser.
  *
- * Neither the dial nor the rebalancer is behind a tap on the furniture any more. §1.1 puts
- * the dial on the room screen with "no tap required", and §3 moved the rebalancer onto the
- * week screen, which the room's own `The week` button opens. The room itself is display
- * only, so nothing here clicks an object.
+ * Neither the breakdown nor the rebalancer is behind a tap on the furniture any more. §1.1's
+ * "no tap required" reading is the room's own corner gauge; §1.2's five-bar breakdown and
+ * its spoken summary sit on the week screen (Ruling 53), which the room's `The week` button
+ * opens, and so does the rebalancer. The room itself is display only, so nothing here clicks
+ * an object.
  */
+
+/** The one tap between the room and the numbers. */
+async function openWeek(page: Page) {
+  await openApp(page)
+  await page.getByTestId('open-week').click()
+}
 
 // §1.5: a full text equivalent of every dial value, treated as a primary view rather
 // than a fallback. Asserted here because an accessibility requirement nothing checks is
 // an accessibility requirement that quietly rots.
 test('states the numbers in words for a screen reader', async ({ page }) => {
-  await openApp(page)
+  await openWeek(page)
 
   const summary = page.getByTestId('reserve-text-equivalent')
   await expect(summary).toHaveText(/capacity/i)
@@ -42,16 +49,15 @@ test('states the numbers in words for a screen reader', async ({ page }) => {
 // The projection's deficit crossing reaches the screen through the text equivalent
 // rather than through a figure of its own, so this is where it is checked.
 test('says whether the fortnight crosses into deficit', async ({ page }) => {
-  await openApp(page)
+  await openWeek(page)
 
   await expect(page.getByTestId('reserve-text-equivalent')).toHaveText(/deficit/i)
 })
 
 // §2.1 puts the solver on the phone. This proves it runs there, on the shipped bundle.
 test('runs the rebalancer in the browser and reports what it changed', async ({ page }) => {
-  await openApp(page)
+  await openWeek(page)
 
-  await page.getByTestId('open-week').click()
   await page.getByTestId('rebalance').click()
 
   const report = page.getByTestId('rebalance-report')

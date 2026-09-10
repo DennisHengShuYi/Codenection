@@ -21,6 +21,19 @@ const drainedWeek = () => ({
 
 let counter = 0
 
+/**
+ * `describeRoom` always emits exactly three sentences (character, weather, and one more);
+ * low-energy mode trims the visible paragraph to the character sentence alone. So the count
+ * is a second, independent reading of whether the collapse really happened -- one that does
+ * not share a cause with `open-week` and cannot quietly stop being able to fail.
+ *
+ * It replaces assertions on `dial-gauge`, which Ruling 53 moved off the room screen
+ * entirely: with the breakdown on the week, `queryByTestId('dial-gauge')` is null here in
+ * both modes, so those assertions would have passed whatever low-energy did.
+ */
+const visibleSentences = (): number =>
+  (screen.getByTestId('room-text-equivalent').textContent ?? '').split('. ').filter(Boolean).length
+
 const renderDrained = async () => {
   counter += 1
   const repository = createLocalRepository(`low-energy-${counter}`)
@@ -119,7 +132,7 @@ describe('the low-energy override, reachable from the settings sheet', () => {
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
     // Collapsed to begin with: this is the state the student is stuck in today.
     expect(screen.queryByTestId('open-week')).toBeNull()
-    expect(screen.queryByTestId('dial-gauge')).toBeNull()
+    expect(visibleSentences()).toBe(1)
 
     // The door itself, asserted rather than assumed: a control in Settings is no fix at all
     // if `open-settings` is one of the things low-energy mode hides.
@@ -127,7 +140,7 @@ describe('the low-energy override, reachable from the settings sheet', () => {
     await userEvent.click(await screen.findByRole('radio', { name: /full interface/i }))
 
     await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
-    expect(screen.getByTestId('dial-gauge')).toBeVisible()
+    expect(visibleSentences()).toBeGreaterThan(1)
   })
 
   it('lets a rested student turn the simplified interface on', async () => {
@@ -153,7 +166,7 @@ describe('the low-energy override, reachable from the settings sheet', () => {
     await userEvent.click(await screen.findByRole('radio', { name: /simplified interface/i }))
 
     await waitFor(() => expect(screen.queryByTestId('open-week')).toBeNull())
-    expect(screen.queryByTestId('dial-gauge')).toBeNull()
+    expect(visibleSentences()).toBe(1)
   })
 
   // Three states, not a toggle. Dropping `auto` strands anyone who touches the control away

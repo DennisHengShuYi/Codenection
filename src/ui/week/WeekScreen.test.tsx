@@ -2,7 +2,15 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { BlockRecord } from '../../domain/blockLog'
-import { HORIZON_DAYS, LOAD_TYPES, type LoadType } from '../../engine'
+import {
+  DEFAULT_PARAMS,
+  HORIZON_DAYS,
+  LOAD_TYPES,
+  project,
+  type DayInput,
+  type LoadType,
+} from '../../engine'
+import { domainBars } from '../dial/domainBars'
 import type { Fix, Schedule, ScheduledItem } from '../../optimizer'
 import { BUSY_ABOVE_HOURS } from './scheduleView'
 import { WeekScreen } from './WeekScreen'
@@ -36,9 +44,26 @@ const week = (items: ScheduledItem[] = [], over: Partial<Schedule> = {}): Schedu
   ...over,
 })
 
+/**
+ * Ruling 53 moved §1.2's five-domain breakdown here from the room screen, so every render
+ * of this component now needs a reserve, its bars and the projection behind them. They are
+ * required props rather than defaulted ones, and this is where the real ones are built --
+ * from the schedule under test, so the numbers on screen belong to that week.
+ */
+const days = (schedule: Schedule): DayInput[] =>
+  Array.from({ length: schedule.horizonDays }, (_, dayIndex) => ({
+    dayIndex,
+    activities: [],
+    sleepHours: schedule.sleepByDay[dayIndex] ?? 7,
+    venueChanges: 0,
+    daysToNearestDeadline: null,
+    checkedIn: true,
+  }))
+
 const setup = (schedule = week(), over: Partial<Parameters<typeof WeekScreen>[0]> = {}) => {
   const onRebalance = vi.fn()
   const onSelectBlock = vi.fn()
+  const projection = project(schedule.start, days(schedule), DEFAULT_PARAMS)
 
   render(
     <WeekScreen
@@ -48,6 +73,9 @@ const setup = (schedule = week(), over: Partial<Parameters<typeof WeekScreen>[0]
       report={null}
       onRebalance={onRebalance}
       onSelectBlock={onSelectBlock}
+      capacity={schedule.start.mental}
+      bars={domainBars(schedule.start, projection, days(schedule))}
+      projection={projection}
       {...over}
     />,
   )
@@ -60,6 +88,34 @@ describe('WeekScreen', () => {
     setup()
 
     expect(screen.getAllByTestId(/^day-\d+$/)).toHaveLength(HORIZON_DAYS)
+  })
+
+  /**
+   * Ruling 53's destination. The five-bar breakdown belongs to the screen about how the
+   * fortnight spends the reserve, not to the room, which reads capacity once through its
+   * corner gauge. Named as well as rendered: an unlabelled gauge at the foot of a screen
+   * is reachable only by accident.
+   */
+  it('carries the five-domain breakdown, under a heading', () => {
+    setup()
+
+    expect(screen.getAllByRole('meter')).toHaveLength(5)
+    expect(screen.getByTestId('reserve-text-equivalent')).toBeVisible()
+    expect(screen.getByRole('heading', { name: /where your reserves stand/i })).toBeVisible()
+  })
+
+  /**
+   * §4's ordering rule survives the arrival: the horizon and Rebalance are this screen's
+   * primary surface, and a dashboard above them would push the fortnight's one action below
+   * the fold at 320px. So the breakdown goes last, not first.
+   */
+  it('keeps the breakdown below Rebalance rather than above the week', () => {
+    setup()
+
+    const rebalance = screen.getByTestId('rebalance')
+    const reserves = screen.getByTestId('week-reserves')
+
+    expect(rebalance.compareDocumentPosition(reserves) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('opens a day when it is tapped', async () => {

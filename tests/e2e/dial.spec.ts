@@ -16,16 +16,20 @@ async function openApp(page: Page, path = '/') {
  * §0 and §10 make all four widths a standing requirement rather than a polish pass, and
  * an unasserted requirement is one that quietly regresses.
  *
- * The dial used to live behind a tap on the light. §1.1 now puts it "in one corner as a
- * compact readout, no tap required", so it is simply on the room screen -- which is also
- * what Ruling 28 restored after the two-screen refactor briefly orphaned it. Nothing here
- * is opened; the widths are measured on the screen the student lands on.
+ * The dial used to live behind a tap on the light. §1.1's "no tap required" reading is now
+ * the room's own corner gauge, and §1.2's five-bar breakdown -- which Ruling 28 rescued from
+ * orphanhood and Ruling 53 moved off the room, because the room was reading capacity twice
+ * -- lives at the foot of the week screen. One tap from the room, on a button that is
+ * always there above the low-energy threshold.
  */
 for (const width of [320, 390, 768, 1280]) {
-  test(`the dial fits at ${width}px`, async ({ page }) => {
+  test(`the breakdown fits at ${width}px, one tap into the week`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 })
     await openApp(page)
 
+    await page.getByTestId('open-week').click()
+
+    await expect(page.getByTestId('week-reserves')).toBeVisible()
     await expect(page.getByTestId('capacity-value')).toBeVisible()
     await expect(page.getByTestId('dial-gauge')).toBeVisible()
 
@@ -39,6 +43,14 @@ for (const width of [320, 390, 768, 1280]) {
 
 test('shows five domain bars, each against its own ceiling', async ({ page }) => {
   await openApp(page)
+
+  // The room reads capacity exactly once, as its corner gauge (Ruling 53). The five-bar
+  // dashboard §1.5 says a depleted student should not be handed is not on the landing
+  // screen -- and this half of the assertion fails on the version that shipped.
+  await expect(page.getByTestId('room-gauge')).toBeVisible()
+  await expect(page.getByRole('meter')).toHaveCount(0)
+
+  await page.getByTestId('open-week').click()
 
   await expect(page.getByRole('meter')).toHaveCount(5)
 })

@@ -10,14 +10,13 @@ import { RoomShell } from './room/RoomShell'
  * The room screen itself, rather than the components in isolation.
  *
  * §3 gives it a fixed shape: `<h1>`, `PreviewBanner`, `Room`, the `describeRoom` paragraph,
- * `AccuracyNote`, the live cards, then `The week` and `+`. §1.1's dial moved permanently
- * into the room's own corner gauge once the drawing became display-only (Task 12) -- there
- * is no remaining tap target to carry a separate dial screen, so that half of the old file
- * (the five domain bars behind `light`) has no home to move to and is not relocated; it is
- * a real, reported reduction in reachability rather than a silent one -- see the task
- * report. What this file keeps proving: that the room leads, and that acting on a block now
- * reaches the *stored* week through the week screen and the block sheet, not a tap on the
- * room itself.
+ * `AccuracyNote`, the live cards, then `The week` and `+`. §1.1's compact readout is the
+ * room's corner gauge and nothing else (Ruling 53): the five-bar breakdown that Ruling 28
+ * correctly rescued from orphanhood was parked here by mistake, giving the room two
+ * capacity readings, and it now lives on the week screen. What this file proves: that the
+ * room leads, that it reads capacity exactly once, that the breakdown is still reachable
+ * from it, and that acting on a block reaches the *stored* week through the week screen and
+ * the block sheet rather than a tap on the room itself.
  */
 const weekWithErrand = (): Schedule => ({
   items: [
@@ -73,15 +72,48 @@ describe('RoomShell with the room', () => {
   })
 
   /**
-   * Coordinator review (combined 12+13): `CapacityDial` -- the semicircular gauge, the five
-   * domain bars each against its own ceiling, and the low-social-flagged-as-warning logic
-   * that is the app's actual differentiator -- had zero production consumers once `Room`'s
-   * tap targets went. §1.1 says it "sits in one corner as a compact readout, no tap
-   * required", not that it is deleted. This is the behavioural RED: a state with a low
-   * social reserve must show the warning without any interaction, and it fails against the
-   * bare-percentage-only room screen.
+   * Ruling 53. `CapacityDial` was bolted onto the room screen beneath the two permanent
+   * controls, which gave the room two capacity readings: the compact corner gauge §1.1
+   * asked for, and a five-bar dashboard the room screen's design never contained (the doc
+   * mentions `CapacityDial` once, in a §11 footnote about a colour token). The breakdown
+   * moved to the week screen; the room keeps one reading.
+   *
+   * The behavioural RED: every part of the loud second reading must be absent from the
+   * room, and this fails against the screen that shipped.
    */
-  it('shows the low-social warning with no tap required', async () => {
+  it('reads capacity once on the room screen, as the corner gauge alone', async () => {
+    await renderWithErrand()
+
+    expect(screen.getByTestId('room-gauge')).toHaveTextContent(/^\d{1,3}%$/)
+    expect(screen.queryAllByRole('meter')).toHaveLength(0)
+    expect(screen.queryByTestId('dial-gauge')).toBeNull()
+    expect(screen.queryByTestId('reserve-text-equivalent')).toBeNull()
+  })
+
+  /**
+   * The other half of the move, and the half that matters most: Ruling 28 found this
+   * content orphaned once and it must not be orphaned again. Reachability is asserted by
+   * walking there the way a student does -- one tap on `The week` -- rather than by
+   * rendering `CapacityDial` in isolation and assuming somebody links to it.
+   */
+  it('reaches the five domain bars and the spoken summary through the week screen', async () => {
+    await renderWithErrand()
+
+    expect(screen.queryAllByRole('meter')).toHaveLength(0)
+
+    await userEvent.click(screen.getByTestId('open-week'))
+
+    expect(await screen.findAllByRole('meter')).toHaveLength(5)
+    expect(screen.getByTestId('reserve-text-equivalent')).toBeVisible()
+  })
+
+  /**
+   * The low-social warning is the single clearest evidence the model understands burnout
+   * rather than summing hours -- a tracker reads a quiet week as healthy. It has already
+   * been lost once (Ruling 28), so the move gets its own test rather than riding on the
+   * meters above.
+   */
+  it('still flags a low social reserve as a warning, one tap into the week', async () => {
     counter += 1
     const repository = createLocalRepository(`room-dial-${counter}`)
     await repository.clear()
@@ -93,16 +125,13 @@ describe('RoomShell with the room', () => {
     })
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
-
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
-    expect(screen.getByTestId('warning-social')).toHaveTextContent(/spending a lot of time alone/i)
-  })
 
-  it('still carries the five domain bars and the dial\'s own spoken summary', async () => {
-    await renderWithErrand()
+    await userEvent.click(screen.getByTestId('open-week'))
 
-    expect(screen.getAllByRole('meter')).toHaveLength(5)
-    expect(screen.getByTestId('reserve-text-equivalent')).toBeVisible()
+    expect(await screen.findByTestId('warning-social')).toHaveTextContent(
+      /spending a lot of time alone/i,
+    )
   })
 
   /**

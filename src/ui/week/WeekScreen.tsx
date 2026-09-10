@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import type { BlockRecord } from '../../domain/blockLog'
+import type { Projection } from '../../engine'
 import type { Fix, Schedule } from '../../optimizer'
+import { CapacityDial } from '../dial/CapacityDial'
+import type { DomainBar } from '../dial/domainBars'
 import { Button } from '../kit/Button'
 import { dayGrid } from './dayGrid'
 import { scheduleView, type LoadBand } from './scheduleView'
@@ -12,6 +15,13 @@ import { scheduleView, type LoadBand } from './scheduleView'
  * acts on the fortnight rather than on whichever day happens to be open -- if it moved down
  * with the day, a student opening a day to check on it would read Rebalance as scoped to
  * that day instead of the whole week (§4).
+ *
+ * §1.2's five-domain breakdown lives here, at the foot of the screen, rather than on the
+ * room (Ruling 53). The room reads capacity once, as the corner gauge §1.1 asked for; a
+ * student who wants to know *where* the reserve is going comes to the week, which is the
+ * screen about how the fortnight spends it. Last rather than first because the horizon and
+ * Rebalance are what §4 calls this screen's primary surface, and a dashboard above them
+ * would push the fortnight's one action below the fold at 320px.
  */
 
 const BAND_LABEL: Record<LoadBand, string> = {
@@ -77,6 +87,15 @@ export function WeekScreen(props: {
    * caller built before the log existed keeps compiling and behaving exactly as it did.
    */
   readonly blockLog?: readonly BlockRecord[]
+  /**
+   * §1.1's reserve and §1.2's five bars, each against its own ceiling, plus the projection
+   * `describeDial` speaks. Required, not optional-with-a-default: this content has been
+   * orphaned once already (Ruling 28) and a default would let a call site that renders the
+   * week without it compile and look fine.
+   */
+  readonly capacity: number
+  readonly bars: readonly DomainBar[]
+  readonly projection: Projection
 }) {
   const {
     schedule,
@@ -87,6 +106,9 @@ export function WeekScreen(props: {
     onRebalance,
     onSelectBlock,
     blockLog = [],
+    capacity,
+    bars,
+    projection,
   } = props
   const [openDay, setOpenDay] = useState<number | null>(null)
 
@@ -189,6 +211,16 @@ export function WeekScreen(props: {
           ))}
         </div>
       )}
+
+      {/* Named, because an unlabelled gauge at the foot of a screen is reachable only by
+          accident. This is the heading a student scrolling the week reads before deciding
+          whether the numbers below are worth their attention. */}
+      <section data-testid="week-reserves" className="flex flex-col gap-4">
+        <h2 className="text-sm font-semibold tracking-wide text-ink-soft">
+          Where your reserves stand
+        </h2>
+        <CapacityDial capacity={capacity} bars={bars} projection={projection} />
+      </section>
     </div>
   )
 }

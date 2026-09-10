@@ -16,7 +16,6 @@ import { toDayInputs } from '../../optimizer'
 import { AddSheet } from '../AddSheet'
 import { AccountBar } from '../auth/AccountBar'
 import { PreviewBanner } from '../auth/PreviewBanner'
-import { CapacityDial } from '../dial/CapacityDial'
 import { domainBars } from '../dial/domainBars'
 import { Button } from '../kit/Button'
 import { Sheet } from '../kit/Sheet'
@@ -175,10 +174,12 @@ export function RoomShell({
   const todayDate = dateFor(week, today)
   const model = roomModel({ schedule: week, today, blockLog })
 
-  // §1.1's dial: the reserve, the five domain bars each against its own ceiling, and the
+  // §1.2's breakdown: the five domain bars each against its own ceiling, and the
   // low-social-flagged-as-warning logic that is the app's own differentiator over a tracker
-  // that would read a quiet week as healthy. Same `checkedIn` wiring as `roomModel.ts`, so
-  // the dial and the room agree about what "silent" means.
+  // that would read a quiet week as healthy. Computed here, where the engine call already
+  // is, and handed to `WeekScreen` -- Ruling 53 moved the breakdown off the room so the
+  // room reads capacity once, through `Room`'s own corner gauge. Same `checkedIn` wiring as
+  // `roomModel.ts`, so the breakdown and the room agree about what "silent" means.
   const days = toDayInputs(week, checkedInDays(blockLog, today, week.horizonDays))
   const projection = project(week.start, days, params)
   const bars = domainBars(week.start, projection, days)
@@ -274,6 +275,9 @@ export function RoomShell({
             onRebalance={() => void onRebalance()}
             onSelectBlock={(itemId) => setView(toBlock(itemId))}
             blockLog={blockLog}
+            capacity={overallReserve(week.start)}
+            bars={bars}
+            projection={projection}
           />
         </>
       ) : (
@@ -339,18 +343,6 @@ export function RoomShell({
               +
             </Button>
           </div>
-
-          {/* §1.1: "sits in one corner as a compact readout, no tap required." Placed after
-              the room's two permanent controls rather than before them, so the dial's own
-              bulk (five domain bars, trends, warnings, its spoken summary) cannot push
-              `The week` / `+` below the fold at 320px -- those two stay exactly where they
-              already were, and the dial is additional content beneath. Hidden in low-energy
-              mode: §1.5's "one number and one action" is the corner gauge already in `Room`
-              plus the single live card, and a five-bar breakdown is exactly the dashboard
-              §1.5 says a depleted student should not be handed. */}
-          {!lowEnergy && (
-            <CapacityDial capacity={overallReserve(week.start)} bars={bars} projection={projection} />
-          )}
         </>
       )}
 

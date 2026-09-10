@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import type { BlockOutcome } from '../../domain/calibration'
 import type { ScheduledItem } from '../../optimizer'
 import { TodayCard } from './TodayCard'
 
@@ -145,5 +146,84 @@ describe('TodayCard', () => {
 
     await userEvent.click(dismiss)
     expect(props.onDismiss).toHaveBeenCalledOnce()
+  })
+})
+
+/**
+ * §7.6/§2.4's Reality Check line, which was written and tested and then rendered by
+ * nothing at all.
+ *
+ * It belongs here rather than on a screen of its own: this is the moment the student is
+ * being asked how long a block actually took, so it is the moment "you underestimate this
+ * by 1.4x, and we already pad it" answers a question they are actually having.
+ */
+describe('TodayCard reality check', () => {
+  const overran = (n: number): BlockOutcome[] =>
+    Array.from({ length: n }, (_, index) => ({
+      blockId: `mental-${index}`,
+      type: 'mental' as const,
+      plannedHours: 2,
+      actualHours: 3,
+    }))
+
+  it('tells the student what they underestimate, beside the block it padded', () => {
+    setup({ outcomes: overran(3) })
+
+    expect(screen.getByTestId('bias-line')).toHaveTextContent(
+      'You underestimate study and writing by about 1.5×. We pad it automatically.',
+    )
+  })
+
+  /** §7.6: a screen claiming a bias nobody measured is worse than a screen with fewer
+   *  lines. Below `MIN_SAMPLES` there is no measurement, so there is no sentence. */
+  it('says nothing when there is not enough history to measure a bias', () => {
+    setup({ outcomes: overran(2) })
+
+    expect(screen.queryByTestId('bias-line')).not.toBeInTheDocument()
+  })
+
+  it('says nothing when the student estimates accurately', () => {
+    const accurate: BlockOutcome[] = Array.from({ length: 4 }, (_, index) => ({
+      blockId: `accurate-${index}`,
+      type: 'mental',
+      plannedHours: 2,
+      actualHours: 2,
+    }))
+
+    setup({ outcomes: accurate })
+
+    expect(screen.queryByTestId('bias-line')).not.toBeInTheDocument()
+  })
+
+  /** The line has to be about the block on the card, not whichever type happens to have
+   *  the most history -- otherwise it reports a bias the student cannot connect to
+   *  anything in front of them. */
+  it('reports the bias for the block being asked about, not another load type', () => {
+    const errands: BlockOutcome[] = Array.from({ length: 4 }, (_, index) => ({
+      blockId: `errands-${index}`,
+      type: 'errands',
+      plannedHours: 1,
+      actualHours: 3,
+    }))
+
+    setup({ outcomes: [...errands, ...overran(3)] })
+
+    expect(screen.getByTestId('bias-line')).toHaveTextContent('study and writing')
+  })
+
+  /** No block on the card means nothing was padded, so there is nothing to explain. */
+  it('says nothing when there is no block to ask about', () => {
+    setup({ block: null, outcomes: overran(3) })
+
+    expect(screen.queryByTestId('bias-line')).not.toBeInTheDocument()
+  })
+
+  /** §0's no-cold-start rule reaches this line too: a student on day one has no history,
+   *  and the card must still render. */
+  it('renders normally when no outcomes are supplied at all', () => {
+    setup()
+
+    expect(screen.queryByTestId('bias-line')).not.toBeInTheDocument()
+    expect(screen.getByTestId('answer-right')).toBeInTheDocument()
   })
 })

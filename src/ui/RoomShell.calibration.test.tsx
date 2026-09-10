@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
+import type { BlockRecord } from '../domain/blockLog'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
 import { RoomShell } from './room/RoomShell'
@@ -191,5 +192,47 @@ describe('RoomShell with a block to confirm', () => {
 
     await waitFor(() => expect(screen.queryByRole('region', { name: /today's check-in/i })).toBeNull())
     expect(card).toBeTruthy()
+  })
+
+  /**
+   * §7.6's Reality Check line, proved end to end rather than in isolation.
+   *
+   * `TodayCard.test.tsx` shows the component can render the sentence; it cannot show that
+   * the durable block log actually reaches it. That wiring is the whole defect -- the
+   * sentence existed and was tested for a fortnight while being rendered by nothing -- so
+   * the regression that matters is this one, at the level where the log is real.
+   */
+  it('quotes the measured bias back to the student from their own block log', async () => {
+    counter += 1
+    const repository = createLocalRepository(`calibration-bias-${counter}`)
+    await repository.clear()
+    await repository.saveWeek(week({ items: [item({ dayIndex: 0 })] }))
+
+    // Three overruns is exactly `MIN_SAMPLES`, and `longer` is a 1.5x factor.
+    const overran: BlockRecord[] = Array.from({ length: 3 }, (_, index) => ({
+      blockId: `past-${index}`,
+      type: 'mental',
+      plannedHours: 2,
+      dayIndex: index,
+      answer: 'longer',
+      answeredAt: index,
+    }))
+
+    render(<RoomShell repository={repository} blockLog={overran} onAnswerBlock={vi.fn()} />)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('bias-line')).toHaveTextContent(
+        'You underestimate study and writing by about 1.5×. We pad it automatically.',
+      ),
+    )
+  })
+
+  /** The other half of the same wiring: an empty log must produce no claim at all. §7.6 --
+   *  a screen asserting a bias nobody measured is worse than a screen without the line. */
+  it('claims no bias when the block log is empty', async () => {
+    await renderHome(week({ items: [item({ dayIndex: 0 })] }))
+
+    expect(screen.getByTestId('answer-right')).toBeVisible()
+    expect(screen.queryByTestId('bias-line')).toBeNull()
   })
 })

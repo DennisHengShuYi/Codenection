@@ -1,4 +1,5 @@
 import type { BlockAnswer } from '../../domain/blockLog'
+import type { BlockOutcome } from '../../domain/calibration'
 import type { Commitment } from '../../optimizer'
 import type { Prescription as PrescriptionData } from '../../domain/prescribe'
 import type { MicroStart } from '../../domain/microStart'
@@ -28,6 +29,7 @@ export function LiveCards({
   blockForToday,
   askEnergy,
   askSleep,
+  outcomes,
   onEnergy,
   onSleep,
   onBlockAnswer,
@@ -45,6 +47,9 @@ export function LiveCards({
   readonly blockForToday: ScheduledItem | null
   readonly askEnergy: boolean
   readonly askSleep: boolean
+  /** §2.4's history, forwarded to `TodayCard` for §7.6's Reality Check line. Optional for
+   *  the same no-cold-start reason `TodayCard` states. */
+  readonly outcomes?: readonly BlockOutcome[]
   readonly onEnergy: (energy: number) => void
   readonly onSleep: (bucket: SleepBucket) => void
   readonly onBlockAnswer: (itemId: string, answer: BlockAnswer) => void
@@ -79,6 +84,7 @@ export function LiveCards({
             block={blockForToday}
             askEnergy={askEnergy}
             askSleep={askSleep}
+            outcomes={outcomes}
             onEnergy={onEnergy}
             onSleep={onSleep}
             onBlock={onBlockAnswer}

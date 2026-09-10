@@ -100,7 +100,11 @@ export function RoomShell({
 
   // §8b/Task 17: the durable log is the only source `paramsFor` reads now -- see
   // `roomModel.ts`'s matching call for why the profile's `confirmations` side is gone.
-  const params = useMemo(() => paramsFor(outcomesFrom(blockLog)), [blockLog])
+  // Derived once and shared: `paramsFor` pads the week with it, and §7.6's Reality Check
+  // line on the today card quotes the very same history back to the student. Two calls
+  // would be two chances for the number shown to drift from the number applied.
+  const outcomes = useMemo(() => outcomesFrom(blockLog), [blockLog])
+  const params = useMemo(() => paramsFor(outcomes), [outcomes])
   const floor = schedule
     ? Math.min(schedule.start.mental, schedule.start.physical, schedule.start.social, schedule.start.errands)
     : 100
@@ -127,7 +131,10 @@ export function RoomShell({
     const next = predictionsAfter(
       profile.predictions,
       schedule,
-      paramsFor(outcomesFrom(blockLog)),
+      // The same `params` the week is projected with. It derives purely from `blockLog`,
+      // which is already in this effect's dependencies, so this is the identical value --
+      // recomputing it here was a third copy of one number.
+      params,
       new Date(),
       blockLog,
     )
@@ -312,6 +319,7 @@ export function RoomShell({
             blockForToday={blockForToday}
             askEnergy={askEnergy}
             askSleep={askSleep}
+            outcomes={outcomes}
             onEnergy={(energy) => {
               if (todayDate === null) return
               setProfile({ ...profile, predictions: resolvePrediction(profile.predictions, todayDate, energy) })

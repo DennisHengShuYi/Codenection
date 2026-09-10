@@ -52,6 +52,29 @@ export interface Projection {
  */
 const MISSING_CHECKIN_PENALTY = 0.08
 
+/**
+ * How long a silence may go on compounding before the worry levels off, in days.
+ *
+ * Eleven days is 1.88x the student's own estimates. A full horizon of silence would
+ * otherwise reach 2.68x, which stops being caution about a week the model cannot see and
+ * becomes a different, fictional week.
+ *
+ * Eleven rather than the tidier five, and this is the whole reason the number is what it
+ * is: §8b requires a heavy fortnight plus silence to lapse a commitment, and `lapsed`
+ * judges that against this very projection. That verdict is a threshold crossing, and it
+ * needs roughly 1.88x to fire. Capping at 1.4x -- the pessimistic band's own bias, and the
+ * intuitive choice -- would silently switch off silence-aware lapsing altogether. The cap
+ * has to sit above the behaviour it must not destroy.
+ *
+ * Note what this does and does not buy. `blockLog.checkedInDays` marks every day from
+ * today forward as checked in, so through the real callers the run can only accumulate
+ * over days that have actually passed and rarely reaches eleven. That invariant is real,
+ * but it lives in another module and `runBand` accepts any `checkedIn` array handed to it.
+ * So this is the arithmetic defending itself against a caller that gets it wrong, not a
+ * bound the app leans on day to day.
+ */
+const MAX_MISSED_RUN_DAYS = 11
+
 /** Scales every type's estimate bias by a factor, returning fresh params. Never mutates
  *  the caller's params: the engine is pure, and the projection runs three bands over the
  *  same input. */
@@ -78,7 +101,7 @@ function runBand(
   let missedRun = 0
 
   for (const day of days) {
-    missedRun = day.checkedIn ? 0 : missedRun + 1
+    missedRun = day.checkedIn ? 0 : Math.min(missedRun + 1, MAX_MISSED_RUN_DAYS)
     current = tick(current, day, withBias(biased, 1 + MISSING_CHECKIN_PENALTY * missedRun))
     out.push(current)
   }

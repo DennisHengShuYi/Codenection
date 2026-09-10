@@ -168,6 +168,51 @@ describe('project', () => {
     expect(sustained.worstOverall).toBeLessThan(brief.worstOverall)
   })
 
+  /**
+   * §6.5 compounds per consecutive miss so a long silence is worse than a skipped day. It
+   * does not follow that the worry should grow without end: at 0.08 a day, a full horizon
+   * of silence reaches 2.68x the student's own estimates, which stops being caution and
+   * becomes a different, fictional week.
+   *
+   * The bound used to live in `blockLog.checkedInDays`, which marks every day from today
+   * forward as checked in so the run can only ever accumulate over the past. That is a
+   * real invariant, but it belongs to a different module -- `runBand` takes any
+   * `checkedIn` array and had no defence of its own. This is that defence.
+   *
+   * Isolated deliberately: `checkedIn` feeds nothing but the multiplier, and every day
+   * here carries identical load and sleep, so the *only* difference between these two
+   * projections is the length of the run at the one day that has any work on it.
+   */
+  it('stops compounding the silence once the run reaches its cap', () => {
+    const emptyThenHeavy = (checkInOn: number | null) =>
+      horizon((i) => ({
+        ...(i === 20 ? heavy(i) : day(i)),
+        checkedIn: i === checkInOn,
+      }))
+
+    // Twelve days of silence: one past the cap.
+    const justOverCap = project(healthy, emptyThenHeavy(8), DEFAULT_PARAMS)
+    // Twenty-one days: far past it, and uncapped this would be 2.68x rather than 1.88x.
+    const farPastCap = project(healthy, emptyThenHeavy(null), DEFAULT_PARAMS)
+
+    expect(farPastCap.worstOverall).toBeCloseTo(justOverCap.worstOverall)
+  })
+
+  /** The cap must not flatten the gradient §6.5 is actually about -- a two-day gap still
+   *  has to read as less worrying than a week of nothing. */
+  it('still worries more about a longer silence below the cap', () => {
+    const emptyThenHeavy = (silentFrom: number) =>
+      horizon((i) => ({
+        ...(i === 20 ? heavy(i) : day(i)),
+        checkedIn: i < silentFrom,
+      }))
+
+    const twoDays = project(healthy, emptyThenHeavy(19), DEFAULT_PARAMS)
+    const fiveDays = project(healthy, emptyThenHeavy(16), DEFAULT_PARAMS)
+
+    expect(fiveDays.worstOverall).toBeLessThan(twoDays.worstOverall)
+  })
+
   it('forgives a gap once the user checks in again', () => {
     const stillWorried = project(
       healthy,

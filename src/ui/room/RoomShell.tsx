@@ -13,6 +13,9 @@ import { predictionsAfter, resolvePrediction } from '../../domain/predictions'
 import { prescribe } from '../../domain/prescribe'
 import { addBlock, completeItem, deferItem, editItem, removeItem } from '../../domain/scheduleEdits'
 import { scheduleRecovery } from '../../domain/scheduleRecovery'
+import { stampSoftDeadlines } from '../../domain/softDeadlines'
+import { applyRest, planRest, type RestPlan } from '../../domain/restNow'
+import { RestPreview } from '../rest/RestPreview'
 import { overallReserve, project } from '../../engine'
 import type { Fix } from '../../optimizer'
 import { toDayInputs } from '../../optimizer'
@@ -53,6 +56,7 @@ import {
   toNotices,
   toRebalance,
   toReserves,
+  toRest,
   toSettings,
   toWeek,
 } from './view'
@@ -119,6 +123,14 @@ export function RoomShell({
    */
   const [proposal, setProposal] = useState<RebalanceOutcome | null>(null)
   /**
+   * The Rest button's answer, held rather than applied.
+   *
+   * Lives here for `proposal`'s reason: a plan is about a moment -- what was free at four
+   * o'clock, what one move could have opened -- and a moment cannot be reconstructed from an
+   * address. So `/rest` opened cold has nothing to show and corrects itself to the room.
+   */
+  const [restPlan, setRestPlan] = useState<RestPlan | null>(null)
+  /**
    * A proposal address with no proposal behind it -- a reload, a pasted link, a Back into a
    * discarded one -- corrects itself to the week.
    *
@@ -128,6 +140,8 @@ export function RoomShell({
    * asked for, on a week that may have moved on since the link was made.
    */
   const proposalIsStale = view.kind === 'rebalance' && proposal === null
+  /** Same rule, same reason: `/rest` reloaded has an address but no plan behind it. */
+  const restPlanIsStale = view.kind === 'rest' && restPlan === null
 
   /**
    * The block an edit address names, or null.
@@ -144,10 +158,15 @@ export function RoomShell({
   const editTargetIsGone = schedule !== null && view.kind === 'editBlock' && editing === null
 
   useEffect(() => {
+    if (restPlanIsStale) {
+      setView(ROOM)
+      return
+    }
+
     if (proposalIsStale || editTargetIsGone) setView(toWeek())
     // `setView` is rebuilt on every render, so listing it here would re-run this effect on
     // every render. Whether it should fire is decided entirely by the two flags above.
-  }, [proposalIsStale, editTargetIsGone]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [proposalIsStale, restPlanIsStale, editTargetIsGone]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Session-scoped dismissals for the four live cards, none of which has a domain-level
   // "not today" of its own any more. §7 retired the recovery card's permanent
@@ -223,9 +242,8 @@ export function RoomShell({
     )
   }
 
-  const week = schedule
   const now = new Date()
-  const today = todayIndex(week, now)
+  const today = todayIndex(schedule, now)
 
   // `todayIndex` returns `null` on purpose (see `calendar.ts`): an unanchored week has no
   // real day to be on, and a week whose fortnight has already elapsed is not "day 0" of a
@@ -245,6 +263,23 @@ export function RoomShell({
       </main>
     )
   }
+
+  /**
+   * The week every screen below here works from, with a deadline on every event.
+   *
+   * Stamped in one place, and this is the place: soft deadlines need `today` and the block
+   * log, and this is the component that already owns both. `useSchedule` has neither, and
+   * threading them into a storage hook to make it the owner would put a domain rule inside
+   * the thing whose only job is reading and writing.
+   *
+   * Derived rather than persisted on its own. What is written back is whatever a handler
+   * passes to `setSchedule`, which is this value -- so stamps reach storage on the next real
+   * change and a week saved before any of this existed is stamped the moment it is opened.
+   *
+   * Below the `today === null` guard because there is no honest deadline to derive without a
+   * day to count from.
+   */
+  const week = stampSoftDeadlines(schedule, today, blockLog)
 
   // Threaded alongside `today` from the same clock read -- see the comment above this
   // effect block: the clock enters here and nowhere deeper, so `checkIn.ts` takes it as a
@@ -313,7 +348,14 @@ export function RoomShell({
     setPlacementFix(
       first === undefined || wanted === undefined
         ? null
-        : fixThatMakesRoom(next, wanted, first.movedFrom ?? first.dayIndex, params),
+        : fixThatMakesRoom(
+            next,
+            // The three fields that question was always about, now said out loud rather
+            // than carried inside a whole `ParsedItem`.
+            { hours: wanted.hours, type: wanted.type, kind: wanted.kind },
+            first.movedFrom ?? first.dayIndex,
+            params,
+          ),
     )
   }
 
@@ -362,9 +404,35 @@ export function RoomShell({
     setView(toWeek())
   }
 
+  /**
+   * §5's Rest button.
+   *
+   * Computed and shown, never applied. `planRest` is pure and cheap -- it walks the day's
+   * gaps and, only when it has to, asks `smallestFixes` for one move -- so unlike the
+   * rebalance this needs no working state and no yielding to paint.
+   */
+  /* An arrow rather than a declaration, and not by taste: a hoisted `function` can be
+     called before the `today === null` guard above has run, so TypeScript will not narrow
+     `today` inside one. The narrowing is the guard doing its job. */
+  const onRest = () => {
+    setRestPlan(planRest(week, params, today, nowHour, blockLog))
+    setView(toRest())
+  }
+
+  const approveRest = () => {
+    if (restPlan !== null) setSchedule(applyRest(week, restPlan))
+    setRestPlan(null)
+    closeToRoom()
+  }
+
+  const discardRest = () => {
+    setRestPlan(null)
+    closeToRoom()
+  }
+
   // §3's card precedence: recovery, then a lapsed commitment, then a stuck task, then the
   // day's own question -- capped to one below the low-energy threshold and two otherwise.
-  const recoveryPrescription = prescribe(week)
+  const recoveryPrescription = prescribe(week, today, blockLog)
   const lapsedCommitments = lapsed(week, today, params, blockLog)
   const stuckItem = week.items.find(
     (item) => item.id !== stuckDismissedId && isStuck(item, Math.max(0, today - item.dayIndex)),
@@ -576,6 +644,17 @@ export function RoomShell({
             blockLog={blockLog}
           />
         </Sheet>
+      )}
+
+      {view.kind === 'rest' && restPlan !== null && (
+        <RestPreview
+          key="rest"
+          plan={restPlan}
+          today={today}
+          onApprove={approveRest}
+          onDiscard={discardRest}
+          onClose={discardRest}
+        />
       )}
 
       {view.kind === 'rebalance' && proposal !== null && (
@@ -802,6 +881,18 @@ export function RoomShell({
             gauge is exactly how `dial.spec.ts` failed at 320 and 390. */}
         <div className="pointer-events-none absolute inset-x-2 top-2 flex flex-wrap items-center gap-2 pr-14 [&>*]:pointer-events-auto">
           {settingsButton}
+          {/*
+            First in the row, and outside `!lowEnergy` -- both deliberate.
+
+            The row's own comment records that at 320px it is wider than the screen and
+            relies on `flex-wrap`, so position decides what survives on the first line.
+            And §1.5 strips this interface exactly when a student is flat, which is exactly
+            when stopping is the one thing worth reaching: withholding it here would remove
+            the control the reduced view exists to serve.
+          */}
+          <Button data-testid="open-rest" onClick={onRest}>
+            Rest
+          </Button>
           {!lowEnergy && (
             <Button variant="secondary" data-testid="open-week" onClick={() => setView(toWeek())}>
               The week

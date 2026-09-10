@@ -466,6 +466,18 @@ export const askUnavailableReply = (): Reply => ({
   text: 'I cannot price a request right now. The app can, on the request box screen.',
 })
 
+/**
+ * What to say when the evidence cannot be read.
+ *
+ * Its own line rather than reusing `askUnavailableReply`, which is about pricing a request
+ * and would be answering a question nobody asked. Advice now depends on what the student
+ * has confirmed they actually did, so with no block log there is no honest suggestion --
+ * and guessing at one is exactly the silent-default fault Ruling 41 records.
+ */
+export const restUnavailableReply = (): Reply => ({
+  text: 'I cannot tell what you have kept up with right now. The app can, in the room.',
+})
+
 export const photoTooBigReply = (): Reply => ({
   text: 'That image is larger than I can read. Send a smaller one, or type what is on it.',
 })

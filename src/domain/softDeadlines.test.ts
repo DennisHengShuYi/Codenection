@@ -225,27 +225,38 @@ describe('missedSoftDeadlines', () => {
     expect(missedSoftDeadlines(schedule, 0, [])).toEqual([])
   })
 
-  it('reports a block still sitting past its soft deadline', () => {
+  it('reports a block whose day went by without it happening', () => {
+    const schedule = stampSoftDeadlines(
+      week({ items: [item({ id: 'x', kind: 'errands', type: 'errands', dayIndex: 9 })] }),
+      0,
+      [],
+    )
+
+    const errand = missedSoftDeadlines(schedule, 12, []).find((miss) => miss.itemId === 'x')
+
+    expect(errand?.daysLate).toBe(12 - SOFT_DEADLINE_INTERVALS.errands)
+  })
+
+  it('does not report a block that is still ahead, however late it is scheduled', () => {
+    // A plan running late, not a failure. Reporting it meant the app went on saying "you
+    // have not rested in nine days" after the student had booked the rest.
     const schedule = stampSoftDeadlines(
       week({ items: [item({ id: 'x', kind: 'errands', type: 'errands', dayIndex: 20 })] }),
       0,
       [],
     )
 
-    const missed = missedSoftDeadlines(schedule, 12, [])
-    const errand = missed.find((miss) => miss.itemId === 'x')
-
-    expect(errand?.daysLate).toBe(12 - SOFT_DEADLINE_INTERVALS.errands)
+    expect(missedSoftDeadlines(schedule, 12, []).map((miss) => miss.itemId)).not.toContain('x')
   })
 
   it('does not report a block the student confirmed done', () => {
     const schedule = stampSoftDeadlines(
-      week({ items: [item({ id: 'x', kind: 'errands', type: 'errands', dayIndex: 2 })] }),
+      week({ items: [item({ id: 'x', kind: 'errands', type: 'errands', dayIndex: 9 })] }),
       0,
       [],
     )
 
-    const missed = missedSoftDeadlines(schedule, 12, [record({ blockId: 'x', dayIndex: 2 })])
+    const missed = missedSoftDeadlines(schedule, 12, [record({ blockId: 'x', dayIndex: 9 })])
 
     expect(missed.map((miss) => miss.itemId)).not.toContain('x')
   })

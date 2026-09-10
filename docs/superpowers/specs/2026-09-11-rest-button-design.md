@@ -283,3 +283,48 @@ behaviour unchanged.
   already; a planning gesture on `WeekScreen` is a separate feature.
 - Any second scheduler. All displacement stays with `smallestFixes`, per §16 and
   `placement.ts`'s own reasoning about two systems disagreeing.
+
+---
+
+# As built
+
+Two corrections, both found by tests. See the synthetic-deadlines spec's own "As built" for
+the rest.
+
+## Where the gate actually has teeth
+
+The amendment above claimed soft deadlines make the "worth it" gate live on every rung.
+Building it showed that is too strong.
+
+Rest dropped into a gap that was *already free* still costs nothing. `drain.ts` excludes
+`kind: 'rest'` from `isDraining` and `isSwitch`, and no soft deadline changes that — nothing
+of the student's moves, so nothing that was being kept up can start being missed.
+
+So the rungs divide like this:
+
+- **Rung 0** — the gate is the **daily recovery ceiling**, and that is the brake the feature
+  needed. Press Rest repeatedly and today fills to `DAILY_RECOVERY_CEILING`, after which the
+  ladder stops offering today and offers a later day instead.
+- **Rung 1** — the floor, the deficit-day count and the newly-missed-soft-deadline check all
+  bite, because a block of the student's is being moved to buy the rest.
+- **Rung 2** — the ceiling again, per day.
+
+## What the receipt quotes
+
+The design had the sentence quote `floorBefore → floorAfter`. Both candidates for that pair
+turned out to be pinned:
+
+- the fortnight's worst floor sits at the trough — social isolation three weeks out — which
+  rest on day three never reaches;
+- the lowest of the four types on the rest's own day is social almost everywhere, and
+  `kRest` barely touches social.
+
+`RestGain.dayBefore`/`dayAfter` quote `overallReserve` on the day the rest lands, which is
+the unit §1.2's dial already shows. The floor pair is kept as context.
+
+## The screen
+
+`RestPreview` has the four faces as designed. The secondary button reads "Not now" where
+there is something to take and "Close" on a refusal, and the primary button is **absent**
+rather than disabled on a refusal — a button that cannot do anything invites a press and
+then reads as the app being broken, rather than as an honest no.

@@ -316,3 +316,112 @@ not cover.
   precedent — everything due lapses together rather than working out which one tipped it,
   "blunt but honest: the model knows the fortnight does not fit, and it does not know which
   one ask is to blame."
+
+---
+
+# As built
+
+Four things in the design above were wrong, and the tests found them. Recorded here rather
+than edited into the body, so the reasoning that produced the wrong answer stays visible
+next to the one that replaced it.
+
+## The neglect cap is 3, not 14, and the budget test caught it
+
+The design set `MAX_NEGLECT` at a fortnight, reasoning that a fortnight is the horizon so a
+fortnight of neglect is as bad as the model can claim to tell.
+
+The new budget test — the one for a fortnight where *nothing* is dated, which is the shape
+`hillClimb`'s own budget test never exercises — failed at **4,769 evaluations against a
+3,000 bound**. That is the same order as the **4,326** `deadlinePressure`'s comment records
+for §20's first attempt, and it is the same fault: my term was sparse in *buffer* but
+saturated too slowly, so every late item still offered the climber a fractional improvement
+and it ground on chasing them.
+
+The fix is the codebase's own argument applied to the other side of the line. "Due tomorrow"
+and "due in a week" differ in kind while "due in five days" and "due in six" do not — and
+equally, one day late and two days late differ in kind while nine days late and ten do not.
+
+`MAX_NEGLECT` is 3 and `NEGLECT_PRESSURE_WEIGHT` is 0.005, set together so the worst
+per-item charge lands beside `DEADLINE_PRESSURE_WEIGHT`'s. Nothing is lost to the student:
+`missedSoftDeadlines` still reports the true `daysLate`, which is what they actually see.
+
+An earlier attempt at the weight alone (0.006 at a cap of 14) let a single neglected item
+cost more than a deficit day. That was caught by the test asserting neglect never outweighs
+the floor — which also turned out to be a bad test, because a 10-hour study block barely
+moves a 21-day floor. It now compares against a week with two hours less sleep a night,
+which genuinely lowers it.
+
+## A rhythm still ahead is a plan, not a miss
+
+The design said `missedSoftDeadlines` reports "an item whose `softDeadlineDay` is behind
+`today` and which the block log does not record as done".
+
+That reported a rest block booked for Friday as nine days overdue, because rest's first
+deadline falls on day zero and the block is not confirmed yet. The app would go on saying
+"you have not stopped in nine days" *after* the student had booked the rest — which is the
+app not listening, and precisely what routing prescriptions through this was meant to end.
+A failing low-energy test surfaced it: the recovery card started outranking the stuck card
+on a fixture that had nothing to do with either.
+
+A miss is now a block whose **day has gone by** unconfirmed, or a rhythm with nothing
+upcoming at all. A block still ahead of today is never a miss however late it is scheduled.
+
+The objective is unaffected and deliberately so. `neglectPressure` still charges a block
+scheduled past its soft deadline, which is what pulls it earlier — the lateness is real, it
+just is not something to tell somebody off about.
+
+## Rhythms date from the fortnight, and successive ones are spaced
+
+Two details the design left implicit, both forced by working the cases:
+
+- With nothing ever confirmed the clock starts at **-1** — one day before day zero — so the
+  first occurrence is due after exactly one interval. Anchoring "never done" at *today*
+  instead is the tempting version and it is broken: the deadline would be re-derived on
+  every load and walk forward with the calendar, so a rhythm could never become overdue at
+  all.
+- Successive occurrences of one rhythm are ranked by day and spaced one interval apart, so
+  three rest blocks do not all inherit the same due day and all read as late.
+
+## What the receipt quotes
+
+The design said the lift is measured on the worst floor across types, arguing from
+`RequestCost.floorBefore`'s own reasoning. That was wrong twice over, and the same test
+caught both.
+
+- **The fortnight's floor does not move.** It sits at the trough, which for a rested student
+  is social isolation three weeks out; three hours of rest on day three does not reach it.
+  This is exactly the trap `RequestCost` documents about its own floor — met again from the
+  other direction.
+- **Neither does the lowest of the four types on the rest's own day.** That minimum is
+  social almost everywhere, and `kRest` barely touches social.
+
+`RestGain.dayBefore`/`dayAfter` quote `overallReserve` on the day the rest lands — the same
+units §1.2's dial already shows, so it is also the number the student has learned to read.
+The floor pair is kept as context and is frequently unchanged, which the field's own comment
+now says.
+
+## Where the Rest gate actually has teeth
+
+The design claimed soft deadlines make the "worth it" gate live on every rung. Building it
+showed that is not true, and the honest version is narrower.
+
+Rest dropped into a gap that was *already free* still costs nothing — `drain.ts` excludes it
+from `isDraining` and `isSwitch`, and nothing about a soft deadline changes that. No block of
+the student's moves, so no soft deadline can newly be missed.
+
+So on rung 0 the gate is the **recovery ceiling**, and that is the real brake: press Rest
+repeatedly and the day fills to `DAILY_RECOVERY_CEILING`, after which the ladder offers a
+later day instead of stacking more onto today. The floor, deficit-day and newly-missed-soft-
+deadline gates have teeth on rung 1, where something of the student's does move.
+
+## Smaller things
+
+- `USEFUL_REST_HOURS` is exported from `src/engine` rather than copied. Three places carried
+  their own `3` with a comment saying it was this one.
+- `fixThatMakesRoom` takes a `SlotNeed`, as designed. Its `deadlineDay` argument turned out
+  never to have been read at all.
+- Telegram needed a reply of its own for "the block log could not be read". Reusing
+  `askUnavailableReply` would have answered a question about pricing a request that nobody
+  asked.
+- `RoomShell` is where the stamping happens, because it is the one place that already owns
+  both `today` and the block log.

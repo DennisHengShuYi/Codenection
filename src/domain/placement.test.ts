@@ -4,7 +4,7 @@ import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
 import { DEFAULT_PARAMS } from '../engine'
 import { describePlacement, fixThatMakesRoom, placeItems } from './placement'
-import { slotOn } from './slotFinder'
+import { slotOn, type SlotNeed } from './slotFinder'
 
 const empty = (): Schedule => ({
   items: [],
@@ -205,12 +205,24 @@ describe('describePlacement', () => {
  * nothing about the thing the student had just been told did not fit.
  */
 describe('fixThatMakesRoom', () => {
-  const parsedNeed = (over: Partial<ParsedItem> = {}) => parsed({ hours: 4, ...over })
+  /**
+   * The three fields this function was ever reading, said directly.
+   *
+   * It used to take a whole `ParsedItem` and use `hours`, `type` and `kind` from it, so
+   * every caller had to have a parse in hand -- or fake one -- to ask a question about
+   * three numbers. `deadlineDay` in particular was never read here at all.
+   */
+  const need = (over: Partial<SlotNeed> = {}): SlotNeed => ({
+    hours: 4,
+    type: 'mental',
+    kind: 'studyBlock',
+    ...over,
+  })
 
   it('has nothing to offer when the week has nothing movable', () => {
     const walled = { ...empty(), items: [fullDay(3)] }
 
-    expect(fixThatMakesRoom(walled, parsedNeed({ deadlineDay: 3 }), 3, DEFAULT_PARAMS)).toBeNull()
+    expect(fixThatMakesRoom(walled, need(), 3, DEFAULT_PARAMS)).toBeNull()
   })
 
   /**
@@ -232,7 +244,7 @@ describe('fixThatMakesRoom', () => {
       ],
     }
 
-    const fix = fixThatMakesRoom(crowded, parsedNeed({ deadlineDay: 3 }), 3, DEFAULT_PARAMS)
+    const fix = fixThatMakesRoom(crowded, need(), 3, DEFAULT_PARAMS)
 
     if (fix !== null) {
       expect(slotOn(fix.move.apply(crowded), 3, { hours: 4, type: 'mental', kind: 'studyBlock' })).not.toBeNull()
@@ -243,7 +255,7 @@ describe('fixThatMakesRoom', () => {
     const crowded = { ...empty(), items: [{ ...fullDay(3), fixed: false, deadlineDay: 12 }] }
     const snapshot = JSON.stringify(crowded)
 
-    fixThatMakesRoom(crowded, parsedNeed({ deadlineDay: 3 }), 3, DEFAULT_PARAMS)
+    fixThatMakesRoom(crowded, need(), 3, DEFAULT_PARAMS)
 
     expect(JSON.stringify(crowded)).toBe(snapshot)
   })

@@ -62,11 +62,24 @@ export type View =
    *  preview notice, the room in words, the accuracy line and the live cards -- behind one
    *  button, so the room is the drawing again. */
   | { readonly kind: 'notices' }
+  /**
+   * The Rest button's answer, held rather than applied.
+   *
+   * A door rather than a card, for `rebalance`'s reason: it is a decision with two answers,
+   * and a student who presses Rest and then wanders off must not come back to a week that
+   * quietly changed. Top level rather than under the week, because it is pressed from the
+   * room -- often by somebody who has not opened their fortnight at all.
+   *
+   * Carries no state of its own. The plan lives in `RoomShell`: it is about a moment, and a
+   * moment cannot be reconstructed from an address.
+   */
+  | { readonly kind: 'rest' }
 
 export const ROOM: View = { kind: 'room' }
 // Not exported: `toWeek()` and `back()` are the module's whole surface for it.
 const WEEK: View = { kind: 'week' }
 const REBALANCE: View = { kind: 'rebalance' }
+const REST: View = { kind: 'rest' }
 
 export const toWeek = (): View => WEEK
 
@@ -79,6 +92,8 @@ export const toSettings = (): View => ({ kind: 'settings' })
 export const toReserves = (): View => ({ kind: 'reserves' })
 
 export const toRebalance = (): View => REBALANCE
+
+export const toRest = (): View => REST
 
 export const toEditBlock = (itemId: string): View => ({ kind: 'editBlock', itemId })
 
@@ -139,6 +154,8 @@ export const toPath = (view: View): string => {
       return `/week/new/${view.dayIndex}`
     case 'notices':
       return '/notices'
+    case 'rest':
+      return '/rest'
   }
 }
 
@@ -193,6 +210,8 @@ export const fromPath = (path: string): View => {
   if (first === 'reserves' && parts.length === 1) return toReserves()
 
   if (first === 'notices' && parts.length === 1) return toNotices()
+
+  if (first === 'rest' && parts.length === 1) return REST
 
   if (first === 'add') {
     if (parts.length === 1) return toAdd()

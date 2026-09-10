@@ -1,11 +1,9 @@
-import { LOAD_TYPES, type ActivityKind, type LoadType, type Reserves } from '../engine'
+import type { ActivityKind, LoadType } from '../engine'
 import type { Schedule } from '../optimizer'
 import { blocksOnDay } from './dayBlocks'
 import { DAY_END_HOUR, gapsOn, MIN_GAP_HOURS, WAKE_HOUR, type FreeSlot } from './slotFinder'
-
-/** Below the comfortable band, but above §1.5's low-energy threshold of 20 -- so advice
- *  arrives before the reduced view takes over, rather than after. */
-const PRESCRIBE_BELOW = 40
+import type { BlockRecord } from './blockLog'
+import { missedSoftDeadlines } from './softDeadlines'
 
 /** `USEFUL_REST_HOURS`. Past this the engine credits nothing, so a longer suggestion would
  *  promise recovery the model refuses to pay out. */
@@ -39,15 +37,18 @@ export type { FreeSlot }
 /**
  * §5.2's matching, stated once.
  *
- * Social low prescribes a person, physical low prescribes movement, mental low prescribes
- * actual downtime -- explicitly not a different screen. The engine already refuses to let
- * sleep cure loneliness; this is that same conviction pointed at the advice rather than the
- * maths.
+ * Neglected company prescribes a person, neglected movement prescribes a walk, neglected
+ * downtime prescribes actual downtime -- explicitly not a different screen. The engine
+ * already refuses to let sleep cure loneliness; this is that same conviction pointed at the
+ * advice rather than the maths.
  *
- * Errands is absent on purpose. A depleted errands reserve is already answered by the room's
+ * Keyed by `LoadType` rather than by kind, so a miss of any sort maps to the one thing worth
+ * saying about the reserve behind it.
+ *
+ * Errands is absent on purpose. A backlog of chores is already answered by the room's
  * clutter boxes, which let a student clear one and see it leave the week -- and telling
  * somebody who is flat to do a chore is advice nobody follows. Its absence must not suppress
- * advice for whichever reserve is next lowest -- see `prescribe`.
+ * advice for whatever is next most neglected -- see `prescribe`.
  */
 const ADVICE: Partial<Record<LoadType, { kind: ActivityKind; title: string }>> = {
   social: { kind: 'socialRestorative', title: 'Message someone you like and see them' },
@@ -82,37 +83,50 @@ export function freeSlotOn(schedule: Schedule, dayIndex: number): FreeSlot | nul
   return gapsOn(schedule, dayIndex)[0] ?? null
 }
 
-const sortedByReserve = (reserves: Reserves): readonly LoadType[] =>
-  [...LOAD_TYPES].sort((a, b) => reserves[a] - reserves[b])
-
 /**
- * One thing to do, matched to what is actually empty.
+ * One thing to do, matched to what is actually being neglected.
  *
  * Returns a single prescription or nothing at all -- never a list. §5.2 is blunt that a
  * depleted person cannot choose from a menu and that every extra option lowers the odds of
  * any action, so the shape of this return type is the feature rather than a convention.
  *
- * Only day 0 is considered, because the engine is pure and has no calendar -- day 0 is "now"
- * everywhere else in the model too. A student whose today is full gets no suggestion even if
- * tomorrow is open; widening that would mean inventing a notion of "soon" the model does not
- * have.
+ * **What is neglected comes from `missedSoftDeadlines` now, not from reserve levels.** The
+ * two answer the same question, and letting both answer it made the app repeat itself:
+ * "your social reserve is low" and "you have not seen anyone in nine days" are one piece of
+ * news, and a student who gets it twice on one day reads an app that is not listening to
+ * itself. Soft deadlines are the source; this reads them.
+ *
+ * That also fixes a quieter fault. A reserve threshold only fires once the damage is already
+ * measurable, and a rhythm can be neglected for a fortnight while the reserve it feeds is
+ * held up by something else -- which is exactly the case §5.1's structural argument is about.
+ *
+ * `today` and `blockLog` are REQUIRED, not defaulted, and that is `priceRequest`'s lesson
+ * rather than a style preference: defaults there are "precisely what let the Telegram `/ask`
+ * call site be silently wrong for as long as it existed". A caller with no evidence says so
+ * in writing, where a reviewer can see it.
  *
  * Takes no memory of what was tried before. §7 replaced the permanent failed-recovery log
  * with a same-day dismissal the room screen holds itself: "not today" is a way out, not a
  * verdict on the advice, and this function has nothing to say about what happens tomorrow.
  */
-export function prescribe(schedule: Schedule): Prescription | null {
-  // Sorted ascending so the emptiest reserve with no advice of its own (errands) never
-  // silently suppresses advice for whichever reserve is next lowest.
-  const type = sortedByReserve(schedule.start).find(
-    (candidate) => schedule.start[candidate] < PRESCRIBE_BELOW && ADVICE[candidate] !== undefined,
+export function prescribe(
+  schedule: Schedule,
+  today: number,
+  blockLog: readonly BlockRecord[],
+): Prescription | null {
+  // Already sorted most-neglected-first. `find` rather than `[0]` so the worst miss having
+  // no advice of its own -- errands, deliberately -- never silently suppresses advice for
+  // whatever is next. That was a real defect under the old reserve ordering and it would
+  // have survived the change unexamined.
+  const miss = missedSoftDeadlines(schedule, today, blockLog).find(
+    (candidate) => ADVICE[candidate.type] !== undefined,
   )
-  if (!type) return null
+  if (!miss) return null
 
-  const advice = ADVICE[type]
+  const advice = ADVICE[miss.type]
   if (!advice) return null
 
-  const slot = freeSlotOn(schedule, 0)
+  const slot = freeSlotOn(schedule, today)
   if (!slot) return null
 
   const hours = Math.min(slot.hours, MAX_BLOCK_HOURS)
@@ -120,11 +134,11 @@ export function prescribe(schedule: Schedule): Prescription | null {
 
   return {
     id: `prescription-${advice.kind}`,
-    type,
+    type: miss.type,
     kind: advice.kind,
     title: advice.title,
     hours: Math.round(hours * 2) / 2,
-    dayIndex: 0,
+    dayIndex: today,
     startHour: slot.startHour,
   }
 }

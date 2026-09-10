@@ -213,6 +213,13 @@ const ABSENT: Record<string, { title: string; type: LoadType }> = {
  * on.
  *
  * A confirmed block is never a miss, however late it sits. It happened.
+ *
+ * Neither is a block still in the future, even one scheduled well past its own soft
+ * deadline. That is a plan running late, not a failure, and reporting it as one meant the
+ * app went on telling a student they had not rested in nine days *after* they had booked
+ * the rest — which is the app not listening. The objective still charges lateness on those
+ * through `neglectPressure`, which is the right place for it: that pulls the block earlier
+ * without anybody being told off.
  */
 export function missedSoftDeadlines(
   schedule: Schedule,
@@ -226,6 +233,8 @@ export function missedSoftDeadlines(
   for (const item of schedule.items) {
     if (confirmed.has(item.id)) continue
     if (item.softDeadlineDay === undefined) continue
+    // Still ahead: a plan, not a failure. See the note above.
+    if (item.dayIndex >= today) continue
 
     const daysLate = today - item.softDeadlineDay
     if (daysLate <= 0) continue

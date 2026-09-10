@@ -1,5 +1,6 @@
 import type { EngineParams } from '../engine'
 import { DAY_END_HOUR, isWork, overlaps, type Schedule, type ScheduledItem } from '../optimizer'
+import { DAILY_RECOVERY_CEILING, restHoursOn } from './recoveryCeiling'
 
 /**
  * What a hand-placed block clashes with, said to the student rather than to the solver.
@@ -65,6 +66,20 @@ export function editWarnings({
   const dayHours = others
     .filter((candidate) => candidate.dayIndex === item.dayIndex && isWork(candidate))
     .reduce((total, candidate) => total + candidate.hours, isWork(item) ? item.hours : 0)
+
+  // §5.1's ceiling, enforced where a student can still change their mind rather than as a
+  // constraint. `violations` deliberately says nothing about this: rest is fixed AND
+  // protected, so an over-rested day is a violation no move the solver can generate would
+  // ever repair, and the week would stay marked broken for good. See `recoveryCeiling`.
+  if (item.kind === 'rest') {
+    const dayRest = restHoursOn(schedule, item.dayIndex, item.id) + item.hours
+
+    if (dayRest > DAILY_RECOVERY_CEILING) {
+      found.push(
+        `That day would come to ${round(dayRest)} hours of recovery, past the ${round(DAILY_RECOVERY_CEILING)} a day can hold.`,
+      )
+    }
+  }
 
   if (dayHours > params.dailyHoursCap) {
     found.push(

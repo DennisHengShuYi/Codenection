@@ -4,7 +4,7 @@ import type { EngineParams } from '../engine'
 import { smallestFixes, type Fix, type Schedule, type ScheduledItem } from '../optimizer'
 import { dateFor } from './calendar'
 import { expandRecurring } from './recurrence'
-import { gapsOn, slotOn } from './slotFinder'
+import { gapsOn, slotOn, type SlotNeed } from './slotFinder'
 
 /**
  * Where an undated item goes when nothing says otherwise, counted from today.
@@ -200,12 +200,18 @@ const FIXES_TO_CONSIDER = 8
  */
 export function fixThatMakesRoom(
   schedule: Schedule,
-  item: ParsedItem,
+  /**
+   * What is being fitted, in the only terms this needs.
+   *
+   * A `SlotNeed` rather than a `ParsedItem`: only `hours`, `type` and `kind` were ever read,
+   * and narrowing it lets the Rest button reuse this untouched -- rest is not a parse, and
+   * building a fake `ParsedItem` to ask a question about three fields would have been the
+   * kind of shim that outlives its excuse.
+   */
+  need: SlotNeed,
   dayIndex: number,
   params: EngineParams,
 ): Fix | null {
-  const need = { hours: item.hours, type: item.type, kind: item.kind }
-
   return (
     smallestFixes(schedule, params, FIXES_TO_CONSIDER).find(
       (fix) => slotOn(fix.move.apply(schedule), dayIndex, need) !== null,

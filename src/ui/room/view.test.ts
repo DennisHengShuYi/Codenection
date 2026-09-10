@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { ROOM, back, toAdd, toBlock, toReserves, toSettings, toWeek, type View } from './view'
+import {
+  ROOM,
+  back,
+  toAdd,
+  toBlock,
+  toEditBlock,
+  toNewBlock,
+  toRebalance,
+  toReserves,
+  toSettings,
+  toWeek,
+  type View,
+} from './view'
 
 describe('the view', () => {
   it('starts in the room', () => {
@@ -63,12 +75,26 @@ describe('the view', () => {
     }
   })
 
-  it('never carries an item id except when on a block', () => {
-    expect('itemId' in ROOM).toBe(false)
-    expect('itemId' in toWeek()).toBe(false)
-    expect('itemId' in toAdd()).toBe(false)
-    expect('itemId' in toSettings()).toBe(false)
-    expect('itemId' in toBlock('essay')).toBe(true)
+  /**
+   * Was "never carries an item id except when on a block", which stopped being true when
+   * the edit form got an address of its own -- it is a view about one block and has to say
+   * which. Rewritten rather than deleted: the invariant is still worth holding, it just has
+   * two members on one side now instead of one.
+   */
+  it('carries an item id only where an item is what it is about', () => {
+    const aboutAnItem: View[] = [toBlock('essay'), toEditBlock('essay')]
+    const aboutSomethingElse: View[] = [
+      ROOM,
+      toWeek(),
+      toRebalance(),
+      toNewBlock(0),
+      toAdd(),
+      toSettings(),
+      toReserves(),
+    ]
+
+    for (const view of aboutAnItem) expect('itemId' in view).toBe(true)
+    for (const view of aboutSomethingElse) expect('itemId' in view).toBe(false)
   })
   /**
    * Ruling 59: the five-bar breakdown moved off the week screen and behind the room's own
@@ -93,5 +119,26 @@ describe('the view', () => {
 
   it('comes back to the room from the chooser itself', () => {
     expect(back(toAdd())).toEqual(ROOM)
+  })
+})
+
+/**
+ * Ruling 60 applied to the three doors this feature adds.
+ *
+ * A proposal and a new block were both opened from the week, so up is the week. The edit
+ * form was opened from the block it edits, so up is that block -- not the week, which would
+ * skip a level and make Back and the close control mean the same thing again.
+ */
+describe('one level up from the new doors', () => {
+  it('takes a proposal back to the week it is about', () => {
+    expect(back(toRebalance())).toEqual(toWeek())
+  })
+
+  it('takes an edit form back to the block it was opened from', () => {
+    expect(back(toEditBlock('essay'))).toEqual(toBlock('essay'))
+  })
+
+  it('takes a new block back to the week it is being added to', () => {
+    expect(back(toNewBlock(4))).toEqual(toWeek())
   })
 })

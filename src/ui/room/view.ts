@@ -1,3 +1,5 @@
+import { HORIZON_DAYS } from '../../engine'
+
 /**
  * Where the student is, as one value.
  *
@@ -33,10 +35,26 @@ export type View =
    *  screen. Two capacity readings on one screen was the fault Ruling 53 fixed; this keeps
    *  them one behind the other instead. */
   | { readonly kind: 'reserves' }
+  /**
+   * The reshuffle, held rather than applied.
+   *
+   * A door rather than a panel on the week: it is a decision with two answers, and a student
+   * who taps Rebalance and then wanders off must not come back to a week that quietly
+   * changed under them. Carries no state of its own -- the proposal itself lives in
+   * `RoomShell`, because a solve is about a moment and cannot be reconstructed from an
+   * address.
+   */
+  | { readonly kind: 'rebalance' }
+  /** One block's own fields, under the block it is about. */
+  | { readonly kind: 'editBlock'; readonly itemId: string }
+  /** A block being added to a named day, which is why the day is in the address: the form
+   *  is opened FROM a day the student was already looking at. */
+  | { readonly kind: 'newBlock'; readonly dayIndex: number }
 
 export const ROOM: View = { kind: 'room' }
 // Not exported: `toWeek()` and `back()` are the module's whole surface for it.
 const WEEK: View = { kind: 'week' }
+const REBALANCE: View = { kind: 'rebalance' }
 
 export const toWeek = (): View => WEEK
 
@@ -47,6 +65,12 @@ export const toAdd = (way: AddWay | null = null): View => ({ kind: 'add', way })
 export const toSettings = (): View => ({ kind: 'settings' })
 
 export const toReserves = (): View => ({ kind: 'reserves' })
+
+export const toRebalance = (): View => REBALANCE
+
+export const toEditBlock = (itemId: string): View => ({ kind: 'editBlock', itemId })
+
+export const toNewBlock = (dayIndex: number): View => ({ kind: 'newBlock', dayIndex })
 
 /**
  * One level up: the Back button's rule (Ruling 60).
@@ -60,6 +84,10 @@ export const toReserves = (): View => ({ kind: 'reserves' })
  */
 export const back = (view: View): View => {
   if (view.kind === 'block') return WEEK
+  // Not the week: the form was opened from the block it edits, and skipping that level
+  // would make Back and the close control mean the same thing again.
+  if (view.kind === 'editBlock') return toBlock(view.itemId)
+  if (view.kind === 'rebalance' || view.kind === 'newBlock') return WEEK
   if (view.kind === 'add' && view.way !== null) return toAdd()
   return ROOM
 }
@@ -90,6 +118,12 @@ export const toPath = (view: View): string => {
       return '/settings'
     case 'reserves':
       return '/reserves'
+    case 'rebalance':
+      return '/week/rebalance'
+    case 'editBlock':
+      return `/week/block/${encodeURIComponent(view.itemId)}/edit`
+    case 'newBlock':
+      return `/week/new/${view.dayIndex}`
   }
 }
 
@@ -115,9 +149,27 @@ export const fromPath = (path: string): View => {
 
   if (first === 'week') {
     if (parts.length === 1) return WEEK
-    if (parts.length === 3 && second === 'block' && third !== undefined) {
-      return toBlock(decodeURIComponent(third))
+    if (parts.length === 2 && second === 'rebalance') return REBALANCE
+
+    if (second === 'block' && third !== undefined) {
+      if (parts.length === 3) return toBlock(decodeURIComponent(third))
+      if (parts.length === 4 && parts[3] === 'edit') return toEditBlock(decodeURIComponent(third))
     }
+
+    /*
+     * Bounds-checked rather than trusted. Every other segment in this address space is a
+     * fixed word or an opaque id, and this is the one a person can plausibly edit by hand
+     * into something meaningless -- a form opened onto day 99 would draw a picker over a day
+     * that does not exist. Compared back as a string as well, so `08` and `1e1` do not read
+     * as days whose canonical address is spelt differently.
+     */
+    if (parts.length === 3 && second === 'new' && third !== undefined) {
+      const dayIndex = Number(third)
+      const real = third === String(dayIndex) && dayIndex >= 0 && dayIndex < HORIZON_DAYS
+
+      return real ? toNewBlock(dayIndex) : ROOM
+    }
+
     return ROOM
   }
 

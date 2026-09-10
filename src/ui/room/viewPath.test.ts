@@ -5,7 +5,10 @@ import {
   isAscent,
   toAdd,
   toBlock,
+  toEditBlock,
+  toNewBlock,
   toPath,
+  toRebalance,
   toReserves,
   toSettings,
   toWeek,
@@ -25,6 +28,9 @@ const TABLE: readonly { readonly path: string; readonly view: View }[] = [
   { path: '/', view: ROOM },
   { path: '/week', view: toWeek() },
   { path: '/week/block/essay', view: toBlock('essay') },
+  { path: '/week/rebalance', view: toRebalance() },
+  { path: '/week/block/essay/edit', view: toEditBlock('essay') },
+  { path: '/week/new/3', view: toNewBlock(3) },
   { path: '/settings', view: toSettings() },
   { path: '/reserves', view: toReserves() },
   { path: '/add', view: toAdd() },
@@ -124,5 +130,42 @@ describe('ascending', () => {
   it('compares whole segments rather than string prefixes', () => {
     expect(isAscent({ kind: 'week' }, { kind: 'room' })).toBe(true)
     expect(fromPath('/weekend')).toEqual(ROOM)
+  })
+})
+
+/**
+ * The day index in `/week/new/<day>` is the one number in the whole address space a person
+ * can type, so it is the one that has to be checked rather than trusted -- a form opened
+ * onto day 99 would render a picker over a day that does not exist.
+ */
+describe('addresses that name nothing real', () => {
+  it('reads a day outside the fortnight as the room', () => {
+    expect(fromPath('/week/new/99')).toEqual(ROOM)
+  })
+
+  it('reads a day that is not a number as the room', () => {
+    expect(fromPath('/week/new/tuesday')).toEqual(ROOM)
+  })
+
+  it('reads a negative day as the room', () => {
+    expect(fromPath('/week/new/-1')).toEqual(ROOM)
+  })
+
+  it('reads an unknown fourth segment under a block as the room', () => {
+    expect(fromPath('/week/block/essay/delete')).toEqual(ROOM)
+  })
+})
+
+describe('ascending out of the new doors', () => {
+  it('is true when closing a proposal back to the week', () => {
+    expect(isAscent(toRebalance(), toWeek())).toBe(true)
+  })
+
+  it('is true when closing an edit form back to its block', () => {
+    expect(isAscent(toEditBlock('essay'), toBlock('essay'))).toBe(true)
+  })
+
+  it('is false when opening an edit form from a block', () => {
+    expect(isAscent(toBlock('essay'), toEditBlock('essay'))).toBe(false)
   })
 })

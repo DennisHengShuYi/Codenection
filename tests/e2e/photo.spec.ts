@@ -13,11 +13,16 @@ import { expect, test, type Page } from '@playwright/test'
  */
 const JPEG_HEADER = Buffer.from([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x43, 0x00, 0x08])
 
+/**
+ * §6's `+` sheet is the one way in now: the room is display only, so photo import is
+ * reached through `Add something` and then "Photograph something", not through a tap on
+ * the desk.
+ */
 async function openPhoto(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: /look around/i }).click()
-  await page.getByTestId('object-desk').click()
-  await page.getByTestId('desk-photograph').click()
+  await page.getByTestId('open-add').click()
+  await page.getByTestId('add-photo').click()
 }
 
 async function choosePhoto(page: Page) {

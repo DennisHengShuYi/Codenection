@@ -21,6 +21,11 @@ async function openApp(page: Page, path = '/') {
  * The dial's own rendering, its five bars and its behaviour across the four supported
  * widths moved to dial.spec.ts when those elements moved into components. What stays
  * here is what is specifically about the *model* running in a browser.
+ *
+ * Neither the dial nor the rebalancer is behind a tap on the furniture any more. §1.1 puts
+ * the dial on the room screen with "no tap required", and §3 moved the rebalancer onto the
+ * week screen, which the room's own `The week` button opens. The room itself is display
+ * only, so nothing here clicks an object.
  */
 
 // §1.5: a full text equivalent of every dial value, treated as a primary view rather
@@ -29,8 +34,6 @@ async function openApp(page: Page, path = '/') {
 test('states the numbers in words for a screen reader', async ({ page }) => {
   await openApp(page)
 
-  // The dial and its spoken summary live behind the light now.
-  await page.getByTestId('object-light').click()
   const summary = page.getByTestId('reserve-text-equivalent')
   await expect(summary).toHaveText(/capacity/i)
   await expect(summary).toHaveText(/\d/)
@@ -41,7 +44,6 @@ test('states the numbers in words for a screen reader', async ({ page }) => {
 test('says whether the fortnight crosses into deficit', async ({ page }) => {
   await openApp(page)
 
-  await page.getByTestId('object-light').click()
   await expect(page.getByTestId('reserve-text-equivalent')).toHaveText(/deficit/i)
 })
 
@@ -49,7 +51,7 @@ test('says whether the fortnight crosses into deficit', async ({ page }) => {
 test('runs the rebalancer in the browser and reports what it changed', async ({ page }) => {
   await openApp(page)
 
-  await page.getByTestId('object-ceiling').click()
+  await page.getByTestId('open-week').click()
   await page.getByTestId('rebalance').click()
 
   const report = page.getByTestId('rebalance-report')

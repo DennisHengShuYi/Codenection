@@ -20,9 +20,22 @@ export default defineConfig({
   // cold-start timing; locally, a failure is a failure.
   retries: process.env.CI ? 1 : 0,
 
-  // Serial in CI: the runner has two cores, and parallel workers on a cold browser make
-  // timing-sensitive assertions flaky for no wall-clock gain at this size.
-  workers: process.env.CI ? 1 : undefined,
+  // Serial everywhere, not only in CI.
+  //
+  // This was `process.env.CI ? 1 : undefined`, and the undefined half was a real defect
+  // rather than a local convenience: Playwright's default is half the machine's cores, so
+  // on a twelve-core laptop six browser workers hammer one `vite preview` at once and the
+  // suite fails differently on every run -- `page.goto` timeouts and
+  // `net::ERR_ABORTED; maybe frame was detached`, scattered across whichever specs happened
+  // to collide. Measured on this tree: six workers failed 16 of 49 tests on one run and a
+  // different 16 on the next; one worker passes all 49 in 24s, two in 16s.
+  //
+  // The reason given for the CI value was always general -- "parallel workers on a cold
+  // browser make timing-sensitive assertions flaky for no wall-clock gain at this size" --
+  // and eight seconds is exactly the size of that gain. A suite that fails at random is
+  // worse than no suite, because it teaches everyone to re-run the job instead of reading
+  // it, which is precisely how this one stayed red for 50+ commits without anyone noticing.
+  workers: 1,
 
   reporter: process.env.CI ? [['html', { open: 'never' }], ['list']] : [['list']],
 

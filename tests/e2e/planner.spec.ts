@@ -8,11 +8,15 @@ import { expect, test, type Page } from '@playwright/test'
  * rather than a limitation: the one feature a student cannot do without must not depend on
  * a model being reachable.
  */
+/**
+ * §6's `+` sheet is the one way in now: the room is display only, so the planner is
+ * reached through `Add something` and then "Type it out", not through a tap on the desk.
+ */
 async function openPlanner(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: /look around/i }).click()
-  await page.getByTestId('object-desk').click()
-  await page.getByTestId('desk-type').click()
+  await page.getByTestId('open-add').click()
+  await page.getByTestId('add-type').click()
 }
 
 test('turns a brain dump into a week', async ({ page }) => {

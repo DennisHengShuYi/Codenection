@@ -19,6 +19,10 @@
   /* Replaces every opacity-70. Opacity fades the background through the text and cannot
      be themed; a colour can be both. */
   --color-ink-soft: #6b635a;
+  /* Text sitting on a coloured surface -- a load-type block, `Button`'s primary fill --
+     rather than the raw `text-white` those surfaces used to reach for. White reads on all
+     four load hues and on `--color-ink`, so one token covers every case so far. */
+  --color-on-color: #ffffff;
 
   /* The accents, and nothing else. */
   --color-attention: #f59e0b; /* needs you: stuck, lapsed, deficit, unconfirmed */

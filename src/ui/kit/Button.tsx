@@ -24,6 +24,16 @@ const SIZES: Record<ButtonSize, string> = {
   sm: 'min-h-11 px-3 py-2 text-sm',
 }
 
+/**
+ * The class list `Button` renders, exported so a control that genuinely cannot be a
+ * `<button>` -- a navigation `<a>`, which a real `<button>` would break for middle-click
+ * and open-in-new-tab -- can still look identical instead of retyping this string an
+ * eighteenth time. `LinkTelegram`'s "Open Telegram" link uses this.
+ */
+export function buttonClassName(variant: ButtonVariant = 'primary', size: ButtonSize = 'lg', className = ''): string {
+  return `inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60 motion-reduce:transition-none ${VARIANTS[variant]} ${SIZES[size]} ${className}`
+}
+
 export function Button({
   variant = 'primary',
   size = 'lg',
@@ -42,7 +52,7 @@ export function Button({
       type={type}
       data-variant={variant}
       data-size={size}
-      className={`inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60 motion-reduce:transition-none ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
+      className={buttonClassName(variant, size, className)}
     />
   )
 }

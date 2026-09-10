@@ -6,6 +6,9 @@ import {
   askReply,
   blockAnsweredReply,
   blocksReply,
+  lapsedReply,
+  rebalanceReply,
+  weekReply,
   helpReply,
   microStartReply,
   needRequestReply,
@@ -143,7 +146,17 @@ describe('helpReply', () => {
   it('names every command a student can use', () => {
     const text = helpReply().text
 
-    for (const command of ['today', 'yesterday', 'rest', 'stuck', 'ask']) {
+    for (const command of [
+      'week',
+      'today',
+      'yesterday',
+      'day',
+      'rebalance',
+      'rest',
+      'stuck',
+      'ask',
+      'lapsed',
+    ]) {
       expect(text).toContain(`/${command}`)
     }
   })
@@ -432,5 +445,80 @@ describe('the wording at its edges', () => {
     ).text
 
     expect(text).not.toMatch(/undefined/)
+  })
+})
+
+/**
+ * §22's parity renderers.
+ *
+ * The rule these are written to: the bot never decides anything. Every number below is
+ * computed in `src/domain` or `src/optimizer` and handed here already made -- if a
+ * threshold comparison ever appears in this file, it belongs somewhere else and the app
+ * should be reading it from the same place.
+ */
+describe('weekReply', () => {
+  const summary = {
+    reserve: 62,
+    firstDeficitDay: 6,
+    accuracy: 'Measured over 5 days: off by about 7 points.',
+    bias: 'You underestimate study and writing by about 1.4×. We pad it automatically.',
+  }
+
+  it('leads with where the student is now', () => {
+    expect(weekReply(summary).text).toContain('62')
+  })
+
+  it('names the day the fortnight stops holding', () => {
+    expect(weekReply(summary).text).toMatch(/day 6/i)
+  })
+
+  /** §8.2: the 21-day projection is a decision aid and is never described as validated. */
+  it('says plainly when the fortnight holds', () => {
+    expect(weekReply({ ...summary, firstDeficitDay: null }).text).toMatch(/holds|clear|nothing/i)
+  })
+
+  /** The two honesty lines the app shows and chat could not: what the app measured about
+   *  its own accuracy, and what it measured about the student's estimates. */
+  it('carries the accuracy figure and the reality-check line across', () => {
+    const text = weekReply(summary).text
+
+    expect(text).toContain('off by about 7 points')
+    expect(text).toContain('underestimate study and writing')
+  })
+
+  it('omits a bias line there is nothing to say about', () => {
+    expect(weekReply({ ...summary, bias: null }).text).not.toMatch(/underestimate/)
+  })
+})
+
+describe('rebalanceReply', () => {
+  it('reports what the solver did in its own words', () => {
+    expect(rebalanceReply('Moved two blocks; your worst day goes from 31 to 44.', null).text).toContain(
+      'worst day goes from 31 to 44',
+    )
+  })
+
+  /** §2.5: "nothing to move, but here is the one thing that would help" is the likelier
+   *  headline for a real final-year student, not a consolation prize. */
+  it('offers the single best remaining move when the solver found none', () => {
+    const reply = rebalanceReply('Nothing I tried improved the week.', 'move the laundry to Saturday')
+
+    expect(reply.text).toContain('move the laundry to Saturday')
+  })
+
+  it('says nothing extra when the solver already helped', () => {
+    expect(rebalanceReply('Moved two blocks.', null).text).not.toMatch(/would still/i)
+  })
+})
+
+describe('lapsedReply', () => {
+  it('names what has fallen through', () => {
+    const reply = lapsedReply([{ title: 'Cover Amir’s shift' }])
+
+    expect(reply.text).toContain('Cover Amir’s shift')
+  })
+
+  it('says so plainly when nothing has', () => {
+    expect(lapsedReply([]).text).toMatch(/nothing|still standing|all good/i)
   })
 })

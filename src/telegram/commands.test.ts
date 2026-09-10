@@ -67,3 +67,20 @@ describe('readCommand', () => {
     expect(readCommand('')).toBeNull()
   })
 })
+
+/**
+ * §22: two thirds of the model was unreachable from chat.
+ *
+ * Almost none of this is new logic -- `handle.ts` already imports from `src/domain` and
+ * `src/optimizer` directly, so these are commands over functions that were already built,
+ * tested and running behind the app's own screens.
+ */
+describe('the commands added for parity with the app', () => {
+  it.each(['week', 'day', 'rebalance', 'lapsed'])('recognises /%s', (name) => {
+    expect(readCommand(`/${name}`)?.name).toBe(name)
+  })
+
+  it('reads the day number off /day', () => {
+    expect(readCommand('/day 3')?.argument).toBe('3')
+  })
+})

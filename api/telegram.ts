@@ -4,6 +4,7 @@ import { readPhoto } from '../src/ai/readPhoto'
 import { readRequest } from '../src/ai/readRequest'
 import { draftReplies } from '../src/ai/drafts'
 import type { BlockRecord } from '../src/domain/blockLog'
+import type { EnergyPrediction } from '../src/domain/predictions'
 import { HORIZON_DAYS } from '../src/engine'
 import type { Schedule } from '../src/optimizer'
 import type { PendingDump } from '../src/telegram/brainDump'
@@ -181,6 +182,28 @@ export function createStore(client: SupabaseClient): ChatStore {
           answeredAt: Date.parse(row.answered_at as string),
         }),
       )
+    },
+
+    /**
+     * §8.1's resolved predictions, from the same `user_state.settings` blob the app writes.
+     *
+     * Empty rather than thrown on failure, and the asymmetry with `loadBlockLog` is
+     * deliberate: an absent profile is an ordinary state -- a student who has answered
+     * nothing yet -- whereas an unreadable block log means "we do not know", which must not
+     * be collapsed into "they answered nothing". Here the worst case of guessing wrong is
+     * the population defaults, which is what the app itself uses on day one.
+     */
+    async loadPredictions(accountId) {
+      const { data } = await client
+        .from('user_state')
+        .select('settings')
+        .eq('id', accountId)
+        .maybeSingle()
+
+      const settings = data?.settings as { calibration?: { predictions?: unknown } } | null
+      const predictions = settings?.calibration?.predictions
+
+      return Array.isArray(predictions) ? (predictions as EnergyPrediction[]) : []
     },
 
     async markAnswered(accountId, dumpId, now) {

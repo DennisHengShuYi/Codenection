@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_PARAMS, HORIZON_DAYS } from '../../engine'
-import type { Schedule, ScheduledItem } from '../../optimizer'
+import { DEFAULT_PARAMS, HORIZON_DAYS } from '../engine'
+import type { Schedule, ScheduledItem } from '../optimizer'
 import { runRebalance } from './rebalanceOutcome'
 
 const SEED = 20260908

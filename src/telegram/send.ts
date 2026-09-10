@@ -83,11 +83,15 @@ export const helpReply = (): Reply => ({
   text: [
     'What I can do:',
     '',
+    '/week — where you are, and where it stops holding',
     '/today — go through today’s blocks',
     '/yesterday — confirm yesterday in one go',
+    '/day 3 — any other day of the fortnight',
+    '/rebalance — move things around and tell you what changed',
     '/rest — one thing that would help right now',
     '/stuck <task> — one small first step',
     '/ask <what they asked> — what saying yes would cost',
+    '/lapsed — what you said yes to that no longer fits',
     '',
     'Anything else you send, I read as things to add to your week.',
   ].join('\n'),
@@ -323,3 +327,80 @@ export const photoTooBigReply = (): Reply => ({
 export const photoUnavailableReply = (): Reply => ({
   text: 'I cannot read images right now. Type what is on it and I will read that the same way.',
 })
+
+/**
+ * §22's parity renderers, and the rule they exist under.
+ *
+ * The bot never decides anything. Every figure below arrives already computed by
+ * `src/domain` or `src/optimizer` -- the same functions the app's own screens read -- so
+ * these keep the shape of the rest of this file: values in, a payload out, nothing sent and
+ * nothing judged. A threshold comparison appearing in this file would mean a second model
+ * of the same student, which is exactly what two renderers over one model avoids.
+ */
+
+/** Everything `/week` says, computed elsewhere. */
+export interface WeekSummary {
+  /** Overall reserve now, already rounded. */
+  readonly reserve: number
+  /** The deficit crossing, or null when the fortnight holds. */
+  readonly firstDeficitDay: number | null
+  /** §8.1's published accuracy sentence. */
+  readonly accuracy: string
+  /** §7.6's Reality Check line, or null when nothing measured is worth saying. */
+  readonly bias: string | null
+}
+
+export function weekReply(summary: WeekSummary): Reply {
+  const crossing =
+    summary.firstDeficitDay === null
+      ? 'Your fortnight holds all the way through.'
+      : `It stops holding on day ${summary.firstDeficitDay}.`
+
+  return {
+    text: [
+      `You are at ${summary.reserve}%.`,
+      crossing,
+      '',
+      summary.accuracy,
+      // Omitted rather than hedged when there is nothing measured: §7.6 is only the
+      // sharpest thing the app can say if every line on it is true.
+      ...(summary.bias === null ? [] : [summary.bias]),
+    ].join('\n'),
+  }
+}
+
+/**
+ * What the solver did, and the one move left when it could not help.
+ *
+ * `describeRebalance` already tells a healthy week with nothing to move from an overloaded
+ * one with nothing that helps, so the fallback only ever adds to that report -- it never
+ * contradicts it.
+ */
+export function rebalanceReply(report: string, fallback: string | null): Reply {
+  if (fallback === null) return { text: report }
+
+  return { text: [report, '', `It would still cut into the deficit to ${fallback}.`].join('\n') }
+}
+
+/** Refused rather than clamped: a student who typed 40 and was shown day 20 would be
+ *  reading a day they did not ask for, with no way to tell. */
+export const needDayReply = (horizonDays: number): Reply => ({
+  text: `Which day? Give me a number from 0 to ${horizonDays - 1}, like "/day 3".`,
+})
+
+/** §2.3's lapsed commitments: the provisional yes that quietly stopped being affordable. */
+export function lapsedReply(commitments: readonly { title: string }[]): Reply {
+  if (commitments.length === 0) {
+    return { text: 'Nothing you said yes to has fallen through.' }
+  }
+
+  return {
+    text: [
+      'These were provisional, and your week no longer holds them:',
+      '',
+      ...commitments.map((commitment) => `• ${shorten(commitment.title)}`),
+      '',
+      'Nothing has been cancelled for you. Telling them is yours to do.',
+    ].join('\n'),
+  }
+}

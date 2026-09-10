@@ -247,105 +247,14 @@ export function RoomShell({
 
   const paragraph = lowEnergy ? firstSentence(describeRoom(model.state)) : describeRoom(model.state)
 
-  return (
-    <main className="mx-auto flex min-h-dvh max-w-screen-md flex-col gap-4 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-sm font-semibold tracking-wide text-ink-soft">Codenection</h1>
-        <Button
-          variant="quiet"
-          size="sm"
-          data-testid="open-settings"
-          onClick={() => setView(toSettings())}
-        >
-          Settings
-        </Button>
-      </div>
-
-      {isWeekScreen ? (
-        <>
-          <Button variant="quiet" size="sm" data-testid="week-back" onClick={() => setView(ROOM)} className="self-start">
-            Back to the room
-          </Button>
-          <WeekScreen
-            schedule={week}
-            today={today}
-            working={working}
-            report={report}
-            fallback={fallback}
-            onRebalance={() => void onRebalance()}
-            onSelectBlock={(itemId) => setView(toBlock(itemId))}
-            blockLog={blockLog}
-            capacity={overallReserve(week.start)}
-            bars={bars}
-            projection={projection}
-          />
-        </>
-      ) : (
-        <>
-          {/* The one thing that is not furniture. A student who does not know their week is
-              not being saved will lose it, and a warning about data loss must not require
-              discovering an object first. */}
-          {session === null && <PreviewBanner onSignIn={onSignIn} />}
-
-          <Room model={model} />
-
-          {/* Flagged by Task 12: the drawing's own `aria-label` (`describeRoomFully`) is
-              already the complete text equivalent a screen reader needs, and this capped
-              paragraph repeats a subset of the same sentences verbatim -- character and
-              weather always, in the same words. Left as visible-and-announced, the two
-              would read out back to back: the full version, then a partial repeat of it.
-              `aria-hidden` keeps it for sighted readers (§1.5, still worth having as
-              running text rather than only inside an SVG's accessible name) without
-              saying anything twice to assistive tech. */}
-          <p data-testid="room-text-equivalent" aria-hidden="true" className="text-sm text-ink-soft">
-            {paragraph}
-          </p>
-
-          <AccuracyNote predictions={profile.predictions} />
-
-          <LiveCards
-            cards={cards}
-            recoveryPrescription={recoveryPrescription}
-            onRecoveryAccept={(taken) => setSchedule(scheduleRecovery(week, taken))}
-            onRecoveryDismiss={() => setRecoveryDismissed(true)}
-            lapsedCommitments={lapsedCommitments}
-            onLapsedDismiss={() => setLapsedDismissed(true)}
-            stuckMicroStart={stuckItem === undefined ? null : firstAction(stuckItem)}
-            onStuckStart={() => stuckItem !== undefined && setView(toBlock(stuckItem.id))}
-            onStuckDismiss={() => stuckItem !== undefined && setStuckDismissedId(stuckItem.id)}
-            blockForToday={blockForToday}
-            askEnergy={askEnergy}
-            askSleep={askSleep}
-            onEnergy={(energy) => {
-              if (todayDate === null) return
-              setProfile({ ...profile, predictions: resolvePrediction(profile.predictions, todayDate, energy) })
-            }}
-            onSleep={(bucket) => {
-              setSchedule(withSleep(week, today, bucket))
-              setSleepAnsweredToday(true)
-            }}
-            onBlockAnswer={answerBlock}
-            onTodayDismiss={() => setTodayDismissed(true)}
-          />
-
-          <div className="flex items-center justify-between gap-2">
-            {!lowEnergy && (
-              <Button variant="quiet" data-testid="open-week" onClick={() => setView(toWeek())}>
-                The week
-              </Button>
-            )}
-            <Button
-              data-testid="open-add"
-              aria-label="Add something"
-              onClick={() => setView(toAdd())}
-              className="ml-auto"
-            >
-              +
-            </Button>
-          </div>
-        </>
-      )}
-
+  /**
+   * The three sheets, written once and rendered by whichever screen is showing. They were
+   * inside the one `<main>` when the room and the week shared a layout; the room screen is
+   * its own full-bleed stage now (Ruling 54), and duplicating forty lines of sheet wiring
+   * across the two branches is how one of them quietly stops opening.
+   */
+  const sheets = (
+    <>
       {view.kind === 'block' && blockModel !== null && (
         <BlockSheet
           key={view.itemId}
@@ -420,6 +329,181 @@ export function RoomShell({
           </div>
         </Sheet>
       )}
+    </>
+  )
+
+  /**
+   * `secondary` rather than `quiet`: on the room screen this button sits over the drawing,
+   * and an underlined text link over a wall wash and a ceiling beam is a control the eye
+   * has to hunt for. It carries its own surface instead, the same way the corner gauge does.
+   */
+  const settingsButton = (
+    <Button
+      variant="secondary"
+      size="sm"
+      data-testid="open-settings"
+      onClick={() => setView(toSettings())}
+    >
+      Settings
+    </Button>
+  )
+
+  if (isWeekScreen) {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-screen-md flex-col gap-4 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-sm font-semibold tracking-wide text-ink-soft">Codenection</h1>
+          {settingsButton}
+        </div>
+
+        <Button
+          variant="quiet"
+          size="sm"
+          data-testid="week-back"
+          onClick={() => setView(ROOM)}
+          className="self-start"
+        >
+          Back to the room
+        </Button>
+
+        <WeekScreen
+          schedule={week}
+          today={today}
+          working={working}
+          report={report}
+          fallback={fallback}
+          onRebalance={() => void onRebalance()}
+          onSelectBlock={(itemId) => setView(toBlock(itemId))}
+          blockLog={blockLog}
+          capacity={overallReserve(week.start)}
+          bars={bars}
+          projection={projection}
+        />
+
+        {sheets}
+      </main>
+    )
+  }
+
+  /**
+   * The room screen (Rulings 54 and 55).
+   *
+   * The room is the whole screen -- no title bar above it, no button row below it -- and
+   * everything else rides over it: `Settings` in the corner opposite the gauge, and one
+   * band along the bottom holding the paragraph, the accuracy line, the live cards and the
+   * two permanent controls.
+   *
+   * Overlaid controls have failed here once already (PR #39: they "covered the furniture
+   * and swallowed its clicks -- the phone was unreachable from 768px up"). Half of that
+   * cannot recur -- the drawing is display-only, so there is nothing inside it left to
+   * swallow a click from. The half that can is occlusion, and the thing that must not be
+   * occluded is the character: it is how this app says how the student is doing and nothing
+   * else expresses it. Two things keep it legible, and the band is measured against the
+   * character's own box at 320/390/768/1280 in `room.spec.ts`:
+   *
+   * 1. The scene is composed clear of the band. The fill framing draws into a 260-unit
+   *    viewBox aligned to the top of the stage, so the furniture and the character occupy
+   *    the upper 150 units and the floor runs on beneath them. The band is then capped at
+   *    the space that leaves: the character's box ends at 157 of the viewBox's 260 units and
+   *    the drawing is scaled by `min(100vw / 300, 100dvh / 260)`, so the character's lowest
+   *    point is at `min(52.33vw, 60.38dvh)` and the band may have everything below it, less
+   *    a finger's margin. A flat percentage cannot express that -- 36% is right for a
+   *    laptop and throws away half the band on a 320x568 phone, where the drawing is
+   *    limited by width and the character sits far higher up the screen.
+   * 2. The band is translucent over a blur, so where it does cross the floor the room is
+   *    still visibly behind it rather than replaced by a panel.
+   *
+   * The controls sit in the band rather than in the top corners for the lower-half-primary
+   * rule -- the primary action belongs where a thumb is -- and they are pinned OUTSIDE the
+   * band's scrolling region, so a tall card can never push `+` off the screen.
+   *
+   * Every one of these is a SIBLING of the `<svg>`, never a child: the drawing carries
+   * `role="img"`, which hides its whole subtree from the accessibility tree, so a control
+   * placed inside it would be invisible to a screen reader while looking perfectly correct.
+   */
+  return (
+    <main data-testid="room-stage" className="relative h-dvh w-full overflow-hidden">
+      {/* The room screen has no visible title -- the room is the title. The heading stays
+          for the document outline and for anyone navigating by heading. */}
+      <h1 className="sr-only">Codenection</h1>
+
+      <Room model={model} frame="fill" />
+
+      <div className="absolute left-2 top-2">{settingsButton}</div>
+
+      <section
+        data-testid="room-band"
+        className="absolute inset-x-0 bottom-0 flex max-h-[calc(100dvh-min(52.33vw,60.38dvh)-1rem)] flex-col gap-3 border-t border-line bg-surface/85 p-3 backdrop-blur-sm"
+      >
+        <div
+          data-testid="room-band-content"
+          className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
+        >
+          {/* The one thing that is not furniture, and first in the band for that reason. A
+              student who does not know their week is not being saved will lose it, and a
+              warning about data loss must not be something they scroll to. */}
+          {session === null && <PreviewBanner onSignIn={onSignIn} />}
+
+          {/* Flagged by Task 12: the drawing's own `aria-label` (`describeRoomFully`) is
+              already the complete text equivalent a screen reader needs, and this capped
+              paragraph repeats a subset of the same sentences verbatim -- character and
+              weather always, in the same words. Left as visible-and-announced, the two
+              would read out back to back: the full version, then a partial repeat of it.
+              `aria-hidden` keeps it for sighted readers (still worth having as running text
+              rather than only inside an SVG's accessible name) without saying anything
+              twice to assistive tech. */}
+          <p data-testid="room-text-equivalent" aria-hidden="true" className="text-sm text-ink-soft">
+            {paragraph}
+          </p>
+
+          <AccuracyNote predictions={profile.predictions} />
+
+          <LiveCards
+            cards={cards}
+            recoveryPrescription={recoveryPrescription}
+            onRecoveryAccept={(taken) => setSchedule(scheduleRecovery(week, taken))}
+            onRecoveryDismiss={() => setRecoveryDismissed(true)}
+            lapsedCommitments={lapsedCommitments}
+            onLapsedDismiss={() => setLapsedDismissed(true)}
+            stuckMicroStart={stuckItem === undefined ? null : firstAction(stuckItem)}
+            onStuckStart={() => stuckItem !== undefined && setView(toBlock(stuckItem.id))}
+            onStuckDismiss={() => stuckItem !== undefined && setStuckDismissedId(stuckItem.id)}
+            blockForToday={blockForToday}
+            askEnergy={askEnergy}
+            askSleep={askSleep}
+            onEnergy={(energy) => {
+              if (todayDate === null) return
+              setProfile({ ...profile, predictions: resolvePrediction(profile.predictions, todayDate, energy) })
+            }}
+            onSleep={(bucket) => {
+              setSchedule(withSleep(week, today, bucket))
+              setSleepAnsweredToday(true)
+            }}
+            onBlockAnswer={answerBlock}
+            onTodayDismiss={() => setTodayDismissed(true)}
+          />
+        </div>
+
+        {/* Pinned below the scrolling region: a long card must never be able to scroll the
+            two permanent controls off the screen. */}
+        <div className="flex shrink-0 items-center justify-between gap-2">
+          {!lowEnergy && (
+            <Button variant="secondary" data-testid="open-week" onClick={() => setView(toWeek())}>
+              The week
+            </Button>
+          )}
+          <Button
+            data-testid="open-add"
+            aria-label="Add something"
+            onClick={() => setView(toAdd())}
+            className="ml-auto"
+          >
+            +
+          </Button>
+        </div>
+      </section>
+
+      {sheets}
     </main>
   )
 }

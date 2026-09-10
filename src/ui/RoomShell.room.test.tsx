@@ -297,3 +297,98 @@ describe('RoomShell with the room', () => {
     expect(onAnswerBlock).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * Rulings 54 and 55: the room fills the screen, its three controls sit inside it, and
+ * §3's "beneath the drawing" content -- the paragraph, the accuracy line and the live
+ * cards -- moves into a band that overlays the lower part of the room.
+ *
+ * What this file can prove is structure: what contains what, and in which order. The two
+ * things that actually broke the last time controls were overlaid are geometric -- a band
+ * covering the furniture, and a control nobody can hit -- and jsdom has no layout engine
+ * and no Tailwind stylesheet, so a `toBeVisible()` here would pass over a button painted
+ * under an opaque band. Those are measured in a real browser instead, in
+ * `tests/e2e/room.spec.ts` at 320/390/768/1280.
+ */
+describe('the room screen, with the controls inside the room', () => {
+  /**
+   * The trap this branch has already paid for once: the scene carries `role="img"`, which
+   * hides its whole subtree from the accessibility tree. A control drawn inside the
+   * `<svg>` would look right and be unreachable to a screen reader, so every control has
+   * to be a SIBLING positioned over it rather than a child of it.
+   */
+  it('puts all three controls inside the room, as siblings of the drawing rather than children', async () => {
+    await renderWithErrand()
+
+    const stage = screen.getByTestId('room-stage')
+    const scene = screen.getByTestId('room-scene')
+
+    expect(stage).toContainElement(scene)
+
+    for (const id of ['open-settings', 'open-week', 'open-add']) {
+      const control = screen.getByTestId(id)
+      expect(stage).toContainElement(control)
+      expect(scene.contains(control)).toBe(false)
+    }
+  })
+
+  /**
+   * The same rule, widened past the three controls named above: nothing inside the drawing
+   * is a control, now or later. The check above names `open-settings`, `open-week` and
+   * `open-add`; this one fails on a *fourth* control someone drops into the `<svg>` because
+   * it aligned nicely there -- which is the way this trap gets sprung, not by moving the
+   * three that already have a test each.
+   *
+   * A CSS locator rather than a role query, and deliberately: `role="img"` hides the
+   * subtree from the accessibility tree, so `getAllByRole('button')` scoped to the scene
+   * reports zero whether or not any exist -- a guard that cannot fail.
+   */
+  it('leaves the drawing itself with no controls in it at all', async () => {
+    await renderWithErrand()
+
+    const scene = screen.getByTestId('room-scene')
+
+    expect(scene.querySelectorAll('button, a, [role="button"], [role="link"]')).toHaveLength(0)
+  })
+
+  /**
+   * Ruling 55's choice: the words and the cards overlay the lower room instead of scrolling
+   * below it, so nothing that needs the student is off the screen. Structurally that means
+   * one band, inside the same stage as the drawing and after it in document order -- two
+   * absolutely positioned siblings in one stacking context paint in tree order, so a band
+   * placed before the scene would be behind the room's own wall, which is exactly how the
+   * corner gauge was invisible for a fortnight (Ruling 52).
+   */
+  it('gathers the paragraph, the accuracy line and the cards into one band over the room', async () => {
+    await renderWithErrand()
+
+    const stage = screen.getByTestId('room-stage')
+    const scene = screen.getByTestId('room-scene')
+    const band = screen.getByTestId('room-band')
+
+    expect(stage).toContainElement(band)
+    expect(band).toContainElement(screen.getByTestId('room-text-equivalent'))
+    expect(band).toContainElement(screen.getByTestId('accuracy-note'))
+    expect(band).toContainElement(screen.getByRole('region', { name: /today's check-in/i }))
+
+    // Later in the tree than the drawing, so it paints over the room rather than under it.
+    expect(Boolean(scene.compareDocumentPosition(band) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+  })
+
+  /**
+   * The band can hold two cards at 320px, which is taller than the space between the
+   * character's head and the bottom of the screen. Rather than let it grow over the
+   * character, the band scrolls -- and the two controls are pinned outside that scrolling
+   * region, so `The week` and `+` cannot be scrolled off by a long card. That pinning is
+   * the difference between "the controls are in the band" and "the controls are reachable".
+   */
+  it("pins the two controls outside the band's scrolling region", async () => {
+    await renderWithErrand()
+
+    const scroller = screen.getByTestId('room-band-content')
+
+    expect(scroller).toContainElement(screen.getByTestId('room-text-equivalent'))
+    expect(scroller.contains(screen.getByTestId('open-week'))).toBe(false)
+    expect(scroller.contains(screen.getByTestId('open-add'))).toBe(false)
+  })
+})

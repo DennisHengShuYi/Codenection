@@ -41,3 +41,20 @@ export const PALETTE = {
  * its sense of depth: the nearer a thing is, the lower it stands.
  */
 export const FLOOR_Y = 148
+
+/**
+ * How far past the viewBox the building is painted.
+ *
+ * The scene is 300x200 units, but the room screen shows it in a viewBox taller than that
+ * and inside a stage of whatever shape the phone or the laptop is -- so `preserveAspectRatio`
+ * letterboxes it, leaving bands at the sides or below the drawing. An `<svg>` clips to its
+ * own element box rather than to its viewBox, so a wall and a floor drawn well past the
+ * viewBox fill those bands with the same two surfaces, meeting the drawing exactly at the
+ * skirting. That is why the room reaches the edge of the screen at every width instead of
+ * sitting in a rectangle of background colour, and it costs two numbers rather than a
+ * per-breakpoint layout.
+ *
+ * The inline framing (the two-room comparison) is boxed to the viewBox's own ratio, so
+ * nothing bleeds into view there -- the element box clips it all.
+ */
+export const BLEED = 400

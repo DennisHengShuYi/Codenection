@@ -48,7 +48,7 @@ describe('Room', () => {
   // §10: a viewBox and no fixed width is the whole argument for hand-rolling it -- it
   // scales at every breakpoint without a media query.
   it('scales with its container rather than fixing a pixel width', () => {
-    render(<Room model={modelOf(state())} />)
+    render(<Room model={modelOf(state())} frame="inline" />)
     const scene = screen.getByTestId('room-scene')
 
     expect(scene).toHaveAttribute('viewBox')
@@ -63,14 +63,14 @@ describe('Room', () => {
    * and the three pieces of furniture that were specified, drawn but never merged.
    */
   it('draws the building it stands in, not one flat field', () => {
-    render(<Room model={modelOf()} />)
+    render(<Room model={modelOf()} frame="inline" />)
 
     expect(screen.getByTestId('room-wall')).toBeInTheDocument()
     expect(screen.getByTestId('room-floor')).toBeInTheDocument()
   })
 
   it('draws the desk, the mirror and the phone', () => {
-    render(<Room model={modelOf()} />)
+    render(<Room model={modelOf()} frame="inline" />)
 
     for (const id of ['desk', 'mirror', 'phone']) {
       expect(screen.getByTestId(`room-${id}`)).toBeInTheDocument()
@@ -84,8 +84,8 @@ describe('Room', () => {
    * more reserve, more glow.
    */
   it('reads the reserve as how lit the room is', () => {
-    const { container: dark } = render(<Room model={modelOf(state({ lightLevel: 0.1 }))} />)
-    const { container: lit } = render(<Room model={modelOf(state({ lightLevel: 0.9 }))} />)
+    const { container: dark } = render(<Room model={modelOf(state({ lightLevel: 0.1 }))} frame="inline" />)
+    const { container: lit } = render(<Room model={modelOf(state({ lightLevel: 0.9 }))} frame="inline" />)
 
     const glow = (root: HTMLElement): number =>
       Number(root.querySelector('[data-testid="room-light"] circle')?.getAttribute('opacity'))
@@ -94,7 +94,7 @@ describe('Room', () => {
   })
 
   it('draws all nine objects', () => {
-    render(<Room model={modelOf(state({ clutter: [{ id: 'a', title: 'Laundry', dayIndex: 1 }] }))} />)
+    render(<Room model={modelOf(state({ clutter: [{ id: 'a', title: 'Laundry', dayIndex: 1 }] }))} frame="inline" />)
 
     for (const id of [
       'ceiling',
@@ -122,6 +122,7 @@ describe('Room', () => {
             ],
           }),
         )}
+        frame="inline"
       />,
     )
 
@@ -129,13 +130,13 @@ describe('Room', () => {
   })
 
   it('lights the door when the state says so', () => {
-    render(<Room model={modelOf(state({ doorLit: true }))} />)
+    render(<Room model={modelOf(state({ doorLit: true }))} frame="inline" />)
 
     expect(screen.getByTestId('room-door')).toHaveAttribute('data-lit', 'true')
   })
 
   it('reflects the character state', () => {
-    render(<Room model={modelOf(state({ character: 'flattened' }))} />)
+    render(<Room model={modelOf(state({ character: 'flattened' }))} frame="inline" />)
 
     expect(screen.getByTestId('room-character')).toHaveAttribute('data-state', 'flattened')
   })
@@ -144,7 +145,7 @@ describe('Room', () => {
   // targets that used to sit over the artwork are gone, along with `onSelect`. Every
   // feature they duplicated is reached elsewhere; this just stops the room shouting.
   it('is a picture, not a control surface', () => {
-    render(<Room model={modelOf()} />)
+    render(<Room model={modelOf()} frame="inline" />)
 
     expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
@@ -152,7 +153,7 @@ describe('Room', () => {
   // §1.1: the dial moves in as a compact readout, "no tap required for either" -- it used
   // to be two taps deep, behind the light object.
   it('shows the reserve without anybody having to look for it', () => {
-    render(<Room model={modelOf()} />)
+    render(<Room model={modelOf()} frame="inline" />)
 
     expect(screen.getByTestId('room-gauge')).toBeInTheDocument()
   })
@@ -166,7 +167,7 @@ describe('Room', () => {
    * the thing that was actually wrong, and it fails on the DOM order that shipped.
    */
   it('paints the corner gauge over the room rather than behind its wall', () => {
-    render(<Room model={modelOf()} />)
+    render(<Room model={modelOf()} frame="inline" />)
     const gauge = screen.getByTestId('room-gauge')
     const scene = screen.getByTestId('room-scene')
 
@@ -176,7 +177,7 @@ describe('Room', () => {
   })
 
   it('reads the reserve off the light level, as a percentage', () => {
-    render(<Room model={modelOf(state({ lightLevel: 0.42 }))} />)
+    render(<Room model={modelOf(state({ lightLevel: 0.42 }))} frame="inline" />)
 
     expect(screen.getByTestId('room-gauge')).toHaveTextContent('42%')
   })
@@ -186,12 +187,12 @@ describe('Room', () => {
   // staying decorative. Screen-reader users lose nothing that used to live on the buttons.
   it('gives screen reader users everything the drawing shows, not a trimmed version', () => {
     const roomState = state({ character: 'flattened', doorLit: true })
-    render(<Room model={modelOf(roomState)} />)
+    render(<Room model={modelOf(roomState)} frame="inline" />)
 
     expect(screen.getByTestId('room-scene')).toHaveAttribute('aria-label', describeRoomFully(roomState))
   })
 
   it('renders an empty room without throwing', () => {
-    expect(() => render(<Room model={modelOf(state())} />)).not.toThrow()
+    expect(() => render(<Room model={modelOf(state())} frame="inline" />)).not.toThrow()
   })
 })

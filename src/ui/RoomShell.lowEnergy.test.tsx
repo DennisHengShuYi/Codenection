@@ -54,6 +54,11 @@ describe('RoomShell in low energy', () => {
     expect(screen.queryByTestId('open-week')).toBeNull()
     // `+` stays: logging something urgent should not require leaving low-energy mode.
     expect(screen.getByTestId('open-add')).toBeVisible()
+    // And `Settings` stays, which matters more now than it did: with the controls moved
+    // inside the room (Ruling 54) this button floats over the drawing in a corner, and it
+    // is still the only way out of the collapsed interface. Hiding it here to quieten the
+    // screen would strand the student in low-energy mode.
+    expect(screen.getByTestId('open-settings')).toBeVisible()
   })
 
   it('caps the paragraph to the character sentence alone', async () => {

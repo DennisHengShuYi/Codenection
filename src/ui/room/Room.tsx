@@ -4,7 +4,7 @@ import { describeRoomFully } from './roomText'
 import { Door, Light, Window } from './scene/Fixtures'
 import { Bed, Desk, Mirror, Phone } from './scene/Furniture'
 import { Clutter, Papers, Plant } from './scene/Loose'
-import { PALETTE } from './scene/palette'
+import { FLOOR_Y, PALETTE } from './scene/palette'
 import { Ceiling, Floor, Wall } from './scene/Walls'
 
 /**
@@ -23,31 +23,76 @@ import { Ceiling, Floor, Wall } from './scene/Walls'
  * `hotspots.ts`, `objects.ts` and `model.rows`, all of which §3 deleted. The attention halo
  * went with them, because nothing on this branch computes attention any more and a mark
  * nothing can switch on is an orphan, not a feature.
+ *
+ * Two framings, one drawing (Ruling 54):
+ *
+ * - `inline` is the boxed 3:2 room the request box puts side by side with itself, where the
+ *   room is one element among several on a scrolling page.
+ * - `fill` is the room screen, where the room IS the screen. The drawing aligns to the top
+ *   of its stage and the viewBox runs on past the scene's own 200 units, so the floor keeps
+ *   going underneath the band that overlays the lower screen -- which is how the band lands
+ *   on floor rather than on the bed, the desk and the character (Ruling 55).
+ *
+ * Required rather than defaulted, on the same reasoning as Rulings 39, 41 and 51: a default
+ * here would let a new call site pick a framing by accident, and the two are not
+ * interchangeable -- `fill` only means anything inside a positioned, screen-sized parent.
  */
-export function Room({ model }: { model: RoomModel }) {
+export type RoomFrame = 'inline' | 'fill'
+
+export function Room({ model, frame }: { model: RoomModel; frame: RoomFrame }) {
   const { state } = model
+  const fills = frame === 'fill'
 
   return (
-    /* No longer locked to the viewBox's 3:2 ratio for hotspot alignment -- nothing is laid
-       over it any more -- but the ratio still reads as a room, so it stays. Capped at the
-       viewport so a tall screen does not stretch it. */
-    <section className="relative mx-auto aspect-[3/2] max-h-dvh w-full">
+    /* The inline framing is no longer locked to the viewBox's 3:2 ratio for hotspot
+       alignment -- nothing is laid over it any more -- but the ratio still reads as a room,
+       so it stays. The fill framing covers its stage instead, and paints the floor's near
+       colour behind the drawing so that the letterboxing a 3:2 room gets on a tall phone
+       reads as more floor rather than as a void under the room. */
+    <section
+      className={
+        fills ? 'absolute inset-0 overflow-hidden' : 'relative mx-auto aspect-[3/2] max-h-dvh w-full'
+      }
+      style={fills ? { backgroundColor: PALETTE.floorNear } : undefined}
+    >
       {/* viewBox and no width: it scales to its container at every breakpoint without a
           media query, which is §10's argument for hand-rolled SVG over an image. */}
       <svg
         data-testid="room-scene"
-        viewBox="0 0 300 200"
-        className="absolute inset-0 h-full w-full overflow-hidden rounded-lg"
+        viewBox={fills ? '0 0 300 260' : '0 0 300 200'}
+        /* Top-aligned in the fill framing so the slack collects at the bottom of the stage,
+           where the band is, instead of being split above and below the drawing. */
+        preserveAspectRatio={fills ? 'xMidYMin meet' : 'xMidYMid meet'}
+        className={`absolute inset-0 h-full w-full overflow-hidden ${fills ? '' : 'rounded-lg'}`}
         role="img"
         aria-label={describeRoomFully(state)}
         focusable="false"
       >
         <defs>
-          <linearGradient id="room-wall-wash" x1="0" y1="0" x2="0" y2="1">
+          {/* Both washes are in user space, not in the rect's own box: the wall and the
+              floor are drawn far past the viewBox so they fill a letterboxed stage
+              (`BLEED`), and an object-bounding-box gradient would have spread each wash
+              over that whole bled rect and washed the room out. Past each wash's end the
+              pad spread holds its last colour, which is exactly what the bleed should be. */}
+          <linearGradient
+            id="room-wall-wash"
+            gradientUnits="userSpaceOnUse"
+            x1="0"
+            y1="0"
+            x2="0"
+            y2={FLOOR_Y}
+          >
             <stop offset="0%" stopColor={PALETTE.wallTop} />
             <stop offset="100%" stopColor={PALETTE.wallBottom} />
           </linearGradient>
-          <linearGradient id="room-floor-wash" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient
+            id="room-floor-wash"
+            gradientUnits="userSpaceOnUse"
+            x1="0"
+            y1={FLOOR_Y}
+            x2="0"
+            y2="200"
+          >
             <stop offset="0%" stopColor={PALETTE.floorFar} />
             <stop offset="100%" stopColor={PALETTE.floorNear} />
           </linearGradient>

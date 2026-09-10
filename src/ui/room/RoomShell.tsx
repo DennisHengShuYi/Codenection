@@ -102,7 +102,7 @@ export function RoomShell({
 }) {
   const { schedule, setSchedule, problem: saveProblem } = useSchedule(repository)
   const { profile, setProfile } = useProfile(repository, session)
-  const { ladders, saveLadder, dropLadder } = useLadders(repository)
+  const { ladders, loaded: laddersLoaded, saveLadder, dropLadder } = useLadders(repository)
   /**
    * Ruling 57: where the student is now lives in the address bar as well as in React.
    * `useUrlView` returns exactly what `useState<View>` returned before it, so everything
@@ -578,6 +578,7 @@ export function RoomShell({
           key={`start-${view.itemId}`}
           item={startTarget}
           ladder={ladders.find((entry) => entry.blockId === view.itemId) ?? null}
+          ready={laddersLoaded}
           onLadder={saveLadder}
           onDone={(itemId) => {
             setSchedule(completeItem(week, itemId))

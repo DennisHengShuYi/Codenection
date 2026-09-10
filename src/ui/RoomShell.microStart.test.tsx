@@ -232,6 +232,54 @@ describe('the micro-start page', () => {
     expect(await screen.findByTestId('ladder-progress')).toHaveTextContent('Step 2')
   })
 
+  /**
+   * The race a real browser found and the remount test above did not.
+   *
+   * Stored ladders arrive from storage asynchronously, and on a cold open of
+   * `/week/block/:id/start` the page mounted before they landed. With nothing to resume it
+   * generated a fresh chain and wrote it over the stored one -- so a reload silently threw
+   * away everything the student had done, which is the exact failure persistence exists to
+   * prevent. Reproduced here by holding the settings read open until after the first render.
+   */
+  it('waits for stored ladders rather than overwriting them on a cold open', async () => {
+    counter += 1
+    const repository = createLocalRepository(`micro-race-${counter}`)
+    await repository.clear()
+    await repository.saveWeek(week())
+    await repository.saveSettings({
+      lowEnergyOverride: 'auto',
+      ladders: [
+        {
+          blockId: 'laundry',
+          rungs: [
+            { action: 'Rung one.', minutes: 2 },
+            { action: 'Rung two.', minutes: 3 },
+            { action: 'Rung three.', minutes: 4 },
+          ],
+          done: 2,
+        },
+      ],
+    })
+
+    const realLoad = repository.loadSettings.bind(repository)
+    let release = () => undefined as void
+    const held = new Promise<void>((resolve) => {
+      release = () => resolve()
+    })
+    const slow = { ...repository, loadSettings: async () => held.then(realLoad) }
+
+    window.history.replaceState(null, '', '/week/block/laundry/start')
+    render(<RoomShell repository={slow} blockLog={[]} onAnswerBlock={vi.fn()} />)
+
+    // The page is on screen before storage has answered. It must not decide anything yet.
+    await waitFor(() => expect(screen.getByTestId('ladder-working')).toBeVisible())
+    release()
+
+    expect(await screen.findByText('Rung three.')).toBeVisible()
+    expect(screen.getByTestId('ladder-progress')).toHaveTextContent('Step 3 of 3')
+    expect((await repository.loadSettings()).ladders?.[0]?.done).toBe(2)
+  })
+
   // Walking the whole chain and taking the offer at the end: the block leaves the week and
   // its stored chain goes with it, because a record must not outlive what it describes.
   it('finishes the block from the end of the chain and drops the ladder', async () => {

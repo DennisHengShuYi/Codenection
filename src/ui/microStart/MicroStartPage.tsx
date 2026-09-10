@@ -1,5 +1,4 @@
 import { useEffect, useState, type JSX } from 'react'
-import { buildLadder, replaceRung } from '../../ai'
 import { advance, currentRung, isComplete, type Ladder } from '../../domain/ladder'
 import type { ScheduledItem } from '../../optimizer'
 import { Button } from '../kit/Button'
@@ -21,6 +20,7 @@ import { Sheet } from '../kit/Sheet'
 export function MicroStartPage({
   item,
   ladder,
+  ready = true,
   onLadder,
   onDone,
   onBack,
@@ -29,12 +29,30 @@ export function MicroStartPage({
   readonly item: ScheduledItem
   /** The stored chain for this block, or null when it has never been opened. */
   readonly ladder: Ladder | null
+  /**
+   * Whether storage has answered about `ladder` yet. False means "not known", which is not
+   * the same fact as null's "there is none".
+   *
+   * Without the distinction this page generated a fresh chain during the gap and wrote it
+   * over the stored one, discarding the student's progress on every cold open of a
+   * micro-start address. Defaulted to true so a caller holding a chain already -- every test
+   * that passes one directly -- need not say so.
+   */
+  readonly ready?: boolean
   readonly onLadder: (ladder: Ladder) => void
   readonly onDone: (itemId: string) => void
   readonly onBack: () => void
   readonly onClose: () => void
 }): JSX.Element {
-  const [built, setBuilt] = useState<Ladder | null>(ladder)
+  /**
+   * The chain this page has moved on to, or null while the stored one still stands.
+   *
+   * Not seeded from `ladder`, because on a cold open `ladder` is still null when this
+   * component mounts and a `useState` initialiser runs exactly once -- the stored chain would
+   * arrive a tick later and never reach the screen. `open` below reads through to the prop
+   * instead, so a late arrival shows up and a local advance still wins over it.
+   */
+  const [built, setBuilt] = useState<Ladder | null>(null)
   /**
    * Whether the chain on screen came from the model.
    *
@@ -48,17 +66,26 @@ export function MicroStartPage({
   useEffect(() => {
     // A stored chain is resumed rather than regenerated. Coming back to different words for
     // the step you had already decided to do is a small betrayal of somebody who came back.
-    if (ladder !== null) return undefined
+    //
+    // `ready` is the other half of that promise: generating before storage has answered
+    // would overwrite a chain that exists but has not arrived yet, which is worse than
+    // regenerating -- it destroys the record rather than ignoring it.
+    if (!ready || ladder !== null) return undefined
 
     let cancelled = false
 
-    void buildLadder(item).then((outcome) => {
-      if (cancelled) return
+    // Loaded on demand, matching `PlannerScreen` and `RequestBoxScreen`. A static import
+    // here pulls the whole `ai` module -- zod, every schema, every parser -- into the main
+    // bundle for a page most opens never reach, and the build says so out loud.
+    void import('../../ai')
+      .then(({ buildLadder }) => buildLadder(item))
+      .then((outcome) => {
+        if (cancelled) return
 
-      setBuilt(outcome.ladder)
-      setFromModel(outcome.source === 'model')
-      onLadder(outcome.ladder)
-    })
+        setBuilt(outcome.ladder)
+        setFromModel(outcome.source === 'model')
+        onLadder(outcome.ladder)
+      })
 
     return () => {
       cancelled = true
@@ -66,14 +93,14 @@ export function MicroStartPage({
     // `onLadder` is deliberately absent from the dependencies: the shell recreates it on
     // every render, and depending on it would regenerate the chain in a loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item, ladder])
+  }, [item, ladder, ready])
 
   const commit = (next: Ladder) => {
     setBuilt(next)
     onLadder(next)
   }
 
-  const open = built
+  const open = built ?? ladder
   const rung = open === null ? null : currentRung(open)
   const finished = open !== null && isComplete(open)
 
@@ -93,7 +120,8 @@ export function MicroStartPage({
           disabled={rerolling}
           onClick={() => {
             setRerolling(true)
-            void replaceRung(item, open)
+            void import('../../ai')
+              .then(({ replaceRung }) => replaceRung(item, open))
               .then(commit)
               .finally(() => setRerolling(false))
           }}

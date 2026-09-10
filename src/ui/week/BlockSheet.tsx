@@ -56,6 +56,8 @@ export function BlockSheet({
   onLater,
   onConfirm,
   onRested,
+  onEdit,
+  onRemove,
 }: {
   readonly model: BlockSheetModel
   readonly onClose: () => void
@@ -66,8 +68,13 @@ export function BlockSheet({
   readonly onLater: (itemId: string) => void
   readonly onConfirm: (itemId: string, answer: BlockAnswer) => void
   readonly onRested: (itemId: string, rested: boolean) => void
+  /** Opens the day/time form on this block. */
+  readonly onEdit: (itemId: string) => void
+  /** Takes the block out of the week. Called only after the confirmation below. */
+  readonly onRemove: (itemId: string) => void
 }): JSX.Element {
   const [revealed, setRevealed] = useState(false)
+  const [confirmingRemove, setConfirmingRemove] = useState(false)
   const { item, actions, microStart: given, recordedAnswer } = model
 
   // §4.1's manual trigger: "I can't start this" reveals a first move even for a block the
@@ -121,8 +128,55 @@ export function BlockSheet({
           I can't start this
         </Button>
       )}
+
+      {actions.includes('edit') && (
+        <Button variant="secondary" data-testid="edit-block" onClick={() => onEdit(item.id)}>
+          Edit
+        </Button>
+      )}
+
+      {/* Quiet, and last. Removing is the only thing on this sheet that cannot be taken
+          back, so it should not sit where a thumb reaching for Done finds it first. */}
+      {actions.includes('remove') && (
+        <Button variant="quiet" data-testid="remove-block" onClick={() => setConfirmingRemove(true)}>
+          Remove
+        </Button>
+      )}
     </>
   )
+
+  /**
+   * Removing is the one action here that cannot be undone.
+   *
+   * Done and Later change a block, and an answer can be given again. This takes the block
+   * out of the week and there is no operation to put it back, so the question IS the
+   * safeguard -- which is why it names the block rather than asking "are you sure?" about
+   * nothing in particular. It replaces the body as well as the bar, so there is no way to
+   * answer it by accident while looking at something else.
+   */
+  if (confirmingRemove) {
+    return (
+      <Sheet
+        title={item.title}
+        onClose={onClose}
+        onBack={() => setConfirmingRemove(false)}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmingRemove(false)}>
+              Keep it
+            </Button>
+            <Button data-testid="confirm-remove-yes" onClick={() => onRemove(item.id)}>
+              Remove
+            </Button>
+          </>
+        }
+      >
+        <p data-testid="confirm-remove">
+          Remove {item.title}? This takes it out of your week, and I cannot put it back.
+        </p>
+      </Sheet>
+    )
+  }
 
   return (
     <Sheet title={item.title} onClose={onClose} onBack={onBack} actions={actionBar}>

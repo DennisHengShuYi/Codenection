@@ -9,13 +9,34 @@ import type { Schedule, ScheduledItem } from '../../optimizer'
  * four *states of a block*, and collapsing them here is what lets the week screen carry all
  * of them without a row of buttons that are mostly wrong for whatever block was tapped.
  *
- * `move` is not in this union. It was specified and wired once, but nothing in this plan
- * ever built a day/time picker for it, so "Move" behaved identically to "Later" with no way
- * to actually choose where a block went -- a silent stub, caught at the combined 12+13
- * review. Dropped rather than left indistinguishable from a real action; reinstate it once
- * a picker exists to back it.
+ * `move` is not in this union, and now genuinely does not need to be. It was specified and
+ * wired once with no day/time picker behind it, so "Move" behaved identically to "Later"
+ * with no way to actually choose where a block went -- a silent stub, dropped rather than
+ * left indistinguishable from a real action. `edit` below is the picker arriving: a block's
+ * day, hour and length are all changeable now, which is what `move` was reaching for and
+ * more.
  */
-export type BlockAction = 'done' | 'later' | 'cantStart' | 'confirm' | 'undo' | 'didRest'
+export type BlockAction =
+  | 'done'
+  | 'later'
+  | 'cantStart'
+  | 'confirm'
+  | 'undo'
+  | 'didRest'
+  | 'edit'
+  | 'remove'
+
+/**
+ * Offered on every block, whatever state it is in.
+ *
+ * Deliberately unconditional, where every other action here is conditional. The rest of this
+ * model answers "what can be said ABOUT this block", and that genuinely depends on whether
+ * it has happened yet. These two change what the block IS, and a student correcting their
+ * own week -- a cancelled class, a tutorial that turned out to be two hours -- is right to
+ * be able to do that on a fixed block, on protected rest, and on last Tuesday. The form says
+ * what each of those costs; it does not refuse.
+ */
+const MANUAL: readonly BlockAction[] = ['edit', 'remove']
 
 export interface BlockSheetModel {
   readonly item: ScheduledItem
@@ -48,20 +69,22 @@ const actionsFor = (
     // that back to the student, and letting protectedRest short-circuit past it would make
     // an answered nap and a never-touched one read identically: asked cold again, with no
     // way to undo, while every other block kind on the same screen does offer that.
-    if (item.protectedRest && !alreadyAsked) return ['didRest']
+    if (item.protectedRest && !alreadyAsked) return ['didRest', ...MANUAL]
 
-    return alreadyAsked ? ['undo'] : ['confirm']
+    return alreadyAsked ? ['undo', ...MANUAL] : ['confirm', ...MANUAL]
   }
 
   // A future or today protected-rest block has nothing to be "answered" about yet -- it
   // keeps asking whether it happened.
-  if (item.protectedRest) return ['didRest']
+  if (item.protectedRest) return ['didRest', ...MANUAL]
 
   // Fixed means classes, shifts and hard deadlines. The optimizer may not move them, so
-  // offering Move here would be the interface promising something the model refuses.
-  if (item.fixed) return ['done']
+  // there is no Later to offer -- deferring is a request the model would refuse. Editing one
+  // by hand is a different act entirely: not asking the solver to move it, but telling the
+  // app the class itself changed.
+  if (item.fixed) return ['done', ...MANUAL]
 
-  return ['done', 'later', 'cantStart']
+  return ['done', 'later', 'cantStart', ...MANUAL]
 }
 
 export function blockSheet({

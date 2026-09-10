@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ScheduledItem } from '../optimizer'
-import { firstAction, isStuck, MICRO_START_MINUTES } from './microStart'
+import { MAX_RUNG_MINUTES } from './ladder'
+import { firstAction, isStuck } from './microStart'
 
 const item = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
   id: 'essay',
@@ -37,9 +38,11 @@ describe('firstAction', () => {
   })
 
   // §4.1: a time box under ten minutes -- short enough that a stuck person believes it.
+  // The constant moved to `ladder.ts` with the table it belongs to: one first move is now
+  // rung one of a chain, and the box is the chain's box.
   it('boxes it under ten minutes', () => {
-    expect(firstAction(item()).minutes).toBeLessThan(10)
-    expect(MICRO_START_MINUTES).toBeLessThan(10)
+    expect(firstAction(item()).minutes).toBeLessThanOrEqual(MAX_RUNG_MINUTES)
+    expect(MAX_RUNG_MINUTES).toBeLessThanOrEqual(10)
   })
 
   // One action, never a list. Same reason as §5.2: a stuck person cannot choose.

@@ -1,8 +1,5 @@
-import type { ActivityKind } from '../engine'
 import type { ScheduledItem } from '../optimizer'
-
-/** §4.1's own example: "open the document and write the title. Eight minutes." */
-export const MICRO_START_MINUTES = 8
+import { ruleLadder } from './ladder'
 
 /**
  * §4.1's other half of the trigger: three days past first appearance.
@@ -22,40 +19,27 @@ export interface MicroStart {
 }
 
 /**
- * The smallest visible move for each kind of work.
+ * §4.1's single first move, for a surface with no room for a chain.
  *
- * §4.1's shape is permission at task level: "you don't have to write the essay, you have to
- * open the document and write the title". So these are first *moves*, not smaller versions
- * of the task -- "outline the essay" is still the essay, and a stuck person is no less stuck
- * looking at it.
+ * The Telegram bot answers `/start <task>` with one message and cannot walk a ladder, so it
+ * gets rung one. §3's stuck card in the room shows the same thing, unasked, and its call to
+ * action opens the page that carries the rest.
  *
- * One action each, never a list, for the reason §5.2 gives about prescriptions: somebody who
- * cannot start cannot choose either.
- */
-const FIRST_MOVE: Record<ActivityKind, string> = {
-  studyBlock: 'Open the document and write the title. Nothing else.',
-  errands: 'Find the one detail you need to start it — a number, an address, a name.',
-  lightExercise: 'Put your shoes on and stand by the door.',
-  hardExercise: 'Put your shoes on and stand by the door.',
-  socialDraining: 'Open the message and write the first line. Do not send it yet.',
-  socialRestorative: 'Open the message and write the first line. Do not send it yet.',
-  rest: 'Sit down and set a timer. That is the whole thing.',
-  sleep: 'Put the phone in another room.',
-}
-
-/**
- * One concrete first action, time-boxed under ten minutes.
- *
- * §4.1 asks the model for this in the real product; the rules here are what makes it work
- * with no key, on the same principle as the planner's fallback -- and a stuck student at
- * 2am is exactly who should not be waiting on a network.
+ * Derived from `ruleLadder` rather than keeping the table this file used to hold. Two tables
+ * is two answers to "what is the first move on this block", and the bot and the app would
+ * drift apart the first time either was edited alone.
  */
 export function firstAction(item: ScheduledItem): MicroStart {
-  return {
-    itemId: item.id,
-    action: FIRST_MOVE[item.kind],
-    minutes: MICRO_START_MINUTES,
+  const first = ruleLadder(item).rungs[0]
+
+  // `ruleLadder` returns at least MIN_RUNGS for every kind, so this is unreachable -- but
+  // `noUncheckedIndexedAccess` is right to insist, and a dull honest sentence reaching a
+  // student beats an empty one.
+  if (first === undefined) {
+    return { itemId: item.id, action: 'Start with the smallest part of it.', minutes: 5 }
   }
+
+  return { itemId: item.id, action: first.action, minutes: first.minutes }
 }
 
 /**

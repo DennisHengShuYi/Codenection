@@ -97,6 +97,18 @@ describe('blockSheet', () => {
     expect(sheet(item())?.microStart).toBeNull()
   })
 
+  /**
+   * Ported from `roomModel.attention.test.ts`, deleted with the rows API it tested when the
+   * room became display-only. The guard outlived its surface: §4.1's trigger is "three days
+   * past first appearance", and a task sixteen days in the *future* has not appeared yet.
+   * The age was once computed as `dayIndex - today` -- the wait ahead of a task rather than
+   * the time behind it -- so every distant errand read as stuck and the room shouted. The
+   * suite otherwise catches a flipped direction only side-on, via the stuck case above.
+   */
+  it('does not call a task scheduled a fortnight ahead stuck', () => {
+    expect(sheet(item({ dayIndex: 16 }), 0)?.microStart).toBeNull()
+  })
+
   it('returns null for an id that no longer exists', () => {
     expect(blockSheet({ schedule: week([]), itemId: 'gone', today: 0 })).toBeNull()
   })

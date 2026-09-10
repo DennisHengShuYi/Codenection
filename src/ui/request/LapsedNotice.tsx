@@ -1,4 +1,7 @@
 import type { Commitment } from '../../optimizer'
+import { Button } from '../kit/Button'
+import { CARD_TONES } from '../kit/Card'
+import { Field } from '../kit/Field'
 
 /**
  * The withdrawal, written in the student's own voice.
@@ -30,7 +33,7 @@ export function LapsedNotice({
     <section
       data-testid="lapsed-notice"
       role="status"
-      className="flex flex-col gap-3 rounded-lg border border-attention bg-attention-soft p-4"
+      className={`flex flex-col gap-3 rounded-lg border p-4 ${CARD_TONES.attention}`}
     >
       <div>
         <h2 className="text-lg font-medium">
@@ -47,18 +50,20 @@ export function LapsedNotice({
       {commitments.map((commitment) => (
         <div key={commitment.id} data-testid={`lapsed-item-${commitment.id}`} className="flex flex-col gap-1">
           <p className="text-sm font-medium">{commitment.title}</p>
-          <textarea
-            data-testid={`withdrawal-${commitment.id}`}
-            defaultValue={withdrawalFor(commitment)}
-            rows={3}
-            className="rounded border border-line p-2 text-sm"
-          />
+          <Field label="Withdrawal message">
+            <textarea
+              data-testid={`withdrawal-${commitment.id}`}
+              defaultValue={withdrawalFor(commitment)}
+              rows={3}
+              className="rounded border border-line p-2 text-sm"
+            />
+          </Field>
         </div>
       ))}
 
-      <button type="button" onClick={onDismiss} className="self-start text-sm underline">
+      <Button variant="quiet" size="sm" onClick={onDismiss} className="self-start">
         Got it
-      </button>
+      </Button>
     </section>
   )
 }

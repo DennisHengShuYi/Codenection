@@ -1,4 +1,5 @@
 import type { Session } from '../../data'
+import { Button } from '../kit/Button'
 import { Avatar } from './Avatar'
 
 /**
@@ -10,7 +11,7 @@ import { Avatar } from './Avatar'
  */
 export function AccountBar({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
   return (
-    <div className="flex items-center justify-between gap-3 text-xs opacity-70">
+    <div className="flex items-center justify-between gap-3 text-xs text-ink-soft">
       <span className="flex min-w-0 items-center gap-2">
         <Avatar email={session.email} name={session.name} avatarUrl={session.avatarUrl} />
         {/* truncate: a long Google display name must not push the sign-out button off a
@@ -18,9 +19,9 @@ export function AccountBar({ session, onSignOut }: { session: Session; onSignOut
         <span className="truncate">{session.name ?? session.email}</span>
       </span>
 
-      <button type="button" onClick={onSignOut} className="shrink-0 underline">
+      <Button variant="quiet" size="sm" onClick={onSignOut} className="shrink-0">
         Sign out
-      </button>
+      </Button>
     </div>
   )
 }

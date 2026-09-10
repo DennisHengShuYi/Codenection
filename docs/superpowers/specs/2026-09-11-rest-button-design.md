@@ -25,6 +25,21 @@ The verdict therefore splits, and the split is the design:
   for: reserve before, reserve after, and the shift in the projection.
 - **Rest needs something moved** — "worth it" is a real gate, and it can say no.
 
+### Amended by synthetic deadlines
+
+The paragraph above was true **only because nothing priced the slack the rest consumed.**
+`2026-09-11-synthetic-deadlines-design.md` gives every undated item a soft deadline, which
+means occupying a gap now has a cost: it is slack something else needed.
+
+So the gate is live on **every** rung, not only the one where work moves. The ladder below
+is unchanged; what changes is that rungs 0 and 2 can now refuse, and the two extra
+conditions in "The gate" apply everywhere.
+
+The brake on repeated Rest falls out of the same mechanism. Rest carries its own
+regenerating soft deadline, so taking rest satisfies it and pushes it forward — and the
+second rest of the day has no deadline left to meet. It stops earning and becomes pure cost
+against everything competing for the same slack.
+
 ## The ladder
 
 Four rungs, tried in order. The first that succeeds is the answer.
@@ -57,13 +72,20 @@ that list to moves which actually open a slot on the day in question, which is a
 question from "does this help the fortnight" and the reason the filter exists at all.
 
 **The gate.** Project the week with the move applied *and* the rest block in the opened
-slot, against the week as it stands. Require both:
+slot, against the week as it stands. Require all four:
 
-- the worst floor across all four reserves does not fall, and
-- deficit days do not rise.
+- the worst floor across all four reserves does not fall,
+- deficit days do not rise,
+- no soft deadline is newly missed that was being met before, and
+- the day is not already at its recovery ceiling.
 
-Failing either drops to rung 2. The move helping on its own is not sufficient, because the
+Failing any drops to rung 2. The move helping on its own is not sufficient, because the
 rest block occupies the room the move made and the displaced work has to go somewhere.
+
+The last two conditions come from the synthetic-deadlines design and apply on **every**
+rung, including rung 0 where nothing of the student's moves. They are what stop repeated
+Rest from delaying everything indefinitely, and the ceiling is what stops a day being
+flooded into the invalid state described there.
 
 ### Rung 2 — the earliest later day with room
 

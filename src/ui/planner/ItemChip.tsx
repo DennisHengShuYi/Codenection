@@ -1,6 +1,7 @@
 import type { ParsedItem } from '../../ai'
 import { ACTIVITY_KINDS, LOAD_TYPES, type ActivityKind, type LoadType } from '../../engine'
 import { Button } from '../kit/Button'
+import { CARD_TONES } from '../kit/Card'
 import { Field } from '../kit/Field'
 
 /** The engine's vocabulary in a student's words. "Mental load" is a modelling term; "study
@@ -36,14 +37,14 @@ export function ItemChip({
   onRemove: (id: string) => void
 }) {
   // A list item, not `Card` -- `Card` renders a `<div>`, and this always sits inside the
-  // screens' `<ul>` of chips, where a `<div>` would be invalid list markup. The border/tone
-  // classes mirror `Card`'s own so a flagged chip still reads as the same "needs you" state
-  // used everywhere else (§1.5).
+  // screens' `<ul>` of chips, where a `<div>` would be invalid list markup. `CARD_TONES` is
+  // `Card`'s own tone map, borrowed rather than retyped, so a flagged chip still reads as
+  // the same "needs you" state used everywhere else (§1.5).
   return (
     <li
       data-testid={`chip-${item.id}`}
       className={`flex flex-col gap-3 rounded-xl border p-3 ${
-        item.confident ? 'border-line bg-surface' : 'border-attention bg-attention-soft'
+        item.confident ? 'border-line bg-surface' : CARD_TONES.attention
       }`}
     >
       <Field label="What">

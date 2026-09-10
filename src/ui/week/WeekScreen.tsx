@@ -172,7 +172,7 @@ export function WeekScreen(props: {
               type="button"
               data-testid={`block-${item.id}`}
               onClick={() => onSelectBlock(item.id)}
-              className={`absolute left-14 right-2 min-h-11 break-words rounded-lg p-1 text-left text-xs text-white ${TYPE_HUE[item.type]}`}
+              className={`absolute left-14 right-2 min-h-11 break-words rounded-lg p-1 text-left text-xs text-on-color ${TYPE_HUE[item.type]}`}
               style={{ top: `${topPercent}%`, height: `${heightPercent}%` }}
             >
               {/* `break-words` on both lines: a pasted URL or a spaceless course code must

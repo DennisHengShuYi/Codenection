@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { hasTelegramLink, requestLinkCode, unlinkTelegram } from '../../data'
-import { Button } from '../kit/Button'
+import { Button, buttonClassName } from '../kit/Button'
 
 type Offer = { code: string; url: string }
 
@@ -92,12 +92,16 @@ export function LinkTelegram() {
           ) : (
             <>
               {/* The link is the path anybody on a phone should take. The code is shown as
-                  well for the case where the app and Telegram are on different devices. */}
+                  well for the case where the app and Telegram are on different devices.
+                  This stays an <a>, not a `Button`, because a real <button> would break
+                  middle-click and open-in-new-tab for a navigation link -- but it borrows
+                  `Button`'s own class list rather than retyping the primary button's
+                  classes a nineteenth time. */}
               <a
                 href={offer.url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex min-h-11 items-center self-start rounded-xl bg-ink px-3 py-2 text-sm font-medium text-white"
+                className={buttonClassName('primary', 'sm', 'self-start')}
               >
                 Open Telegram
               </a>

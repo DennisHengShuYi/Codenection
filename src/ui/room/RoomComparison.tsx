@@ -20,11 +20,11 @@ export function RoomComparison({ now, ifAccepted }: { now: RoomModel; ifAccepted
   return (
     <div data-testid="room-comparison" className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <div className="flex flex-col gap-1">
-        <h3 className="text-xs font-medium uppercase tracking-wide opacity-70">Now</h3>
+        <h3 className="text-xs font-medium uppercase tracking-wide text-ink-soft">Now</h3>
         <Room model={now} />
       </div>
       <div className="flex flex-col gap-1">
-        <h3 className="text-xs font-medium uppercase tracking-wide opacity-70">If you accept</h3>
+        <h3 className="text-xs font-medium uppercase tracking-wide text-ink-soft">If you accept</h3>
         <Room model={ifAccepted} />
       </div>
     </div>

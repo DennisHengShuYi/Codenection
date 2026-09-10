@@ -107,21 +107,22 @@ export function firstDeficitDay(projection: Projection): number | null {
  * to a *copy* of the week and reading the difference out of the projection that already
  * exists -- the model already knows the answer, because it has just been asked to carry it.
  *
- * `today` and `blockLog` default to `0` and `[]` -- the same "nothing has happened yet"
- * state `checkedInDays` already treats as fully checked in when `today` is `0` -- so a
- * caller with no check-in context (the Telegram `/ask` path, which has no durable log to
- * read yet) keeps exactly the behaviour it had. `RequestBoxScreen` is not that caller: it
- * has the student's own `today` and `blockLog` on hand and must thread them, the same way
- * `roomModel` and `lapsed` do, so the price quoted here is judged against the fortnight the
- * student is actually living -- including §6.5's missing-data pessimism -- rather than an
- * optimistic stand-in for it.
+ * `today` and `blockLog` are REQUIRED, and that is Ruling 41's enabler rather than a style
+ * preference. They used to default to `0` and `[]`, and the defaults are precisely what let
+ * the Telegram `/ask` call site be silently wrong for as long as it existed: it priced every
+ * request against day 0 of the fortnight with no check-in evidence, compiled, read
+ * reasonably, and tested green. A caller that genuinely means "no evidence" says so, in
+ * writing, at the call site -- which is a thing a reviewer can see.
+ *
+ * With them supplied, the price is judged against the fortnight the student is actually
+ * living, including §6.5's missing-data pessimism, the same way `roomModel` and `lapsed` do.
  */
 export function priceRequest(
   schedule: Schedule,
   item: ParsedItem,
   params: EngineParams,
-  today = 0,
-  blockLog: readonly BlockRecord[] = [],
+  today: number,
+  blockLog: readonly BlockRecord[],
 ): RequestCost {
   const checkedIn = checkedInDays(blockLog, today, schedule.horizonDays)
   const before = project(schedule.start, toDayInputs(schedule, checkedIn), params)

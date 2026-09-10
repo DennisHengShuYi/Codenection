@@ -53,8 +53,18 @@ const request = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   ...over,
 })
 
+/**
+ * Day 0 with an empty log, said out loud rather than left to a default.
+ *
+ * Ruling 41 made both required, so "no evidence" is now something a call site states. These
+ * cases are about the pricing arithmetic itself and want a fortnight nothing has happened
+ * in yet -- which `checkedInDays` already treats as fully checked in at day 0 -- so this is
+ * deliberate, not an omission.
+ */
+const NO_EVIDENCE_YET = { today: 0, log: [] as readonly BlockRecord[] }
+
 const priceOf = (schedule: Schedule, item = request()) =>
-  priceRequest(schedule, item, DEFAULT_PARAMS)
+  priceRequest(schedule, item, DEFAULT_PARAMS, NO_EVIDENCE_YET.today, NO_EVIDENCE_YET.log)
 
 describe('firstDeficitDay', () => {
   it('is null for a fortnight that never crosses', () => {
@@ -168,7 +178,7 @@ describe('priceRequest', () => {
     })
     const today = 10
 
-    const silent = priceRequest(busy, request({ hours: 6 }), DEFAULT_PARAMS, today)
+    const silent = priceRequest(busy, request({ hours: 6 }), DEFAULT_PARAMS, today, [])
     const checkedIn = priceRequest(
       busy,
       request({ hours: 6 }),

@@ -1,6 +1,23 @@
 -- §8b: make block_answers readable, and make it carry enough to compute an outcome.
 --
--- NOT APPLIED AUTOMATICALLY. Apply it the way 0002, 0003 and 0004 were applied.
+-- ============================================================================
+-- DEPLOY GATE. THIS MIGRATION MUST BE APPLIED BEFORE THIS BRANCH IS DEPLOYED.
+-- ============================================================================
+--
+-- NOT APPLIED AUTOMATICALLY, and nothing in this repository applies it. Apply it by hand,
+-- the way 0002, 0003 and 0004 were applied, and do it BEFORE the code that reads these
+-- columns is serving anyone.
+--
+-- What depends on it, and what breaks without it:
+--   * src/data/supabaseRepository.ts  -- loadBlockLog / recordBlockAnswer / clear
+--   * api/telegram.ts (createStore)   -- recordBlockAnswer, loadBlockLog
+-- Both reject rather than swallowing the failure, on purpose (Ruling 42): a signed-in
+-- student on an unmigrated database is told the answer could not be saved and that a
+-- request cannot be priced, instead of being told "Noted." while nothing is written and
+-- being quoted a price computed as though they had answered nothing.
+--
+-- So the failure is loud, but it is still a failure: until this is applied, §2.4's Reality
+-- Check, §6.5's missing-data pessimism and §7.3's calibration have no evidence to run on.
 --
 -- 0004 stored an answer and nothing else, which is why nothing could read it: a week lives
 -- in a jsonb column, so `block_id` has nothing to join against and the type and planned

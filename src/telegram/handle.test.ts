@@ -62,6 +62,7 @@ function harness(over: Partial<ChatStore> = {}): Harness {
     recordBlockAnswer: async (_accountId, answer) => {
       blockAnswers.push(answer)
     },
+    loadBlockLog: async () => [],
     ...over,
   }
 
@@ -607,6 +608,62 @@ describe('pricing a request', () => {
     await handleIntent(ask('cover my shift'), h.store, 1000, { priceAsk })
 
     expect(priceAsk).not.toHaveBeenCalled()
+  })
+
+  /**
+   * Ruling 41. `/ask` priced against day 0 of the fortnight no matter what day it was, with
+   * no check-in evidence at all -- while the app's own request box passed both. The same
+   * question got two answers depending on which door it came through, and `todayFor` was
+   * already in this file and already used by the `today` and `yesterday` branches.
+   */
+  it('prices against the day the student is actually on', async () => {
+    const anchored = {
+      ...week(),
+      // Anchored three days before `now` below, so day 3 is the only correct answer and
+      // day 0 -- what this branch used to imply -- is visibly wrong.
+      startedOn: '2026-03-02',
+    }
+    const h = harness({ loadWeek: async () => anchored as never })
+    const priceAsk = vi.fn().mockResolvedValue(priced)
+
+    await handleIntent(
+      ask('cover my shift'),
+      h.store,
+      Date.parse('2026-03-05T09:00:00Z'),
+      { priceAsk },
+    )
+
+    expect(priceAsk).toHaveBeenCalledWith('cover my shift', anchored, 3, [])
+  })
+
+  // The evidence half. Without it the price is quoted against a fortnight assumed to be
+  // fully checked in, which is the optimistic stand-in §6.5 exists to refuse.
+  it('prices against the block log the account has actually written', async () => {
+    const log: BlockRecord[] = [
+      { blockId: 'b1', type: 'mental', plannedHours: 2, dayIndex: 0, answer: 'longer', answeredAt: 1 },
+    ]
+    const h = harness({ loadBlockLog: async () => log })
+    const priceAsk = vi.fn().mockResolvedValue(priced)
+
+    await handleIntent(ask('cover my shift'), h.store, 1000, { priceAsk })
+
+    expect(priceAsk).toHaveBeenCalledWith('cover my shift', expect.anything(), 0, log)
+  })
+
+  // Ruling 42's shape: a block-log read that cannot reach its columns must be visible, not
+  // swallowed into a price computed as though the student had never answered anything.
+  it('says it cannot price rather than pricing on evidence it could not read', async () => {
+    const h = harness({
+      loadBlockLog: async () => {
+        throw new Error('column "load_type" does not exist')
+      },
+    })
+    const priceAsk = vi.fn().mockResolvedValue(priced)
+
+    const reply = await handleIntent(ask('cover my shift'), h.store, 1000, { priceAsk })
+
+    expect(priceAsk).not.toHaveBeenCalled()
+    expect(reply?.text).toMatch(/cannot price/i)
   })
 })
 

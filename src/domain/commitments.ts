@@ -64,3 +64,26 @@ export function lapsed(
 
   return due
 }
+
+/**
+ * Drops the acceptance a removed block was standing for.
+ *
+ * A `Commitment` points at the item `accept` created for it, and 2.3's whole mechanism --
+ * a review date that lapses on its own -- reads that item through the projection. A
+ * commitment left pointing at a block that no longer exists would go on being weighed and
+ * go on being offered for withdrawal, for something that is not in the week any more.
+ *
+ * Lives here rather than in `scheduleEdits` because what a commitment is, and when it stops
+ * being one, is this module's question; `removeItem` only needs to ask it.
+ *
+ * Returns the identical object when nothing matched, so a caller can tell a real change
+ * from a no-op without comparing contents.
+ */
+export function dropCommitmentFor(schedule: Schedule, itemId: string): Schedule {
+  const commitments = schedule.commitments
+  if (commitments === undefined) return schedule
+
+  const kept = commitments.filter((commitment) => commitment.itemId !== itemId)
+
+  return kept.length === commitments.length ? schedule : { ...schedule, commitments: kept }
+}

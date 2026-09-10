@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Repository, Session } from '../../data'
-import { addItems } from '../../domain/addItems'
+import type { ParsedItem } from '../../ai'
+import { describePlacement, placeItems } from '../../domain/placement'
 import { checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
 import { anchorTo, dateFor, isAnchored, todayIndex } from '../../domain/calendar'
 import { accept, lapsed } from '../../domain/commitments'
@@ -13,13 +14,14 @@ import { completeItem, deferItem } from '../../domain/scheduleEdits'
 import { scheduleRecovery } from '../../domain/scheduleRecovery'
 import { overallReserve, project } from '../../engine'
 import type { Fix } from '../../optimizer'
-import { toDayInputs } from '../../optimizer'
+import { smallestFixes, toDayInputs } from '../../optimizer'
 import { AddSheet } from '../AddSheet'
 import { AccountBar } from '../auth/AccountBar'
 import { PreviewBanner } from '../auth/PreviewBanner'
 import { CapacityDial } from '../dial/CapacityDial'
 import { domainBars } from '../dial/domainBars'
 import { Button } from '../kit/Button'
+import { Card } from '../kit/Card'
 import { Sheet } from '../kit/Sheet'
 import { LinkTelegram } from '../settings/LinkTelegram'
 import { LowEnergyControl } from '../settings/LowEnergyControl'
@@ -95,6 +97,12 @@ export function RoomShell({
   const [stuckDismissedId, setStuckDismissedId] = useState<string | null>(null)
   const [todayDismissed, setTodayDismissed] = useState(false)
   const [sleepAnsweredToday, setSleepAnsweredToday] = useState(false)
+
+  // What just happened to the things the student added, and the one move that would help
+  // if anything had to give. Session-scoped like every other dismissal here: this is a
+  // report on an action they just took, not a state of the week.
+  const [placementLines, setPlacementLines] = useState<readonly string[]>([])
+  const [placementFix, setPlacementFix] = useState<Fix | null>(null)
 
   const reducedMotion = useReducedMotion()
   const { play } = useTidyUp(reducedMotion)
@@ -210,6 +218,31 @@ export function RoomShell({
     }
   }
 
+  /**
+   * §15/§16: place what was accepted, say where it went, and offer one optional move.
+   *
+   * Deliberately not a second rearranging algorithm. `placeItems` never touches anything
+   * already in the week, so the student's own decisions survive intact; when something had
+   * to land somewhere other than where it asked, `smallestFixes` -- the search that already
+   * exists, with full 21-day scoring -- is asked for the single best move, and the student
+   * decides whether to take it. Two systems rearranging a week with different logic would
+   * disagree, and the one that ran last would win.
+   */
+  // A `const` arrow rather than a declaration: declarations hoist above the `today === null`
+  // guard, so TypeScript cannot narrow the day away and `placeItems` would be handed a
+  // possibly-null day. The guard is the real protection; this keeps the compiler able to see it.
+  const acceptItems = (items: readonly ParsedItem[]) => {
+    const { schedule: next, notes } = placeItems(week, items, today)
+    setSchedule(next)
+
+    const moved = notes.filter((note) => note.movedFrom !== null || !note.fitted)
+    setPlacementLines(notes.map((note) => describePlacement(note, next)))
+
+    // Only when something actually had to give. A week that simply absorbed the new work
+    // has nothing to offer and nothing to apologise for.
+    setPlacementFix(moved.length === 0 ? null : (smallestFixes(next, params, 1)[0] ?? null))
+  }
+
   function answerBlock(itemId: string, answer: BlockAnswer) {
     const item = week.items.find((candidate) => candidate.id === itemId)
     if (!item) return
@@ -305,6 +338,50 @@ export function RoomShell({
             {paragraph}
           </p>
 
+          {/* §16: never silently reshuffle. What was added, where it went, and -- only when
+              something had to give -- the single move that would help, offered rather than
+              taken. "Leave it" is the healthy default: doing nothing keeps the week the
+              student decided on. */}
+          {placementLines.length > 0 && (
+            <Card role="status" data-testid="placement-note" className="flex flex-col gap-2">
+              {placementLines.map((line, index) => (
+                <p key={`${line}-${index}`} className="text-sm">
+                  {line}
+                </p>
+              ))}
+
+              {placementFix !== null && (
+                <>
+                  <p className="text-sm text-ink-soft">Or: {placementFix.move.description}.</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      data-testid="placement-do"
+                      onClick={() => {
+                        setSchedule(placementFix.move.apply(week))
+                        setPlacementLines([])
+                        setPlacementFix(null)
+                      }}
+                    >
+                      Do that
+                    </Button>
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      data-testid="placement-leave"
+                      onClick={() => {
+                        setPlacementLines([])
+                        setPlacementFix(null)
+                      }}
+                    >
+                      Leave it
+                    </Button>
+                  </div>
+                </>
+              )}
+            </Card>
+          )}
+
           <AccuracyNote predictions={profile.predictions} />
 
           <LiveCards
@@ -399,7 +476,7 @@ export function RoomShell({
           params={params}
           today={today}
           blockLog={blockLog}
-          onAcceptItems={(items) => setSchedule(addItems(week, items))}
+          onAcceptItems={(items) => acceptItems(items)}
           onAcceptRequest={(item) => setSchedule(accept(week, item, today))}
           onClose={closeToRoom}
         />

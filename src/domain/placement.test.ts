@@ -1,0 +1,192 @@
+import { describe, expect, it } from 'vitest'
+import type { ParsedItem } from '../ai'
+import { HORIZON_DAYS } from '../engine'
+import type { Schedule, ScheduledItem } from '../optimizer'
+import { describePlacement, placeItems } from './placement'
+
+const empty = (): Schedule => ({
+  items: [],
+  start: { mental: 70, physical: 70, social: 70, errands: 70 },
+  horizonDays: HORIZON_DAYS,
+  sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+})
+
+const parsed = (over: Partial<ParsedItem> = {}): ParsedItem => ({
+  id: 'a',
+  title: 'Essay',
+  type: 'mental',
+  kind: 'studyBlock',
+  hours: 3,
+  deadlineDay: null,
+  fixed: false,
+  confident: true,
+  ...over,
+})
+
+/** A day with no room left in it at all. */
+const fullDay = (dayIndex: number): ScheduledItem => ({
+  id: `wall-${dayIndex}`,
+  title: 'Solid',
+  type: 'mental',
+  kind: 'studyBlock',
+  hours: 16,
+  intensity: 1,
+  dayIndex,
+  startHour: 8,
+  fixed: true,
+  deadlineDay: null,
+  protectedRest: false,
+})
+
+describe('placeItems', () => {
+  it('puts an item where it asked to go when there is room', () => {
+    const { schedule, notes } = placeItems(empty(), [parsed({ deadlineDay: 4 })], 0)
+
+    expect(schedule.items[0]?.dayIndex).toBe(4)
+    expect(notes[0]?.movedFrom).toBeNull()
+  })
+
+  /**
+   * The step the old code never took. A day with no room used to get the item anyway,
+   * stacked on top of whatever was there -- so the week said something that was not true.
+   *
+   * Earlier, not later: a deadline is a latest bound, so a full due-day sends work
+   * backwards toward today. Pushing it past the day it is due would be the one
+   * rearrangement that costs a student marks.
+   */
+  it('moves earlier when the day it is due is full', () => {
+    const { schedule, notes } = placeItems(
+      { ...empty(), items: [fullDay(6)] },
+      [parsed({ deadlineDay: 6 })],
+      0,
+    )
+
+    expect(schedule.items[1]?.dayIndex).toBe(5)
+    expect(notes[0]?.movedFrom).toBe(6)
+  })
+
+  /** Undated work has no wall to back away from, so it looks forward instead. */
+  it('moves later when undated work has nowhere to sit', () => {
+    const { schedule, notes } = placeItems({ ...empty(), items: [fullDay(2)] }, [parsed()], 0)
+
+    expect(schedule.items[1]?.dayIndex).toBe(3)
+    expect(notes[0]?.movedFrom).toBe(2)
+  })
+
+  /**
+   * A deadline is a wall, not a preference. Moving something past the day it is due to
+   * make the week look tidier is the one rearrangement that costs the student marks.
+   */
+  it('never moves an item past its deadline to find room', () => {
+    const walled = { ...empty(), items: [fullDay(2), fullDay(3)] }
+
+    const { schedule } = placeItems(walled, [parsed({ deadlineDay: 3, hours: 4 })], 0)
+
+    expect(schedule.items.at(-1)?.dayIndex).toBeLessThanOrEqual(3)
+  })
+
+  it('still adds an item that fits nowhere before its deadline', () => {
+    // Every day it could legally use is solid, so there is genuinely nowhere for it.
+    const walled = { ...empty(), items: [fullDay(0), fullDay(1), fullDay(2), fullDay(3)] }
+
+    const { schedule, notes } = placeItems(walled, [parsed({ deadlineDay: 3, hours: 4 })], 0)
+
+    expect(schedule.items).toHaveLength(5)
+    expect(notes[0]?.fitted).toBe(false)
+  })
+
+  it('never searches earlier than today', () => {
+    const { schedule } = placeItems(empty(), [parsed({ deadlineDay: 1 })], 5)
+
+    expect(schedule.items[0]?.dayIndex).toBeGreaterThanOrEqual(5)
+  })
+
+  /**
+   * §16: never silently reshuffle. Inaction produces the healthy outcome and the student
+   * stays in charge of their own week -- so placing something new may read the schedule but
+   * must never write to any part of it that was already there.
+   */
+  it('never moves anything already in the week', () => {
+    const before = { ...empty(), items: [fullDay(4)] }
+    const settled = before.items.map(({ id, dayIndex, startHour }) => ({ id, dayIndex, startHour }))
+
+    const { schedule } = placeItems(before, [parsed({ deadlineDay: 6 })], 0)
+
+    expect(
+      schedule.items
+        .filter((item) => item.id.startsWith('wall-'))
+        .map(({ id, dayIndex, startHour }) => ({ id, dayIndex, startHour })),
+    ).toEqual(settled)
+  })
+
+  it('places several items without stacking them', () => {
+    const dump = Array.from({ length: 4 }, (_, index) =>
+      parsed({ id: `x${index}`, hours: 3, deadlineDay: 3 }),
+    )
+
+    const { schedule } = placeItems(empty(), dump, 0)
+    const onDayThree = schedule.items.filter((item) => item.dayIndex === 3)
+
+    for (const [i, a] of onDayThree.entries()) {
+      for (const b of onDayThree.slice(i + 1)) {
+        expect(a.startHour < b.startHour + b.hours && b.startHour < a.startHour + a.hours).toBe(false)
+      }
+    }
+  })
+
+  it('reports one note per item accepted', () => {
+    const { notes } = placeItems(empty(), [parsed({ id: 'a' }), parsed({ id: 'b' })], 0)
+
+    expect(notes).toHaveLength(2)
+  })
+
+  it('does not modify the week it was given', () => {
+    const before = { ...empty(), items: [fullDay(4)] }
+    const snapshot = JSON.stringify(before)
+
+    placeItems(before, [parsed({ deadlineDay: 6 })], 0)
+
+    expect(JSON.stringify(before)).toBe(snapshot)
+  })
+})
+
+/**
+ * §16: say what was done. Silent displacement breaks a student's mental model of their own
+ * week -- they look at Tuesday, remember putting something there, and it is gone.
+ */
+describe('describePlacement', () => {
+  const note = (over: Partial<Parameters<typeof describePlacement>[0]> = {}) => ({
+    itemId: 'a',
+    title: 'Essay draft',
+    dayIndex: 4,
+    movedFrom: null,
+    fitted: true,
+    ...over,
+  })
+
+  it('says nothing beyond the plain fact when nothing had to move', () => {
+    expect(describePlacement(note(), null)).toBe('Added.')
+  })
+
+  it('names both days when it had to go somewhere else', () => {
+    const line = describePlacement(note({ movedFrom: 2, dayIndex: 4 }), null)
+
+    expect(line).toContain('day 2')
+    expect(line).toContain('day 4')
+  })
+
+  it('uses the real weekday when the week knows what day it is', () => {
+    const anchored = { ...empty(), startedOn: '2026-09-07' }
+
+    expect(describePlacement(note({ movedFrom: 1, dayIndex: 3 }), anchored)).toMatch(
+      /Tuesday|Thursday/,
+    )
+  })
+
+  /** Honest about the case it could not solve, rather than claiming a placement it did not
+   *  make. The student can see the day is overfull; pretending otherwise loses their trust
+   *  in every other thing the app says. */
+  it('says so when it could not find room at all', () => {
+    expect(describePlacement(note({ fitted: false }), null)).toMatch(/no room|does not fit|full/i)
+  })
+})

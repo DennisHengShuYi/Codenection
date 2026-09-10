@@ -20,12 +20,21 @@ const BAND_LABEL: Record<LoadBand, string> = {
   heavy: 'heavy',
 }
 
-// §1.5: colour never carries meaning alone. These shades are only ever paired with the band
-// word in the button's own accessible name.
+// §1.5: colour never carries meaning alone. These shades are paired with the band word in
+// the button's accessible name *and* with `BAND_GLYPH` below, visibly, in the button itself
+// -- an accessible name is not a visual pairing.
 const BAND_SHADE: Record<LoadBand, string> = {
   light: 'bg-line/40',
   busy: 'bg-attention/30',
   heavy: 'bg-attention/70',
+}
+
+/** The spec's own mockup legend: `░ light ▓ busy █ heavy`. The only visible (not just
+ *  spoken) distinction between the three load bands. */
+const BAND_GLYPH: Record<LoadBand, string> = {
+  light: '░',
+  busy: '▓',
+  heavy: '█',
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -107,7 +116,13 @@ export function WeekScreen(props: {
                 className={`flex min-h-11 w-full flex-col items-center justify-center gap-1 rounded-lg border border-line p-2 text-xs aspect-square md:aspect-auto ${BAND_SHADE[cell.band]}`}
               >
                 <span>{dayLabel(cell.dayIndex, cell.date)}</span>
+                <span aria-hidden="true">{BAND_GLYPH[cell.band]}</span>
                 {cell.deficit && <span aria-hidden="true">⚠</span>}
+                {/* §4: the confirmation prompt discoverable from the overview, not only from
+                    the card -- quiet on purpose, so the deficit ⚠ above stays the louder
+                    signal. Paired with the same "not confirmed" text already in the button's
+                    accessible name. */}
+                {cell.unconfirmed && <span aria-hidden="true">?</span>}
               </button>
             </li>
           )

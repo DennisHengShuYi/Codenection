@@ -141,6 +141,53 @@ describe('WeekScreen', () => {
     expect(screen.getByTestId('day-4')).toHaveAccessibleName(/busy/i)
   })
 
+  /**
+   * §1.5/§12: colour never carries meaning alone. `BAND_SHADE` was the only visual
+   * difference between light, busy and heavy -- the band word reached the `aria-label`
+   * only, which is not a visual pairing. Every cell shows the legend glyph for its own
+   * band, matching the spec's own mockup (`░ light ▓ busy █ heavy`).
+   */
+  it('pairs the load band with a visible glyph, not colour alone', () => {
+    setup(week([item('a', 4, 9, BUSY_ABOVE_HOURS)]))
+
+    expect(within(screen.getByTestId('day-4')).getByText('▓')).toBeInTheDocument()
+    expect(within(screen.getByTestId('day-5')).getByText('░')).toBeInTheDocument()
+  })
+
+  it('marks a heavy day with its own visible glyph', () => {
+    setup(week([item('a', 2, 9, 11)]))
+
+    expect(within(screen.getByTestId('day-2')).getByText('█')).toBeInTheDocument()
+  })
+
+  /**
+   * `scheduleView` computes `unconfirmed` and this screen's test already asserted it landed
+   * in the `aria-label` -- but the button's visible children were only the date and the
+   * deficit ⚠, so the mark never reached a sighted student. The spec needs it discoverable
+   * from the overview, not only from a screen reader.
+   */
+  it('shows a visible mark for an unconfirmed day, not only in the accessible name', () => {
+    setup(week([item('essay', 0)]))
+
+    const cell = screen.getByTestId('day-0')
+    expect(within(cell).getByText('?')).toBeInTheDocument()
+  })
+
+  it('does not show the unconfirmed mark once the block is answered', () => {
+    const answered: BlockRecord = {
+      blockId: 'essay',
+      type: 'mental',
+      plannedHours: 2,
+      dayIndex: 0,
+      answer: 'right',
+      answeredAt: 0,
+    }
+
+    setup(week([item('essay', 0)]), { blockLog: [answered] })
+
+    expect(within(screen.getByTestId('day-0')).queryByText('?')).not.toBeInTheDocument()
+  })
+
   it('names a deficit day in words and marks it with an aria-hidden glyph', () => {
     // A fortnight that starts flat is in deficit regardless of how empty the days look --
     // see scheduleView.test.ts. Day 0 is never ahead of `today`, so it is eligible to

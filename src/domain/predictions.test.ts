@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS, HORIZON_DAYS } from '../engine'
-import type { Schedule, ScheduledItem } from '../optimizer'
+import { ALL_PRESENT, type Schedule, type ScheduledItem } from '../optimizer'
 import type { BlockRecord } from './blockLog'
 import { anchorTo } from './calendar'
 import {
@@ -65,7 +65,7 @@ describe('predictEnergy', () => {
    * do -- and why this is the falsifiable claim and that one is not.
    */
   it('predicts a figure for a day inside the horizon', () => {
-    const predicted = predictEnergy(week(), DEFAULT_PARAMS, 2)
+    const predicted = predictEnergy(week(), DEFAULT_PARAMS, 2, ALL_PRESENT)
 
     expect(predicted).toBeGreaterThan(0)
     expect(predicted).toBeLessThanOrEqual(100)
@@ -74,8 +74,8 @@ describe('predictEnergy', () => {
   it('predicts a lower figure for a heavier week', () => {
     const heavy = week({ start: { mental: 20, physical: 20, social: 20, errands: 20 } })
 
-    const depleted = predictEnergy(heavy, DEFAULT_PARAMS, 2)
-    const rested = predictEnergy(week(), DEFAULT_PARAMS, 2)
+    const depleted = predictEnergy(heavy, DEFAULT_PARAMS, 2, ALL_PRESENT)
+    const rested = predictEnergy(week(), DEFAULT_PARAMS, 2, ALL_PRESENT)
 
     expect(depleted).not.toBeNull()
     expect(rested).not.toBeNull()
@@ -85,7 +85,7 @@ describe('predictEnergy', () => {
   // It comes from the same projection the rest of the app runs on. A separate predictor
   // would be scoring something the student never saw.
   it('predicts nothing for a day outside the horizon', () => {
-    expect(predictEnergy(week(), DEFAULT_PARAMS, HORIZON_DAYS + 5)).toBeNull()
+    expect(predictEnergy(week(), DEFAULT_PARAMS, HORIZON_DAYS + 5, ALL_PRESENT)).toBeNull()
   })
 })
 

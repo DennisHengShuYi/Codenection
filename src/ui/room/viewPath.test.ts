@@ -6,6 +6,7 @@ import {
   toAdd,
   toBlock,
   toEditBlock,
+  toMicroStart,
   toNewBlock,
   toPath,
   toNotices,
@@ -170,5 +171,34 @@ describe('ascending out of the new doors', () => {
 
   it('is false when opening an edit form from a block', () => {
     expect(isAscent(toBlock('essay'), toEditBlock('essay'))).toBe(false)
+  })
+})
+
+describe('the micro-start address', () => {
+  it('sits under the block it is about', () => {
+    expect(toPath(toMicroStart('b1'))).toBe('/week/block/b1/start')
+  })
+
+  it('round-trips through the address', () => {
+    expect(fromPath('/week/block/b1/start')).toEqual({ kind: 'microStart', itemId: 'b1' })
+  })
+
+  // Ids are free-form -- the planner derives one from whatever the student typed -- so an
+  // unencoded slash would write a path with an extra segment in it.
+  it('encodes an id with a slash in it', () => {
+    const view = toMicroStart('a/b')
+
+    expect(toPath(view)).toBe('/week/block/a%2Fb/start')
+    expect(fromPath(toPath(view))).toEqual(view)
+  })
+
+  it('is a descent from the block, so Back does not walk forward into it', () => {
+    expect(isAscent(toBlock('b1'), toMicroStart('b1'))).toBe(false)
+    expect(isAscent(toMicroStart('b1'), toBlock('b1'))).toBe(true)
+  })
+
+  it('does not confuse the edit form or an unknown leaf with the page', () => {
+    expect(fromPath('/week/block/b1/edit')).toEqual(toEditBlock('b1'))
+    expect(fromPath('/week/block/b1/elsewhere')).toEqual(ROOM)
   })
 })

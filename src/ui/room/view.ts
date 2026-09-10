@@ -55,6 +55,14 @@ export type View =
   | { readonly kind: 'rebalance' }
   /** One block's own fields, under the block it is about. */
   | { readonly kind: 'editBlock'; readonly itemId: string }
+  /**
+   * §4.1's ladder, under the block it is about.
+   *
+   * A page rather than a panel on the sheet, and for the same reason `rebalance` is a door:
+   * the point of it is that nothing else is in view. Somebody who cannot start a task is not
+   * helped by the task sitting behind a card telling them how to start it.
+   */
+  | { readonly kind: 'microStart'; readonly itemId: string }
   /** A block being added to a named day, which is why the day is in the address: the form
    *  is opened FROM a day the student was already looking at. */
   | { readonly kind: 'newBlock'; readonly dayIndex: number }
@@ -82,6 +90,8 @@ export const toRebalance = (): View => REBALANCE
 
 export const toEditBlock = (itemId: string): View => ({ kind: 'editBlock', itemId })
 
+export const toMicroStart = (itemId: string): View => ({ kind: 'microStart', itemId })
+
 export const toNewBlock = (dayIndex: number): View => ({ kind: 'newBlock', dayIndex })
 export const toNotices = (): View => ({ kind: 'notices' })
 
@@ -100,6 +110,8 @@ export const back = (view: View): View => {
   // Not the week: the form was opened from the block it edits, and skipping that level
   // would make Back and the close control mean the same thing again.
   if (view.kind === 'editBlock') return toBlock(view.itemId)
+  // Same rule, same reason: the page is opened FROM the block, so one level up is the block.
+  if (view.kind === 'microStart') return toBlock(view.itemId)
   if (view.kind === 'rebalance' || view.kind === 'newBlock') return WEEK
   if (view.kind === 'add' && view.way !== null) return toAdd()
   return ROOM
@@ -135,6 +147,8 @@ export const toPath = (view: View): string => {
       return '/week/rebalance'
     case 'editBlock':
       return `/week/block/${encodeURIComponent(view.itemId)}/edit`
+    case 'microStart':
+      return `/week/block/${encodeURIComponent(view.itemId)}/start`
     case 'newBlock':
       return `/week/new/${view.dayIndex}`
     case 'notices':
@@ -169,6 +183,7 @@ export const fromPath = (path: string): View => {
     if (second === 'block' && third !== undefined) {
       if (parts.length === 3) return toBlock(decodeURIComponent(third))
       if (parts.length === 4 && parts[3] === 'edit') return toEditBlock(decodeURIComponent(third))
+      if (parts.length === 4 && parts[3] === 'start') return toMicroStart(decodeURIComponent(third))
     }
 
     /*

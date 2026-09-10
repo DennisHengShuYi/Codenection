@@ -5,6 +5,7 @@ import {
   toAdd,
   toBlock,
   toEditBlock,
+  toMicroStart,
   toNewBlock,
   toRebalance,
   toReserves,
@@ -140,5 +141,17 @@ describe('one level up from the new doors', () => {
 
   it('takes a new block back to the week it is being added to', () => {
     expect(back(toNewBlock(4))).toEqual(toWeek())
+  })
+})
+
+describe('the micro-start page', () => {
+  // Ruling 60: one level up is the block, not the week. Skipping it would make Back and the
+  // close control mean the same thing again.
+  it('goes back to the block it was opened from', () => {
+    expect(back(toMicroStart('b1'))).toEqual(toBlock('b1'))
+  })
+
+  it('is about the block it names', () => {
+    expect(toMicroStart('b1')).toEqual({ kind: 'microStart', itemId: 'b1' })
   })
 })

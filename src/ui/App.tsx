@@ -3,12 +3,17 @@ import { createRepository, signOut, unlinkTelegram } from '../data'
 import { SignInScreen } from './auth/SignInScreen'
 import { useSession } from './auth/useSession'
 import { RoomShell } from './room/RoomShell'
+import { useBlockLog } from './useBlockLog'
 
 export function App() {
   const { session, loading, setSession, signedIn } = useSession()
   const [browsing, setBrowsing] = useState(false)
 
   const repository = useMemo(() => createRepository(session), [session])
+  // Ruling 12: `RoomShell.blockLog` is a required prop now, so something above it has to
+  // load a real one -- this is that something, kept at the app's own top level next to
+  // `repository` and `session` rather than inside the screen it feeds.
+  const { blockLog, recordAnswer } = useBlockLog(repository)
 
   if (loading) {
     // One frame, and a sentence rather than a spinner -- a spinner says nothing about
@@ -39,6 +44,8 @@ export function App() {
     <RoomShell
       repository={repository}
       session={session}
+      blockLog={blockLog}
+      onAnswerBlock={recordAnswer}
       onSignOut={() => {
         // The chat is unlinked first, while there is still a session to authorise it.
         // Afterwards there would be no identity for the database function to act on, and a

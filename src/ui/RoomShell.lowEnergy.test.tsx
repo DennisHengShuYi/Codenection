@@ -1,17 +1,14 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
-import { HORIZON_DAYS } from '../engine'
+import { describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
+import { HORIZON_DAYS } from '../engine'
 import { RoomShell } from './room/RoomShell'
 
 /**
- * §1.5's low-energy mode, driven through the real screen rather than the rule in
- * isolation.
- *
- * The rule itself is unit-tested; what this covers is the wiring -- that a depleted week
- * actually reaches the stripped-back view, and that the way out of it is honoured and
- * remembered.
+ * §1.5's low-energy mode, absorbed into the room screen rather than a separate view
+ * (§11's deliberate deviation). This file used to test `LowEnergyView` replacing the whole
+ * screen; it now tests the same screen trimming itself: the week link drops, the paragraph
+ * caps to the character sentence, and the card cap falls from two to one.
  */
 const drainedWeek = () => ({
   items: [],
@@ -29,67 +26,75 @@ const renderDrained = async () => {
   await repository.clear()
   await repository.saveWeek(drainedWeek())
 
-  render(<RoomShell repository={repository} />)
+  render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
   return repository
 }
 
 describe('RoomShell in low energy', () => {
-  // §1.5: "A student at 12% reserve should not be handed a dashboard."
-  it('collapses to one number and one action when the reserve is low', async () => {
+  // §1.5: "A student at 12% reserve should not be handed a dashboard." The room stays --
+  // it is still the surface -- but the way in to more of it (the week) goes.
+  it('drops the week link below the low-energy threshold', async () => {
     await renderDrained()
 
-    await waitFor(() => expect(screen.getByTestId('capacity-value')).toBeVisible())
-    expect(screen.queryAllByRole('meter')).toHaveLength(0)
+    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+    expect(screen.queryByTestId('open-week')).toBeNull()
+    // `+` stays: logging something urgent should not require leaving low-energy mode.
+    expect(screen.getByTestId('open-add')).toBeVisible()
   })
 
-  // Never coercive: an interface a struggling student cannot dismiss is one more thing
-  // being done to them.
-  it('lets the student ask for the full view back', async () => {
+  it('caps the paragraph to the character sentence alone', async () => {
     await renderDrained()
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /show everything/i })).toBeVisible(),
-    )
 
-    await userEvent.click(screen.getByRole('button', { name: /show everything/i }))
+    await waitFor(() => expect(screen.getByTestId('room-text-equivalent')).toBeVisible())
 
-    // The full view is the room. The five bars are one tap further in, behind the light --
-    // which is the point of §1.5's exit: it returns you to everything, not to a dashboard.
+    const paragraph = screen.getByTestId('room-text-equivalent').textContent ?? ''
+    // The drained week is also stormy and clutter-free, so the ordinary paragraph would
+    // read as two sentences (character, then weather). Trimmed, only one survives.
+    expect(paragraph.split('. ').filter(Boolean)).toHaveLength(1)
+  })
+
+  it('still carries the full text to a screen reader, via the drawing itself', async () => {
+    await renderDrained()
+
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
-
-    await userEvent.click(screen.getByTestId('object-light'))
-    expect(screen.getAllByRole('meter')).toHaveLength(5)
+    // The cap on the visible paragraph is visual only (§3) -- the drawing's own
+    // `aria-label` is `describeRoomFully`, uncapped, so nothing is lost to assistive tech.
+    expect(screen.getByTestId('room-scene').getAttribute('aria-label')?.length ?? 0).toBeGreaterThan(
+      (screen.getByTestId('room-text-equivalent').textContent ?? '').length,
+    )
   })
 
   /**
-   * §1.5 gives the low-energy screen exactly one action, and it has to do something. An
-   * action that looked live and did nothing would be worse than not offering one.
+   * Ruling 16's second behavioural RED. The rule this guards: below the threshold, `visibleCards`
+   * itself already caps to one (proven in `cardPrecedence.test.ts`) -- what only this level
+   * can prove is that `RoomShell` actually passes `lowEnergy: true` through rather than
+   * silently always requesting the normal cap of two.
    */
-  it('the single action actually rebalances the week', async () => {
-    const repository = await renderDrained()
-    const before = JSON.stringify(await repository.loadWeek())
+  it('shows at most one live card below the threshold', async () => {
+    counter += 1
+    const repository = createLocalRepository(`low-energy-cards-${counter}`)
+    await repository.clear()
+    // Social AND physical low: normally this alone would be enough for a recovery card,
+    // and a lapsed commitment below stacks a second candidate -- two cards above the
+    // threshold, one below it.
+    await repository.saveWeek({
+      items: [],
+      start: { mental: 8, physical: 9, social: 7, errands: 10 },
+      horizonDays: HORIZON_DAYS,
+      sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 6),
+      commitments: [{ id: 'c1', title: 'Committee meeting', reviewDay: -1, itemId: 'x' }],
+    })
 
-    // findByRole rather than getByRole: the low-energy view appears only once the stored
-    // settings have resolved, which is a tick after the week does.
-    await userEvent.click(
-      await screen.findByRole('button', { name: /twenty minutes outside/i }),
-    )
+    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
 
-    await waitFor(
-      async () => expect(JSON.stringify(await repository.loadWeek())).not.toBe(before),
-      { timeout: 20_000 },
-    )
-  }, 30_000)
+    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+    const cards = [
+      screen.queryByTestId('prescription'),
+      screen.queryByTestId('lapsed-notice'),
+      screen.queryByTestId('micro-start'),
+      screen.queryByRole('region', { name: /today's check-in/i }),
+    ].filter((card) => card !== null)
 
-  it('remembers that choice, so it is not made again every visit', async () => {
-    const repository = await renderDrained()
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /show everything/i })).toBeVisible(),
-    )
-
-    await userEvent.click(screen.getByRole('button', { name: /show everything/i }))
-
-    await waitFor(async () =>
-      expect((await repository.loadSettings()).lowEnergyOverride).toBe('off'),
-    )
+    expect(cards).toHaveLength(1)
   })
 })

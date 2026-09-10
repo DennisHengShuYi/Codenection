@@ -60,9 +60,9 @@ describe('App, signed in', () => {
   it('shows who is signed in', async () => {
     render(<App />)
 
-    // Who you are lives behind the mirror, with the rest of "about you".
-    await waitFor(() => expect(screen.getByTestId('object-mirror')).toBeVisible())
-    await userEvent.click(screen.getByTestId('object-mirror'))
+    // Who you are lives in settings now.
+    await waitFor(() => expect(screen.getByTestId('open-settings')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-settings'))
     await waitFor(() => expect(screen.getByText('student@um.edu.my')).toBeVisible())
   })
 
@@ -70,18 +70,18 @@ describe('App, signed in', () => {
   it('does not claim the week is unsaved', async () => {
     render(<App />)
 
-    // Who you are lives behind the mirror, with the rest of "about you".
-    await waitFor(() => expect(screen.getByTestId('object-mirror')).toBeVisible())
-    await userEvent.click(screen.getByTestId('object-mirror'))
+    // Who you are lives in settings now.
+    await waitFor(() => expect(screen.getByTestId('open-settings')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-settings'))
     await waitFor(() => expect(screen.getByText('student@um.edu.my')).toBeVisible())
     expect(screen.queryByText(/not being saved/i)).toBeNull()
   })
 
   it('signs out and returns to the way in', async () => {
     render(<App />)
-    // Who you are lives behind the mirror, with the rest of "about you".
-    await waitFor(() => expect(screen.getByTestId('object-mirror')).toBeVisible())
-    await userEvent.click(screen.getByTestId('object-mirror'))
+    // Who you are lives in settings now.
+    await waitFor(() => expect(screen.getByTestId('open-settings')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-settings'))
     await waitFor(() => expect(screen.getByText('student@um.edu.my')).toBeVisible())
 
     await userEvent.click(screen.getByRole('button', { name: /sign out/i }))
@@ -153,9 +153,9 @@ describe('signing out', () => {
     currentSession = { userId: 'u1', email: 'student@um.edu.my' }
     unlinkTelegram.mockClear().mockResolvedValue({ ok: true })
     render(<App />)
-    // Who you are lives behind the mirror, with the rest of "about you".
-    await waitFor(() => expect(screen.getByTestId('object-mirror')).toBeVisible())
-    await userEvent.click(screen.getByTestId('object-mirror'))
+    // Who you are lives in settings now.
+    await waitFor(() => expect(screen.getByTestId('open-settings')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-settings'))
     await waitFor(() => expect(screen.getByText('student@um.edu.my')).toBeVisible())
 
     await userEvent.click(screen.getByRole('button', { name: /sign out/i }))
@@ -168,9 +168,9 @@ describe('signing out', () => {
     currentSession = { userId: 'u1', email: 'student@um.edu.my' }
     unlinkTelegram.mockClear().mockRejectedValue(new Error('network down'))
     render(<App />)
-    // Who you are lives behind the mirror, with the rest of "about you".
-    await waitFor(() => expect(screen.getByTestId('object-mirror')).toBeVisible())
-    await userEvent.click(screen.getByTestId('object-mirror'))
+    // Who you are lives in settings now.
+    await waitFor(() => expect(screen.getByTestId('open-settings')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-settings'))
     await waitFor(() => expect(screen.getByText('student@um.edu.my')).toBeVisible())
 
     await userEvent.click(screen.getByRole('button', { name: /sign out/i }))

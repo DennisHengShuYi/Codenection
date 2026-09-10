@@ -25,9 +25,7 @@ describe('App', () => {
 
     // A working week, seen the way a student sees it: the room, with everything in it.
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
-
-    await userEvent.click(screen.getByTestId('object-light'))
-    expect(screen.getByTestId('capacity-value')).toHaveTextContent(/^\d{1,3}%$/)
+    expect(screen.getByTestId('room-gauge')).toHaveTextContent(/^\d{1,3}%$/)
   })
 
   // The banner's offer has to actually lead somewhere.

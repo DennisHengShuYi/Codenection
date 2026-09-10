@@ -1,97 +1,109 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Repository, Session } from '../../data'
 import { addItems } from '../../domain/addItems'
-import { answeredIds, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
+import { outcomesFrom, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
 import { anchorTo, dateFor, isAnchored, todayIndex } from '../../domain/calendar'
-import { accept } from '../../domain/commitments'
+import { accept, lapsed } from '../../domain/commitments'
 import { paramsFor } from '../../domain/engineParams'
-import { firstAction } from '../../domain/microStart'
+import { firstAction, isStuck } from '../../domain/microStart'
 import { predictionsAfter, resolvePrediction } from '../../domain/predictions'
 import { prescribe } from '../../domain/prescribe'
 import { recordAttempt, attemptsIn } from '../../domain/recoveryLog'
 import { completeItem, deferItem } from '../../domain/scheduleEdits'
 import { scheduleRecovery } from '../../domain/scheduleRecovery'
-import { describeRebalance, makeRng, rebalance } from '../../optimizer'
+import type { Fix } from '../../optimizer'
 import { AccountBar } from '../auth/AccountBar'
-import { CapacityDial } from '../dial/CapacityDial'
-import { domainBars } from '../dial/domainBars'
-import { overallReserve, project } from '../../engine'
-import { toDayInputs } from '../../optimizer'
 import { PreviewBanner } from '../auth/PreviewBanner'
-import { BlockConfirm } from '../calibration/BlockConfirm'
-import { CalibrationScreen } from '../calibration/CalibrationScreen'
-import { useProfile } from '../useProfile'
+import { Button } from '../kit/Button'
+import { Sheet } from '../kit/Sheet'
 import { MicroStartCard } from '../microStart/MicroStartCard'
 import { PhotoImportScreen } from '../planner/PhotoImportScreen'
 import { PlannerScreen } from '../planner/PlannerScreen'
 import { Prescription } from '../recovery/Prescription'
 import { LapsedNotice } from '../request/LapsedNotice'
 import { RequestBoxScreen } from '../request/RequestBoxScreen'
-import { LowEnergyView } from '../LowEnergyView'
+import { LinkTelegram } from '../settings/LinkTelegram'
+import { TodayCard } from '../today/TodayCard'
+import { blockToAsk, withSleep } from '../today/checkIn'
 import { useLowEnergy } from '../useLowEnergy'
+import { useProfile } from '../useProfile'
 import { useReducedMotion } from '../useReducedMotion'
 import { useSchedule } from '../useSchedule'
 import { AccuracyNote } from '../validation/AccuracyNote'
-import { EnergyCheckIn } from '../validation/EnergyCheckIn'
-import { DoorPanel } from '../recovery/DoorPanel'
-import { LinkTelegram } from '../settings/LinkTelegram'
-import { isClutterId, type ObjectId } from './objects'
-import { Room } from './Room'
+import { BlockSheet } from '../week/BlockSheet'
+import { blockSheet } from '../week/blockActions'
+import { runRebalance } from '../week/rebalanceOutcome'
+import { WeekScreen } from '../week/WeekScreen'
+import { visibleCards, type CardId } from './cardPrecedence'
 import { roomModel } from './roomModel'
-import { RoomSidebar } from './RoomSidebar'
-import { back, ROOM, toWords, zoomTo, type View } from './view'
-import { ZoomLayer } from './ZoomLayer'
+import { describeRoom } from './roomText'
+import { Room } from './Room'
+import { back, ROOM, toAdd, toBlock, toSettings, toWeek, type View } from './view'
 import { useTidyUp } from './useTidyUp'
 
 /** §2.1's search takes its randomness as a parameter; a fixed seed keeps what the student
  *  sees reproducible between renders rather than shifting under them. */
 const SEED = 20260908
 
+/** The one sentence the room can never say another way (§3): character state, capped from
+ *  `describeRoom`'s own three-sentence paragraph rather than re-deriving it. */
+const firstSentence = (paragraph: string): string => paragraph.match(/^[^.]*\./)?.[0] ?? paragraph
+
+type AddWay = 'choose' | 'photo' | 'type' | 'request'
+
 /**
- * The room, as the whole app.
+ * The room, as the whole app -- and now the router.
  *
- * This replaces `HomeScreen`, which was a switchboard: seven booleans, four early returns
- * that swapped the room out entirely, and nine cards stacked in a scroll above and below it.
- * §1.1 said the room was the surface; it was a section of a page.
- *
- * Here every feature is reached by touching furniture, every notification is a state of the
- * object it concerns, and the sidebar is the same thing in words.
+ * §3 turns the old 507-line switchboard into two things only: the data every screen needs
+ * (the schedule, the profile, the block log, the anchoring and prediction effect, rebalance)
+ * and routing between the room, the week, a block sheet, the add sheet and settings. The
+ * eleven-case `contentFor` switch this replaced is gone entirely -- every feature it held
+ * now belongs to the component that owns it (`WeekScreen`, `BlockSheet`, `TodayCard`, the
+ * live cards below) rather than being inlined here.
  */
 export function RoomShell({
   repository,
   session = null,
   onSignOut = () => undefined,
   onSignIn = () => undefined,
-  // §8b's block log. Not yet loaded from the repository here -- nothing writes it through
-  // this screen until Task 9 wires the papers' confirmation onto it, so there is nothing
-  // to load. Threaded in as an input rather than fetched inside this component, the same
-  // way `repository` and `session` are, so a caller that does have it in hand can already
-  // supply it without this component's signature changing again.
-  blockLog = [],
+  // Ruling 12: required rather than defaulted to `[]`. `RoomShell` is being rewritten
+  // wholesale in this task, which is exactly the point Task 8b's own note named as the
+  // moment to stop treating the log as optional -- the caller now has somewhere to load a
+  // real one from (`useBlockLog`) and a reason to (the today card and the block sheet both
+  // write to it here for the first time).
+  blockLog,
+  onAnswerBlock,
 }: {
   repository: Repository
   session?: Session | null
   onSignOut?: () => void
   onSignIn?: () => void
-  blockLog?: readonly BlockRecord[]
+  blockLog: readonly BlockRecord[]
+  onAnswerBlock: (record: BlockRecord) => void
 }) {
   const { schedule, setSchedule } = useSchedule(repository)
   const { profile, setProfile } = useProfile(repository)
   const [view, setView] = useState<View>(ROOM)
   const [report, setReport] = useState<string | null>(null)
+  const [fallback, setFallback] = useState<Fix | null>(null)
   const [working, setWorking] = useState(false)
-  /** Which way in the desk is currently offering. §1.4 ranks the camera above typing, so it
-   *  is named first -- but neither is chosen for the student. */
-  const [deskWay, setDeskWay] = useState<'choose' | 'type' | 'photograph'>('choose')
+  const [addWay, setAddWay] = useState<AddWay>('choose')
+
+  // Session-scoped dismissals for the three cards with no domain-level "not today" of their
+  // own. Recovery needs none of these: dismissing it already writes through
+  // `recordAttempt`, which is what makes it not offer the same thing again across a reload.
+  const [lapsedDismissed, setLapsedDismissed] = useState(false)
+  const [stuckDismissedId, setStuckDismissedId] = useState<string | null>(null)
+  const [todayDismissed, setTodayDismissed] = useState(false)
+  const [sleepAnsweredToday, setSleepAnsweredToday] = useState(false)
 
   const reducedMotion = useReducedMotion()
   const { play } = useTidyUp(reducedMotion)
 
-  // §8b: `paramsFor` now takes outcomes directly rather than the whole profile, combined
-  // from the durable log and the profile's own (soon-to-be-retired) record -- see
-  // `roomModel`'s matching combination for why dropping either side here would either lose
-  // calibration the room still shows elsewhere, or diverge from what `roomModel` computes
-  // for the same week.
+  // §8b: outcomes come from the durable log and from the profile's own (soon-to-be-retired)
+  // record, combined -- see `roomModel`'s matching combination for why dropping either side
+  // would either lose calibration the room still shows elsewhere, or diverge from what
+  // `roomModel` computes for the same week.
   const params = useMemo(
     () => paramsFor([...outcomesFrom(blockLog), ...profile.confirmations]),
     [blockLog, profile.confirmations],
@@ -99,12 +111,15 @@ export function RoomShell({
   const floor = schedule
     ? Math.min(schedule.start.mental, schedule.start.physical, schedule.start.social, schedule.start.errands)
     : 100
-  const { active: lowEnergy, setOverride } = useLowEnergy(repository, floor)
+  // `setOverride` is not wired to any control on this screen: §3's low-energy behaviour is
+  // now the room screen trimming itself rather than a separate view to exit from, so there
+  // is nothing left for a manual override to toggle out of. `useLowEnergy` keeps the
+  // capability (and its own tests) for whenever a future settings control wants it.
+  const { active: lowEnergy } = useLowEnergy(repository, floor)
 
   /**
    * §8.1's two prerequisites: anchor the fortnight to a real day, and claim something about a
-   * real day two days out. The clock enters here and nowhere deeper -- `calendar.ts` takes it
-   * as a parameter and the engine never sees it, which is what keeps the model pure.
+   * real day two days out. The clock enters here and nowhere deeper.
    */
   useEffect(() => {
     if (!schedule) return
@@ -121,6 +136,7 @@ export function RoomShell({
       new Date(),
     )
     if (next.length !== profile.predictions.length) setProfile({ ...profile, predictions: next })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schedule, profile, blockLog, setSchedule, setProfile])
 
   if (!schedule) {
@@ -133,10 +149,9 @@ export function RoomShell({
     )
   }
 
-  // Bound once, after the guard: narrowing does not survive into the closures below, and
-  // threading `schedule!` through every one of them would be noise.
   const week = schedule
   const today = todayIndex(week, new Date()) ?? 0
+  const todayDate = dateFor(week, today)
   const model = roomModel({ schedule: week, profile, today, blockLog })
 
   async function onRebalance() {
@@ -148,376 +163,279 @@ export function RoomShell({
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     try {
-      const result = rebalance(week, params, makeRng(SEED))
-      setSchedule(result.schedule)
-      setReport(describeRebalance(result, params))
+      const outcome = runRebalance(week, params, SEED)
+      setSchedule(outcome.schedule)
+      setReport(outcome.report)
+      setFallback(outcome.fallback)
       play()
     } finally {
       setWorking(false)
     }
   }
 
-  const close = () => {
-    setDeskWay('choose')
-    setView(back(view))
+  function answerBlock(itemId: string, answer: BlockAnswer) {
+    const item = week.items.find((candidate) => candidate.id === itemId)
+    if (!item) return
+
+    onAnswerBlock({
+      blockId: item.id,
+      type: item.type,
+      plannedHours: item.hours,
+      dayIndex: item.dayIndex,
+      answer,
+      answeredAt: Date.now(),
+    })
   }
 
-  /** What each object shows once you have walked up to it. */
-  function contentFor(objectId: ObjectId) {
-    if (isClutterId(objectId)) {
-      const id = objectId.replace('clutter-', '')
-      const item = week.items.find((candidate) => candidate.id === id)
+  const closeToRoom = () => setView(back(view))
+  const closeAdd = () => {
+    setAddWay('choose')
+    setView(back(view))
+  }
+  const acceptItems: Parameters<typeof PlannerScreen>[0]['onAccept'] = (items) => {
+    setSchedule(addItems(week, items))
+    closeAdd()
+  }
 
-      return (
-        <>
-          <MicroStartCard
-            microStart={item ? firstAction(item) : null}
-            onStarted={close}
-            onDismiss={close}
+  // §3's card precedence: recovery, then a lapsed commitment, then a stuck task, then the
+  // day's own question -- capped to one below the low-energy threshold and two otherwise.
+  const recoveryPrescription = prescribe(week, attemptsIn(week))
+  const lapsedCommitments = lapsed(week, today, params)
+  const stuckItem = week.items.find(
+    (item) => item.id !== stuckDismissedId && isStuck(item, 0, Math.max(0, today - item.dayIndex)),
+  )
+  const blockForToday = blockToAsk({ schedule: week, profile, today, blockLog })
+  const askEnergy = profile.predictions.some(
+    (prediction) => prediction.forDate === todayDate && prediction.reported === null,
+  )
+  const askSleep = !sleepAnsweredToday
+  const showTodayCard = !todayDismissed && (askEnergy || askSleep || blockForToday !== null)
+
+  const cards = visibleCards({
+    recovery: recoveryPrescription !== null,
+    lapsed: !lapsedDismissed && lapsedCommitments.length > 0,
+    stuck: stuckItem !== undefined,
+    today: showTodayCard,
+    lowEnergy,
+  })
+
+  const renderCard = (id: CardId) => {
+    switch (id) {
+      case 'recovery':
+        return (
+          <Prescription
+            key="recovery"
+            prescription={recoveryPrescription}
+            onAccept={(taken) => setSchedule(scheduleRecovery(week, taken))}
+            onDismiss={(taken) => setSchedule(recordAttempt(week, taken.kind, false))}
           />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setSchedule(completeItem(week, id))
-                close()
-              }}
-              className="rounded-lg bg-slate-900 px-3 py-2 text-white"
+        )
+      case 'lapsed':
+        return (
+          <LapsedNotice
+            key="lapsed"
+            commitments={lapsedCommitments}
+            onDismiss={() => setLapsedDismissed(true)}
+          />
+        )
+      case 'stuck':
+        return stuckItem === undefined ? null : (
+          <MicroStartCard
+            key="stuck"
+            microStart={firstAction(stuckItem)}
+            onStarted={() => setView(toBlock(stuckItem.id))}
+            onDismiss={() => setStuckDismissedId(stuckItem.id)}
+          />
+        )
+      case 'today':
+        return (
+          <TodayCard
+            key="today"
+            block={blockForToday}
+            askEnergy={askEnergy}
+            askSleep={askSleep}
+            onEnergy={(energy) => {
+              if (todayDate === null) return
+              setProfile({ ...profile, predictions: resolvePrediction(profile.predictions, todayDate, energy) })
+            }}
+            onSleep={(bucket) => {
+              setSchedule(withSleep(week, today, bucket))
+              setSleepAnsweredToday(true)
+            }}
+            onBlock={(itemId, answer) => answerBlock(itemId, answer)}
+            onDismiss={() => setTodayDismissed(true)}
+          />
+        )
+    }
+  }
+
+  const isWeekScreen = view.kind === 'week' || view.kind === 'block'
+  const blockModel =
+    view.kind === 'block' ? blockSheet({ schedule: week, profile, itemId: view.itemId, today, blockLog }) : null
+
+  const paragraph = lowEnergy ? firstSentence(describeRoom(model.state)) : describeRoom(model.state)
+
+  return (
+    <main className="mx-auto flex min-h-dvh max-w-screen-md flex-col gap-4 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-sm font-semibold tracking-wide text-ink-soft">Codenection</h1>
+        <Button
+          variant="quiet"
+          size="sm"
+          data-testid="open-settings"
+          onClick={() => setView(toSettings())}
+        >
+          Settings
+        </Button>
+      </div>
+
+      {isWeekScreen ? (
+        <>
+          <Button variant="quiet" size="sm" data-testid="week-back" onClick={() => setView(ROOM)} className="self-start">
+            Back to the room
+          </Button>
+          <WeekScreen
+            schedule={week}
+            profile={profile}
+            today={today}
+            working={working}
+            report={report}
+            fallback={fallback}
+            onRebalance={() => void onRebalance()}
+            onSelectBlock={(itemId) => setView(toBlock(itemId))}
+            blockLog={blockLog}
+          />
+        </>
+      ) : (
+        <>
+          {/* The one thing that is not furniture. A student who does not know their week is
+              not being saved will lose it, and a warning about data loss must not require
+              discovering an object first. */}
+          {session === null && <PreviewBanner onSignIn={onSignIn} />}
+
+          <Room model={model} />
+
+          {/* Flagged by Task 12: the drawing's own `aria-label` (`describeRoomFully`) is
+              already the complete text equivalent a screen reader needs, and this capped
+              paragraph repeats a subset of the same sentences verbatim -- character and
+              weather always, in the same words. Left as visible-and-announced, the two
+              would read out back to back: the full version, then a partial repeat of it.
+              `aria-hidden` keeps it for sighted readers (§1.5, still worth having as
+              running text rather than only inside an SVG's accessible name) without
+              saying anything twice to assistive tech. */}
+          <p data-testid="room-text-equivalent" aria-hidden="true" className="text-sm text-ink-soft">
+            {paragraph}
+          </p>
+
+          <AccuracyNote predictions={profile.predictions} />
+
+          {cards.map(renderCard)}
+
+          <div className="flex items-center justify-between gap-2">
+            {!lowEnergy && (
+              <Button variant="quiet" data-testid="open-week" onClick={() => setView(toWeek())}>
+                The week
+              </Button>
+            )}
+            <Button
+              data-testid="open-add"
+              aria-label="Add something"
+              onClick={() => setView(toAdd())}
+              className="ml-auto"
             >
-              Done
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSchedule(deferItem(week, id))
-                close()
-              }}
-              className="rounded-lg border border-slate-400 px-3 py-2"
-            >
-              Later
-            </button>
+              +
+            </Button>
           </div>
         </>
-      )
-    }
+      )}
 
-    switch (objectId) {
-      case 'desk': {
-        // Two forms stacked on one surface gave two Cancel buttons and no way to tell which
-        // was which. The desk offers the choice instead -- one job, two ways to do it.
-        const accepted = (items: Parameters<typeof addItems>[1]) => {
-          setSchedule(addItems(week, items))
-          close()
-        }
+      {view.kind === 'block' && blockModel !== null && (
+        <BlockSheet
+          key={view.itemId}
+          model={blockModel}
+          onClose={closeToRoom}
+          onDone={(itemId) => {
+            setSchedule(completeItem(week, itemId))
+            closeToRoom()
+          }}
+          onLater={(itemId) => {
+            setSchedule(deferItem(week, itemId))
+            closeToRoom()
+          }}
+          // "Move" has no target-picking UI yet -- nothing in this plan builds one before
+          // Task 13 -- so it shares `deferItem` with "Later" for now rather than doing
+          // nothing. Flagged in the task report as a real gap for a future task.
+          onMove={(itemId) => {
+            setSchedule(deferItem(week, itemId))
+            closeToRoom()
+          }}
+          onConfirm={(itemId, answer) => {
+            answerBlock(itemId, answer)
+            closeToRoom()
+          }}
+          // The repository has no operation to retract a recorded answer yet (`recordBlockAnswer`
+          // only upserts), so Undo cannot yet do anything real. Closing rather than silently
+          // pretending is the honest behaviour until that exists. Flagged in the task report.
+          onUndo={closeToRoom}
+          onRested={(itemId, rested) => {
+            answerBlock(itemId, rested ? 'right' : 'didnt')
+            closeToRoom()
+          }}
+        />
+      )}
 
-        if (deskWay === 'type') {
-          return <PlannerScreen onAccept={accepted} onCancel={() => setDeskWay('choose')} />
-        }
-
-        if (deskWay === 'photograph') {
-          return <PhotoImportScreen onAccept={accepted} onCancel={() => setDeskWay('choose')} />
-        }
-
-        return (
-          <div className="flex flex-col gap-3">
-            <h2 className="text-lg font-medium">What are you carrying?</h2>
-            <p className="text-sm opacity-70">Photograph it, or type it out. Either works.</p>
-            <div className="flex flex-wrap gap-2">
-              {/* §1.4 ranks the camera above typing, because deadlines cause the pile-up and
-                  a brief is where the deadlines are. */}
-              <button
-                type="button"
-                data-testid="desk-photograph"
-                onClick={() => setDeskWay('photograph')}
-                className="rounded-lg bg-slate-900 px-4 py-3 text-white"
-              >
-                Photograph a brief
-              </button>
-              <button
-                type="button"
-                data-testid="desk-type"
-                onClick={() => setDeskWay('type')}
-                className="rounded-lg border border-slate-400 px-4 py-3"
-              >
+      {view.kind === 'add' && (
+        <Sheet key="add" title="What's coming at you?" onClose={closeAdd}>
+          {addWay === 'choose' && (
+            <div className="flex flex-col gap-3">
+              <Button data-testid="add-photo" onClick={() => setAddWay('photo')}>
+                Photograph something
+              </Button>
+              <Button data-testid="add-type" onClick={() => setAddWay('type')}>
                 Type it out
-              </button>
+              </Button>
+              <Button data-testid="add-request" onClick={() => setAddWay('request')}>
+                Someone asked me for something
+              </Button>
             </div>
-          </div>
-        )
-      }
-      case 'phone':
-        return (
-          <>
-            <LapsedNotice
-              commitments={model.rows.some((row) => row.id === 'phone' && row.attention)
-                ? (week.commitments ?? [])
-                : []}
-              onDismiss={close}
-            />
-            <Prescription
-              prescription={
-                prescribe(week, attemptsIn(week))?.kind === 'socialRestorative'
-                  ? prescribe(week, attemptsIn(week))
-                  : null
-              }
-              onAccept={(taken) => {
-                setSchedule(scheduleRecovery(week, taken))
-                close()
-              }}
-              onDismiss={(taken) => {
-                setSchedule(recordAttempt(week, taken.kind, false))
-                close()
-              }}
-            />
+          )}
+
+          {addWay === 'photo' && (
+            <PhotoImportScreen onAccept={acceptItems} onCancel={() => setAddWay('choose')} />
+          )}
+
+          {addWay === 'type' && (
+            <PlannerScreen onAccept={acceptItems} onCancel={() => setAddWay('choose')} />
+          )}
+
+          {addWay === 'request' && (
             <RequestBoxScreen
               schedule={week}
               onAccept={(item) => {
                 setSchedule(accept(week, item, today))
-                close()
+                closeAdd()
               }}
-              onCancel={close}
+              onCancel={() => setAddWay('choose')}
             />
-            {session !== null && <LinkTelegram />}
-          </>
-        )
-      case 'mirror':
-        return (
-          <>
-            {session !== null && <AccountBar session={session} onSignOut={onSignOut} />}
-            <CalibrationScreen profile={profile} onChange={setProfile} onDone={close} />
-          </>
-        )
-      case 'papers': {
-        // §8b: a block counts as already asked about if the durable log says so *or* if
-        // the profile's own record of it does. The log is the future of this check -- it is
-        // what `roomModel` now reads too -- but nothing writes a real answer into it through
-        // this screen yet (Task 9 moves the write here, onto the log's own four-way
-        // vocabulary). Dropping the profile side today would silently break "stops asking
-        // about the same block" the moment this ships, for every block confirmed the way
-        // this screen currently confirms them. `profile.confirmedItemIds` is still written
-        // below for the same reason: the calibration subsystem it belongs to is removed
-        // wholesale in a later task, not piecemeal here.
-        const alreadyAsked = (id: string) =>
-          answeredIds(blockLog).includes(id) || profile.confirmedItemIds.includes(id)
-        const block = week.items.find(
-          (candidate) => candidate.dayIndex === today && !alreadyAsked(candidate.id),
-        )
+          )}
+        </Sheet>
+      )}
 
-        return (
-          <BlockConfirm
-            block={block ?? null}
-            onAnswer={(happened, difficulty) => {
-              if (!block) return
-
-              // "Partly" counts as half the planned time, "no" as none. Both feed §2.4 as
-              // real data rather than being discarded -- §7.9 is explicit that a student who
-              // did not do the thing is the one whose data is most needed.
-              const done = happened === 'yes' ? 1 : happened === 'partly' ? 0.5 : 0
-              const overrun = difficulty === 'harder' ? 1.5 : difficulty === 'easier' ? 0.75 : 1
-
-              setProfile({
-                ...profile,
-                confirmedItemIds: [...profile.confirmedItemIds, block.id],
-                confirmations: [
-                  ...profile.confirmations,
-                  {
-                    type: block.type,
-                    plannedHours: block.hours,
-                    actualHours: block.hours * done * overrun,
-                  },
-                ],
-              })
-              close()
-            }}
-            onDismiss={close}
-          />
-        )
-      }
-      case 'bed': {
-        const suggestion = prescribe(week, attemptsIn(week))
-
-        return (
-          <Prescription
-            prescription={suggestion}
-            onAccept={(taken) => {
-              setSchedule(scheduleRecovery(week, taken))
-              close()
-            }}
-            onDismiss={(taken) => {
-              setSchedule(recordAttempt(week, taken.kind, false))
-              close()
-            }}
-          />
-        )
-      }
-      case 'door':
-        return (
-          <>
-          <Prescription
-            prescription={
-              prescribe(week, attemptsIn(week))?.kind === 'lightExercise'
-                ? prescribe(week, attemptsIn(week))
-                : null
-            }
-            onAccept={(taken) => {
-              setSchedule(scheduleRecovery(week, taken))
-              close()
-            }}
-            onDismiss={(taken) => {
-              setSchedule(recordAttempt(week, taken.kind, false))
-              close()
-            }}
-          />
-          <DoorPanel
-            gapHours={4}
-            onChoose={(outing) => {
-              setSchedule(
-                scheduleRecovery(week, {
-                  title: outing.title,
-                  type: 'physical',
-                  kind: 'lightExercise',
-                  hours: outing.hours,
-                  dayIndex: today,
-                  startHour: 16,
-                }),
-              )
-              close()
-            }}
-            onClose={close}
-          />
-          </>
-        )
-      case 'character': {
-        const todayDate = dateFor(week, today)
-
-        return (
-          <EnergyCheckIn
-            onReport={(energy) => {
-              if (todayDate !== null) {
-                setProfile({
-                  ...profile,
-                  predictions: resolvePrediction(profile.predictions, todayDate, energy),
-                })
-              }
-              close()
-            }}
-            onDismiss={close}
-          />
-        )
-      }
-      case 'ceiling':
-        return (
-          <div className="flex flex-col gap-3">
-            <button
-              type="button"
-              onClick={() => void onRebalance()}
-              disabled={working}
-              data-testid="rebalance"
-              className="w-full rounded-lg bg-slate-900 px-4 py-3 text-white disabled:opacity-60 sm:w-auto"
-            >
-              {working ? 'Working out a better week…' : 'Rebalance my fortnight'}
-            </button>
-            {report !== null && (
-              <p data-testid="rebalance-report" role="status" className="text-sm">
-                {report}
+      {view.kind === 'settings' && (
+        <Sheet key="settings" title="Settings" onClose={closeToRoom}>
+          <div className="flex flex-col gap-4">
+            {session !== null ? (
+              <>
+                <AccountBar session={session} onSignOut={onSignOut} />
+                <LinkTelegram />
+              </>
+            ) : (
+              <p className="text-sm text-ink-soft">
+                Sign in to keep this week and link Telegram to it.
               </p>
             )}
           </div>
-        )
-      case 'window':
-        return <AccuracyNote predictions={profile.predictions} />
-      case 'light': {
-        /**
-         * §1.2's dial, on the object that already means the reserve.
-         *
-         * It has to live somewhere: it is in §11's must-build tier, and the first version of
-         * this shell dropped it entirely -- the light reported a percentage and the five
-         * domain bars vanished. Putting it behind the light is the mapping that already
-         * existed in the room's own vocabulary.
-         */
-        const days = toDayInputs(week)
-
-        return (
-          <CapacityDial
-            capacity={overallReserve(week.start)}
-            bars={domainBars(week.start, project(week.start, days, params), days)}
-            projection={project(week.start, days, params)}
-          />
-        )
-      }
-      default: {
-        // The plant reports its reading and nothing more.
-        const row = model.rows.find((candidate) => candidate.id === objectId)
-
-        return <p className="text-sm">{row ? `${row.label}: ${row.reading}` : ''}</p>
-      }
-    }
-  }
-
-  /**
-   * §1.5: a student at 12% reserve should not be handed a dashboard.
-   *
-   * The design said low-energy would become the sidebar trimmed to what matters. Building it
-   * that way lost the shape §1.5 actually asks for -- one number and one action -- because a
-   * list of things needing you is still a list. `LowEnergyView` already gets that right and
-   * is already tested, so it stays, and the sidebar's trimmed mode serves the words view
-   * instead. A deviation from the spec, and the spec was wrong.
-   */
-  if (lowEnergy && view.kind !== 'zoom') {
-    return (
-      <LowEnergyView
-        capacity={overallReserve(week.start)}
-        action="Take twenty minutes outside"
-        onAction={() => void onRebalance()}
-        onExit={() => setOverride('off')}
-      />
-    )
-  }
-
-  return (
-    <main className="flex min-h-dvh flex-col gap-4 p-4 md:flex-row md:gap-6">
-      {/* The rail from 768px up; below that the list is reached by the toggle and takes the
-          screen, because a sidebar and a usable room cannot share 320px. */}
-      <div className="hidden md:block md:w-64 md:shrink-0">
-        <RoomSidebar model={model} onSelect={(id) => setView(zoomTo(view, id))} />
-      </div>
-
-      <div className="flex min-w-0 flex-1 flex-col gap-3">
-        {/* Not chrome, structure. A page with no h1 has no name to a screen reader and no
-            identity to anybody else, and dropping it was an oversight rather than a
-            decision. Kept small so the room still leads. */}
-        <h1 className="text-sm font-semibold tracking-wide opacity-60">Codenection</h1>
-
-        {/* The one thing that is not furniture. A student who does not know their week is
-            not being saved will lose it, and a warning about data loss must not require
-            discovering an object first. */}
-        {session === null && <PreviewBanner onSignIn={onSignIn} />}
-
-        <Room model={model} onSelect={(id) => setView(zoomTo(view, id))} />
-
-        <button
-          type="button"
-          data-testid="open-words"
-          onClick={() => setView(toWords(view))}
-          className="self-start text-sm underline md:hidden"
-        >
-          Everything in words
-        </button>
-      </div>
-
-      {view.kind === 'words' && (
-        <div className="fixed inset-0 z-10 overflow-y-auto bg-white p-4">
-          <button type="button" onClick={close} data-testid="words-back" className="mb-2 text-sm underline">
-            Back to the room
-          </button>
-          <RoomSidebar model={model} onSelect={(id) => setView(zoomTo(view, id))} />
-        </div>
-      )}
-
-      {view.kind === 'zoom' && (
-        <ZoomLayer objectId={view.objectId} onClose={close}>
-          {contentFor(view.objectId)}
-        </ZoomLayer>
+        </Sheet>
       )}
     </main>
   )

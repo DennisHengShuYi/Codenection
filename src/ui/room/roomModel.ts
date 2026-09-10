@@ -1,4 +1,4 @@
-import { answeredIds, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
+import { answeredIds, checkedInDays, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
 import { calibrationProgress, type CalibrationProfile } from '../../domain/calibration'
 import { lapsed } from '../../domain/commitments'
 import { dateFor } from '../../domain/calendar'
@@ -63,7 +63,12 @@ export function roomModel({ schedule, profile, today, blockLog = [] }: RoomModel
   // dial elsewhere in the app kept using it. Combining keeps this byte-for-byte identical
   // to before while the log is still empty in practice.
   const params = paramsFor([...outcomesFrom(blockLog), ...profile.confirmations])
-  const projection = project(schedule.start, toDayInputs(schedule), params)
+  // §8b/Ruling 11 amended: a past day carrying no answer is a day the student went quiet,
+  // and the model should get more worried, not pretend it heard from them. Days from
+  // `today` onward stay checked in -- there is nothing to check in about yet -- which is
+  // `checkedInDays`'s own guarantee, not re-derived here.
+  const checkedIn = checkedInDays(blockLog, today, schedule.horizonDays)
+  const projection = project(schedule.start, toDayInputs(schedule, checkedIn), params)
   const state = roomStateFor(schedule.start, projection, schedule)
 
   const prescription = prescribe(schedule, attemptsIn(schedule))

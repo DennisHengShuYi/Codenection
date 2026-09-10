@@ -1,11 +1,20 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
 import { RoomShell } from './room/RoomShell'
 
+/**
+ * This file used to cover the `mirror` and `papers` objects: the calibration screen behind
+ * the mirror, and `BlockConfirm` behind the papers. §10's module table drops the whole
+ * `calibration/` directory (a later task's deletion -- Task 17 -- since nothing routes to
+ * it from here any more) and folds block confirmation into the block sheet and the today
+ * card instead. What is left to cover at this level: that a confirmation reaches either
+ * surface and lands in the durable block log, which `BlockSheet.test.tsx` and
+ * `TodayCard.test.tsx` cannot prove on their own because neither is wired to storage.
+ */
 const item = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
   id: 'essay',
   title: 'WIA3001 essay',
@@ -37,122 +46,136 @@ const renderHome = async (schedule = week()) => {
   await repository.clear()
   await repository.saveWeek(schedule)
 
-  render(<RoomShell repository={repository} />)
-  await waitFor(() => expect(screen.getByTestId('object-mirror')).toBeVisible())
+  render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+  await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
 
   return repository
 }
 
-describe('RoomShell with calibration', () => {
-  /**
-   * §7.7: no cold start. The room works before anybody has calibrated anything, and
-   * calibration is a screen you choose to open rather than a wall in front of the app.
-   */
-  it('shows the room without any calibration at all', async () => {
+describe('RoomShell with a block to confirm', () => {
+  // §7.7: no cold start. The room works before anybody has answered anything.
+  it('shows the room without anything to confirm', async () => {
     await renderHome()
 
     expect(screen.getByTestId('room-scene')).toBeVisible()
+    expect(screen.queryByTestId('answer-right')).toBeNull()
   })
 
-  it('offers a way into calibration', async () => {
-    await renderHome()
+  // §7.9's whole point: two taps that feed the estimate correction.
+  it('asks whether a scheduled block happened, on the today card', async () => {
+    await renderHome(week({ items: [item({ dayIndex: 0 })] }))
 
-    expect(screen.getByTestId('object-mirror')).toHaveAccessibleName(/how i work/i)
+    expect(screen.getByText(/wia3001 essay/i)).toBeVisible()
+    expect(screen.getByTestId('answer-right')).toBeVisible()
   })
 
-  it('can be opened and left without changing anything', async () => {
-    await renderHome()
+  it('records the answer to the durable block log and stops asking about the same block', async () => {
+    const onAnswerBlock = vi.fn()
+    counter += 1
+    const repository = createLocalRepository(`calibration-record-${counter}`)
+    await repository.clear()
+    await repository.saveWeek(week({ items: [item({ dayIndex: 0 })] }))
 
-    await userEvent.click(screen.getByTestId('object-mirror'))
-    expect(screen.getByTestId('calibration-modes')).toBeVisible()
+    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={onAnswerBlock} />)
+    await waitFor(() => expect(screen.getByTestId('answer-longer')).toBeVisible())
 
-    await userEvent.click(screen.getByRole('button', { name: /^done$/i }))
+    await userEvent.click(screen.getByTestId('answer-longer'))
 
-    await waitFor(() => expect(screen.queryByTestId('zoom-mirror')).toBeNull())
-    expect(screen.getByTestId('room-scene')).toBeVisible()
-  })
-
-  it('remembers a mode that was chosen', async () => {
-    const repository = await renderHome()
-
-    await userEvent.click(screen.getByTestId('object-mirror'))
-    await userEvent.click(screen.getByTestId('mode-working'))
-
-    await waitFor(async () =>
-      expect((await repository.loadSettings()).calibration?.mode).toBe('working'),
-    )
-  })
-
-  // §7.6 is the payoff, and it has to be reachable from where the work happens.
-  it('shows the how-you-work screen alongside the tuning', async () => {
-    await renderHome()
-
-    await userEvent.click(screen.getByTestId('object-mirror'))
-
-    expect(screen.getByTestId('how-you-work')).toBeVisible()
-  })
-
-  // §7.9's prompt, and its whole point: two taps that feed three parameters.
-  it('asks whether a scheduled block happened', async () => {
-    await renderHome(week({ items: [item()] }))
-
-    // The prompt lives on the papers now: they are marked, and it is what you find there.
-    expect(screen.getByTestId('object-papers')).toHaveAttribute('data-attention', 'true')
-
-    await userEvent.click(screen.getByTestId('object-papers'))
-    expect(screen.getByTestId('block-confirm')).toHaveTextContent('WIA3001 essay')
-  })
-
-  it('records the answer and stops asking about the same block', async () => {
-    const repository = await renderHome(week({ items: [item()] }))
-
-    await userEvent.click(screen.getByTestId('object-papers'))
-    await userEvent.click(screen.getByTestId('happened-yes'))
-    await userEvent.click(screen.getByTestId('difficulty-harder'))
-
-    await waitFor(async () =>
-      expect((await repository.loadSettings()).calibration?.confirmations).toHaveLength(1),
-    )
-    await waitFor(() =>
-      expect(screen.getByTestId('object-papers')).toHaveAttribute('data-attention', 'false'),
+    expect(onAnswerBlock).toHaveBeenCalledWith(
+      expect.objectContaining({ blockId: 'essay', answer: 'longer', type: 'mental', plannedHours: 2 }),
     )
   })
 
   /**
-   * §7.9: "no" is a neutral answer that feeds the model, not a failure. It must be recorded
-   * rather than discarded -- a student who did not do the thing is exactly the one whose
-   * data is most needed.
+   * §7.9: "no" is a neutral answer that feeds the model, not a failure. It must be
+   * recorded rather than discarded.
    */
   it('records a no as data rather than throwing it away', async () => {
-    const repository = await renderHome(week({ items: [item()] }))
+    const onAnswerBlock = vi.fn()
+    counter += 1
+    const repository = createLocalRepository(`calibration-no-${counter}`)
+    await repository.clear()
+    await repository.saveWeek(week({ items: [item({ dayIndex: 0 })] }))
 
-    await userEvent.click(screen.getByTestId('object-papers'))
-    await userEvent.click(screen.getByTestId('happened-no'))
-    await userEvent.click(screen.getByTestId('difficulty-expected'))
+    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={onAnswerBlock} />)
+    await waitFor(() => expect(screen.getByTestId('answer-didnt')).toBeVisible())
 
-    await waitFor(async () =>
-      expect((await repository.loadSettings()).calibration?.confirmations).toHaveLength(1),
+    await userEvent.click(screen.getByTestId('answer-didnt'))
+
+    expect(onAnswerBlock).toHaveBeenCalledWith(expect.objectContaining({ answer: 'didnt' }))
+  })
+
+  it('a block already answered in the log is not asked about again', async () => {
+    const answered = [
+      {
+        blockId: 'essay',
+        type: 'mental' as const,
+        plannedHours: 2,
+        dayIndex: 0,
+        answer: 'right' as const,
+        answeredAt: 0,
+      },
+    ]
+    counter += 1
+    const repository = createLocalRepository(`calibration-answered-${counter}`)
+    await repository.clear()
+    await repository.saveWeek(week({ items: [item({ dayIndex: 0 })] }))
+
+    render(<RoomShell repository={repository} blockLog={answered} onAnswerBlock={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+    expect(screen.queryByTestId('answer-right')).toBeNull()
+  })
+
+  // The same question, reachable a second way: the week's own day, via the block sheet.
+  // Anchored three days into the fortnight so day 0 genuinely reads as past, which is what
+  // gives the sheet a `confirm` action rather than the "today or later" set.
+  it('also confirms a past block from the week screen, through the block sheet', async () => {
+    const onAnswerBlock = vi.fn()
+    counter += 1
+    const repository = createLocalRepository(`calibration-sheet-${counter}`)
+    await repository.clear()
+    const startedOn = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    await repository.saveWeek({
+      ...week({ items: [item({ dayIndex: 0, id: 'past-essay' })] }),
+      startedOn,
+    })
+
+    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={onAnswerBlock} />)
+    await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+
+    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(await screen.findByTestId('day-0'))
+    await userEvent.click(await screen.findByTestId('block-past-essay'))
+    await userEvent.click(await screen.findByTestId('answer-right'))
+
+    expect(onAnswerBlock).toHaveBeenCalledWith(
+      expect.objectContaining({ blockId: 'past-essay', answer: 'right' }),
     )
   })
 
-  it('asks about nothing when there is nothing scheduled today', async () => {
-    await renderHome()
+  /**
+   * §8's sleep row: `schedule.sleepByDay` has never been written after a week is created
+   * outside this card, and cutting the painter (§11) makes that the *only* remaining input
+   * -- see `checkIn.ts`'s own doc comment. This is the level that proves `RoomShell` really
+   * wires the answer through to the stored week, not just that `withSleep` itself works.
+   */
+  it('recording a night of sleep on the today card writes it into the saved week', async () => {
+    const repository = await renderHome()
+    await waitFor(() => expect(screen.getByTestId('sleep-under5')).toBeVisible())
 
-    expect(screen.getByTestId('object-papers')).toHaveAttribute('data-attention', 'false')
+    await userEvent.click(screen.getByTestId('sleep-under5'))
+
+    await waitFor(async () => expect((await repository.loadWeek())?.sleepByDay[0]).toBe(4.5))
   })
 
-  /**
-   * §7.9: a prompt nobody can escape is one they learn to dread. Walking away closes it --
-   * and the papers keep asking, because dismissing is not answering. Asserting the mark
-   * cleared would be asserting that the app forgot something it should not.
-   */
-  it('can be dismissed without answering, and keeps asking', async () => {
-    await renderHome(week({ items: [item()] }))
+  it('dismissing the today card with "Not now" hides it without answering anything', async () => {
+    await renderHome()
+    const card = await screen.findByRole('region', { name: /today's check-in/i })
 
-    await userEvent.click(screen.getByTestId('object-papers'))
     await userEvent.click(screen.getByRole('button', { name: /not now/i }))
 
-    await waitFor(() => expect(screen.queryByTestId('zoom-papers')).toBeNull())
-    expect(screen.getByTestId('object-papers')).toHaveAttribute('data-attention', 'true')
+    await waitFor(() => expect(screen.queryByRole('region', { name: /today's check-in/i })).toBeNull())
+    expect(card).toBeTruthy()
   })
 })

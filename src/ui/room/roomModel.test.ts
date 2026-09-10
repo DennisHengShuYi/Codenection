@@ -213,4 +213,98 @@ describe('roomModel', () => {
       expect(marked(input())).toEqual(marked({ ...input(), blockLog: [] }))
     })
   })
+
+  /**
+   * Ruling 11 amended: `checkedInDays` exists and is unit-tested, but nothing in the
+   * running app ever called it -- every `project()` call site hardcoded `checkedIn: true`
+   * via `toDayInputs(schedule)`. Task 18's reachability guard tests the *parameter*, not
+   * the wiring, so it would not catch this: only a test against `roomModel`'s own output
+   * can. §8b's own warning is exact -- treating every silent past day as checked in
+   * compounds to 2.68x pessimism nowhere, and treating it as MISSED (the bug this fixes)
+   * compounds real pessimism that was previously invisible to the room.
+   */
+  describe('checkedIn, wired into the live projection', () => {
+    const heavyMentalDay = (id: string, dayIndex: number): ScheduledItem => ({
+      id,
+      title: id,
+      type: 'mental',
+      kind: 'studyBlock',
+      hours: 8,
+      intensity: 1.3,
+      dayIndex,
+      startHour: 9,
+      fixed: false,
+      deadlineDay: null,
+      protectedRest: false,
+    })
+
+    // Heavy enough that 20 consecutive UNANSWERED days push the fortnight into deficit by
+    // day 7 (a storm), while the same 20 days all ANSWERED never cross the threshold at
+    // all (clear) -- a real, numerically-verified divergence, not an assumption.
+    const heavySchedule = week({
+      items: Array.from({ length: 20 }, (_, day) => heavyMentalDay(`i${day}`, day)),
+    })
+
+    const fullyAnswered: BlockRecord[] = Array.from({ length: 20 }, (_, day) => ({
+      blockId: `i${day}`,
+      type: 'mental',
+      plannedHours: 8,
+      dayIndex: day,
+      // 'right': actual matches planned, so this does not also shift the learned estimate
+      // bias -- isolating the assertion to the checkedIn signal alone.
+      answer: 'right',
+      answeredAt: 0,
+    }))
+
+    it('reads as calm when every day up to today answered, and as a storm when none did', () => {
+      const silent = roomModel({
+        schedule: heavySchedule,
+        profile: DEFAULT_PROFILE,
+        today: 20,
+        blockLog: [],
+      })
+      const checkedIn = roomModel({
+        schedule: heavySchedule,
+        profile: DEFAULT_PROFILE,
+        today: 20,
+        blockLog: fullyAnswered,
+      })
+
+      expect(silent.state.weather).toBe('storm')
+      expect(checkedIn.state.weather).toBe('clear')
+    })
+
+    it('marks the ceiling for attention only once the missing check-ins compound', () => {
+      const silentCeiling = roomModel({
+        schedule: heavySchedule,
+        profile: DEFAULT_PROFILE,
+        today: 20,
+        blockLog: [],
+      }).rows.find((row) => row.id === 'ceiling')!
+      const checkedInCeiling = roomModel({
+        schedule: heavySchedule,
+        profile: DEFAULT_PROFILE,
+        today: 20,
+        blockLog: fullyAnswered,
+      }).rows.find((row) => row.id === 'ceiling')!
+
+      expect(silentCeiling.attention).toBe(true)
+      expect(checkedInCeiling.attention).toBe(false)
+    })
+
+    it('treats every day from today onward as checked in, never inflating the horizon itself', () => {
+      // A day still ahead has nothing to check in about (§8b). Confirms `today` is passed
+      // through rather than e.g. `today - 1`, which would wrongly mark today missed too.
+      const atDayZero = roomModel({
+        schedule: heavySchedule,
+        profile: DEFAULT_PROFILE,
+        today: 0,
+        blockLog: [],
+      })
+
+      // With nothing yet lived, there is nothing to be silent about -- the fortnight
+      // should read exactly as it would with the old hardcoded `true`.
+      expect(atDayZero.state.weather).not.toBe('storm')
+    })
+  })
 })

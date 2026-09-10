@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Draft, ParsedItem } from '../../ai'
+import type { Calendar, Draft, ParsedItem } from '../../ai'
 import { addItems } from '../../domain/addItems'
 import type { EnergyPrediction } from '../../domain/predictions'
 import type { BlockRecord } from '../../domain/blockLog'
@@ -11,6 +11,7 @@ import { Card } from '../kit/Card'
 import { Field } from '../kit/Field'
 import { Sheet } from '../kit/Sheet'
 import { ItemChip } from '../planner/ItemChip'
+import { saysWhen } from '../planner/when'
 import { RoomComparison } from '../room/RoomComparison'
 import { roomModel } from '../room/roomModel'
 import { DEFAULT_PROFILE } from '../../domain/calibration'
@@ -55,7 +56,10 @@ export function RequestBoxScreen({
   blockLog,
   predictions,
   onAccept,
-  onCancel,
+  onBack,
+  onClose,
+  dayLabels,
+  calendar,
 }: {
   schedule: Schedule
   /** §2.4's calibrated params -- the student's own measured estimate bias, not the
@@ -72,7 +76,16 @@ export function RequestBoxScreen({
    *  one. This is the call site the identical mistake was made at once already. */
   predictions: readonly EnergyPrediction[]
   onAccept: (item: ParsedItem) => void
-  onCancel: () => void
+  /** Ruling 60: one level up, to the chooser this was chosen from. */
+  onBack: () => void
+  /** Done entirely -- straight to the room, whatever depth this was opened to.
+   *  Wired to `onCancel` before Ruling 60, which meant the sheet's own close control
+   *  quietly dropped the student at the chooser instead of closing. */
+  onClose: () => void
+  /** §43: the horizon's days in a student's words, for the chip's "when" question. */
+  dayLabels: readonly string[]
+  /** §44: which real day the horizon's day 0 is, so "next thursday" means that thursday. */
+  calendar: Calendar
 }) {
   const [text, setText] = useState('')
   const [item, setItem] = useState<ParsedItem | null>(null)
@@ -92,7 +105,7 @@ export function RequestBoxScreen({
       // never the first screen a student sees.
       const { readRequest, draftReplies } = await import('../../ai')
 
-      const read = existing ?? (await readRequest(source))
+      const read = existing ?? (await readRequest(source, calendar))
       if (!read) {
         setProblem('I could not find a request in that. Try describing what you were asked for.')
         setItem(null)
@@ -128,22 +141,21 @@ export function RequestBoxScreen({
 
   const actions = (
     <>
-      <Button variant="quiet" onClick={onCancel}>
-        Cancel
-      </Button>
       <Button onClick={() => void onPrice()} disabled={working}>
         {working ? 'Working it out…' : 'What would this cost?'}
       </Button>
       {/* Separate from copying on purpose: a student may copy the decline and want
           nothing in their week. */}
       {item !== null && cost !== null && (
-        <Button onClick={() => onAccept(item)}>Take it on</Button>
+        <Button onClick={() => onAccept(item)} disabled={!saysWhen(item)}>
+          Take it on
+        </Button>
       )}
     </>
   )
 
   return (
-    <Sheet title="Someone asked you for something" onClose={onCancel} actions={actions}>
+    <Sheet title="Someone asked you for something" onClose={onClose} onBack={onBack} actions={actions}>
       <div className="flex flex-col gap-4">
         <p className="text-sm text-ink-soft">
           Paste it here and see what saying yes would actually cost.
@@ -171,6 +183,7 @@ export function RequestBoxScreen({
                 being priced on it. */}
             <ul className="flex flex-col gap-3">
               <ItemChip
+                dayLabels={dayLabels}
                 item={item}
                 onChange={(next) => void onPrice(text, next)}
                 onRemove={() => {

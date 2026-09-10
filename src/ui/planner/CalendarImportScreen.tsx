@@ -3,6 +3,7 @@ import type { ParsedItem } from '../../ai'
 import { Button } from '../kit/Button'
 import { Sheet } from '../kit/Sheet'
 import { ItemChip } from './ItemChip'
+import { saysWhen } from './when'
 
 /**
  * §1.4's optional calendar supplement, as a fourth way in.
@@ -23,7 +24,9 @@ export function CalendarImportScreen({
   onConnect,
   onRead,
   onAccept,
-  onCancel,
+  onBack,
+  onClose,
+  dayLabels,
   suggestRepeat = () => null,
 }: {
   /** Whether this student has already granted calendar access. */
@@ -34,7 +37,13 @@ export function CalendarImportScreen({
    *  it -- said out loud rather than quietly dropped. */
   readonly onRead: () => Promise<{ items: readonly ParsedItem[]; skipped: number }>
   readonly onAccept: (items: readonly ParsedItem[]) => void
-  readonly onCancel: () => void
+  /** Ruling 60: one level up, to the chooser this was chosen from. */
+  readonly onBack: () => void
+  /** Done entirely -- straight to the room, whatever depth this was opened to. Distinct
+   *  from `onBack`, which is what a single `onCancel` used to conflate. */
+  readonly onClose: () => void
+  /** §43: the horizon's days in a student's words, for the chip's "when" question. */
+  readonly dayLabels: readonly string[]
   readonly suggestRepeat?: (item: ParsedItem) => ParsedItem['repeat']
 }) {
   const [items, setItems] = useState<ParsedItem[] | null>(null)
@@ -61,15 +70,19 @@ export function CalendarImportScreen({
     }
   }
 
-  const canAccept = items !== null && items.length > 0
+  /**
+   * §43, as in the other two import screens. A calendar row almost always says when it
+   * happens -- that is the whole reason to read one -- but almost always is not always, and
+   * a row that arrived without a day must be asked about rather than placed on a day nobody
+   * named.
+   */
+  const missingWhen = (items ?? []).filter((item) => !saysWhen(item))
+  const canAccept = items !== null && items.length > 0 && missingWhen.length === 0
 
   const actions = (
     <>
-      <Button variant="quiet" onClick={onCancel}>
-        Cancel
-      </Button>
-      {canAccept && (
-        <Button data-testid="calendar-accept" onClick={() => onAccept(items)}>
+      {items !== null && items.length > 0 && (
+        <Button data-testid="calendar-accept" onClick={() => onAccept(items)} disabled={!canAccept}>
           Add these to my week
         </Button>
       )}
@@ -77,7 +90,7 @@ export function CalendarImportScreen({
   )
 
   return (
-    <Sheet title="From my calendar" onClose={onCancel} actions={actions}>
+    <Sheet title="From my calendar" onClose={onClose} onBack={onBack} actions={actions}>
       <div className="flex flex-col gap-4">
         {!connected && (
           <>
@@ -142,6 +155,7 @@ export function CalendarImportScreen({
               <ItemChip
                 key={item.id}
                 item={item}
+                dayLabels={dayLabels}
                 onChange={(next) =>
                   setItems(items.map((existing) => (existing.id === next.id ? next : existing)))
                 }

@@ -145,3 +145,55 @@ describe('the view, kept in the address', () => {
     expect(result.current[0]).toBe(before)
   })
 })
+
+/**
+ * Ruling 60's Back button, which is a different thing from `setView`: it walks the
+ * browser's own history rather than navigating somewhere new, so pressing it is
+ * indistinguishable from pressing the browser's Back.
+ */
+describe('going back', () => {
+  it('walks the history when this session put an entry there', () => {
+    const { result } = renderHook(() => useUrlView())
+    act(() => result.current[1](toAdd()))
+    act(() => result.current[1](toAdd('photo')))
+
+    const back = vi.spyOn(window.history, 'back')
+
+    act(() => result.current[2]())
+
+    expect(back).toHaveBeenCalledOnce()
+  })
+
+  /**
+   * The case a pasted link creates, and the reason this is not simply `history.back()`:
+   * a student who opened `/add/photo` directly has no entry of ours behind them, so
+   * walking the history would take them OUT of the app -- to whatever page they were on
+   * before, or to a blank tab. They go up one level instead.
+   */
+  it('steps up one level instead of leaving the site, when nothing was pushed', () => {
+    startAt('/add/photo')
+    const { result } = renderHook(() => useUrlView())
+    const back = vi.spyOn(window.history, 'back')
+
+    act(() => result.current[2]())
+
+    expect(back).not.toHaveBeenCalled()
+    expect(result.current[0]).toEqual(toAdd())
+    expect(window.location.pathname).toBe('/add')
+  })
+
+  it('stops walking the history once its own entries are used up', () => {
+    startAt('/add/photo')
+    const { result } = renderHook(() => useUrlView())
+
+    // Up to the chooser, which replaced rather than pushed -- so there is still nothing of
+    // ours behind us, and the next Back must not leave the site either.
+    act(() => result.current[2]())
+    const back = vi.spyOn(window.history, 'back')
+
+    act(() => result.current[2]())
+
+    expect(back).not.toHaveBeenCalled()
+    expect(result.current[0]).toEqual(ROOM)
+  })
+})

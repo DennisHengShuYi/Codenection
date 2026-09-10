@@ -29,7 +29,11 @@ describe('RoomShell', () => {
     renderHome()
 
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
-    expect(screen.getByTestId('room-text-equivalent')).toBeVisible()
+
+    // Ruling 61: the room in words moved behind the `Waiting` button with everything else
+    // that used to be stacked beneath the drawing.
+    await userEvent.click(screen.getByTestId('open-notices'))
+    expect(await screen.findByTestId('room-text-equivalent')).toBeVisible()
   })
 
   describe('routing', () => {
@@ -110,15 +114,59 @@ describe('RoomShell', () => {
       await userEvent.click(await screen.findByTestId('block-essay'))
       expect(await screen.findByRole('dialog', { name: /essay draft/i })).toBeVisible()
 
-      await userEvent.click(screen.getByRole('button', { name: /close/i }))
+      await userEvent.click(screen.getByTestId('sheet-back'))
 
       // Back in the week, not the room. Since Ruling 59 the week is itself a sheet, so what
-      // closing a block leaves you looking at is the week's dialog rather than a page --
-      // and only ever one dialog at a time, which is what keeps Escape unambiguous.
+      // stepping back out of a block leaves you looking at is the week's dialog rather than
+      // a page -- and only ever one dialog at a time, which is what keeps Escape
+      // unambiguous. Ruling 60 gave this rule to the Back button: `close` now means done
+      // with the lot, asserted below.
       const week = await screen.findByRole('dialog', { name: /the week/i })
       expect(week).toBeVisible()
       expect(screen.queryByRole('dialog', { name: /essay draft/i })).toBeNull()
       expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    })
+
+    /**
+     * The other half of Ruling 60, and the reason the two controls exist: from three levels
+     * in, close does not walk the student back out one sheet at a time.
+     */
+    it('closing a block goes to the room, past the week it was opened from', async () => {
+      const repository = createLocalRepository('roomshell-block-close')
+      await repository.clear()
+      const { HORIZON_DAYS } = await import('../engine')
+      await repository.saveWeek({
+        items: [
+          {
+            id: 'essay',
+            title: 'Essay draft',
+            type: 'mental',
+            kind: 'studyBlock',
+            hours: 2,
+            intensity: 1,
+            dayIndex: 5,
+            startHour: 10,
+            fixed: false,
+            deadlineDay: null,
+            protectedRest: false,
+          },
+        ],
+        start: { mental: 70, physical: 70, social: 70, errands: 70 },
+        horizonDays: HORIZON_DAYS,
+        sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+      })
+      render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+
+      await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+      await userEvent.click(screen.getByTestId('open-week'))
+      await userEvent.click(await screen.findByTestId('day-5'))
+      await userEvent.click(await screen.findByTestId('block-essay'))
+      await screen.findByRole('dialog', { name: /essay draft/i })
+
+      await userEvent.click(screen.getByRole('button', { name: /close/i }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(screen.getByTestId('room-scene')).toBeVisible()
     })
   })
 

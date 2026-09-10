@@ -20,6 +20,7 @@ const parsed = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   kind: 'studyBlock',
   hours: 3,
   deadlineDay: null,
+  startHour: null,
   fixed: false,
   confident: true,
   repeat: null,
@@ -249,49 +250,70 @@ describe('fixThatMakesRoom', () => {
 })
 
 /**
- * §1.4's calendar import, and the one thing a calendar is authoritative about.
+ * §43: a stated hour is the student's, not a suggestion.
  *
- * A photo or a brain dump says nothing about when something starts, so `placeItems` finding
- * a sensible gap is the right answer. A calendar does say, and importing a 9am lecture only
- * to place it at 19:00 throws away the only fact worth having.
+ * Placement used to choose every hour -- the first free slot on the day, or
+ * `FALLBACK_START_HOUR` when the day was full. That was the only possible behaviour while
+ * `ParsedItem` carried no time; now that a student can say "lecture Tuesday 9am", the app
+ * choosing 10am instead would be overruling them about their own timetable.
  */
-describe('placeItems and a stated start time', () => {
-  it('puts a pinned block at the hour it was given', () => {
-    const lecture = parsed({ fixed: true, startHour: 9, hours: 2, deadlineDay: 3 })
+describe('an item that states its own hour', () => {
+  it('lands on the hour the student stated', () => {
+    const { schedule } = placeItems(empty(), [parsed({ startHour: 9, deadlineDay: 2 })], 0)
 
-    expect(placeItems(empty(), [lecture], 0).schedule.items[0]?.startHour).toBe(9)
+    expect(schedule.items[0]?.startHour).toBe(9)
+    expect(schedule.items[0]?.dayIndex).toBe(2)
   })
 
   /**
-   * A pinned block keeps its hour even when something is already there. It is a lecture: it
-   * happens at nine whether or not the week is convenient, and moving it would be the app
-   * inventing a timetable the student does not have. Movable-movable overlap is legal and
-   * `constraints.ts` says so deliberately.
+   * The other half of "pinned": the optimizer may not move it. Without this the hour would
+   * be honoured at the moment of adding and quietly rearranged by the next rebalance,
+   * which is worse than never having honoured it -- the student would have watched it
+   * land correctly.
    */
-  it('keeps a pinned hour even when the day is already busy', () => {
+  it('is fixed, so a rebalance may not move it', () => {
+    const { schedule } = placeItems(empty(), [parsed({ startHour: 9, deadlineDay: 2 })], 0)
+
+    expect(schedule.items[0]?.fixed).toBe(true)
+  })
+
+  it('leaves the hour to placement when the student stated none', () => {
+    const { schedule } = placeItems(empty(), [parsed({ startHour: null, deadlineDay: 2 })], 0)
+
+    expect(schedule.items[0]?.fixed).toBe(false)
+    expect(schedule.items[0]?.startHour).toEqual(expect.any(Number))
+  })
+
+  /**
+   * A stated hour on a day with nothing free is still the student's answer. The app says
+   * what it did in the placement note rather than moving the lecture somewhere emptier --
+   * two things at once is a real week, and §16 is about never reshuffling silently.
+   */
+  it('keeps the stated hour even where the day is already busy', () => {
     const busy = {
       ...empty(),
-      items: [{ ...fullDay(3), hours: 4, startHour: 8, fixed: false }],
+      items: [
+        {
+          id: 'existing',
+          title: 'Lab',
+          type: 'mental' as const,
+          kind: 'studyBlock' as const,
+          hours: 3,
+          intensity: 1,
+          dayIndex: 2,
+          startHour: 9,
+          fixed: true,
+          deadlineDay: null,
+          protectedRest: false,
+        },
+      ],
     }
-    const lecture = parsed({ fixed: true, startHour: 9, hours: 2, deadlineDay: 3 })
 
-    expect(placeItems(busy, [lecture], 0).schedule.items[1]?.startHour).toBe(9)
-  })
+    const { schedule } = placeItems(busy, [parsed({ startHour: 9, deadlineDay: 2 })], 0)
+    const added = schedule.items.find((item) => item.id !== 'existing')
 
-  /** An unpinned item with a stated hour takes it when the day allows, because something
-   *  knew it -- but yields rather than landing on top of other work. */
-  it('prefers a stated hour for movable work when there is room', () => {
-    const suggested = parsed({ fixed: false, startHour: 14, hours: 2, deadlineDay: 3 })
-
-    expect(placeItems(empty(), [suggested], 0).schedule.items[0]?.startHour).toBe(14)
-  })
-
-  /** Nothing stated is the ordinary case, and it must behave exactly as it always has. */
-  it('chooses an hour itself when nothing said one', () => {
-    const item = placeItems(empty(), [parsed({ hours: 2, deadlineDay: 3 })], 0).schedule.items[0]
-
-    expect(item?.startHour).toBeGreaterThanOrEqual(8)
-    expect(item?.startHour).toBeLessThanOrEqual(24)
+    expect(added?.startHour).toBe(9)
+    expect(added?.dayIndex).toBe(2)
   })
 })
 

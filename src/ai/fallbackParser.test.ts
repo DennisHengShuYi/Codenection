@@ -159,3 +159,93 @@ describe('parseWithRules', () => {
     expect(item?.confident).toBe(false)
   })
 })
+
+/**
+ * §43: the clock time, read by the rules as well as by the model.
+ *
+ * This parser is not a lesser path -- it is what runs whenever there is no key configured,
+ * no /api under `vite dev`, a timeout, or a reply that fails validation. If only the model
+ * could read a time, then a student's stated 9am would survive or vanish depending on
+ * whether an endpoint happened to answer.
+ */
+describe('the stated time', () => {
+  it.each([
+    ['lecture tuesday 9am', 9],
+    ['lecture tuesday 9 am', 9],
+    ['shift at 9pm', 21],
+    ['lab at 14:00', 14],
+    ['seminar 09:30', 9],
+    ['gym at 7.30am', 7],
+    ['midnight shift at 12am', 0],
+    ['lunch thing at 12pm', 12],
+  ])('reads %s as hour %i', (text, startHour) => {
+    expect(parseWithRules(text)[0]?.startHour).toBe(startHour)
+  })
+
+  it('says nothing about the hour when the text states none', () => {
+    expect(parseWithRules('read chapter 3')[0]?.startHour).toBeNull()
+  })
+
+  /**
+   * A number that is not a time must not become one. "3 hours" is an effort estimate and
+   * "chapter 3" is a chapter -- neither is a student saying when something happens.
+   */
+  it.each(['fyp presentation 3 hours', 'read chapter 3', 'essay worth 40%'])(
+    'does not invent an hour from %s',
+    (text) => {
+      expect(parseWithRules(text)[0]?.startHour).toBeNull()
+    },
+  )
+
+  it('refuses an hour that is not one, rather than wrapping it round', () => {
+    expect(parseWithRules('meeting at 25:00')[0]?.startHour).toBeNull()
+  })
+})
+
+/**
+ * §44: a named weekday has to land on that weekday.
+ *
+ * `deadlineOf` computed `(named - today % 7 + 7) % 7`, which reads `today % 7` as today's
+ * weekday -- true only if day index 0 is a Sunday, and it is whatever weekday the student's
+ * week actually began on. So "gym thursday" landed on a Monday, and the app then showed the
+ * student that Monday in the chip's own Day select, which is where this was finally seen.
+ *
+ * The anchor is passed in rather than read from a clock: the parser is pure, and the caller
+ * is the one holding the week.
+ */
+describe('a named weekday, against the real calendar', () => {
+  // 2026-09-11 is a Friday, so day 0 is a Friday: weekday 5.
+  const FRIDAY = 5
+
+  it('puts thursday on the next thursday, not on an arbitrary index', () => {
+    const item = parseWithRules('gym thursday 7pm', 0, FRIDAY)[0]
+
+    // Friday + 6 = Thursday.
+    expect(item?.deadlineDay).toBe(6)
+  })
+
+  it("puts the next day's weekday on tomorrow", () => {
+    const item = parseWithRules('laundry saturday', 0, FRIDAY)[0]
+
+    expect(item?.deadlineDay).toBe(1)
+  })
+
+  /** A named day that is today means next week's one, not this morning's -- unchanged, and
+   *  now measured against the real weekday rather than an index modulo seven. */
+  it("reads the current weekday as next week's one", () => {
+    const item = parseWithRules('call home friday', 0, FRIDAY)[0]
+
+    expect(item?.deadlineDay).toBe(7)
+  })
+
+  it('counts from wherever today sits in the horizon', () => {
+    // Day 3 of a week starting Friday is a Monday; the next Thursday is three days later.
+    const item = parseWithRules('gym thursday', 3, FRIDAY)[0]
+
+    expect(item?.deadlineDay).toBe(6)
+  })
+
+  it('still reads no day where none is named', () => {
+    expect(parseWithRules('read chapter 3', 0, FRIDAY)[0]?.deadlineDay).toBeNull()
+  })
+})

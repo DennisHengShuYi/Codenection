@@ -40,10 +40,12 @@ const openPlanner = async () => {
 }
 
 describe('RoomShell with the planner', () => {
-  it('opens the planner and can come back without changing anything', async () => {
+  it('opens the planner and can be stepped back from without changing anything', async () => {
     const repository = await openPlanner()
 
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    // Ruling 60: Back is the way up to the chooser now. `Cancel` had to mean both this
+    // and "close the whole thing", depending on which sheet you were standing in.
+    await userEvent.click(screen.getByTestId('sheet-back'))
     await waitFor(() => expect(screen.getByTestId('add-type')).toBeVisible())
 
     expect((await repository.loadWeek())?.items).toHaveLength(0)
@@ -56,6 +58,12 @@ describe('RoomShell with the planner', () => {
     await userEvent.type(screen.getByLabelText(/on your mind/i), 'gym, laundry')
     await userEvent.click(screen.getByRole('button', { name: /read this/i }))
     await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(2))
+
+    // §43: the week will not take an item that does not say when it happens, so the day is
+    // answered on the chip first -- the same press a student makes.
+    for (const select of screen.getAllByTestId(/^when-day-/)) {
+      await userEvent.selectOptions(select, '2')
+    }
 
     await userEvent.click(screen.getByRole('button', { name: /add these/i }))
 
@@ -76,8 +84,18 @@ describe('RoomShell with the planner', () => {
     await userEvent.click(screen.getByRole('button', { name: /read this/i }))
     await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(2))
 
+    // §43: the week will not take an item that does not say when it happens, so the day is
+    // answered on the chip first -- the same press a student makes.
+    for (const select of screen.getAllByTestId(/^when-day-/)) {
+      await userEvent.selectOptions(select, '2')
+    }
+
     await userEvent.click(screen.getByRole('button', { name: /add these/i }))
 
+    // Ruling 61: what the app did with what was added is a notice, so it waits behind the
+    // `Waiting` button with the rest of them rather than appearing under the room.
+    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-notices'))
     await waitFor(() => expect(screen.getByTestId('placement-note')).toBeVisible())
     expect(screen.getByTestId('placement-note')).toHaveTextContent(/Added/)
   })
@@ -91,8 +109,18 @@ describe('RoomShell with the planner', () => {
     await userEvent.click(screen.getByRole('button', { name: /read this/i }))
     await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(1))
 
+    // §43: the week will not take an item that does not say when it happens, so the day is
+    // answered on the chip first -- the same press a student makes.
+    for (const select of screen.getAllByTestId(/^when-day-/)) {
+      await userEvent.selectOptions(select, '2')
+    }
+
     await userEvent.click(screen.getByRole('button', { name: /add these/i }))
 
+    // Ruling 61: what the app did with what was added is a notice, so it waits behind the
+    // `Waiting` button with the rest of them rather than appearing under the room.
+    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-notices'))
     await waitFor(() => expect(screen.getByTestId('placement-note')).toBeVisible())
     expect(screen.queryByTestId('placement-do')).toBeNull()
   })
@@ -105,7 +133,17 @@ describe('RoomShell with the planner', () => {
     await userEvent.type(screen.getByLabelText(/on your mind/i), 'gym, laundry')
     await userEvent.click(screen.getByRole('button', { name: /read this/i }))
     await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(2))
+
+    // §43: the week will not take an item that does not say when it happens, so the day is
+    // answered on the chip first -- the same press a student makes.
+    for (const select of screen.getAllByTestId(/^when-day-/)) {
+      await userEvent.selectOptions(select, '2')
+    }
     await userEvent.click(screen.getByRole('button', { name: /add these/i }))
+    // Ruling 61: what the app did with what was added is a notice, so it waits behind the
+    // `Waiting` button with the rest of them rather than appearing under the room.
+    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-notices'))
     await waitFor(() => expect(screen.getByTestId('placement-note')).toBeVisible())
 
     const settled = (await repository.loadWeek())?.items.map((item) => ({
@@ -145,8 +183,15 @@ describe('RoomShell with the planner', () => {
       const repository = createLocalRepository(`planner-repeat-${counter}`)
       await repository.clear()
 
-      // Day 2 of a week starting 2026-09-07 is 2026-09-09, a Wednesday -- which is what the
-      // parser's "tuesday" actually lands on. Day 9 is the Wednesday after it.
+      // §44: "tuesday" lands on a real Tuesday now. The week starts Monday 2026-09-07, so
+      // day 1 is Tuesday the 8th -- where the typed item goes -- and day 8 is the Tuesday
+      // after it, where the block already in the week has to sit for the two to be
+      // instances of one weekly series.
+      //
+      // This fixture used to say day 9, a WEDNESDAY, because that is where `deadlineOf`
+      // put "tuesday" while it read `today % 7` as today's weekday. The comment explaining
+      // that was the bug written down and left in place; §43's Day select is what finally
+      // made a student see it.
       await repository.saveWeek({
         ...emptyWeek(),
         startedOn: '2026-09-07',
@@ -160,7 +205,7 @@ describe('RoomShell with the planner', () => {
             kind: 'studyBlock',
             hours: 2,
             intensity: 1,
-            dayIndex: 9,
+            dayIndex: 8,
             startHour: 9,
             fixed: true,
             deadlineDay: null,
@@ -178,6 +223,7 @@ describe('RoomShell with the planner', () => {
       await userEvent.click(screen.getByRole('button', { name: /read this/i }))
 
       await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(1))
+
       expect(screen.getByText(/repeats every week/i)).toBeVisible()
     } finally {
       vi.useRealTimers()
@@ -191,6 +237,12 @@ describe('RoomShell with the planner', () => {
     await userEvent.type(screen.getByLabelText(/on your mind/i), 'laundry')
     await userEvent.click(screen.getByRole('button', { name: /read this/i }))
     await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(1))
+
+    // §43: the week will not take an item that does not say when it happens, so the day is
+    // answered on the chip first -- the same press a student makes.
+    for (const select of screen.getAllByTestId(/^when-day-/)) {
+      await userEvent.selectOptions(select, '2')
+    }
 
     // Nothing in the week to look like, so nothing is suggested.
     expect(screen.queryByText(/repeats every week/i)).toBeNull()

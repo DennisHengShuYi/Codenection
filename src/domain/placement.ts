@@ -33,20 +33,6 @@ export interface PlacementNote {
 const clampDay = (day: number): number => Math.min(Math.max(day, 0), HORIZON_DAYS - 1)
 
 /**
- * Whether a specific window on a day is genuinely open.
- *
- * Asked only of an item that arrived with an hour already on it -- which today means a
- * calendar import, since nothing else knows. `slotOn` answers "where would this fit", which
- * is a different question: it would happily report a gap at 14:00 for something that said
- * 09:00.
- */
-function windowIsFree(schedule: Schedule, dayIndex: number, startHour: number, hours: number): boolean {
-  return gapsOn(schedule, dayIndex).some(
-    (gap) => startHour >= gap.startHour && startHour + hours <= gap.startHour + gap.hours,
-  )
-}
-
-/**
  * Adds accepted items, finding each one a day with room, and reports what it did.
  *
  * Three questions in order, and only the first two are ever acted on: does it fit the day
@@ -111,28 +97,6 @@ export function placeItems(
       }
     }
 
-    /**
-     * An hour something outside the app already knew.
-     *
-     * Only a calendar sets this. A photo and a brain dump say nothing about when a thing
-     * starts, and for those `slotOn` finding a real gap is the better answer -- but a
-     * lecture happens at nine whether or not the week is convenient, and placing it at 19:00
-     * would discard the only fact the calendar was authoritative about.
-     *
-     * A pinned block keeps its hour unconditionally: it is not ours to move, and
-     * movable-movable overlap is legal anyway (`constraints.ts` says so deliberately). An
-     * unpinned one takes its stated hour when the day has room there and yields otherwise,
-     * because something knowing the hour is weaker than something insisting on it.
-     */
-    const stated = item.startHour
-
-    const startHour =
-      stated === undefined
-        ? (slot?.startHour ?? FALLBACK_START_HOUR)
-        : item.fixed || windowIsFree(current, dayIndex, stated, item.hours)
-          ? stated
-          : (slot?.startHour ?? FALLBACK_START_HOUR)
-
     const added: ScheduledItem = {
       id: `added-${stamp}-${index}-${item.id}`,
       title: item.title,
@@ -141,10 +105,22 @@ export function placeItems(
       hours: item.hours,
       intensity: 1,
       dayIndex: slot === null ? start : dayIndex,
-      startHour,
+      /**
+       * §43: the student's own hour wins over the search.
+       *
+       * Placement chose every hour while `ParsedItem` carried no time -- the first free
+       * slot, or `FALLBACK_START_HOUR` on a full day. Now that "lecture Tuesday 9am" can be
+       * read, choosing 10am instead would be the app overruling a student about their own
+       * timetable. A stated hour is taken as given even where the day is already busy: two
+       * things at once is a real week, and the placement note says so rather than moving
+       * the lecture somewhere emptier behind their back (§16).
+       */
+      startHour: item.startHour ?? slot?.startHour ?? FALLBACK_START_HOUR,
       // §5.1 unchanged: what the student ticked may pin a time, and nothing here may ever
-      // create protected rest.
-      fixed: item.fixed,
+      // create protected rest. §43 adds the other half of a stated hour: honouring it once
+      // and letting the next rebalance move it would be worse than never honouring it --
+      // the student would have watched it land correctly and then drift.
+      fixed: item.fixed || item.startHour !== null,
       deadlineDay: item.deadlineDay,
       protectedRest: false,
       // §39: carried through when the item came from a series, absent when it did not.

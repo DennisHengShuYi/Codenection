@@ -9,6 +9,7 @@ import { Sheet } from './kit/Sheet'
 import { suggestRepeat } from '../domain/recurrence'
 import { beginConnect, readCalendar } from '../google/client'
 import { CalendarImportScreen } from './planner/CalendarImportScreen'
+import { calendarFor, dayLabelsFor } from './planner/dayLabels'
 import { PhotoImportScreen } from './planner/PhotoImportScreen'
 import { PlannerScreen } from './planner/PlannerScreen'
 import { RequestBoxScreen } from './request/RequestBoxScreen'
@@ -81,6 +82,7 @@ export function AddSheet({
   way,
   onWay,
   calendarConnected = false,
+  onBack,
 }: {
   readonly schedule: Schedule
   /** §2.4's calibrated params, threaded to the request path so it prices against the
@@ -109,20 +111,35 @@ export function AddSheet({
    * the connect step rather than pretending a connection already exists.
    */
   readonly calendarConnected?: boolean
+  /** Ruling 60: one level up, from a sub-flow to the chooser. The chooser itself is given
+   *  none -- it opens straight from the room, where Back and close would mean the same
+   *  thing and two controls doing one job is how `Cancel` became ambiguous. */
+  readonly onBack: () => void
 }) {
   const close = () => onClose()
 
-  const backToChoice = () => onWay(null)
+  /**
+   * §43: computed once here rather than in each of the three screens.
+   *
+   * This is the only component in the add flow holding both the week and today, which is
+   * what the labels need -- the screens below it take the finished list and hand it to the
+   * chip.
+   */
+  const dayLabels = dayLabelsFor(schedule, today)
+  /** §44: and the same week, said in the terms the two readers need. */
+  const calendar = calendarFor(schedule, today)
 
   if (way === 'photo') {
     return (
       <PhotoImportScreen
+        dayLabels={dayLabels}
         suggestRepeat={(item) => suggestRepeat(item, schedule)}
         onAccept={(items) => {
           onAcceptItems(items)
           close()
         }}
-        onCancel={backToChoice}
+        onBack={onBack}
+        onClose={close}
       />
     )
   }
@@ -130,12 +147,15 @@ export function AddSheet({
   if (way === 'type') {
     return (
       <PlannerScreen
+        dayLabels={dayLabels}
+        calendar={calendar}
         suggestRepeat={(item) => suggestRepeat(item, schedule)}
         onAccept={(items) => {
           onAcceptItems(items)
           close()
         }}
-        onCancel={backToChoice}
+        onBack={onBack}
+        onClose={close}
       />
     )
   }
@@ -143,6 +163,7 @@ export function AddSheet({
   if (way === 'calendar') {
     return (
       <CalendarImportScreen
+        dayLabels={dayLabels}
         connected={calendarConnected}
         onConnect={() => void beginConnect()}
         onRead={() => readCalendar(schedule)}
@@ -151,7 +172,8 @@ export function AddSheet({
           onAcceptItems(items)
           close()
         }}
-        onCancel={backToChoice}
+        onBack={onBack}
+        onClose={close}
       />
     )
   }
@@ -159,6 +181,8 @@ export function AddSheet({
   if (way === 'request') {
     return (
       <RequestBoxScreen
+        dayLabels={dayLabels}
+        calendar={calendar}
         schedule={schedule}
         params={params}
         today={today}
@@ -168,7 +192,8 @@ export function AddSheet({
           onAcceptRequest(item)
           close()
         }}
-        onCancel={backToChoice}
+        onBack={onBack}
+        onClose={close}
       />
     )
   }
@@ -177,11 +202,6 @@ export function AddSheet({
     <Sheet
       title="What's coming at you?"
       onClose={close}
-      actions={
-        <Button variant="quiet" onClick={close}>
-          Cancel
-        </Button>
-      }
     >
       <div className="flex flex-col gap-3">
         {WAYS_IN.map(({ way, testid, label, help }) => (

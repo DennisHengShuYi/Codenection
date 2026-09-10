@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { fromPath, isAscent, toPath, type View } from './view'
+import { back, fromPath, isAscent, toPath, type View } from './view'
 
 /**
  * `View`, kept in the address bar.
@@ -16,7 +16,7 @@ import { fromPath, isAscent, toPath, type View } from './view'
 const currentPath = (): string =>
   typeof window === 'undefined' ? '/' : window.location.pathname
 
-export function useUrlView(): readonly [View, (next: View) => void] {
+export function useUrlView(): readonly [View, (next: View) => void, () => void] {
   const [view, setViewState] = useState<View>(() => fromPath(currentPath()))
 
   /**
@@ -28,6 +28,17 @@ export function useUrlView(): readonly [View, (next: View) => void] {
    * two entries for one navigation, so one Back press would appear to do nothing.
    */
   const here = useRef(view)
+
+  /**
+   * How many entries THIS session put in the history.
+   *
+   * `goBack` needs it. A student who followed a pasted `/add/photo` has nothing of ours
+   * behind them, so `history.back()` would take them out of the app entirely -- to
+   * whatever page they were on before, or to a blank tab -- when all they asked for was
+   * one level up. Counted rather than guessed: `history.length` includes entries from
+   * before the app loaded and cannot tell ours apart from theirs.
+   */
+  const pushed = useRef(0)
 
   // An address the app cannot read resolved to the room; the bar has to be corrected or it
   // goes on asserting a state the app is not in. Replaced, not pushed: a typo should not
@@ -47,6 +58,7 @@ export function useUrlView(): readonly [View, (next: View) => void] {
     const onPop = () => {
       const next = fromPath(window.location.pathname)
       here.current = next
+      pushed.current = Math.max(0, pushed.current - 1)
       setViewState(next)
     }
 
@@ -60,16 +72,35 @@ export function useUrlView(): readonly [View, (next: View) => void] {
     // Only when the address would actually change. Re-selecting where you already are is
     // not a navigation, and an entry for it would be a Back press that does nothing.
     if (typeof window !== 'undefined' && path !== window.location.pathname) {
-      const write = isAscent(here.current, next)
-        ? window.history.replaceState.bind(window.history)
-        : window.history.pushState.bind(window.history)
-
-      write(null, '', path)
+      if (isAscent(here.current, next)) {
+        window.history.replaceState(null, '', path)
+      } else {
+        window.history.pushState(null, '', path)
+        pushed.current += 1
+      }
     }
 
     here.current = next
     setViewState(next)
   }, [])
 
-  return [view, setView] as const
+  /**
+   * Up one level (Ruling 60).
+   *
+   * Walks the browser's own history where this session has an entry to walk back to, so
+   * pressing Back in a sheet is indistinguishable from pressing the browser's Back and the
+   * forward entry is not orphaned. Where it does not -- a pasted link, or an entry budget
+   * already spent -- it navigates to the parent view instead, which `setView` will REPLACE
+   * rather than push, because a parent is always an ascent.
+   */
+  const goBack = useCallback(() => {
+    if (typeof window !== 'undefined' && pushed.current > 0) {
+      window.history.back()
+      return
+    }
+
+    setView(back(here.current))
+  }, [setView])
+
+  return [view, setView, goBack] as const
 }

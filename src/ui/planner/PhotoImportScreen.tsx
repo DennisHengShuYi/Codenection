@@ -4,6 +4,7 @@ import { Button } from '../kit/Button'
 import { Field } from '../kit/Field'
 import { Sheet } from '../kit/Sheet'
 import { ItemChip } from './ItemChip'
+import { saysWhen } from './when'
 
 /**
  * §1.4's primary input path: one button, camera or gallery, and the model works out what it
@@ -20,13 +21,22 @@ import { ItemChip } from './ItemChip'
 export function PhotoImportScreen({
   onAccept,
   suggestRepeat = () => null,
-  onCancel,
+  onBack,
+  onClose,
+  dayLabels,
 }: {
   onAccept: (items: readonly ParsedItem[]) => void
   /** §37, as `PlannerScreen` takes it: a timetable photo is the likeliest place a repeating
    *  class arrives one instance at a time. */
   suggestRepeat?: (item: ParsedItem) => ParsedItem['repeat']
-  onCancel: () => void
+  /** Ruling 60: one level up, to the chooser this was chosen from. */
+  onBack: () => void
+  /** Done entirely -- straight to the room, whatever depth this was opened to.
+   *  Wired to `onCancel` before Ruling 60, which meant the sheet's own close control
+   *  quietly dropped the student at the chooser instead of closing. */
+  onClose: () => void
+  /** §43: the horizon's days in a student's words, for the chip's "when" question. */
+  dayLabels: readonly string[]
 }) {
   const [items, setItems] = useState<ParsedItem[] | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -63,19 +73,24 @@ export function PhotoImportScreen({
     }
   }
 
-  const canAccept = items !== null && items.length > 0
+  // §43, as in `PlannerScreen`: a photographed timetable is exactly where a stated time
+  // exists to be read, and exactly where a row the model could not date must be asked
+  // about rather than placed on a day nobody named.
+  const missingWhen = (items ?? []).filter((item) => !saysWhen(item))
+  const canAccept = items !== null && items.length > 0 && missingWhen.length === 0
 
   const actions = (
     <>
-      <Button variant="quiet" onClick={onCancel}>
-        Cancel
-      </Button>
-      {canAccept && <Button onClick={() => onAccept(items)}>Add these to my week</Button>}
+      {items !== null && items.length > 0 && (
+        <Button onClick={() => onAccept(items)} disabled={!canAccept}>
+          Add these to my week
+        </Button>
+      )}
     </>
   )
 
   return (
-    <Sheet title="Photograph it" onClose={onCancel} actions={actions}>
+    <Sheet title="Photograph it" onClose={onClose} onBack={onBack} actions={actions}>
       <div className="flex flex-col gap-4">
         <p className="text-sm text-ink-soft">
           An assignment brief, your planner page, a whiteboard, a slide with dates on it.
@@ -116,6 +131,7 @@ export function PhotoImportScreen({
             <ul className="flex flex-1 flex-col gap-3">
               {items.map((item) => (
                 <ItemChip
+                  dayLabels={dayLabels}
                   key={item.id}
                   item={item}
                   onChange={(next) =>
@@ -127,6 +143,14 @@ export function PhotoImportScreen({
             </ul>
           )}
         </div>
+
+        {missingWhen.length > 0 && (
+          <p data-testid="when-blocked" role="status" className="text-sm text-attention">
+            {missingWhen.length === 1
+              ? 'One of these does not say when it happens. Pick a day for it before adding.'
+              : `${missingWhen.length} of these do not say when they happen. Pick a day for each before adding.`}
+          </p>
+        )}
 
         {items !== null && items.length === 0 && (
           <p className="text-sm text-ink-soft">I could not find anything to do in that photo.</p>

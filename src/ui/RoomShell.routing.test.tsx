@@ -139,3 +139,61 @@ describe('the address, while the student moves around', () => {
     expect(await screen.findByTestId('add-photo')).toBeVisible()
   })
 })
+
+/**
+ * Ruling 60: Back and close are two different promises.
+ *
+ * `Cancel` was making both, badly -- inside a sub-flow it dropped you at the chooser, at
+ * the chooser it closed the whole thing, so the same word meant two things depending on
+ * where you were standing. Back is now one level up and follows the history; close means
+ * "done with this", from any depth, straight to the room.
+ */
+describe('Back and close, which are not the same button', () => {
+  it('steps Back from a sub-flow to the chooser', async () => {
+    await renderShell()
+    await waitFor(() => expect(screen.getByTestId('open-add')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-add'))
+    await userEvent.click(screen.getByTestId('add-photo'))
+
+    await userEvent.click(screen.getByTestId('sheet-back'))
+
+    expect(await screen.findByTestId('add-photo')).toBeVisible()
+    await waitFor(() => expect(window.location.pathname).toBe('/add'))
+  })
+
+  it('closes from a sub-flow straight to the room, not to the chooser', async () => {
+    await renderShell()
+    await waitFor(() => expect(screen.getByTestId('open-add')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-add'))
+    await userEvent.click(screen.getByTestId('add-photo'))
+
+    await userEvent.click(screen.getByRole('button', { name: /close/i }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(window.location.pathname).toBe('/')
+  })
+
+  it('offers no Back where nothing is above, and no Cancel anywhere', async () => {
+    await renderShell()
+    await waitFor(() => expect(screen.getByTestId('open-add')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-add'))
+
+    expect(screen.queryByTestId('sheet-back')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^cancel$/i })).toBeNull()
+  })
+
+  it('steps Back from a block to the week, and closes from it to the room', async () => {
+    await renderShell()
+    await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(await screen.findByTestId('day-2'))
+    await userEvent.click(await screen.findByTestId('block-laundry'))
+
+    await userEvent.click(screen.getByTestId('sheet-back'))
+    expect(await screen.findByRole('dialog', { name: /the week/i })).toBeVisible()
+
+    await userEvent.click(screen.getByRole('button', { name: /close/i }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(window.location.pathname).toBe('/')
+  })
+})

@@ -113,7 +113,9 @@ describe('readEvents', () => {
 
     expect(allDay[0]?.confident).toBe(false)
     expect(allDay[0]?.fixed).toBe(false)
-    expect(allDay[0]?.startHour).toBeUndefined()
+    // Null rather than absent: §43 made a stated hour a required answer, and "no time of
+    // day" is a real answer to it rather than a missing one.
+    expect(allDay[0]?.startHour).toBeNull()
   })
 
   it('is confident about an event it read exactly', () => {

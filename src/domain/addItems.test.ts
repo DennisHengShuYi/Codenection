@@ -19,6 +19,7 @@ const parsed = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   kind: 'studyBlock',
   hours: 3,
   deadlineDay: null,
+  startHour: null,
   fixed: false,
   confident: true,
   repeat: null,

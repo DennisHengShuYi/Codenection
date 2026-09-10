@@ -60,10 +60,12 @@ const openPhoto = async () => {
 }
 
 describe('RoomShell with photo import', () => {
-  it('comes back without changing anything when cancelled', async () => {
+  it('comes back without changing anything when stepped back from', async () => {
     const repository = await openPhoto()
 
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    // Ruling 60: Back is the way up to the chooser now. `Cancel` had to mean both this
+    // and "close the whole thing", depending on which sheet you were standing in.
+    await userEvent.click(screen.getByTestId('sheet-back'))
     await waitFor(() => expect(screen.getByTestId('add-photo')).toBeVisible())
 
     expect((await repository.loadWeek())?.items).toHaveLength(0)

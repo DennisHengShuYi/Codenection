@@ -81,4 +81,17 @@ describe('the view', () => {
   it('comes back to the room from the reserves', () => {
     expect(back(toReserves())).toEqual(ROOM)
   })
+  /**
+   * Ruling 60. `back` is the Back BUTTON's rule now: one level up, not "the way out". The
+   * close control is what leaves entirely, and it does not consult this.
+   */
+  it('comes back to the chooser from one of the add sub-flows, not to the room', () => {
+    expect(back(toAdd('photo'))).toEqual(toAdd())
+    expect(back(toAdd('type'))).toEqual(toAdd())
+    expect(back(toAdd('request'))).toEqual(toAdd())
+  })
+
+  it('comes back to the room from the chooser itself', () => {
+    expect(back(toAdd())).toEqual(ROOM)
+  })
 })

@@ -14,6 +14,7 @@ const item = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   fixed: true,
   confident: true,
   repeat: null,
+  startHour: 9,
   ...over,
 })
 
@@ -23,7 +24,9 @@ const setup = (over: Partial<Parameters<typeof CalendarImportScreen>[0]> = {}) =
     onConnect: vi.fn(),
     onRead: vi.fn().mockResolvedValue({ items: [item()], skipped: 0 }),
     onAccept: vi.fn(),
-    onCancel: vi.fn(),
+    onBack: vi.fn(),
+    onClose: vi.fn(),
+    dayLabels: ['today', 'tomorrow', 'Friday'],
     ...over,
   }
 
@@ -161,12 +164,28 @@ describe('CalendarImportScreen', () => {
     )
   })
 
-  it('can be left without anything happening', async () => {
+  /**
+   * Ruling 60 split the one `Cancel` into two: Back goes up to the chooser, close is done
+   * with the whole thing. Both are the container's own controls now, so both are asserted
+   * here -- the screen's job is only to hand them somewhere to go.
+   */
+  it('can be stepped back to the chooser without accepting anything', async () => {
     const props = setup()
 
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    await userEvent.click(screen.getByTestId('sheet-back'))
 
-    expect(props.onCancel).toHaveBeenCalled()
+    expect(props.onBack).toHaveBeenCalledOnce()
+    expect(props.onClose).not.toHaveBeenCalled()
+    expect(props.onAccept).not.toHaveBeenCalled()
+  })
+
+  it('can be closed outright without accepting anything', async () => {
+    const props = setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /close/i }))
+
+    expect(props.onClose).toHaveBeenCalledOnce()
+    expect(props.onBack).not.toHaveBeenCalled()
     expect(props.onAccept).not.toHaveBeenCalled()
   })
 })

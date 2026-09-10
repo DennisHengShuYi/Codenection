@@ -29,7 +29,10 @@ const setup = (over: Partial<Parameters<typeof RequestBoxScreen>[0]> = {}) => {
     blockLog: [],
     predictions: [],
     onAccept: vi.fn(),
-    onCancel: vi.fn(),
+    onBack: vi.fn(),
+    onClose: vi.fn(),
+    dayLabels: ['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep'],
+    calendar: { today: 0, startWeekday: 5, todayLabel: '11 September 2026' },
     ...over,
   }
   const { unmount } = render(<RequestBoxScreen {...props} />)
@@ -215,12 +218,28 @@ describe('RequestBoxScreen', () => {
     expect(props.onAccept).not.toHaveBeenCalled()
   })
 
-  it('can be left without accepting anything', async () => {
+  /**
+   * Ruling 60 split the one `Cancel` into two: Back goes up to the chooser, close is done
+   * with the whole thing. Both are the container's own controls now, so both are asserted
+   * here -- the screen's job is only to hand them somewhere to go.
+   */
+  it('can be stepped back to the chooser without accepting anything', async () => {
     const props = setup()
 
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    await userEvent.click(screen.getByTestId('sheet-back'))
 
-    expect(props.onCancel).toHaveBeenCalledOnce()
+    expect(props.onBack).toHaveBeenCalledOnce()
+    expect(props.onClose).not.toHaveBeenCalled()
+    expect(props.onAccept).not.toHaveBeenCalled()
+  })
+
+  it('can be closed outright without accepting anything', async () => {
+    const props = setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /close/i }))
+
+    expect(props.onClose).toHaveBeenCalledOnce()
+    expect(props.onBack).not.toHaveBeenCalled()
     expect(props.onAccept).not.toHaveBeenCalled()
   })
 

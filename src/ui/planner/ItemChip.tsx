@@ -3,6 +3,7 @@ import { BLOCK_KINDS, LOAD_TYPES, type ActivityKind, type LoadType } from '../..
 import { Button } from '../kit/Button'
 import { CARD_TONES } from '../kit/Card'
 import { Field } from '../kit/Field'
+import { saysWhen } from './when'
 
 /** The engine's vocabulary in a student's words. "Mental load" is a modelling term; "study
  *  and thinking" is what someone recognises as their own week. */
@@ -38,6 +39,10 @@ const KIND_LABELS: Record<ActivityKind, string> = {
  */
 const SELECTABLE_KINDS = BLOCK_KINDS
 
+/** Every hour of the day, offered as a real clock rather than a free-text box: a typed
+ *  "half nine" is a parsing problem the student would have to solve twice. */
+const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
+
 /** §40's whole vocabulary needs names a student reads, and `Date.getUTCDay`'s ordering is
  *  what `expandRecurring` matches against -- so this is that order, not a prettier one. */
 const WEEKDAY_NAMES = [
@@ -54,10 +59,19 @@ export function ItemChip({
   item,
   onChange,
   onRemove,
+  dayLabels,
 }: {
   item: ParsedItem
   onChange: (next: ParsedItem) => void
   onRemove: (id: string) => void
+  /**
+   * §43: the horizon's days, named the way a student recognises them.
+   *
+   * Passed in rather than derived, because the names depend on when the week started and
+   * this component holds no week. Index is the day index the item carries, so the select's
+   * value is the domain's own number and nothing has to be translated back.
+   */
+  dayLabels: readonly string[]
 }) {
   // A list item, not `Card` -- `Card` renders a `<div>`, and this always sits inside the
   // screens' `<ul>` of chips, where a `<div>` would be invalid list markup. `CARD_TONES` is
@@ -118,6 +132,57 @@ export function ItemChip({
           />
         </Field>
 
+        {/* §43: the one thing a calendar entry is for, and the one thing this chip did not
+            say. The day and the hour used to be decided AFTER the accept, by `placement.ts`
+            -- so a student confirmed an entry without being told when it would land, and
+            met it later in the week. */}
+        <Field label="Day">
+          <select
+            data-testid={`when-day-${item.id}`}
+            value={item.deadlineDay === null ? '' : String(item.deadlineDay)}
+            onChange={(event) =>
+              onChange({
+                ...item,
+                deadlineDay: event.target.value === '' ? null : Number(event.target.value),
+              })
+            }
+            className="min-h-11 rounded border border-line bg-surface px-2 py-1 text-sm text-ink"
+          >
+            {/* Only while it is the answer. Once a day is chosen, offering "not said" back
+                would invite undoing the thing this chip just asked for. */}
+            {item.deadlineDay === null && <option value="">Pick a day</option>}
+            {dayLabels.map((label, dayIndex) => (
+              <option key={label} value={String(dayIndex)}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Time">
+          <select
+            data-testid={`when-hour-${item.id}`}
+            value={item.startHour === null ? '' : String(item.startHour)}
+            onChange={(event) =>
+              onChange({
+                ...item,
+                startHour: event.target.value === '' ? null : Number(event.target.value),
+              })
+            }
+            className="min-h-11 rounded border border-line bg-surface px-2 py-1 text-sm text-ink"
+          >
+            {/* "Any time" is a real answer, not a missing one: an essay due Friday has a day
+                and no hour, and pinning one would take away the freedom the rebalancer needs
+                to place it. Stating an hour is what pins a block (§43). */}
+            <option value="">Any time</option>
+            {HOURS.map((hour) => (
+              <option key={hour} value={String(hour)}>
+                {String(hour).padStart(2, '0')}:00
+              </option>
+            ))}
+          </select>
+        </Field>
+
         <Button variant="quiet" size="sm" className="ml-auto" onClick={() => onRemove(item.id)}>
           Remove
         </Button>
@@ -156,6 +221,15 @@ export function ItemChip({
             Just once
           </Button>
         </div>
+      )}
+
+      {/* §43's ask. Extraction that found no day is a question, not a failure to be
+          hidden: the alternative is a default nobody chose, landing an entry on a day the
+          student never said. `PlannerScreen` holds the accept shut until this is answered. */}
+      {!saysWhen(item) && (
+        <p data-testid={`when-missing-${item.id}`} className="text-xs text-attention">
+          When is this? Pick a day before adding it.
+        </p>
       )}
 
       {/* §1.4: flagged rather than silently guessed. A student cannot correct what they

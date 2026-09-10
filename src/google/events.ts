@@ -119,7 +119,9 @@ export function readEvents(events: readonly unknown[], schedule: Schedule): read
       ? ALL_DAY_HOURS
       : Math.round(((endedAt - startedAt) / 3_600_000) * 2) / 2
 
-    const startHour = from.allDay ? undefined : localHourOf(from.at)
+    // Null, not absent: §43 made `startHour` a required answer, and null is the real one
+    // for an all-day event. It is a date without a time, so naming an hour would invent it.
+    const startHour = from.allDay ? null : localHourOf(from.at)
 
     items.push({
       id: `gcal-${counter}`,
@@ -133,7 +135,7 @@ export function readEvents(events: readonly unknown[], schedule: Schedule): read
       // A timed event is a commitment at a time, which is what `fixed` means. An all-day
       // one is a date without a time, so pinning it to an hour would invent the hour.
       fixed: !from.allDay,
-      ...(startHour === null || startHour === undefined ? {} : { startHour }),
+      startHour,
       // See the note above: Google has already expanded any recurrence into instances.
       repeat: null,
       // §1.4: what was read exactly is not flagged; what was inferred is. An all-day event's

@@ -27,6 +27,7 @@ const model = (over: Partial<BlockSheetModel> = {}): BlockSheetModel => ({
 const setup = (over: Partial<BlockSheetModel> = {}) => {
   const handlers = {
     onClose: vi.fn(),
+    onBack: vi.fn(),
     onDone: vi.fn(),
     onLater: vi.fn(),
     onConfirm: vi.fn(),

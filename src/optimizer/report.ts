@@ -56,42 +56,92 @@ function describeGain(result: RebalanceResult, params: EngineParams): string {
   return 'This fortnight is beyond what rearranging can fix. Something needs to come out of it.'
 }
 
-export function describeRebalance(result: RebalanceResult, params: EngineParams): string {
-  if (result.moves.length === 0) {
-    // "Already the best arrangement" is true but reads as reassurance, and reassurance
-    // is the wrong register for someone whose fortnight is underwater. Same finding,
-    // opposite meaning: nothing left to move is good news for a healthy week and bad
-    // news for an overloaded one, so the two get different sentences.
-    const deficitDays = summarise(
-      result.schedule.start,
-      toDayInputs(result.schedule, ALL_PRESENT),
-      params,
-    ).deficitDays
+/**
+ * One phrase per move kind, in both the tense that reports and the tense that proposes.
+ *
+ * Two lists would be two chances for the preview and the report to disagree about what the
+ * same solve did -- and the preview's whole job is to be the thing the report will later
+ * confirm. The order is the order the sentence reads in, and is deliberately the order the
+ * past-tense sentence has always used.
+ */
+const PHRASES: readonly {
+  readonly kind: MoveKind
+  readonly did: string
+  readonly would: string
+  readonly object: (count: number) => string
+}[] = [
+  { kind: 'shiftDay', did: 'moved', would: 'move', object: (n) => plural(n, 'thing') },
+  { kind: 'batchErrands', did: 'batched', would: 'batch', object: (n) => plural(n, 'errand') },
+  { kind: 'insertRest', did: 'added', would: 'add', object: (n) => plural(n, 'rest block') },
+  {
+    kind: 'insertSocial',
+    did: 'made',
+    would: 'make',
+    object: (n) => `time to see someone on ${plural(n, 'day')}`,
+  },
+  {
+    kind: 'reorderWithinDay',
+    did: 'reordered',
+    would: 'reorder',
+    object: (n) => `${plural(n, 'block')} within its day`,
+  },
+]
 
-    return deficitDays > 0
-      ? 'There is nothing left to move. This fortnight is beyond what rearranging can fix — something needs to come out of it.'
-      : 'Nothing worth moving. This is already the best arrangement of these commitments.'
-  }
-
+/** The "moved 20 things, batched 3 errands and ..." half, in whichever tense was asked for. */
+function movesClause(result: RebalanceResult, tense: 'did' | 'would'): string {
   const counts = new Map<MoveKind, number>()
   for (const move of result.moves) {
     counts.set(move.kind, (counts.get(move.kind) ?? 0) + 1)
   }
 
-  const parts: string[] = []
-  const moved = counts.get('shiftDay') ?? 0
-  const batched = counts.get('batchErrands') ?? 0
-  const rested = counts.get('insertRest') ?? 0
-  const social = counts.get('insertSocial') ?? 0
-  const reordered = counts.get('reorderWithinDay') ?? 0
+  const parts = PHRASES.flatMap((phrase) => {
+    const count = counts.get(phrase.kind) ?? 0
+    return count === 0 ? [] : [`${phrase[tense]} ${phrase.object(count)}`]
+  })
 
-  if (moved > 0) parts.push(`moved ${plural(moved, 'thing')}`)
-  if (batched > 0) parts.push(`batched ${plural(batched, 'errand')}`)
-  if (rested > 0) parts.push(`added ${plural(rested, 'rest block')}`)
-  if (social > 0) parts.push(`made time to see someone on ${plural(social, 'day')}`)
-  if (reordered > 0) parts.push(`reordered ${plural(reordered, 'block')} within its day`)
+  return joinParts(parts)
+}
 
-  return `I ${joinParts(parts)}. ${describeGain(result, params)}`
+/**
+ * What to say when the search found nothing.
+ *
+ * "Already the best arrangement" is true but reads as reassurance, and reassurance is the
+ * wrong register for someone whose fortnight is underwater. Same finding, opposite meaning:
+ * nothing left to move is good news for a healthy week and bad news for an overloaded one,
+ * so the two get different sentences.
+ *
+ * Shared by both tenses because it is in neither: there is no move to report and none to
+ * propose, so the sentence is about the week rather than about the solver.
+ */
+function nothingToMove(result: RebalanceResult, params: EngineParams): string {
+  const deficitDays = summarise(
+    result.schedule.start,
+    toDayInputs(result.schedule, ALL_PRESENT),
+    params,
+  ).deficitDays
+
+  return deficitDays > 0
+    ? 'There is nothing left to move. This fortnight is beyond what rearranging can fix — something needs to come out of it.'
+    : 'Nothing worth moving. This is already the best arrangement of these commitments.'
+}
+
+export function describeRebalance(result: RebalanceResult, params: EngineParams): string {
+  if (result.moves.length === 0) return nothingToMove(result, params)
+
+  return `I ${movesClause(result, 'did')}. ${describeGain(result, params)}`
+}
+
+/**
+ * The same finding, before it has happened.
+ *
+ * §2.1's rule that the app never says "optimised" cuts both ways: a preview that borrowed
+ * the past-tense sentence would be claiming a change the student has not agreed to yet. The
+ * counts and the gain are identical -- only the verb moves.
+ */
+export function describeProposal(result: RebalanceResult, params: EngineParams): string {
+  if (result.moves.length === 0) return nothingToMove(result, params)
+
+  return `I'd ${movesClause(result, 'would')}. ${describeGain(result, params)}`
 }
 
 /** §2.1: one tap to undo all of it. Exact rather than reconstructed, because the result

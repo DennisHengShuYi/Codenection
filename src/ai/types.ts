@@ -14,7 +14,21 @@ export interface ParsedItem {
   readonly hours: number
   /** Day index within the horizon, or null when nothing in the text implied one. */
   readonly deadlineDay: number | null
-  readonly hard: boolean
+  /**
+   * Whether this is pinned to a *time* -- a lecture, a lab, a shift.
+   *
+   * Distinct from `deadlineDay`, which the schema used to conflate it with under the name
+   * `hard`. `fixed` means the optimizer may not move it at all; `deadlineDay` means it may
+   * not move it *past* a day but is free before it. An essay with a hard deadline is
+   * maximally movable, so one boolean could never have carried both -- and while it did,
+   * nothing read it.
+   *
+   * The model's `hard` seeds this, but it is the student's answer, not the model's: it is
+   * editable on the chip and the accept is what commits it. §5.1's guarantee holds on the
+   * side that matters -- see `addItems`, which still refuses to create `protectedRest`
+   * whatever this says.
+   */
+  readonly fixed: boolean
   /**
    * Whether this was read with confidence.
    *

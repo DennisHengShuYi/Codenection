@@ -111,6 +111,22 @@ export function ItemChip({
         </Button>
       </div>
 
+      {/* §5.1's boundary, drawn where the student can see it. A pinned block is one the
+          optimizer may never move, so the model's reading of the page arrives as a ticked
+          box rather than as a fact -- the accept is what commits it. A plain checkbox
+          rather than a `Field`+`select`: this is one yes/no about the row, and the two
+          selects above already carry the row's structure. */}
+      <label className="flex items-center gap-2 text-xs text-ink-soft">
+        <input
+          type="checkbox"
+          data-testid={`fixed-${item.id}`}
+          checked={item.fixed}
+          onChange={(event) => onChange({ ...item, fixed: event.target.checked })}
+          className="size-4 rounded border-line"
+        />
+        Fixed time — a class, lab or shift the week has to work around
+      </label>
+
       {/* §1.4: flagged rather than silently guessed. A student cannot correct what they
           were never shown. */}
       {!item.confident && (

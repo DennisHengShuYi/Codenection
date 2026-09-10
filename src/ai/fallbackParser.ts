@@ -155,9 +155,12 @@ export function parseWithRules(text: string, today = 0): ParsedItem[] {
         kind,
         hours: hoursOf(lower),
         deadlineDay,
-        // A stated day is the student saying it is fixed. Everything else stays soft until
-        // they say otherwise.
-        hard: deadlineDay !== null,
+        // Never pre-pinned. The rules here can spot a stated *day*, which is a deadline
+        // and is carried by `deadlineDay` already -- they cannot tell that from a stated
+        // *time*, which is what `fixed` means. Guessing would pin blocks the optimizer may
+        // not move on the strength of the word "Tuesday", so this stays off and the chip's
+        // checkbox is where a class becomes fixed.
+        fixed: false,
         confident,
       }
     })

@@ -44,5 +44,8 @@ export async function readRequest(text: string): Promise<ParsedItem | null> {
     null,
   )
 
-  return { ...ask, hours, deadlineDay, hard: deadlineDay !== null }
+  // Never pinned. A request is somebody else's ask, and the one thing a student must keep
+  // is the freedom to fit it where it actually goes -- pinning it to a time on their behalf
+  // would be the app taking the other person's side.
+  return { ...ask, hours, deadlineDay, fixed: false }
 }

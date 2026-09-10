@@ -48,7 +48,7 @@ const request = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   kind: 'studyBlock',
   hours: 3,
   deadlineDay: 4,
-  hard: false,
+  fixed: false,
   confident: true,
   ...over,
 })

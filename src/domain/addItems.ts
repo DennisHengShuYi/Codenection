@@ -13,12 +13,15 @@ const DEFAULT_DAY = 2
 /**
  * Turns accepted chips into real schedule items.
  *
- * Everything here arrives from a parse, and a parse is a proposal. Nothing it produces may
- * be fixed or protected: a model able to create protected rest could pin a block the
- * optimizer is forbidden to move, and that guarantee is what §5.1's whole stance rests on.
- * That guarantee is unrelated to `kind` -- a movable rest block is a different thing from
- * `protectedRest` and is safe -- so `kind` is carried straight through from the parse
- * rather than re-derived from `type` the way it used to be.
+ * Everything here arrives from a parse, and a parse is a proposal -- but a proposal the
+ * student has now read and accepted, which is what makes `fixed` safe to honour. §5.1's
+ * guarantee is drawn precisely: `protectedRest` is the thing the optimizer may never move,
+ * and nothing arriving from text may create it, whatever the chip says. Pinning a time and
+ * creating untouchable rest are different powers, and only the first is on offer here.
+ *
+ * That guarantee is likewise unrelated to `kind` -- a movable rest block is a different
+ * thing from `protectedRest` and is safe -- so `kind` is carried straight through from the
+ * parse rather than re-derived from `type` the way it used to be.
  */
 export function addItems(schedule: Schedule, items: readonly ParsedItem[]): Schedule {
   const stamp = Date.now()
@@ -33,8 +36,11 @@ export function addItems(schedule: Schedule, items: readonly ParsedItem[]): Sche
     dayIndex:
       item.deadlineDay === null ? DEFAULT_DAY : Math.min(item.deadlineDay, HORIZON_DAYS - 1),
     startHour: DEFAULT_START_HOUR,
-    // Never fixed, never protected. A proposal cannot pin anything.
-    fixed: false,
+    // What the student confirmed on the chip, not what the model claimed. The two are
+    // different things: `hard` arrives as the model's reading of the page and seeds the
+    // checkbox, and the accept is what commits it -- so a lecture can finally be a lecture
+    // rather than a suggestion the optimizer is free to move to Thursday.
+    fixed: item.fixed,
     deadlineDay: item.deadlineDay,
     protectedRest: false,
   }))

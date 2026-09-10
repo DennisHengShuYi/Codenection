@@ -49,9 +49,14 @@ export function parseModelReply(raw: unknown): ParsedItem[] | null {
   const result = replySchema.safeParse(raw)
   if (!result.success) return null
 
-  return result.data.items.map((item) => ({
+  return result.data.items.map(({ hard, ...item }) => ({
     id: nextId(),
     ...item,
+    // `hard` is the model's word on the wire; `fixed` is the domain's. Mapped here rather
+    // than carried through under two names, because what the model is asserting -- "a
+    // fixed time was printed on the page" -- is a *proposal* for the chip's checkbox, and
+    // the student's accept is what turns it into a pinned block.
+    fixed: hard,
     // Everything from the model is a proposal. §3.2: nothing enters unconfirmed.
     confident: false,
   }))

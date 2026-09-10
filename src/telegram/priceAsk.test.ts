@@ -44,7 +44,7 @@ const request = (): ParsedItem => ({
   kind: 'studyBlock',
   hours: 6,
   deadlineDay: 4,
-  hard: false,
+  fixed: false,
   confident: true,
 })
 

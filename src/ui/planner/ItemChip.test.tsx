@@ -12,7 +12,7 @@ const item = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   kind: 'studyBlock',
   hours: 4,
   deadlineDay: 5,
-  hard: true,
+  fixed: true,
   confident: true,
   ...over,
 })
@@ -113,5 +113,43 @@ describe('ItemChip', () => {
     setup({ confident: true })
 
     expect(screen.queryByTestId('unsure-a')).toBeNull()
+  })
+
+  /**
+   * §5.1's boundary, drawn where the student can see it.
+   *
+   * A parse may not pin a block on its own -- a pinned block is one the optimizer is
+   * forbidden to move, and a model that could create those could quietly wreck a week. So
+   * the model's reading arrives as a ticked box rather than as a fact, and this control is
+   * the difference between "the app decided your lecture is immovable" and "you told it
+   * so". It is also the only way a photographed timetable becomes real fixed load rather
+   * than movable work the solver shuffles around.
+   */
+  it('shows the model reading a stated time as a fixed block', () => {
+    setup({ fixed: true })
+
+    expect(screen.getByTestId('fixed-a')).toBeChecked()
+  })
+
+  it('shows an item with no stated time as movable', () => {
+    setup({ fixed: false })
+
+    expect(screen.getByTestId('fixed-a')).not.toBeChecked()
+  })
+
+  it('lets the student pin a block the model read as movable', async () => {
+    const props = setup({ fixed: false })
+
+    await userEvent.click(screen.getByTestId('fixed-a'))
+
+    expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ fixed: true }))
+  })
+
+  it('lets the student unpin a block the model read as fixed', async () => {
+    const props = setup({ fixed: true })
+
+    await userEvent.click(screen.getByTestId('fixed-a'))
+
+    expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ fixed: false }))
   })
 })

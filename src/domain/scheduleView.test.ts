@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { BlockRecord } from '../../domain/blockLog'
-import { HORIZON_DAYS } from '../../engine'
-import type { Schedule, ScheduledItem } from '../../optimizer'
+import type { BlockRecord } from './blockLog'
+import { HORIZON_DAYS } from '../engine'
+import type { Schedule, ScheduledItem } from '../optimizer'
 import { BUSY_ABOVE_HOURS, HEAVY_ABOVE_HOURS, scheduleView } from './scheduleView'
 
 const item = (id: string, dayIndex: number, hours: number): ScheduledItem => ({

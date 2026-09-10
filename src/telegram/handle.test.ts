@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ParsedItem } from '../ai'
 import { outcomesFrom, type BlockRecord } from '../domain/blockLog'
+import type { EnergyPrediction } from '../domain/predictions'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
 import { handleIntent, type BlockAnswerInput, type ChatStore } from './handle'
 import type { PendingDump } from './brainDump'
-import { blocksReply } from './send'
+import { blocksReply } from './render'
 import { readUpdate } from './update'
 
 const week = (): Schedule => ({
@@ -34,6 +35,7 @@ interface Harness {
   pendings: PendingDump[]
   answered: string[]
   linked: Array<{ chatId: number; accountId: string }>
+  savedPredictions: Array<readonly EnergyPrediction[]>
 }
 
 function harness(over: Partial<ChatStore> = {}): Harness {
@@ -42,6 +44,7 @@ function harness(over: Partial<ChatStore> = {}): Harness {
   const pendings: PendingDump[] = []
   const answered: string[] = []
   const linked: Array<{ chatId: number; accountId: string }> = []
+  const savedPredictions: Array<readonly EnergyPrediction[]> = []
 
   const store: ChatStore = {
     accountForChat: async () => 'account-1',
@@ -65,10 +68,13 @@ function harness(over: Partial<ChatStore> = {}): Harness {
     },
     loadBlockLog: async () => [],
     loadPredictions: async () => [],
+    savePredictions: async (_accountId, next) => {
+      savedPredictions.push(next)
+    },
     ...over,
   }
 
-  return { store, saved, blockAnswers, pendings, answered, linked }
+  return { store, saved, blockAnswers, pendings, answered, linked, savedPredictions }
 }
 
 const parse = vi.fn()
@@ -390,6 +396,30 @@ describe('the command surface', () => {
       expect(h.saved).toHaveLength(1)
     })
 
+    it('answers /schedule with the whole horizon', async () => {
+      const h = harness({ loadWeek: async () => week([studyBlock]) as never })
+
+      const reply = await handleIntent(command('schedule'), h.store, 1000)
+
+      expect(reply?.text).toMatch(/day 0/i)
+      expect(reply?.text).toMatch(/day 20/i)
+    })
+
+    it('answers /checkin by asking for energy in one tap', async () => {
+      const h = harness()
+
+      const reply = await handleIntent(command('checkin'), h.store, 1000)
+
+      expect(reply?.buttons?.flat()).toHaveLength(5)
+    })
+
+    it('asks about sleep when that is what was asked for', async () => {
+      const h = harness()
+
+      expect((await handleIntent(command('checkin', 'sleep'), h.store, 1000))?.buttons?.flat())
+        .toHaveLength(4)
+    })
+
     it('answers /lapsed plainly when nothing has fallen through', async () => {
       const h = harness()
 
@@ -683,15 +713,37 @@ describe('pricing a request', () => {
 
   /**
    * §2.3: the app does the work of declining, the student keeps the decision. This is the
-   * one place a bot could quietly take it, so there must be nothing to press.
+   * one place a bot could quietly take it out of their hands.
+   *
+   * Narrowed deliberately, and worth saying why. This asserted `buttons` was undefined
+   * outright, which was broader than both its own name and its own reason: the rule is that
+   * nothing may *send anything to anybody*, not that nothing may be pressable. §2.3's
+   * provisional yes writes only to the student's own week, as a commitment with a review
+   * day that lapses on its own -- it is the mechanism the section is built on, and it was
+   * unreachable from the door most students use. So the assertion now says what the rule
+   * says: nothing here answers the other person.
    */
   it('offers nothing that could send the reply', async () => {
     const h = harness()
     const priceAsk = vi.fn().mockResolvedValue(priced)
 
     const reply = await handleIntent(ask('cover my shift'), h.store, 1000, { priceAsk })
+    const buttons = reply?.buttons?.flat() ?? []
 
-    expect(reply?.buttons).toBeUndefined()
+    expect(buttons.every((button) => button.data.startsWith('takeon:'))).toBe(true)
+    expect(buttons.map((button) => button.label).join(' ')).not.toMatch(/send|reply|tell them/i)
+  })
+
+  /** And the other half of the same rule: pricing a request still changes nothing until the
+   *  student presses something. */
+  it('offers the provisional yes without taking it', async () => {
+    const h = harness()
+    const priceAsk = vi.fn().mockResolvedValue(priced)
+
+    const reply = await handleIntent(ask('cover my shift'), h.store, 1000, { priceAsk })
+
+    expect(reply?.buttons?.flat()).toHaveLength(1)
+    expect(h.saved).toEqual([])
   })
 
   it('never writes the request into the week', async () => {
@@ -1102,5 +1154,84 @@ describe('looking back at yesterday', () => {
     const h = harness({ loadWeek: async () => anchoredWeek(startedThreeDaysAgo) as never })
 
     expect((await handleIntent(yesterday(), h.store, nowOnDayTwo))?.text).toMatch(/nothing/i)
+  })
+})
+
+/**
+ * §22's last three, at the handler rather than the renderer: a reply that looks right and
+ * writes nothing is the failure mode these are guarding against.
+ */
+describe('answering from chat', () => {
+  const chatCommand = (name: string, argument = '') =>
+    ({ kind: 'command', chatId: 7, name, argument }) as never
+
+  const anchoredWeek = () => ({
+    ...week(),
+    startedOn: new Date(1000).toISOString().split('T')[0],
+  })
+
+  it('records a reported energy against a real date', async () => {
+    const h = harness({
+      loadWeek: async () => anchoredWeek(),
+      loadPredictions: async () => [
+        { forDate: new Date(1000).toISOString().split('T')[0] as string, predicted: 60, reported: null },
+      ],
+    })
+
+    await handleIntent({ kind: 'energyAnswer', chatId: 7, energy: 70 } as never, h.store, 1000)
+
+    expect(h.savedPredictions[0]?.[0]?.reported).toBe(70)
+  })
+
+  /** §8.1 scores a claim about a real date. An unanchored week has none, so there is
+   *  nothing to attach an answer to and saying so beats inventing a day. */
+  it('refuses to record energy against a week it cannot place today in', async () => {
+    const h = harness({ loadWeek: async () => week() })
+
+    const reply = await handleIntent(
+      { kind: 'energyAnswer', chatId: 7, energy: 70 } as never,
+      h.store,
+      1000,
+    )
+
+    expect(h.savedPredictions).toEqual([])
+    expect(reply?.text).toMatch(/cannot place/i)
+  })
+
+  it('writes a reported night into the week, exactly as the today card does', async () => {
+    const h = harness({ loadWeek: async () => anchoredWeek() })
+
+    await handleIntent({ kind: 'sleepAnswer', chatId: 7, bucket: 'under5' } as never, h.store, 1000)
+
+    expect(h.saved[0]?.sleepByDay[0]).toBe(4.5)
+  })
+
+  /**
+   * §2.3's provisional yes. It records a commitment with a review day, so saying yes is
+   * reversible by default -- and it sends nothing to anybody, which is the part of §2.3 the
+   * "no buttons" note was protecting.
+   */
+  it('takes on a priced request as a reviewable commitment', async () => {
+    const asked = parsed('cover the shift')
+    const h = harness({
+      findPending: async () => ({ id: 'ask-1', items: [asked], answeredAt: null }),
+      loadWeek: async () => anchoredWeek(),
+    })
+
+    const reply = await handleIntent({ kind: 'takeOn', chatId: 7, askId: 'ask-1' } as never, h.store, 1000)
+
+    expect(h.saved[0]?.commitments).toHaveLength(1)
+    expect(reply?.text).toMatch(/lapses on its own/i)
+  })
+
+  it('does not take the same thing on twice', async () => {
+    const h = harness({
+      findPending: async () => ({ id: 'ask-1', items: [parsed('shift')], answeredAt: 500 }),
+      loadWeek: async () => anchoredWeek(),
+    })
+
+    await handleIntent({ kind: 'takeOn', chatId: 7, askId: 'ask-1' } as never, h.store, 1000)
+
+    expect(h.saved).toEqual([])
   })
 })

@@ -7,7 +7,7 @@ import { CapacityDial } from '../dial/CapacityDial'
 import type { DomainBar } from '../dial/domainBars'
 import { Button } from '../kit/Button'
 import { dayGrid } from './dayGrid'
-import { scheduleView, type LoadBand } from './scheduleView'
+import { scheduleView, type LoadBand } from '../../domain/scheduleView'
 
 /**
  * §4's primary surface: the whole horizon, one day expanded beneath it, and Rebalance.

@@ -12,7 +12,7 @@ import {
 } from '../../engine'
 import { domainBars } from '../dial/domainBars'
 import type { Fix, Schedule, ScheduledItem } from '../../optimizer'
-import { BUSY_ABOVE_HOURS } from './scheduleView'
+import { BUSY_ABOVE_HOURS } from '../../domain/scheduleView'
 import { WeekScreen } from './WeekScreen'
 
 const item = (

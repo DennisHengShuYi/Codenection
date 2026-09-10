@@ -1,4 +1,5 @@
 import type { BlockAnswer } from '../domain/blockLog'
+import type { SleepBucket } from '../ui/today/checkIn'
 import type { LoadType } from '../engine'
 import { readCommand, type CommandName } from './commands'
 import { readStartCode } from './linkCode'
@@ -28,6 +29,9 @@ export type Intent =
       answer: BlockAnswer
     }
   | { kind: 'restAnswer'; chatId: number; startHour: number | null; accepted: boolean }
+  | { kind: 'takeOn'; chatId: number; askId: string }
+  | { kind: 'energyAnswer'; chatId: number; energy: number }
+  | { kind: 'sleepAnswer'; chatId: number; bucket: SleepBucket }
   | { kind: 'photo'; chatId: number; fileId: string; bytes: number }
   | { kind: 'voice'; chatId: number; fileId: string; seconds: number; bytes: number }
   | { kind: 'unhandled'; chatId: number | null }
@@ -171,6 +175,24 @@ export function readUpdate(update: unknown): Intent {
         dayIndex: Number(block[4]),
         answer: ANSWER_BY_CODE[block[5] as string] as BlockAnswer,
       }
+    }
+
+    // §2.3's provisional yes: writes to the student's own week, sends nothing to anybody.
+    const takeOn = /^takeon:(.+)$/.exec(data)
+    if (takeOn !== null) {
+      return { kind: 'takeOn', chatId, askId: takeOn[1] as string }
+    }
+
+    // §8's check-in, answered in one tap. Everything the answer needs travels in the
+    // callback, so nothing has to be remembered between one message and the next.
+    const energy = /^energy:(\d{1,3})$/.exec(data)
+    if (energy !== null) {
+      return { kind: 'energyAnswer', chatId, energy: Number(energy[1]) }
+    }
+
+    const sleep = /^sleep:(under5|six|seven|eightPlus)$/.exec(data)
+    if (sleep !== null) {
+      return { kind: 'sleepAnswer', chatId, bucket: sleep[1] as SleepBucket }
     }
 
     if (data === 'rest:decline') {

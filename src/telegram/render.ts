@@ -5,9 +5,17 @@ import type { LoadType } from '../engine'
 /**
  * What the bot says, kept apart from the endpoint that says it.
  *
- * These are pure: text and buttons in, a payload out, nothing sent. That is what lets every
- * reply be tested without a network, and it is why the endpoint has almost no wording of
- * its own.
+ * These are pure: values in, a payload out, nothing sent. That is what lets every reply be
+ * tested without a network, and it is why the endpoint has almost no wording of its own.
+ *
+ * §25's render layer, and the file was already it -- the rename is what stops the name
+ * arguing with the contents. `send.ts` sent nothing; the network call has always lived in
+ * `api/telegram.ts`.
+ *
+ * The rule this file is under: the bot decides nothing. Every figure arrives already
+ * computed by `src/domain` or `src/optimizer`, so a threshold comparison appearing here
+ * would mean a second model of the same student living in the chat layer. Two renderers over
+ * one model is sustainable; two models is not.
  */
 export interface Reply {
   readonly text: string
@@ -92,6 +100,8 @@ export const helpReply = (): Reply => ({
     '/stuck <task> — one small first step',
     '/ask <what they asked> — what saying yes would cost',
     '/lapsed — what you said yes to that no longer fits',
+    '/schedule — the whole fortnight at a glance',
+    '/checkin — how today went, in one tap',
     '',
     'Anything else you send, I read as things to add to your week.',
   ].join('\n'),
@@ -243,6 +253,8 @@ export function askReply(
     eveningsEquivalent: number
   },
   drafts: readonly { tone: 'decline' | 'defer' | 'accept'; text: string }[],
+  /** §2.3's provisional yes, when there is a stored ask for the button to accept. */
+  askId?: string,
 ): Reply {
   const evenings =
     cost.eveningsEquivalent <= 0
@@ -276,8 +288,102 @@ export function askReply(
       '',
       `Yes: ${byTone('accept')}`,
     ].join('\n'),
-    // Deliberately no buttons. §2.3: the app does the work of declining and the student
-    // keeps the decision, so there must be nothing here that sends anything to anybody.
+    /**
+     * Still nothing that sends anything to anybody -- §2.3's rule is that the app does the
+     * work of declining and the student keeps the decision, and copying a draft is how they
+     * answer. What this adds writes only to their own week.
+     *
+     * §2.3's provisional yes is the mechanism the whole section is built on: saying yes is
+     * reversible by default, and the commitment lapses on its own unless the reserve can
+     * still hold it at review. Without a button, that mechanism existed in the app and was
+     * unreachable from the door most students actually use.
+     */
+    ...(askId === undefined
+      ? {}
+      : { buttons: [[{ label: 'Take it on (for now)', data: `takeon:${askId}` }]] }),
+  }
+}
+
+/** §2.3: reversible by default, and said so. The review day is the mechanism -- it lapses
+ *  on its own unless the reserve can still hold it -- so the reply names the direction of
+ *  effort rather than congratulating anybody for saying yes. */
+export const takenOnReply = (): Reply => ({
+  text: 'Taken on, for now. If your week cannot hold it by the review day it lapses on its own — I will tell you if that happens.',
+})
+
+/** §7.9: never punish a miss, and never make an answer feel like paperwork. */
+export const checkedInReply = (): Reply => ({
+  text: 'Noted.',
+})
+
+/** §8.1 scores a claim about a real date. Without one there is nothing to attach an answer
+ *  to, and recording it against a day index would be recording it against a different day
+ *  tomorrow. */
+export const checkInUnavailableReply = (): Reply => ({
+  text: 'I cannot place today inside your fortnight, so there is nothing to record this against yet. Open the app once and it will sort itself out.',
+})
+
+/** One line per day of the horizon. §1.5: a chat message has no colour, so the band is a
+ *  word rather than a shade -- the same rule the week grid follows for a different reason. */
+export function scheduleReply(
+  cells: readonly {
+    dayIndex: number
+    date: string | null
+    band: 'light' | 'busy' | 'heavy'
+    deficit: boolean
+    unconfirmed: boolean
+  }[],
+): Reply {
+  const crossing = cells.find((cell) => cell.deficit)
+
+  return {
+    text: [
+      'Your fortnight:',
+      '',
+      ...cells.map((cell) => {
+        const marks = [cell.band, ...(cell.deficit ? ['deficit'] : []), ...(cell.unconfirmed ? ['unanswered'] : [])]
+        return `${cell.date ?? `Day ${cell.dayIndex}`} — ${marks.join(', ')}`
+      }),
+      '',
+      crossing === undefined
+        ? 'It holds all the way through.'
+        : `It stops holding on day ${crossing.dayIndex}.`,
+    ].join('\n'),
+  }
+}
+
+/** §8's five energy bands and four sleep buckets, in the same words and the same order the
+ *  today card uses -- a student answering in both places must not meet two different
+ *  questions (§8b②). The values live in `src/ui/today/checkIn` and `TodayCard`; these are
+ *  the same numbers, and a test in `handle.test.ts` pins them together. */
+const ENERGY_BANDS: readonly { label: string; value: number }[] = [
+  { label: 'Running on empty', value: 10 },
+  { label: 'Low', value: 30 },
+  { label: 'Getting by', value: 50 },
+  { label: 'Pretty good', value: 70 },
+  { label: 'Full of it', value: 90 },
+]
+
+const SLEEP_BUCKETS: readonly { label: string; bucket: string }[] = [
+  { label: 'Under 5 hours', bucket: 'under5' },
+  { label: 'About 6', bucket: 'six' },
+  { label: 'About 7', bucket: 'seven' },
+  { label: '8 or more', bucket: 'eightPlus' },
+]
+
+export function checkInReply(asking: 'energy' | 'sleep'): Reply {
+  if (asking === 'sleep') {
+    return {
+      text: 'How much sleep last night?',
+      buttons: [SLEEP_BUCKETS.map((entry) => ({ label: entry.label, data: `sleep:${entry.bucket}` }))],
+    }
+  }
+
+  return {
+    text: 'How is your energy today?',
+    // Everything the answer needs travels in the callback, so nothing has to be remembered
+    // between one message and the next.
+    buttons: [ENERGY_BANDS.map((band) => ({ label: band.label, data: `energy:${band.value}` }))],
   }
 }
 

@@ -12,7 +12,7 @@ import { checkRequest } from '../src/telegram/guard'
 import { handleIntent, type ChatServices, type ChatStore } from '../src/telegram/handle'
 import { hasExpired } from '../src/telegram/linkCode'
 import { priceAskWith } from '../src/telegram/priceAsk'
-import type { Reply } from '../src/telegram/send'
+import type { Reply } from '../src/telegram/render'
 import { callbackIdOf, readUpdate } from '../src/telegram/update'
 
 /**
@@ -204,6 +204,29 @@ export function createStore(client: SupabaseClient): ChatStore {
       const predictions = settings?.calibration?.predictions
 
       return Array.isArray(predictions) ? (predictions as EnergyPrediction[]) : []
+    },
+
+    /**
+     * Writes §8.1's predictions back after a check-in answered in chat.
+     *
+     * Reads the row and merges into it rather than upserting a whole settings blob: the app
+     * writes that blob entire from the browser, and a bot replacing it would drop whatever
+     * the student had changed there since. Only the predictions are ours to touch.
+     */
+    async savePredictions(accountId, predictions) {
+      const { data } = await client
+        .from('user_state')
+        .select('settings')
+        .eq('id', accountId)
+        .maybeSingle()
+
+      const settings = (data?.settings as Record<string, unknown> | null) ?? {}
+      const calibration = (settings.calibration as Record<string, unknown> | undefined) ?? {}
+
+      await client.from('user_state').upsert(
+        { id: accountId, settings: { ...settings, calibration: { ...calibration, predictions } } },
+        { onConflict: 'id' },
+      )
     },
 
     async markAnswered(accountId, dumpId, now) {

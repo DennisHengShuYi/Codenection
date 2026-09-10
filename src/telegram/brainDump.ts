@@ -8,7 +8,7 @@ import {
   nothingUnderstoodReply,
   unhandledReply,
   type Reply,
-} from './send'
+} from './render'
 
 /**
  * A parse waiting to be confirmed.

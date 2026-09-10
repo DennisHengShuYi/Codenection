@@ -16,10 +16,18 @@ import { HORIZON_DAYS } from '../../engine'
  * `history`, `popstate`, a live `window` -- and nothing else in the app reads either.
  */
 
-/** The three ways something can arrive, once one has been chosen. */
-export type AddWay = 'photo' | 'type' | 'request'
+/**
+ * The ways something can arrive, once one has been chosen.
+ *
+ * `calendar` is §1.4's optional supplement, and its position in this list is the decision
+ * the spec asked for: "OCR primary, calendar as an additive import for those who use it,
+ * never as the only path." It goes last, beside the others, never in front of them.
+ */
+export type AddWay = 'photo' | 'type' | 'request' | 'calendar'
 
-const WAYS: readonly AddWay[] = ['photo', 'type', 'request']
+/** Must agree with the union above -- this is what `isWay` checks, and so what makes
+ *  `/add/calendar` a real address rather than a 404 back to the room. */
+const WAYS: readonly AddWay[] = ['photo', 'type', 'request', 'calendar']
 
 export type View =
   | { readonly kind: 'room' }

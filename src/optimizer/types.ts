@@ -28,6 +28,17 @@ export interface ScheduledItem {
    * hand.
    */
   readonly seriesId?: string
+  /**
+   * The identifier this block carries in the system it was imported from, when it was
+   * imported at all.
+   *
+   * Carried this far for the push: a block that came from Google and is pushed back
+   * appears twice in the calendar it came from, and the next import reads both. By push
+   * time the `ParsedItem` that knew is long gone, so the block has to know instead.
+   *
+   * Absent for anything typed, photographed or generated here, which is most of a week.
+   */
+  readonly sourceId?: string
 }
 
 /** §2.3's provisional yes: an acceptance and the date by which it has to prove itself. */

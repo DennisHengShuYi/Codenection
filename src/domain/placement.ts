@@ -4,7 +4,7 @@ import type { EngineParams } from '../engine'
 import { smallestFixes, type Fix, type Schedule, type ScheduledItem } from '../optimizer'
 import { dateFor } from './calendar'
 import { expandRecurring } from './recurrence'
-import { slotOn } from './slotFinder'
+import { gapsOn, slotOn } from './slotFinder'
 
 /**
  * Where an undated item goes when nothing says otherwise, counted from today.
@@ -125,6 +125,9 @@ export function placeItems(
       protectedRest: false,
       // §39: carried through when the item came from a series, absent when it did not.
       ...(item.seriesId === undefined ? {} : { seriesId: item.seriesId }),
+      // Carried for the push, which must not send a block back to the calendar it was
+      // read from.
+      ...(item.sourceId === undefined ? {} : { sourceId: item.sourceId }),
     }
 
     notes.push({

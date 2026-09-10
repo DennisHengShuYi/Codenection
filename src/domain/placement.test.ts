@@ -316,3 +316,25 @@ describe('an item that states its own hour', () => {
     expect(added?.dayIndex).toBe(2)
   })
 })
+
+/**
+ * Where an item came from, kept on the block it becomes.
+ *
+ * The push side is the reason. A block imported from Google that gets pushed back is
+ * duplicated in the calendar it came from, and the next import reads both -- so the push
+ * has to be able to tell, and by then the `ParsedItem` is long gone. One field, carried,
+ * absent when there was no source.
+ */
+describe('placeItems and where an item came from', () => {
+  it('keeps the source of an item that came from outside the app', () => {
+    const { schedule } = placeItems(empty(), [parsed({ sourceId: 'gcal-evt-1' })], 0)
+
+    expect(schedule.items[0]?.sourceId).toBe('gcal-evt-1')
+  })
+
+  it('leaves an item typed by hand without one', () => {
+    const { schedule } = placeItems(empty(), [parsed()], 0)
+
+    expect(schedule.items[0]?.sourceId).toBeUndefined()
+  })
+})

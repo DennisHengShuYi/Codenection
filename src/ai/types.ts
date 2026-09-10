@@ -45,6 +45,11 @@ export interface ParsedItem {
    * Null is a real answer, not a missing one: an essay due Friday has a deadline and no
    * time of day, and the optimizer should keep its freedom to place it. A stated hour
    * removes that freedom -- see `fixed`, which the accept sets alongside it.
+   *
+   * A calendar import is the other producer, and the one place the hour is not a reading of
+   * what somebody typed but a fact: the time is the single thing a calendar is genuinely
+   * authoritative about, and importing a 9am lecture only to place it at 19:00 would throw
+   * away the only reason to read a calendar at all.
    */
   readonly startHour: number | null
   /**
@@ -81,6 +86,14 @@ export interface ParsedItem {
    * ended" a single operation rather than deleting three items by hand.
    */
   readonly seriesId?: string
+  /**
+   * Where this came from outside the app, when it came from somewhere.
+   *
+   * Carried so a second import can tell what it has already seen, and so the push side never
+   * sends an event back to the calendar it was read from -- which would duplicate it, and
+   * then duplicate the duplicate.
+   */
+  readonly sourceId?: string
   /**
    * Whether this was read with confidence.
    *

@@ -247,3 +247,50 @@ describe('fixThatMakesRoom', () => {
     expect(JSON.stringify(crowded)).toBe(snapshot)
   })
 })
+
+/**
+ * §1.4's calendar import, and the one thing a calendar is authoritative about.
+ *
+ * A photo or a brain dump says nothing about when something starts, so `placeItems` finding
+ * a sensible gap is the right answer. A calendar does say, and importing a 9am lecture only
+ * to place it at 19:00 throws away the only fact worth having.
+ */
+describe('placeItems and a stated start time', () => {
+  it('puts a pinned block at the hour it was given', () => {
+    const lecture = parsed({ fixed: true, startHour: 9, hours: 2, deadlineDay: 3 })
+
+    expect(placeItems(empty(), [lecture], 0).schedule.items[0]?.startHour).toBe(9)
+  })
+
+  /**
+   * A pinned block keeps its hour even when something is already there. It is a lecture: it
+   * happens at nine whether or not the week is convenient, and moving it would be the app
+   * inventing a timetable the student does not have. Movable-movable overlap is legal and
+   * `constraints.ts` says so deliberately.
+   */
+  it('keeps a pinned hour even when the day is already busy', () => {
+    const busy = {
+      ...empty(),
+      items: [{ ...fullDay(3), hours: 4, startHour: 8, fixed: false }],
+    }
+    const lecture = parsed({ fixed: true, startHour: 9, hours: 2, deadlineDay: 3 })
+
+    expect(placeItems(busy, [lecture], 0).schedule.items[1]?.startHour).toBe(9)
+  })
+
+  /** An unpinned item with a stated hour takes it when the day allows, because something
+   *  knew it -- but yields rather than landing on top of other work. */
+  it('prefers a stated hour for movable work when there is room', () => {
+    const suggested = parsed({ fixed: false, startHour: 14, hours: 2, deadlineDay: 3 })
+
+    expect(placeItems(empty(), [suggested], 0).schedule.items[0]?.startHour).toBe(14)
+  })
+
+  /** Nothing stated is the ordinary case, and it must behave exactly as it always has. */
+  it('chooses an hour itself when nothing said one', () => {
+    const item = placeItems(empty(), [parsed({ hours: 2, deadlineDay: 3 })], 0).schedule.items[0]
+
+    expect(item?.startHour).toBeGreaterThanOrEqual(8)
+    expect(item?.startHour).toBeLessThanOrEqual(24)
+  })
+})

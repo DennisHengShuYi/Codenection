@@ -87,13 +87,19 @@ export default async function handler(request: Request): Promise<Response> {
 
     const state = await signState(accountId as string, google.stateSecret as string)
 
-    return Response.redirect(
-      consentUrl({
-        clientId: google.clientId as string,
-        redirectUri: redirectUriFor(request),
-        state,
+    // Answered as JSON rather than a 302, so the caller can reach this with an
+    // `Authorization` header. A redirect would mean the browser navigating here directly,
+    // and a navigation carries no headers -- which would force the session token into the
+    // query string, where it lands in logs, history and any `Referer` sent onward.
+    return new Response(
+      JSON.stringify({
+        url: consentUrl({
+          clientId: google.clientId as string,
+          redirectUri: redirectUriFor(request),
+          state,
+        }),
       }),
-      302,
+      { headers: { 'content-type': 'application/json' } },
     )
   }
 

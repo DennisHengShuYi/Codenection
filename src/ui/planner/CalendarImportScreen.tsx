@@ -1,0 +1,156 @@
+import { useState } from 'react'
+import type { ParsedItem } from '../../ai'
+import { Button } from '../kit/Button'
+import { Sheet } from '../kit/Sheet'
+import { ItemChip } from './ItemChip'
+
+/**
+ * §1.4's optional calendar supplement, as a fourth way in.
+ *
+ * Modelled on `PhotoImportScreen`, deliberately and closely: the same loading state, the
+ * same human failure sentence, the same chips, and nothing accepted until the student
+ * presses the button. §1.4 is blunt about why -- "Never import silently. Confirm screen,
+ * low-confidence rows flagged, one-tap correction. A wrong class time silently poisoning
+ * every prediction is the fastest way to lose trust, and users cannot debug what they never
+ * saw" -- and a calendar can bring in fifty rows at once, so it matters more here than for a
+ * photo, not less.
+ *
+ * The screen owns its own `Sheet`, as the other import screens do, because its actions
+ * depend on state only it holds.
+ */
+export function CalendarImportScreen({
+  connected,
+  onConnect,
+  onRead,
+  onAccept,
+  onCancel,
+  suggestRepeat = () => null,
+}: {
+  /** Whether this student has already granted calendar access. */
+  readonly connected: boolean
+  /** Sends them to Google's consent screen. */
+  readonly onConnect: () => void
+  /** Reads the fortnight. Returns the items, plus how many were left out for being outside
+   *  it -- said out loud rather than quietly dropped. */
+  readonly onRead: () => Promise<{ items: readonly ParsedItem[]; skipped: number }>
+  readonly onAccept: (items: readonly ParsedItem[]) => void
+  readonly onCancel: () => void
+  readonly suggestRepeat?: (item: ParsedItem) => ParsedItem['repeat']
+}) {
+  const [items, setItems] = useState<ParsedItem[] | null>(null)
+  const [skipped, setSkipped] = useState(0)
+  const [problem, setProblem] = useState<string | null>(null)
+  const [reading, setReading] = useState(false)
+
+  async function read() {
+    setReading(true)
+    setProblem(null)
+    setItems(null)
+
+    try {
+      const outcome = await onRead()
+      setItems(outcome.items.map((item) => ({ ...item, repeat: item.repeat ?? suggestRepeat(item) })))
+      setSkipped(outcome.skipped)
+    } catch {
+      // A network that died, a grant Google has stopped honouring, an unmigrated database.
+      // All the same thing to a student, and all recoverable by trying again -- so this says
+      // that rather than describing the inside of the system.
+      setProblem('I could not read your calendar just now. Try again in a moment.')
+    } finally {
+      setReading(false)
+    }
+  }
+
+  const canAccept = items !== null && items.length > 0
+
+  const actions = (
+    <>
+      <Button variant="quiet" onClick={onCancel}>
+        Cancel
+      </Button>
+      {canAccept && (
+        <Button data-testid="calendar-accept" onClick={() => onAccept(items)}>
+          Add these to my week
+        </Button>
+      )}
+    </>
+  )
+
+  return (
+    <Sheet title="From my calendar" onClose={onCancel} actions={actions}>
+      <div className="flex flex-col gap-4">
+        {!connected && (
+          <>
+            {/* Said before the button, not after. A student about to hand over access to
+                their calendar should know what is being asked for and what will be done
+                with it while they can still decline. */}
+            <p className="text-sm text-ink-soft">
+              I will read the next three weeks of your calendar and show you what I found. You
+              choose what becomes part of your week — nothing is added until you say so.
+            </p>
+            <p className="text-sm text-ink-soft">
+              I never change anything in your existing calendars.
+            </p>
+            <Button data-testid="calendar-connect" onClick={onConnect}>
+              Connect Google Calendar
+            </Button>
+          </>
+        )}
+
+        {connected && items === null && !reading && (
+          <>
+            <p className="text-sm text-ink-soft">
+              Your calendar is connected. This reads the fortnight you are in — nothing
+              before it, nothing after.
+            </p>
+            <Button data-testid="calendar-read" onClick={() => void read()}>
+              Read my calendar
+            </Button>
+          </>
+        )}
+
+        {reading && (
+          <p data-testid="calendar-reading" className="text-sm text-ink-soft">
+            Reading your calendar…
+          </p>
+        )}
+
+        {problem !== null && (
+          <p data-testid="calendar-problem" className="text-sm text-attention">
+            {problem}
+          </p>
+        )}
+
+        {items !== null && items.length === 0 && (
+          <p data-testid="calendar-empty" className="text-sm text-ink-soft">
+            Nothing in your calendar falls inside this fortnight. Photograph your timetable or
+            type it out instead — both work without a calendar.
+          </p>
+        )}
+
+        {skipped > 0 && (
+          <p data-testid="calendar-skipped" className="text-xs text-ink-soft">
+            {skipped === 1
+              ? 'One event was outside this fortnight, so I left it out.'
+              : `${skipped} events were outside this fortnight, so I left them out.`}
+          </p>
+        )}
+
+        {items !== null && items.length > 0 && (
+          <ul className="flex flex-col gap-3">
+            {items.map((item) => (
+              <ItemChip
+                key={item.id}
+                item={item}
+                onChange={(next) =>
+                  setItems(items.map((existing) => (existing.id === next.id ? next : existing)))
+                }
+                onRemove={(id) => setItems(items.filter((existing) => existing.id !== id))}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
+    </Sheet>
+  )
+}

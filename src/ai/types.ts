@@ -50,6 +50,25 @@ export interface ParsedItem {
    */
   readonly seriesId?: string
   /**
+   * The hour this actually starts at, when something authoritative said so.
+   *
+   * Absent for a photo or a brain dump, which is right: neither knows, and `placeItems`
+   * finding a sensible gap is better than either inventing one. A calendar is the exception
+   * -- the time is the one thing it is genuinely authoritative about, and importing a 9am
+   * lecture only to place it at 19:00 throws away the only fact worth having.
+   *
+   * Optional, so every existing producer and every existing test is untouched.
+   */
+  readonly startHour?: number
+  /**
+   * Where this came from outside the app, when it came from somewhere.
+   *
+   * Carried so a second import can tell what it has already seen, and so the push side never
+   * sends an event back to the calendar it was read from -- which would duplicate it, and
+   * then duplicate the duplicate.
+   */
+  readonly sourceId?: string
+  /**
    * Whether this was read with confidence.
    *
    * §1.4 requires low-confidence rows to be visibly flagged rather than silently guessed.

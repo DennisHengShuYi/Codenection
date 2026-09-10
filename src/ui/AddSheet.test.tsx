@@ -1,11 +1,37 @@
 import { useState, type ComponentProps } from 'react'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_PARAMS, HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
 import { AddSheet } from './AddSheet'
 import type { AddWay } from './room/view'
+import * as google from '../google/client'
+
+/**
+ * Stubbed, because the real ones call this app's own endpoints and there are none in a unit
+ * test. What this file asks is what the sheet *does* with the answer; whether the client can
+ * reach the network is `google/client.test.ts`'s question.
+ */
+vi.mock('../google/client', () => ({
+  beginConnect: vi.fn().mockResolvedValue(undefined),
+  readCalendar: vi.fn().mockResolvedValue({
+    items: [
+      {
+        id: 'gcal-1',
+        title: 'WIA3001 lecture',
+        type: 'mental',
+        kind: 'studyBlock',
+        hours: 2,
+        deadlineDay: 2,
+        fixed: true,
+        confident: true,
+        repeat: null,
+      },
+    ],
+    skipped: 0,
+  }),
+}))
 
 /**
  * §6's `+` sheet, the single control behind "photograph something · type it out · someone
@@ -38,7 +64,7 @@ function Harness(props: Omit<ComponentProps<typeof AddSheet>, 'way' | 'onWay'>) 
   return <AddSheet {...props} way={way} onWay={setWay} />
 }
 
-const setup = () => {
+const setup = (over: { calendarConnected?: boolean } = {}) => {
   const props = {
     schedule: emptySchedule(),
     params: DEFAULT_PARAMS,
@@ -48,6 +74,7 @@ const setup = () => {
     onAcceptItems: vi.fn(),
     onAcceptRequest: vi.fn(),
     onClose: vi.fn(),
+    ...over,
   }
   render(<Harness {...props} />)
   return props
@@ -129,9 +156,86 @@ describe('AddSheet', () => {
     ['add-photo', /timetable/i],
     ['add-type', /own words/i],
     ['add-request', /before you answer/i],
+    ['add-calendar', /nothing is added until you say so/i],
   ])('says what %s actually does, under its label', (testid, description) => {
     setup()
 
     expect(within(screen.getByTestId(testid)).getByText(description)).toBeVisible()
+  })
+})
+
+/**
+ * §1.4's optional calendar supplement, as a fourth way in.
+ *
+ * The spec asked for a decision -- "OCR primary, calendar as an additive import for those
+ * who use it, never as the only path" -- and its position in this list is that decision.
+ * Last, beside the others, never in front of them.
+ */
+describe('AddSheet and the calendar', () => {
+  it('offers the calendar after the three ways that need nothing connected', () => {
+    setup()
+
+    const rows = screen.getAllByRole('button').map((button) => button.getAttribute('data-testid'))
+    const ways = rows.filter((id): id is string => id !== null && id.startsWith('add-'))
+
+    expect(ways).toEqual(['add-photo', 'add-type', 'add-request', 'add-calendar'])
+  })
+
+  it('opens the calendar screen when it is chosen', async () => {
+    setup()
+
+    await userEvent.click(screen.getByTestId('add-calendar'))
+
+    expect(screen.getByRole('dialog', { name: /from my calendar/i })).toBeVisible()
+  })
+
+  /** Nothing has been granted yet, so the first thing it offers is the choice to grant it --
+   *  with what it will do said before the button. */
+  it('asks to connect before it can read anything', async () => {
+    setup({ calendarConnected: false })
+
+    await userEvent.click(screen.getByTestId('add-calendar'))
+
+    expect(screen.getByTestId('calendar-connect')).toBeVisible()
+    expect(screen.queryByTestId('calendar-read')).toBeNull()
+  })
+
+  it('offers to read once a calendar is connected', async () => {
+    setup({ calendarConnected: true })
+
+    await userEvent.click(screen.getByTestId('add-calendar'))
+
+    expect(screen.getByTestId('calendar-read')).toBeVisible()
+    expect(screen.queryByTestId('calendar-connect')).toBeNull()
+  })
+
+  it('begins the connection when asked to', async () => {
+    setup({ calendarConnected: false })
+
+    await userEvent.click(screen.getByTestId('add-calendar'))
+    await userEvent.click(screen.getByTestId('calendar-connect'))
+
+    expect(google.beginConnect).toHaveBeenCalledOnce()
+  })
+
+  /**
+   * The whole path, end to end: read the calendar, see the row, accept it. What this proves
+   * beyond the screen's own tests is the wiring -- that the week the sheet holds is the one
+   * the calendar is read against, and that accepting reaches the caller.
+   */
+  it('reads the calendar and hands what was accepted to the week', async () => {
+    const props = setup({ calendarConnected: true })
+
+    await userEvent.click(screen.getByTestId('add-calendar'))
+    await userEvent.click(screen.getByTestId('calendar-read'))
+
+    await waitFor(() => expect(screen.getByTestId('calendar-accept')).toBeVisible())
+    await userEvent.click(screen.getByTestId('calendar-accept'))
+
+    expect(google.readCalendar).toHaveBeenCalledWith(props.schedule)
+    expect(props.onAcceptItems).toHaveBeenCalledWith([
+      expect.objectContaining({ title: 'WIA3001 lecture' }),
+    ])
+    expect(props.onClose).toHaveBeenCalled()
   })
 })

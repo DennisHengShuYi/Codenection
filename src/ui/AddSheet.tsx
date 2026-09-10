@@ -7,6 +7,8 @@ import type { AddWay } from './room/view'
 import { Button } from './kit/Button'
 import { Sheet } from './kit/Sheet'
 import { suggestRepeat } from '../domain/recurrence'
+import { beginConnect, readCalendar } from '../google/client'
+import { CalendarImportScreen } from './planner/CalendarImportScreen'
 import { PhotoImportScreen } from './planner/PhotoImportScreen'
 import { PlannerScreen } from './planner/PlannerScreen'
 import { RequestBoxScreen } from './request/RequestBoxScreen'
@@ -26,7 +28,7 @@ import { RequestBoxScreen } from './request/RequestBoxScreen'
  * the `Sheet` for the choice itself.
  */
 /**
- * The three ways in, each saying what it actually does.
+ * The ways in, each saying what it actually does.
  *
  * Ruling 58: these were centred labels and nothing else, so "Someone asked me for
  * something" had to carry the whole idea -- that the request is PRICED against the week
@@ -56,6 +58,15 @@ const WAYS_IN: readonly {
     label: 'Someone asked me for something',
     help: 'Priced against your week before you answer.',
   },
+  {
+    way: 'calendar',
+    testid: 'add-calendar',
+    label: 'From my Google Calendar',
+    // Says what it will and will not do, because "sync" is the word people fear here. The
+    // read half is one-way and nothing is added without the same confirm screen the other
+    // ways use.
+    help: 'Read this fortnight in. Nothing is added until you say so.',
+  },
 ]
 
 export function AddSheet({
@@ -69,6 +80,7 @@ export function AddSheet({
   onClose,
   way,
   onWay,
+  calendarConnected = false,
 }: {
   readonly schedule: Schedule
   /** §2.4's calibrated params, threaded to the request path so it prices against the
@@ -89,6 +101,14 @@ export function AddSheet({
    *  written into the address, so `/add/photo` could not exist. */
   readonly way: AddWay | null
   readonly onWay: (way: AddWay | null) => void
+  /**
+   * Whether this student has already granted calendar access (§1.4's supplement).
+   *
+   * Defaulted to false so every caller written before the calendar way existed keeps
+   * compiling and behaving as it did -- and so a build with no Google configuration offers
+   * the connect step rather than pretending a connection already exists.
+   */
+  readonly calendarConnected?: boolean
 }) {
   const close = () => onClose()
 
@@ -110,6 +130,22 @@ export function AddSheet({
   if (way === 'type') {
     return (
       <PlannerScreen
+        suggestRepeat={(item) => suggestRepeat(item, schedule)}
+        onAccept={(items) => {
+          onAcceptItems(items)
+          close()
+        }}
+        onCancel={backToChoice}
+      />
+    )
+  }
+
+  if (way === 'calendar') {
+    return (
+      <CalendarImportScreen
+        connected={calendarConnected}
+        onConnect={() => void beginConnect()}
+        onRead={() => readCalendar(schedule)}
         suggestRepeat={(item) => suggestRepeat(item, schedule)}
         onAccept={(items) => {
           onAcceptItems(items)

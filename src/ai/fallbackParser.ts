@@ -60,6 +60,15 @@ const REST_WORDS = ['nap', 'rest', 'break', 'downtime']
  *  Every other physical word takes the dearer `hardExercise` default in `kindOf`. */
 const PHYSICAL_LIGHT_WORDS = ['walk', 'yoga']
 
+/**
+ * Whole-word membership, not `String.includes`. A bare substring check reads "restaurant"
+ * as containing "rest" and "breakfast" as containing "break" -- silently turning a social
+ * obligation into confident recovery, which is exactly what the doctrine above warns
+ * against. Every signal list in this file is checked through this, not just `REST_WORDS`:
+ * the same hazard sits behind "exam" in "example" and "call" in "recall".
+ */
+const hasSignalWord = (lower: string, word: string): boolean => new RegExp(`\\b${word}\\b`).test(lower)
+
 /** Splits on the punctuation people actually use in a dump. */
 const splitFragments = (text: string): string[] =>
   text
@@ -69,7 +78,7 @@ const splitFragments = (text: string): string[] =>
 
 function typeOf(lower: string): { type: LoadType; confident: boolean } {
   for (const signal of SIGNALS) {
-    if (signal.words.some((word) => lower.includes(word))) {
+    if (signal.words.some((word) => hasSignalWord(lower, word))) {
       return { type: signal.type, confident: true }
     }
   }
@@ -92,7 +101,7 @@ function typeOf(lower: string): { type: LoadType; confident: boolean } {
  */
 function kindOf(type: LoadType, lower: string): ActivityKind {
   if (type === 'physical') {
-    return PHYSICAL_LIGHT_WORDS.some((word) => lower.includes(word)) ? 'lightExercise' : 'hardExercise'
+    return PHYSICAL_LIGHT_WORDS.some((word) => hasSignalWord(lower, word)) ? 'lightExercise' : 'hardExercise'
   }
   if (type === 'social') return 'socialDraining'
   if (type === 'errands') return 'errands'
@@ -129,7 +138,7 @@ export function parseWithRules(text: string, today = 0): ParsedItem[] {
     .slice(0, MAX_ITEMS)
     .map((fragment) => {
       const lower = fragment.toLowerCase()
-      const isRest = REST_WORDS.some((word) => lower.includes(word))
+      const isRest = REST_WORDS.some((word) => hasSignalWord(lower, word))
       // A stated rest word is its own signal, read ahead of `typeOf`: "nap" and "downtime"
       // say nothing about mental, physical, social or errand load, but they say everything
       // about kind.

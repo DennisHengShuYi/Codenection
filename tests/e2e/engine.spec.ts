@@ -24,22 +24,28 @@ async function openApp(page: Page, path = '/') {
  *
  * Neither the breakdown nor the rebalancer is behind a tap on the furniture any more. §1.1's
  * "no tap required" reading is the room's own corner gauge; §1.2's five-bar breakdown and
- * its spoken summary sit on the week screen (Ruling 53), which the room's `The week` button
- * opens, and so does the rebalancer. The room itself is display only, so nothing here clicks
- * an object.
+ * its spoken summary sit one tap BEHIND that gauge (Ruling 59), and the rebalancer is in
+ * the week sheet, which `The week` opens. The room itself is display only, so nothing here
+ * clicks an object.
  */
 
-/** The one tap between the room and the numbers. */
+/** The one tap between the room and the calendar. */
 async function openWeek(page: Page) {
   await openApp(page)
   await page.getByTestId('open-week').click()
+}
+
+/** The one tap between the room and the numbers behind its gauge. */
+async function openReserves(page: Page) {
+  await openApp(page)
+  await page.getByTestId('room-gauge').click()
 }
 
 // §1.5: a full text equivalent of every dial value, treated as a primary view rather
 // than a fallback. Asserted here because an accessibility requirement nothing checks is
 // an accessibility requirement that quietly rots.
 test('states the numbers in words for a screen reader', async ({ page }) => {
-  await openWeek(page)
+  await openReserves(page)
 
   const summary = page.getByTestId('reserve-text-equivalent')
   await expect(summary).toHaveText(/capacity/i)
@@ -49,7 +55,7 @@ test('states the numbers in words for a screen reader', async ({ page }) => {
 // The projection's deficit crossing reaches the screen through the text equivalent
 // rather than through a figure of its own, so this is where it is checked.
 test('says whether the fortnight crosses into deficit', async ({ page }) => {
-  await openWeek(page)
+  await openReserves(page)
 
   await expect(page.getByTestId('reserve-text-equivalent')).toHaveText(/deficit/i)
 })

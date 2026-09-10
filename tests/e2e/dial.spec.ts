@@ -19,17 +19,17 @@ async function openApp(page: Page, path = '/') {
  * The dial used to live behind a tap on the light. §1.1's "no tap required" reading is now
  * the room's own corner gauge, and §1.2's five-bar breakdown -- which Ruling 28 rescued from
  * orphanhood and Ruling 53 moved off the room, because the room was reading capacity twice
- * -- lives at the foot of the week screen. One tap from the room, on a button that is
- * always there above the low-energy threshold.
+ * -- lives one tap behind that gauge since Ruling 59. The compact readout is the door to
+ * the full one, rather than the breakdown sitting under a calendar on the week screen.
  */
 for (const width of [320, 390, 768, 1280]) {
-  test(`the breakdown fits at ${width}px, one tap into the week`, async ({ page }) => {
+  test(`the breakdown fits at ${width}px, one tap behind the gauge`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 })
     await openApp(page)
 
-    await page.getByTestId('open-week').click()
+    await page.getByTestId('room-gauge').click()
 
-    await expect(page.getByTestId('week-reserves')).toBeVisible()
+    await expect(page.getByRole('dialog', { name: /reserves/i })).toBeVisible()
     await expect(page.getByTestId('capacity-value')).toBeVisible()
     await expect(page.getByTestId('dial-gauge')).toBeVisible()
 
@@ -50,7 +50,7 @@ test('shows five domain bars, each against its own ceiling', async ({ page }) =>
   await expect(page.getByTestId('room-gauge')).toBeVisible()
   await expect(page.getByRole('meter')).toHaveCount(0)
 
-  await page.getByTestId('open-week').click()
+  await page.getByTestId('room-gauge').click()
 
   await expect(page.getByRole('meter')).toHaveCount(5)
 })

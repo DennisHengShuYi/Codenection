@@ -170,7 +170,7 @@ describe('RoomShell showing reported energy over time', () => {
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
     await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
-    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(screen.getByTestId('room-gauge'))
 
     await waitFor(() => expect(screen.getByTestId('sparkline')).toBeInTheDocument())
     expect(screen.getByTestId('sparkline').getAttribute('points')?.split(' ')).toHaveLength(4)

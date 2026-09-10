@@ -169,6 +169,8 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         onAcceptItems={vi.fn()}
         onAcceptRequest={vi.fn()}
         onClose={vi.fn()}
+        way={null}
+        onWay={vi.fn()}
       />,
     )
 

@@ -1,17 +1,15 @@
-import { useState } from 'react'
 import type { ParsedItem } from '../ai'
 import type { BlockRecord } from '../domain/blockLog'
 import type { EnergyPrediction } from '../domain/predictions'
 import type { EngineParams } from '../engine'
 import type { Schedule } from '../optimizer'
+import type { AddWay } from './room/view'
 import { Button } from './kit/Button'
 import { Sheet } from './kit/Sheet'
 import { suggestRepeat } from '../domain/recurrence'
 import { PhotoImportScreen } from './planner/PhotoImportScreen'
 import { PlannerScreen } from './planner/PlannerScreen'
 import { RequestBoxScreen } from './request/RequestBoxScreen'
-
-type AddWay = 'choose' | 'photo' | 'type' | 'request'
 
 /**
  * §6's `+` sheet -- "photograph something · type it out · someone asked me for something".
@@ -27,6 +25,39 @@ type AddWay = 'choose' | 'photo' | 'type' | 'request'
  * there is anything to accept yet -- that only that screen holds. This component only owns
  * the `Sheet` for the choice itself.
  */
+/**
+ * The three ways in, each saying what it actually does.
+ *
+ * Ruling 58: these were centred labels and nothing else, so "Someone asked me for
+ * something" had to carry the whole idea -- that the request is PRICED against the week
+ * before you answer -- in six words, and could not.
+ */
+const WAYS_IN: readonly {
+  readonly way: AddWay
+  readonly testid: string
+  readonly label: string
+  readonly help: string
+}[] = [
+  {
+    way: 'photo',
+    testid: 'add-photo',
+    label: 'Photograph something',
+    help: 'A timetable, a whiteboard, a printed schedule.',
+  },
+  {
+    way: 'type',
+    testid: 'add-type',
+    label: 'Type it out',
+    help: 'Write it in your own words and I will read it back as blocks.',
+  },
+  {
+    way: 'request',
+    testid: 'add-request',
+    label: 'Someone asked me for something',
+    help: 'Priced against your week before you answer.',
+  },
+]
+
 export function AddSheet({
   schedule,
   params,
@@ -36,6 +67,8 @@ export function AddSheet({
   onAcceptItems,
   onAcceptRequest,
   onClose,
+  way,
+  onWay,
 }: {
   readonly schedule: Schedule
   /** §2.4's calibrated params, threaded to the request path so it prices against the
@@ -51,15 +84,15 @@ export function AddSheet({
   readonly onAcceptItems: (items: readonly ParsedItem[]) => void
   readonly onAcceptRequest: (item: ParsedItem) => void
   readonly onClose: () => void
+  /** Which of the three ways is open, or null at the chooser. Held by the caller rather
+   *  than here since Ruling 57: a sub-flow only this component knew about could not be
+   *  written into the address, so `/add/photo` could not exist. */
+  readonly way: AddWay | null
+  readonly onWay: (way: AddWay | null) => void
 }) {
-  const [way, setWay] = useState<AddWay>('choose')
+  const close = () => onClose()
 
-  const close = () => {
-    setWay('choose')
-    onClose()
-  }
-
-  const backToChoice = () => setWay('choose')
+  const backToChoice = () => onWay(null)
 
   if (way === 'photo') {
     return (
@@ -115,15 +148,20 @@ export function AddSheet({
       }
     >
       <div className="flex flex-col gap-3">
-        <Button variant="secondary" data-testid="add-photo" onClick={() => setWay('photo')}>
-          Photograph something
-        </Button>
-        <Button variant="secondary" data-testid="add-type" onClick={() => setWay('type')}>
-          Type it out
-        </Button>
-        <Button variant="secondary" data-testid="add-request" onClick={() => setWay('request')}>
-          Someone asked me for something
-        </Button>
+        {WAYS_IN.map(({ way, testid, label, help }) => (
+          <Button
+            key={way}
+            variant="secondary"
+            data-testid={testid}
+            onClick={() => onWay(way)}
+            className="w-full justify-start text-left"
+          >
+            <span className="flex flex-col gap-0.5">
+              <span className="font-medium">{label}</span>
+              <span className="text-xs font-normal text-ink-soft">{help}</span>
+            </span>
+          </Button>
+        ))}
       </div>
     </Sheet>
   )

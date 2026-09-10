@@ -252,7 +252,10 @@ test('carries the words, the accuracy line and the live cards in the band, and s
   await expect(band.getByTestId('accuracy-note')).toBeVisible()
 
   // And the band is a place a student can act from, not just read: the week opens from it.
+  // Since Ruling 59 the week is a sheet OVER the room rather than a page replacing it, so
+  // what proves the click landed is the dialog, and the room stays where it was -- inert
+  // behind the panel until the sheet closes.
   await page.getByTestId('open-week').click()
-  await expect(page.getByTestId('week-back')).toBeVisible()
-  await expect(page.getByTestId('room-band')).toHaveCount(0)
+  await expect(page.getByRole('dialog', { name: /the week/i })).toBeVisible()
+  await expect(page.getByTestId('room-stage')).toHaveAttribute('inert', '')
 })

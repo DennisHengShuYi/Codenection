@@ -33,15 +33,20 @@ describe('RoomShell', () => {
   })
 
   describe('routing', () => {
-    it('opens the week and comes back to the room', async () => {
+    /**
+     * Ruling 59: the week is a sheet like every other destination, so it closes the way
+     * they all do -- its own close control -- rather than through a "Back to the room" link
+     * it had to carry because it was a page.
+     */
+    it('opens the week as a sheet over the room and closes back to it', async () => {
       renderHome()
       await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
 
       await userEvent.click(screen.getByTestId('open-week'))
-      expect(screen.getByTestId('week-back')).toBeVisible()
+      expect(await screen.findByRole('dialog', { name: /the week/i })).toBeVisible()
 
-      await userEvent.click(screen.getByTestId('week-back'))
-      await waitFor(() => expect(screen.queryByTestId('week-back')).toBeNull())
+      await userEvent.click(screen.getByRole('button', { name: /close/i }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
       expect(screen.getByTestId('room-scene')).toBeVisible()
     })
 
@@ -107,10 +112,13 @@ describe('RoomShell', () => {
 
       await userEvent.click(screen.getByRole('button', { name: /close/i }))
 
-      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-      // Back in the week, not the room -- the day grid and Rebalance are still on screen.
-      expect(screen.getByTestId('week-back')).toBeVisible()
-      expect(screen.queryByTestId('room-scene')).toBeNull()
+      // Back in the week, not the room. Since Ruling 59 the week is itself a sheet, so what
+      // closing a block leaves you looking at is the week's dialog rather than a page --
+      // and only ever one dialog at a time, which is what keeps Escape unambiguous.
+      const week = await screen.findByRole('dialog', { name: /the week/i })
+      expect(week).toBeVisible()
+      expect(screen.queryByRole('dialog', { name: /essay draft/i })).toBeNull()
+      expect(screen.getAllByRole('dialog')).toHaveLength(1)
     })
   })
 

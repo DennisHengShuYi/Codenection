@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ROOM, back, toAdd, toBlock, toSettings, toWeek, type View } from './view'
+import { ROOM, back, toAdd, toBlock, toReserves, toSettings, toWeek, type View } from './view'
 
 describe('the view', () => {
   it('starts in the room', () => {
@@ -14,8 +14,16 @@ describe('the view', () => {
     expect(toBlock('essay')).toEqual({ kind: 'block', itemId: 'essay' })
   })
 
-  it('opens add', () => {
-    expect(toAdd()).toEqual({ kind: 'add' })
+  it('opens add at the chooser', () => {
+    expect(toAdd()).toEqual({ kind: 'add', way: null })
+  })
+
+  /**
+   * The sub-flow is part of where the student IS, not private state inside the sheet.
+   * That is what lets `/add/photo` be an address at all -- see `viewPath.test.ts`.
+   */
+  it('opens add on one of its three ways', () => {
+    expect(toAdd('photo')).toEqual({ kind: 'add', way: 'photo' })
   })
 
   it('opens settings', () => {
@@ -47,7 +55,7 @@ describe('the view', () => {
   })
 
   it('is only ever in one place at a time', () => {
-    const views: View[] = [ROOM, toWeek(), toBlock('essay'), toAdd(), toSettings()]
+    const views: View[] = [ROOM, toWeek(), toBlock('essay'), toAdd(), toAdd('type'), toSettings()]
 
     for (const view of views) {
       expect(Object.keys(view).filter((key) => key === 'kind')).toHaveLength(1)
@@ -61,5 +69,16 @@ describe('the view', () => {
     expect('itemId' in toAdd()).toBe(false)
     expect('itemId' in toSettings()).toBe(false)
     expect('itemId' in toBlock('essay')).toBe(true)
+  })
+  /**
+   * Ruling 59: the five-bar breakdown moved off the week screen and behind the room's own
+   * corner gauge, which is now the door to it rather than only a readout.
+   */
+  it('opens the reserves', () => {
+    expect(toReserves()).toEqual({ kind: 'reserves' })
+  })
+
+  it('comes back to the room from the reserves', () => {
+    expect(back(toReserves())).toEqual(ROOM)
   })
 })

@@ -98,12 +98,17 @@ describe('RoomShell with the room', () => {
    * walking there the way a student does -- one tap on `The week` -- rather than by
    * rendering `CapacityDial` in isolation and assuming somebody links to it.
    */
-  it('reaches the five domain bars and the spoken summary through the week screen', async () => {
+  /**
+   * Ruling 59 moved the breakdown from the foot of the week screen to behind the room's
+   * corner gauge. The room still reads capacity exactly once -- that gauge -- and the five
+   * bars are one press behind it rather than under a calendar.
+   */
+  it('reaches the five domain bars and the spoken summary through the gauge', async () => {
     await renderWithErrand()
 
     expect(screen.queryAllByRole('meter')).toHaveLength(0)
 
-    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(screen.getByTestId('room-gauge'))
 
     expect(await screen.findAllByRole('meter')).toHaveLength(5)
     expect(screen.getByTestId('reserve-text-equivalent')).toBeVisible()
@@ -115,7 +120,7 @@ describe('RoomShell with the room', () => {
    * been lost once (Ruling 28), so the move gets its own test rather than riding on the
    * meters above.
    */
-  it('still flags a low social reserve as a warning, one tap into the week', async () => {
+  it('still flags a low social reserve as a warning, one tap behind the gauge', async () => {
     counter += 1
     const repository = createLocalRepository(`room-dial-${counter}`)
     await repository.clear()
@@ -129,7 +134,7 @@ describe('RoomShell with the room', () => {
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
 
-    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(screen.getByTestId('room-gauge'))
 
     expect(await screen.findByTestId('warning-social')).toHaveTextContent(
       /spending a lot of time alone/i,

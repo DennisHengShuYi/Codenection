@@ -55,4 +55,24 @@ describe('LowEnergyControl', () => {
 
     expect(screen.getByRole('group', { name: /how much to show/i })).toBeVisible()
   })
+  /**
+   * Ruling 58. These were three bare browser radios with the explanation beside them as
+   * loose text, so the only thing you could press was the 8px dot. Each option is now a
+   * row: the whole thing, its explanation included, selects that option.
+   */
+  it('selects the option when its explanation is pressed, not only the dot', async () => {
+    const onChange = vi.fn()
+    render(<LowEnergyControl value="auto" onChange={onChange} />)
+
+    await userEvent.click(screen.getByText(/one number and one action/i))
+
+    expect(onChange).toHaveBeenCalledWith('on')
+  })
+
+  it('marks the chosen row as chosen, so the selection reads without hunting for the dot', () => {
+    render(<LowEnergyControl value="on" onChange={vi.fn()} />)
+
+    expect(screen.getByTestId('low-energy-option-on')).toHaveAttribute('data-selected', 'true')
+    expect(screen.getByTestId('low-energy-option-off')).toHaveAttribute('data-selected', 'false')
+  })
 })

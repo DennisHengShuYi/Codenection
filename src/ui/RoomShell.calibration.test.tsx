@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
@@ -162,7 +162,12 @@ describe('RoomShell with a block to confirm', () => {
     await userEvent.click(screen.getByTestId('open-week'))
     await userEvent.click(await screen.findByTestId('day-0'))
     await userEvent.click(await screen.findByTestId('block-past-essay'))
-    await userEvent.click(await screen.findByTestId('answer-right'))
+
+    // Scoped to the sheet since Ruling 59: the block opens OVER the room now rather than
+    // over a week page that had replaced it, so the room's own check-in card is still in
+    // the document behind it and offers the same three answers.
+    const sheet = await screen.findByRole('dialog')
+    await userEvent.click(within(sheet).getByTestId('answer-right'))
 
     expect(onAnswerBlock).toHaveBeenCalledWith(
       expect.objectContaining({ blockId: 'past-essay', answer: 'right' }),

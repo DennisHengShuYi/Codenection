@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { ParsedItem } from '../../ai'
+import { ACTIVITY_KINDS } from '../../engine'
 import { ItemChip } from './ItemChip'
 
 const item = (over: Partial<ParsedItem> = {}): ParsedItem => ({
@@ -62,6 +63,24 @@ describe('ItemChip', () => {
     await userEvent.selectOptions(screen.getByLabelText(/detail/i), 'hardExercise')
 
     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ kind: 'hardExercise' }))
+  })
+
+  /**
+   * `sleep` is an `ActivityKind` the engine understands but that no scheduled item may
+   * carry: `engine/reachable.test.ts` records it as intentionally absent from every
+   * producer -- "Enters through Schedule.sleepByDay, never as a scheduled activity."
+   * Offering it in this select was the one place a student could put it on a block anyway,
+   * and `drain.ts` then treats that block as costing nothing, while `sleepByDay` counts the
+   * same hours a second time.
+   */
+  it('does not offer sleep as something a block can be', async () => {
+    setup()
+
+    const detail = screen.getByLabelText(/detail/i)
+
+    expect(within(detail).queryByRole('option', { name: /sleep/i })).toBeNull()
+    // The rest of the list is untouched -- this is one option removed, not a shorter menu.
+    expect(within(detail).getAllByRole('option')).toHaveLength(ACTIVITY_KINDS.length - 1)
   })
 
   it('lets the effort be corrected', async () => {

@@ -96,8 +96,9 @@ describe('TodayCard', () => {
     expect(variants.size).toBe(1)
   })
 
-  // Ruling 23: `blockToAsk` can select a block scheduled for later today, so the copy must
-  // not assert the block already happened.
+  // Ruling 23/36: `blockToAsk` no longer selects an unfinished block on today, so this is
+  // no longer guarding against ITS output. It guards this component's own contract instead
+  // -- `block` is whatever the caller hands over, and nothing here can verify it ended.
   it('does not assert the block has finished', () => {
     setup()
 

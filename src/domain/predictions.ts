@@ -26,7 +26,9 @@ export interface EnergyPrediction {
  * intervenes** — which is exactly what the 21-day projection cannot do, and why that one is a
  * decision aid rather than a validated claim (§8.2).
  */
-export const PREDICTION_HORIZON_DAYS = 2
+// Not exported: nothing outside this module has ever read it, and `predictionsAfter` is
+// where the horizon is applied.
+const PREDICTION_HORIZON_DAYS = 2
 
 /**
  * Reads the prediction off the same projection the rest of the app runs on.

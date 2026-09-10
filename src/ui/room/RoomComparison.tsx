@@ -7,9 +7,9 @@ import type { RoomModel } from './roomModel'
  * §1.3 wants "now" beside "if you accept" in the decision flow, and §10 is firm that two
  * rooms never sit side by side on a phone — so they stack below 768px and pair above it.
  *
- * Nothing drives the two-room case yet: the request box that would is §2.3, in the next
- * plan. The layout is built now so the room does not need reshaping when that arrives,
- * rather than building a fake trigger for a feature with no real caller.
+ * `RequestBoxScreen` drives the two-room case: §2.3's price for saying yes is shown as the
+ * room now beside the room you would be living in. This said "nothing drives it yet" until
+ * batch D; it was written before that screen existed.
  *
  * §3 made `Room` a picture rather than a control surface, so there is nothing left for a
  * tap on either room to report -- `onSelect` went with it.

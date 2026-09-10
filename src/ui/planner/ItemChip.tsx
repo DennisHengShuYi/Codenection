@@ -27,6 +27,19 @@ const KIND_LABELS: Record<ActivityKind, string> = {
   sleep: 'Sleep',
 }
 
+/**
+ * Every kind a *block* may carry -- which is every `ActivityKind` except `sleep`.
+ *
+ * `engine/reachable.test.ts` records sleep as intentionally absent from every producer:
+ * "Enters through `Schedule.sleepByDay`, never as a scheduled activity." This select was
+ * the one place in the app that contradicted that, and a student who used it got a block
+ * `drain.ts` charges nothing for while `sleepByDay` counts the same hours again.
+ *
+ * Filtered from `ACTIVITY_KINDS` rather than listed out, so a kind added to the engine
+ * appears here without anybody remembering to add it.
+ */
+const SELECTABLE_KINDS = ACTIVITY_KINDS.filter((kind) => kind !== 'sleep')
+
 export function ItemChip({
   item,
   onChange,
@@ -76,7 +89,7 @@ export function ItemChip({
             onChange={(event) => onChange({ ...item, kind: event.target.value as ActivityKind })}
             className="min-h-11 rounded border border-line bg-surface px-2 py-1 text-sm text-ink"
           >
-            {ACTIVITY_KINDS.map((kind) => (
+            {SELECTABLE_KINDS.map((kind) => (
               <option key={kind} value={kind}>
                 {KIND_LABELS[kind]}
               </option>

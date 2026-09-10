@@ -16,7 +16,8 @@ export type View =
   | { readonly kind: 'settings' }
 
 export const ROOM: View = { kind: 'room' }
-export const WEEK: View = { kind: 'week' }
+// Not exported: `toWeek()` and `back()` are the module's whole surface for it.
+const WEEK: View = { kind: 'week' }
 
 export const toWeek = (): View => WEEK
 

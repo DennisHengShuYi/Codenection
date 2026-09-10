@@ -70,10 +70,15 @@ export interface EngineParams {
   /**
    * Hours of sleep that count as breaking even for this student.
    *
-   * A parameter rather than a constant because §7.3 says the painter's measured baseline
-   * sets it: seven hours is a gain for somebody who normally gets six and a deficit for
-   * somebody who normally gets nine, and scoring both against one number would tell one of
-   * them something false about their own week.
+   * A parameter rather than a constant because seven hours is a gain for somebody who
+   * normally gets six and a deficit for somebody who normally gets nine, and scoring both
+   * against one number would tell one of them something false about their own week.
+   *
+   * §7.3 had the sleep painter measure it. The painter was deleted in Task 17 and §11
+   * records the consequence in terms: nothing measures a personal baseline any more, so
+   * this falls back to the population figure in `DEFAULT_PARAMS`, and §8's sleep row is what
+   * makes that defensible. Stated here because the parameter still reads as though something
+   * fills it in.
    */
   readonly sleepBaselineHours: number
   /** Reserve points returned per hour of scheduled rest. */

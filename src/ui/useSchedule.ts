@@ -7,8 +7,10 @@ import type { Schedule } from '../optimizer'
  * Loads the week once, falling back to the seeded fortnight on first run.
  *
  * §0's no-cold-start rule: a student opening the app for the first time sees a real week
- * rather than a blank state. The seed stands in until §1.4's import paths and §3's
- * planner exist to replace it.
+ * rather than a blank state. This said the seed "stands in until §1.4's import paths and
+ * §3's planner exist to replace it" -- they exist now (`AddSheet`'s three ways in), and the
+ * seed stayed anyway, deliberately: §14 keeps it for the demo, and it is what a visitor
+ * looking around with no account is shown before they have typed anything.
  */
 export function useSchedule(repo: Repository): {
   schedule: Schedule | null

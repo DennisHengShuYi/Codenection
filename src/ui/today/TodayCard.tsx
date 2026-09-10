@@ -43,10 +43,14 @@ const BLOCK_ANSWERS: readonly { answer: BlockAnswer; label: string }[] = [
  * app's published accuracy figure is measured against, so making one primary would nudge
  * reporting toward it and skew the measurement.
  *
- * Ruling 23: `blockToAsk` can select a block scheduled for later today (it filters
- * `dayIndex <= today`, not `< today`), so the copy here never asserts the block has
- * finished. "How much of it happened" reads honestly whether or not the block has started
- * yet, and "Didn't happen" already covers the not-yet case tolerably.
+ * Ruling 23, as it now stands: the constraint that chose this copy is GONE. `blockToAsk`
+ * took a `nowHour` in 37eaf52 (Ruling 36) and will no longer select a block on today that
+ * has not finished, so its output can no longer be something that has not happened.
+ *
+ * The copy stays neutral anyway, for a reason that survives the fix: this component takes
+ * whatever `block` it is handed and has no way to know it came from `blockToAsk`. "How much
+ * of it happened" is true of a finished block and of one that is not, and nothing is gained
+ * by making it presuppose an ending it cannot verify.
  */
 export function TodayCard(props: {
   readonly block: ScheduledItem | null

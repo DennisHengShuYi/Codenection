@@ -103,10 +103,17 @@ export function RoomShell({
   const floor = schedule
     ? Math.min(schedule.start.mental, schedule.start.physical, schedule.start.social, schedule.start.errands)
     : 100
-  // `setOverride` is not wired to any control on this screen: §3's low-energy behaviour is
-  // now the room screen trimming itself rather than a separate view to exit from, so there
-  // is nothing left for a manual override to toggle out of. `useLowEnergy` keeps the
-  // capability (and its own tests) for whenever a future settings control wants it.
+  // KNOWN GAP, deliberately left rather than tidied away (batch D). `setOverride` is wired
+  // to no control anywhere in the app -- the toggle it was built for lived on
+  // `LowEnergyView`, which Task 17 deleted -- and `useLowEnergy` has no test file either,
+  // despite an earlier comment here claiming it "keeps the capability (and its own tests)".
+  //
+  // It was NOT swept as dead code, because `lowEnergy.ts`'s own docstring records the
+  // product rule it serves: "An interface a struggling student cannot dismiss is one more
+  // thing being done to them." A student below 20% reserve currently cannot dismiss it. The
+  // stored preference is still honoured, so the capability is one control away; deleting the
+  // setter would make it a rewrite instead. Same shape as Ruling 28's `CapacityDial`, and it
+  // wants the same judgement rather than an implementer's guess.
   const { active: lowEnergy } = useLowEnergy(repository, floor)
 
   /**

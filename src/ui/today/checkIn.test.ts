@@ -39,14 +39,34 @@ describe('blockToAsk', () => {
     const blockLog = [record('a', 'mental')]
 
     expect(
-      blockToAsk({ schedule: week([item('a', 'mental')]), today: 0, blockLog }),
+      blockToAsk({ schedule: week([item('a', 'mental')]), today: 0, nowHour: 23, blockLog }),
     ).toBeNull()
   })
 
   it('never asks about a day that has not happened', () => {
     const schedule = week([item('future', 'mental', 6)])
 
-    expect(blockToAsk({ schedule, today: 0 })).toBeNull()
+    expect(blockToAsk({ schedule, today: 0, nowHour: 12 })).toBeNull()
+  })
+
+  /**
+   * Ruling 23 is retired: a block later today used to be askable as soon as the day
+   * started, so the card could ask "how did it go?" about an 8pm block at 2pm -- and that
+   * answer fed the estimate bias behind the app's published accuracy figure. A block on
+   * today is now askable only once it has actually finished.
+   */
+  it('does not ask about a block scheduled for later today', () => {
+    const notYetStarted = { ...item('evening', 'mental', 0), startHour: 20, hours: 2 }
+    const schedule = week([notYetStarted])
+
+    expect(blockToAsk({ schedule, today: 0, nowHour: 14 })).toBeNull()
+  })
+
+  it('asks about a same-day block once it has finished', () => {
+    const finished = { ...item('evening', 'mental', 0), startHour: 20, hours: 2 }
+    const schedule = week([finished])
+
+    expect(blockToAsk({ schedule, today: 0, nowHour: 23 })?.id).toBe('evening')
   })
 
   it('asks about the load type it knows least about, so the threshold is reached fastest', () => {
@@ -55,28 +75,28 @@ describe('blockToAsk', () => {
     const blockLog = [record('past-1', 'mental', 1), record('past-2', 'mental', 1)]
     const schedule = week([item('study', 'mental', 2), item('gym', 'physical', 2)])
 
-    expect(blockToAsk({ schedule, today: 2, blockLog })?.id).toBe('gym')
+    expect(blockToAsk({ schedule, today: 2, nowHour: 23, blockLog })?.id).toBe('gym')
   })
 
   it('breaks ties by the earlier block, so the day is walked as it was lived', () => {
     const early = { ...item('early', 'mental'), startHour: 8 }
     const late = { ...item('late', 'mental'), startHour: 20 }
 
-    expect(blockToAsk({ schedule: week([late, early]), today: 0 })?.id).toBe('early')
+    expect(blockToAsk({ schedule: week([late, early]), today: 0, nowHour: 23 })?.id).toBe('early')
   })
 
   it('does not ask again about a block already answered via the log', () => {
     const schedule = week([item('a', 'mental')])
     const blockLog = [record('a', 'mental')]
 
-    expect(blockToAsk({ schedule, today: 0, blockLog })).toBeNull()
+    expect(blockToAsk({ schedule, today: 0, nowHour: 23, blockLog })).toBeNull()
   })
 
   it('defaults to an empty block log when none is given, so every existing caller keeps working', () => {
     const schedule = week([item('a', 'mental')])
 
-    expect(blockToAsk({ schedule, today: 0 })).toEqual(
-      blockToAsk({ schedule, today: 0, blockLog: [] }),
+    expect(blockToAsk({ schedule, today: 0, nowHour: 23 })).toEqual(
+      blockToAsk({ schedule, today: 0, nowHour: 23, blockLog: [] }),
     )
   })
 })

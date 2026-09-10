@@ -36,24 +36,42 @@ export const SLEEP_HOURS: Record<SleepBucket, number> = {
  * `confirmedItemIds`/`confirmations`: they were unioned with the log only until something
  * wrote a `BlockRecord` in the running app, which `TodayCard` and the Telegram bot now do,
  * so the log is the only source left.
+ *
+ * `nowHour` is required, not optional: a block on today is askable only once it has
+ * finished, and an optional clock is one a caller forgets to pass -- which silently let a
+ * block scheduled for later today be asked about ("how did it go?" about an 8pm block at
+ * 2pm), feeding a wrong answer into the estimate bias behind the app's published accuracy
+ * figure. It is threaded in from the same site as `today`, mirroring the rule in
+ * `RoomShell.tsx` that the clock enters at the UI edge and nowhere deeper.
  */
 export function blockToAsk({
   schedule,
   today,
+  nowHour,
   blockLog = [],
 }: {
   readonly schedule: Schedule
   readonly today: number
+  readonly nowHour: number
   readonly blockLog?: readonly BlockRecord[]
 }): ScheduledItem | null {
   const alreadyAsked = (id: string) => answeredIds(blockLog).includes(id)
+
+  // A past day is askable as it always was. A future day never is. Today is askable only
+  // once the block has actually finished -- otherwise the card can ask about something
+  // that has not happened yet.
+  const hasHappened = (item: ScheduledItem): boolean => {
+    if (item.dayIndex < today) return true
+    if (item.dayIndex > today) return false
+    return item.startHour + item.hours <= nowHour
+  }
 
   const outcomes = outcomesFrom(blockLog)
   const samples = (item: ScheduledItem): number =>
     outcomes.filter((outcome) => outcome.type === item.type).length
 
   const candidates = schedule.items
-    .filter((item) => item.dayIndex <= today && !alreadyAsked(item.id))
+    .filter((item) => hasHappened(item) && !alreadyAsked(item.id))
     .slice()
     .sort(
       (left, right) =>

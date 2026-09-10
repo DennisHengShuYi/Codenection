@@ -142,7 +142,12 @@ export function RoomShell({
   }
 
   const week = schedule
-  const today = todayIndex(week, new Date()) ?? 0
+  const now = new Date()
+  const today = todayIndex(week, now) ?? 0
+  // Threaded alongside `today` from the same clock read -- see the comment above this
+  // effect block: the clock enters here and nowhere deeper, so `checkIn.ts` takes it as a
+  // parameter rather than reading one itself.
+  const nowHour = now.getHours()
   const todayDate = dateFor(week, today)
   const model = roomModel({ schedule: week, profile, today, blockLog })
 
@@ -196,7 +201,7 @@ export function RoomShell({
   const stuckItem = week.items.find(
     (item) => item.id !== stuckDismissedId && isStuck(item, Math.max(0, today - item.dayIndex)),
   )
-  const blockForToday = blockToAsk({ schedule: week, today, blockLog })
+  const blockForToday = blockToAsk({ schedule: week, today, nowHour, blockLog })
   const askEnergy = profile.predictions.some(
     (prediction) => prediction.forDate === todayDate && prediction.reported === null,
   )

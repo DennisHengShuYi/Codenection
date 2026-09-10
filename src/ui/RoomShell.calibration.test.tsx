@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
@@ -53,6 +53,20 @@ const renderHome = async (schedule = week()) => {
 }
 
 describe('RoomShell with a block to confirm', () => {
+  // Fixed late in the day: `item()`'s default `startHour: 10, hours: 2` block is anchored
+  // to "today" in these tests, and RoomShell now only asks about a same-day block once it
+  // has finished (nowHour >= startHour + hours). Pinning the clock keeps these tests
+  // deterministic instead of depending on the wall-clock hour the suite happens to run at.
+  // `shouldAdvanceTime` keeps `waitFor` and `userEvent`'s own timers moving in real time.
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2024, 5, 10, 23, 0, 0))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   // §7.7: no cold start. The room works before anybody has answered anything.
   it('shows the room without anything to confirm', async () => {
     await renderHome()

@@ -1,3 +1,4 @@
+import type { Repeat } from '../domain/recurrence'
 import type { ActivityKind, LoadType } from '../engine'
 
 export interface ParsedItem {
@@ -29,6 +30,25 @@ export interface ParsedItem {
    * whatever this says.
    */
   readonly fixed: boolean
+  /**
+   * How often this comes round, or null for a one-off.
+   *
+   * §36: the schema returned one `deadlineDay`, so "WIA3001 lecture every Tuesday 9am"
+   * produced a single item on a single day -- and recurring items are almost entirely the
+   * fixed set that everything else is measured against. If the timetable is wrong, every
+   * projection is wrong, and nothing in the app revealed it.
+   *
+   * Expanded at entry by `domain/recurrence`, never carried further: nothing downstream of
+   * the add flow knows recurrence exists.
+   */
+  readonly repeat: Repeat | null
+  /**
+   * §39: which series this instance came from, when it came from one.
+   *
+   * Optional because a one-off has none. One field, and it is what makes "this class has
+   * ended" a single operation rather than deleting three items by hand.
+   */
+  readonly seriesId?: string
   /**
    * Whether this was read with confidence.
    *

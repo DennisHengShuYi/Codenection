@@ -24,6 +24,7 @@ const parsed = (title: string): ParsedItem => ({
   deadlineDay: null,
   fixed: false,
   confident: true,
+  repeat: null,
 })
 
 interface Harness {

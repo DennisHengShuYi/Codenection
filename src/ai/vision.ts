@@ -33,6 +33,9 @@ const SYSTEM_PROMPT = [
   'where the page gives them.',
   `deadlineDay is a day index from 0 (today) to ${HORIZON_DAYS - 1}, or null if the page`,
   'does not state one. hard is true only where a fixed date is actually printed.',
+  'repeat is {"weekdays":[1,3],"untilDay":null} for a row that recurs weekly on those days',
+  '(0 is Sunday), and null otherwise. A timetable grid is the usual case: read the column',
+  'the row sits under. untilDay is a day index the series stops on, or null.',
   `Return at most ${MAX_ITEMS} items.`,
   // Per row, so the confirm screen can point at the two it should not trust rather than
   // flagging all twenty. A timetable photo is mostly legible with a few cells that are

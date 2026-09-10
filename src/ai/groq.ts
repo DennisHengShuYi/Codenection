@@ -25,6 +25,8 @@ const SYSTEM_PROMPT = [
   'hard is true only when the student stated a fixed date or deadline.',
   'confident is false when you had to guess at what an item is or how long it takes, and',
   'true when the notes say it plainly.',
+  'repeat is {"weekdays":[1,3],"untilDay":null} for something that happens every week on',
+  'those days (0 is Sunday), and null for a one-off. Use it for classes, labs and shifts.',
   `Return at most ${MAX_ITEMS} items. Do not invent tasks the notes do not mention.`,
 ].join(' ')
 

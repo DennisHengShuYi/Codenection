@@ -2,6 +2,7 @@ import type { ParsedItem } from '../ai'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
 import { dateFor } from './calendar'
+import { expandRecurring } from './recurrence'
 import { slotOn } from './slotFinder'
 
 /**
@@ -53,10 +54,15 @@ export function placeItems(
   const stamp = Date.now()
   const notes: PlacementNote[] = []
 
+  // §38: recurrence is expanded here and nowhere later, so a weekly class becomes the three
+  // real blocks it actually is before anything downstream sees it. Nothing past this point
+  // knows recurrence exists -- the engine takes a flat list by design.
+  const expanded = items.flatMap((item) => expandRecurring(item, schedule, today))
+
   // Folded rather than mapped, so each item sees the ones placed before it. Computing every
   // placement against the original week would send them all to the same first opening,
   // which is the pile-up this exists to end.
-  const placed = items.reduce((current, item, index) => {
+  const placed = expanded.reduce((current, item, index) => {
     const floor = clampDay(today)
     const need = { hours: item.hours, type: item.type, kind: item.kind }
 
@@ -104,6 +110,8 @@ export function placeItems(
       fixed: item.fixed,
       deadlineDay: item.deadlineDay,
       protectedRest: false,
+      // §39: carried through when the item came from a series, absent when it did not.
+      ...(item.seriesId === undefined ? {} : { seriesId: item.seriesId }),
     }
 
     notes.push({

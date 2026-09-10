@@ -46,6 +46,7 @@ const request = (): ParsedItem => ({
   deadlineDay: 4,
   fixed: false,
   confident: true,
+  repeat: null,
 })
 
 /** Every block answered "took longer", which is what moves `paramsFor` off the population

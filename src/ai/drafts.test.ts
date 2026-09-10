@@ -12,6 +12,7 @@ const item: ParsedItem = {
   deadlineDay: 4,
   fixed: false,
   confident: true,
+  repeat: null,
 }
 
 const cost: RequestCost = {

@@ -33,6 +33,7 @@ const item = (title: string): ParsedItem => ({
   deadlineDay: null,
   fixed: false,
   confident: true,
+  repeat: null,
 })
 
 describe('linkedReply', () => {

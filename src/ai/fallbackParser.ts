@@ -175,6 +175,7 @@ export function parseWithRules(text: string, today = 0): ParsedItem[] {
         // checkbox is where a class becomes fixed.
         fixed: false,
         confident,
+        repeat: null,
       }
     })
 }

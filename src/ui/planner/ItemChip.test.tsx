@@ -14,6 +14,7 @@ const item = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   deadlineDay: 5,
   fixed: true,
   confident: true,
+  repeat: null,
   ...over,
 })
 
@@ -151,5 +152,42 @@ describe('ItemChip', () => {
     await userEvent.click(screen.getByTestId('fixed-a'))
 
     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ fixed: false }))
+  })
+
+  /**
+   * §41: recurrence is a property confirmed on something the student was already adding,
+   * not a screen of its own.
+   *
+   * A form with weekday checkboxes and an until-date picker is exactly the setup burden this
+   * design has cut everywhere else -- so it surfaces here, as one line on the chip that is
+   * already in front of them, and only when the parse actually read a repeat.
+   */
+  it('says so when what was read repeats', () => {
+    setup({ repeat: { weekdays: [2], untilDay: null } })
+
+    expect(screen.getByTestId('repeat-a')).toHaveTextContent(/every week|weekly|repeats/i)
+  })
+
+  it('names the days it repeats on', () => {
+    setup({ repeat: { weekdays: [1, 3], untilDay: null } })
+
+    expect(screen.getByTestId('repeat-a')).toHaveTextContent(/Monday/)
+    expect(screen.getByTestId('repeat-a')).toHaveTextContent(/Wednesday/)
+  })
+
+  it('says nothing about repeating for a one-off', () => {
+    setup({ repeat: null })
+
+    expect(screen.queryByTestId('repeat-a')).toBeNull()
+  })
+
+  /** The correction that matters most: a parse reading a repeat into a one-off would fill
+   *  three weeks with a class that meets once. One tap has to undo it. */
+  it('lets the student say it does not actually repeat', async () => {
+    const props = setup({ repeat: { weekdays: [2], untilDay: null } })
+
+    await userEvent.click(screen.getByRole('button', { name: /just once/i }))
+
+    expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ repeat: null }))
   })
 })

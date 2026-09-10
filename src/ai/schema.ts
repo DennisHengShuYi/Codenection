@@ -37,6 +37,25 @@ const replySchema = z.object({
          * requiring it would let one missing field discard every other item in the reply.
          */
         confident: z.boolean().default(false),
+        /**
+         * §40's whole recurrence vocabulary: which weekdays, and when it stops.
+         *
+         * Bounded at the boundary like everything else here. A weekday outside 0-6 or an
+         * end day outside the horizon is a model inventing structure, and `expandRecurring`
+         * would turn one such value into a whole semester of wrong classes.
+         */
+        repeat: z
+          .object({
+            weekdays: z.array(z.number().int().min(0).max(6)).max(7),
+            untilDay: z
+              .number()
+              .int()
+              .min(0)
+              .max(HORIZON_DAYS - 1)
+              .nullable(),
+          })
+          .nullable()
+          .default(null),
       }),
     )
     .max(MAX_ITEMS),

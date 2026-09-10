@@ -12,6 +12,7 @@ const item = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   deadlineDay: 4,
   fixed: false,
   confident: true,
+  repeat: null,
   ...over,
 })
 

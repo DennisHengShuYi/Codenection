@@ -22,6 +22,7 @@ const parsed = (title: string): ParsedItem => ({
   deadlineDay: null,
   fixed: false,
   confident: true,
+  repeat: null,
 })
 
 const outcome = (items: readonly ParsedItem[], source: 'model' | 'fallback' = 'model'): ParseOutcome => ({

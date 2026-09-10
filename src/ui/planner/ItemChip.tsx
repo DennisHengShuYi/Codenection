@@ -38,6 +38,18 @@ const KIND_LABELS: Record<ActivityKind, string> = {
  */
 const SELECTABLE_KINDS = BLOCK_KINDS
 
+/** §40's whole vocabulary needs names a student reads, and `Date.getUTCDay`'s ordering is
+ *  what `expandRecurring` matches against -- so this is that order, not a prettier one. */
+const WEEKDAY_NAMES = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+]
+
 export function ItemChip({
   item,
   onChange,
@@ -126,6 +138,25 @@ export function ItemChip({
         />
         Fixed time — a class, lab or shift the week has to work around
       </label>
+
+      {/* §41: recurrence is a property confirmed on the thing they were already adding, not
+          a screen of its own -- a form with weekday checkboxes and an until-date picker is
+          the setup burden this design cuts everywhere else. Shown only when the parse
+          actually read a repeat, and undoable in one tap, because a repeat invented from a
+          one-off fills three weeks with a class that meets once. */}
+      {item.repeat !== null && (
+        <div
+          data-testid={`repeat-${item.id}`}
+          className="flex flex-wrap items-center gap-2 text-xs text-ink-soft"
+        >
+          <span>
+            Repeats every week on {item.repeat.weekdays.map((day) => WEEKDAY_NAMES[day]).join(' and ')}
+          </span>
+          <Button variant="quiet" size="sm" onClick={() => onChange({ ...item, repeat: null })}>
+            Just once
+          </Button>
+        </div>
+      )}
 
       {/* §1.4: flagged rather than silently guessed. A student cannot correct what they
           were never shown. */}

@@ -29,6 +29,17 @@ export interface Ladder {
   readonly blockId: string
   readonly rungs: readonly Rung[]
   readonly done: number
+  /**
+   * Whether a model wrote this chain, rather than the rules.
+   *
+   * Stored with the chain because it decides whether "that one doesn't fit" is offered, and
+   * that offer has to survive a reload. Without it the button was there on the visit that
+   * generated the chain and gone on the next one, for no reason the student could see.
+   *
+   * Optional: a ladder saved before this field existed keeps loading, and reads as the
+   * rules -- the safe answer, since the re-roll it gates does nothing without a model.
+   */
+  readonly fromModel?: boolean
 }
 
 export const currentRung = (ladder: Ladder): Rung | null => ladder.rungs[ladder.done] ?? null

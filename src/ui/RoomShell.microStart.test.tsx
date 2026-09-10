@@ -70,6 +70,21 @@ describe('RoomShell with a stuck task', () => {
     expect(screen.queryByTestId('micro-start')).toBeNull()
   })
 
+  /**
+   * The direction guard, which used to live in `blockActions.test.ts` and moved here with
+   * the caller that computes the age.
+   *
+   * §4.1's trigger is "three days past first appearance", and a task a fortnight in the
+   * *future* has not appeared yet. The age was once computed as `dayIndex - today` -- the
+   * wait ahead of a task rather than the time behind it -- so every distant errand read as
+   * stuck and the room shouted. Nothing else in the suite catches a flipped sign head-on.
+   */
+  it('does not call a task scheduled a fortnight ahead stuck', async () => {
+    await renderHome(week({ items: [item({ dayIndex: 13 })] }))
+
+    expect(screen.queryByTestId('micro-start')).toBeNull()
+  })
+
   // §4.1's other half: three days past first appearance, with no clock in the domain
   // layer, so `today` has to be pushed forward via anchoring rather than misses.
   it('raises the card unprompted once a task has sat three days', async () => {

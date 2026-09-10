@@ -53,14 +53,6 @@ export function MicroStartPage({
    * instead, so a late arrival shows up and a local advance still wins over it.
    */
   const [built, setBuilt] = useState<Ladder | null>(null)
-  /**
-   * Whether the chain on screen came from the model.
-   *
-   * Only used to decide whether the re-roll is offered. Without a model there is nothing new
-   * to say -- `replaceRung` hands back the same rung -- and a button that visibly does
-   * nothing is worse than one that is not there.
-   */
-  const [fromModel, setFromModel] = useState(false)
   const [rerolling, setRerolling] = useState(false)
 
   useEffect(() => {
@@ -83,7 +75,6 @@ export function MicroStartPage({
         if (cancelled) return
 
         setBuilt(outcome.ladder)
-        setFromModel(outcome.source === 'model')
         onLadder(outcome.ladder)
       })
 
@@ -101,6 +92,15 @@ export function MicroStartPage({
   }
 
   const open = built ?? ladder
+  /**
+   * Whether the re-roll is worth offering.
+   *
+   * Read off the chain rather than held in state, so it survives a reload: without a model
+   * `replaceRung` hands back the rung already on screen, and a button that visibly does
+   * nothing is worse than one that is not there -- but a button that vanishes on reload is
+   * worse still, because the student saw it work.
+   */
+  const fromModel = open?.fromModel === true
   const rung = open === null ? null : currentRung(open)
   const finished = open !== null && isComplete(open)
 

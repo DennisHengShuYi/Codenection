@@ -94,6 +94,23 @@ describe('useLadders', () => {
     expect(result.current.ladders[0]?.done).toBe(1)
   })
 
+  // Both changes start from the same render's closure. Computed against that snapshot rather
+  // than against the live state, the second would silently undo the first -- and the pair
+  // below is exactly what completing a block from the page does.
+  it('keeps both changes when two land in the same tick', async () => {
+    const { repo } = repoWith({ ...DEFAULT_SETTINGS, ladders: [ladder('b1'), ladder('b2')] })
+    const { result } = renderHook(() => useLadders(repo))
+
+    await waitFor(() => expect(result.current.ladders).toHaveLength(2))
+    act(() => {
+      result.current.saveLadder(ladder('b3'))
+      result.current.dropLadder('b1')
+    })
+
+    await waitFor(() => expect(result.current.ladders).toHaveLength(2))
+    expect(result.current.ladders.map((entry) => entry.blockId).sort()).toEqual(['b2', 'b3'])
+  })
+
   it('drops the ladder for a block that is gone', async () => {
     const { repo } = repoWith({ ...DEFAULT_SETTINGS, ladders: [ladder('b1'), ladder('b2')] })
     const { result } = renderHook(() => useLadders(repo))

@@ -159,6 +159,21 @@ describe('MicroStartPage', () => {
     expect(screen.queryByRole('button', { name: /doesn.t fit/i })).not.toBeInTheDocument()
   })
 
+  // The offer has to survive a reload. It was held in state, so it appeared on the visit
+  // that generated the chain and was gone on the next one, for no reason a student could see.
+  it('offers the re-roll on a stored chain a model wrote', async () => {
+    renderPage({ ladder: { ...ladder, fromModel: true } })
+
+    expect(await screen.findByRole('button', { name: /doesn.t fit/i })).toBeInTheDocument()
+  })
+
+  it('offers no re-roll on a stored chain the rules wrote', async () => {
+    renderPage({ ladder: { ...ladder, fromModel: false } })
+
+    await screen.findByTestId('rung-action')
+    expect(screen.queryByRole('button', { name: /doesn.t fit/i })).not.toBeInTheDocument()
+  })
+
   it('offers a re-roll when the chain came from the model', async () => {
     vi.mocked(fetch).mockResolvedValue(modelReply)
 

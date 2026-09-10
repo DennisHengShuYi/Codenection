@@ -55,7 +55,7 @@ export async function buildLadder(item: ScheduledItem): Promise<LadderOutcome> {
 
   if (rungs === null) return { ladder: ruleLadder(item), source: 'fallback' }
 
-  return { ladder: { blockId: item.id, rungs, done: 0 }, source: 'model' }
+  return { ladder: { blockId: item.id, rungs, done: 0, fromModel: true }, source: 'model' }
 }
 
 /**

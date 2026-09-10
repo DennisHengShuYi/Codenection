@@ -20,7 +20,7 @@ const SYSTEM_PROMPT = [
   "You read a photograph of a student's work and turn it into a task list.",
   'It may be an assignment brief, a handwritten planner page, a whiteboard, a lecture',
   'slide, a shift roster or a sticky note. Read whatever is actually there.',
-  'Reply with JSON only, shaped {"items":[{"title","type","kind","hours","deadlineDay","hard"}]}.',
+  'Reply with JSON only, shaped {"items":[{"title","type","kind","hours","deadlineDay","hard","confident"}]}.',
   'type is one of: mental, physical, social, errands.',
   // Derived from `BLOCK_KINDS` rather than typed out, so the prompt cannot go on asking
   // for a kind `ai/schema.ts` rejects. It used to offer `sleep`, which the boundary now
@@ -34,6 +34,11 @@ const SYSTEM_PROMPT = [
   `deadlineDay is a day index from 0 (today) to ${HORIZON_DAYS - 1}, or null if the page`,
   'does not state one. hard is true only where a fixed date is actually printed.',
   `Return at most ${MAX_ITEMS} items.`,
+  // Per row, so the confirm screen can point at the two it should not trust rather than
+  // flagging all twenty. A timetable photo is mostly legible with a few cells that are
+  // not, and those few are the ones worth a student's attention.
+  'confident is false when the row was hard to read -- blurred, cut off, ambiguous, or a',
+  'time or title you had to infer -- and true when it is plainly legible in the image.',
   // The line that matters most, and the one the test pins. A model filling in a plausible
   // deadline is exactly the silent poisoning §1.4 exists to prevent.
   'Never invent a task, a date or a number that is not visible in the image.',

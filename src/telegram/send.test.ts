@@ -193,6 +193,59 @@ describe('blocksReply', () => {
     expect(reply.text).toMatch(/nothing/i)
     expect(reply.buttons).toBeUndefined()
   })
+
+  /**
+   * The bot used to ask about `blocks[0]` unconditionally, so a student who answered it got
+   * asked about the same block again on the next `/today` -- for ever -- while every other
+   * block on the day stayed unreachable from their phone. The app has never behaved that
+   * way: `blockToAsk` skips what the log already holds and moves on.
+   */
+  it('moves on to the next block once the first has been answered', () => {
+    const actions = blocksReply('today', blocks, ['b1']).buttons?.flat().map((b) => b.data) ?? []
+
+    expect(actions.length).toBe(4)
+    expect(actions.every((action) => action.startsWith('block:b2:s:3:1:'))).toBe(true)
+  })
+
+  it('asks nothing once every block on the day has been answered', () => {
+    const answered = blocksReply('today', blocks, ['b1', 'b2'])
+
+    expect(answered.buttons).toBeUndefined()
+    // The day is still worth listing -- the student asked what was on it.
+    expect(answered.text).toContain('Ethics essay')
+    expect(answered.text).toContain('Shift')
+  })
+
+  it('still lists every block on the day, not only the one being asked about', () => {
+    const text = blocksReply('today', blocks, ['b1']).text
+
+    expect(text).toContain('Ethics essay')
+    expect(text).toContain('Shift')
+  })
+
+  /**
+   * §23: Telegram silently drops a `sendMessage` whose `callback_data` exceeds 64 bytes,
+   * and `api/telegram.ts` ignores the response -- so the failure mode is a keyboard that
+   * simply never appears, with nothing logged anywhere. The single-character type and
+   * answer codes exist to buy headroom; this is the test that proves the budget is still
+   * being met rather than merely intended.
+   */
+  it('keeps every callback payload inside the 64-byte limit Telegram enforces', () => {
+    const longest = [
+      {
+        id: 'added-1757000000000-24-parsed-123',
+        title: 'A very long block title that does not enter the payload at all',
+        startHour: 9,
+        type: 'physical' as const,
+        hours: 10.5,
+        dayIndex: 20,
+      },
+    ]
+
+    for (const button of blocksReply('today', longest).buttons?.flat() ?? []) {
+      expect(new TextEncoder().encode(button.data).length).toBeLessThanOrEqual(64)
+    }
+  })
 })
 
 describe('blockAnsweredReply', () => {

@@ -29,6 +29,14 @@ const replySchema = z.object({
           .max(HORIZON_DAYS - 1)
           .nullable(),
         hard: z.boolean(),
+        /**
+         * Whether the model actually read this row, or reconstructed it.
+         *
+         * Defaulted rather than required, in the cautious direction: a reply that omits it
+         * is one that never claimed certainty, and `parseModelReply` is all-or-nothing, so
+         * requiring it would let one missing field discard every other item in the reply.
+         */
+        confident: z.boolean().default(false),
       }),
     )
     .max(MAX_ITEMS),
@@ -57,7 +65,11 @@ export function parseModelReply(raw: unknown): ParsedItem[] | null {
     // fixed time was printed on the page" -- is a *proposal* for the chip's checkbox, and
     // the student's accept is what turns it into a pinned block.
     fixed: hard,
-    // Everything from the model is a proposal. §3.2: nothing enters unconfirmed.
-    confident: false,
+    // `confident` is the model's own word on whether it read this row or reconstructed it,
+    // and it is carried through rather than overwritten. It used to be hardcoded `false`,
+    // which meant `ItemChip`'s "not sure about this one" fired on every row of every
+    // import -- a warning that is always on carries no information, and students learn to
+    // tap past it. §3.2's "nothing enters unconfirmed" is unaffected: it is the accept
+    // flow that enforces that, not this flag.
   }))
 }

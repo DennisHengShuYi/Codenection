@@ -89,10 +89,37 @@ describe('parseModelReply', () => {
     expect(parseModelReply({ items: [] })).toEqual([])
   })
 
-  // §3.2: nothing enters unconfirmed. Defaulting this way makes that a property of the
-  // data rather than a habit of the interface.
-  it('marks everything from the model as needing confirmation', () => {
-    expect(parseModelReply(good)?.every((item) => item.confident)).toBe(false)
+  /**
+   * `confident` used to be hardcoded `false` for every model-parsed item, on the grounds
+   * of §3.2's "nothing enters unconfirmed". That conflated two different things, and the
+   * cost was paid on screen: `ItemChip` renders the flag as "Not sure about this one --
+   * check it before adding", which is a claim about *the model's* certainty. With it
+   * always false, every row of every photo import was flagged, always -- and a warning
+   * that fires on everything is one students learn to tap past, which is precisely the
+   * silent-poisoning failure §1.4 exists to prevent.
+   *
+   * §3.2 is unaffected. Nothing enters unconfirmed because the chips must be accepted
+   * before `addItems` ever sees them, which is a property of the flow rather than of this
+   * field. So `confident` now means what the interface already claimed it meant.
+   */
+  it('reports the model’s own confidence rather than flagging every row', () => {
+    const mixed = {
+      items: [
+        { ...good.items[0], title: 'WIA3001 lecture', confident: true },
+        { ...good.items[0], title: 'something illegible', confident: false },
+      ],
+    }
+
+    expect(parseModelReply(mixed)?.map((item) => item.confident)).toEqual([true, false])
+  })
+
+  /** A model that omits the field is a model that did not tell us it was sure, and §1.4's
+   *  bias is toward flagging. Absent must not take the whole reply down either -- the
+   *  parse is all-or-nothing, so a missing optional field would cost every other item. */
+  it('treats a missing confidence as unsure rather than rejecting the reply', () => {
+    const withoutField = { items: [{ ...good.items[0] }] }
+
+    expect(parseModelReply(withoutField)?.[0]?.confident).toBe(false)
   })
 
   it('rejects a kind the engine does not have', () => {

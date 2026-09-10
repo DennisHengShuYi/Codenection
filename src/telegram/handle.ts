@@ -1,7 +1,7 @@
 import { MAX_IMAGE_BYTES, MAX_INPUT_LENGTH, parseBrainDump, type ParsedItem } from '../ai'
 import { todayIndex } from '../domain/calendar'
 import { blocksOnDay } from '../domain/dayBlocks'
-import type { BlockAnswer, BlockRecord } from '../domain/blockLog'
+import { answeredIds, type BlockAnswer, type BlockRecord } from '../domain/blockLog'
 import { firstAction } from '../domain/microStart'
 import { prescribe } from '../domain/prescribe'
 import type { LoadType } from '../engine'
@@ -202,6 +202,24 @@ export async function handleIntent(
   const accountId = await store.accountForChat(intent.chatId)
   if (accountId === null) return notLinkedReply()
 
+  /**
+   * Which blocks §8b's log already holds an answer for.
+   *
+   * Fails closed, and the direction matters. If the log cannot be read we return every id
+   * on the week rather than none, so the day is still listed but nothing is asked about.
+   * The alternative -- treating an unreadable log as empty -- would ask a student to
+   * re-answer a block they had already answered and overwrite the real record with it,
+   * which is the same "assume rather than admit" failure `73efd65` removed from pricing.
+   */
+  const answeredSoFar = async (week: Schedule): Promise<readonly string[]> => {
+    try {
+      return answeredIds(await store.loadBlockLog(accountId))
+    } catch {
+      // Every id on the week, so `blocksReply` finds nothing left to ask about.
+      return week.items.map((item) => item.id)
+    }
+  }
+
   if (intent.kind === 'command') {
     switch (intent.name) {
       case 'help':
@@ -209,7 +227,7 @@ export async function handleIntent(
 
       case 'today': {
         const week = await store.loadWeek(accountId)
-        return blocksReply('today', blocksOnDay(week, todayFor(week, now)))
+        return blocksReply('today', blocksOnDay(week, todayFor(week, now)), await answeredSoFar(week))
       }
 
       case 'yesterday': {
@@ -221,7 +239,7 @@ export async function handleIntent(
         // later trust.
         if (today === null || today < 1) return yesterdayUnavailableReply()
 
-        return blocksReply('yesterday', blocksOnDay(week, today - 1))
+        return blocksReply('yesterday', blocksOnDay(week, today - 1), await answeredSoFar(week))
       }
 
       case 'rest': {

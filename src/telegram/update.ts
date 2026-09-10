@@ -118,6 +118,28 @@ function audioIn(
   }
 }
 
+/**
+ * The id a button press must be acknowledged with, or null when the update was not one.
+ *
+ * Telegram shows a loading indicator on a tapped button and clears it only when the bot
+ * answers that specific callback query. Nothing ever did, so every button press in the app
+ * span until the client timed out -- the only signal a student got that their answer had
+ * landed was the spinner eventually giving up.
+ *
+ * Separate from `readUpdate` rather than a field on `Intent`: acknowledging is owed for
+ * *every* press, including the ones that read as `unhandled`, so tying it to a successfully
+ * parsed intent would leave exactly the presses that already went wrong still spinning.
+ *
+ * Validated rather than trusted, like everything else here -- anyone can post to the
+ * webhook, and this value is interpolated into an outbound API call.
+ */
+export function callbackIdOf(update: unknown): string | null {
+  if (!isObject(update) || !isObject(update.callback_query)) return null
+
+  const id = update.callback_query.id
+  return typeof id === 'string' ? id : null
+}
+
 export function readUpdate(update: unknown): Intent {
   if (!isObject(update)) return { kind: 'unhandled', chatId: null }
 

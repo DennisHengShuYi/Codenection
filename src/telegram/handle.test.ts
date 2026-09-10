@@ -284,6 +284,62 @@ describe('the command surface', () => {
     expect((await handleIntent(command('today'), h.store, 1000))?.text).toMatch(/nothing/i)
   })
 
+  /**
+   * §8b②: a student answering on their phone must not meet a different question from the
+   * one the app asks. `/today` used to ask about `blocks[0]` whatever the log held, so
+   * answering the first block got them asked about it again on the next `/today`, for
+   * ever, while every other block on the day stayed unreachable from chat.
+   */
+  describe('/today and what has already been answered', () => {
+    const second = { ...studyBlock, id: 'b2', title: 'Stats problem set' }
+    const bothBlocks = () => week([studyBlock, second]) as never
+
+    const logFor = (blockId: string): BlockRecord[] => [
+      { blockId, type: 'mental', plannedHours: 2, dayIndex: 0, answer: 'right', answeredAt: 1 },
+    ]
+
+    it('moves on to the next block once the first has been answered', async () => {
+      const h = harness({ loadWeek: bothBlocks, loadBlockLog: async () => logFor('b1') })
+
+      const reply = await handleIntent(command('today'), h.store, 1000)
+
+      expect(reply?.text).toContain('Did Stats problem set happen?')
+      expect(reply?.buttons?.flat().every((b) => b.data.startsWith('block:b2:'))).toBe(true)
+    })
+
+    it('stops asking once the whole day is in the log', async () => {
+      const h = harness({
+        loadWeek: bothBlocks,
+        loadBlockLog: async () => [...logFor('b1'), ...logFor('b2')],
+      })
+
+      const reply = await handleIntent(command('today'), h.store, 1000)
+
+      expect(reply?.buttons).toBeUndefined()
+      expect(reply?.text).toContain('Ethics essay')
+    })
+
+    /**
+     * Fails closed. An unreadable log and an empty one mean opposite things -- "we do not
+     * know" versus "they have answered nothing" -- and treating the first as the second
+     * would ask a student to re-answer a block and overwrite the real record with the
+     * repeat. So the day is still listed and nothing is asked.
+     */
+    it('asks nothing rather than re-asking when the log cannot be read', async () => {
+      const h = harness({
+        loadWeek: bothBlocks,
+        loadBlockLog: async () => {
+          throw new Error('offline')
+        },
+      })
+
+      const reply = await handleIntent(command('today'), h.store, 1000)
+
+      expect(reply?.buttons).toBeUndefined()
+      expect(reply?.text).toContain('Ethics essay')
+    })
+  })
+
   it('answers /rest with one thing to do when something is low', async () => {
     const h = harness({ loadWeek: async () => week([], depleted) as never })
 

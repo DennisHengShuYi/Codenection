@@ -92,10 +92,28 @@ export function WeekScreen(props: {
 
   const cells = scheduleView({ schedule, today, blockLog })
 
+  /**
+   * Fixed load is the baseline everything else is measured against, so a week with none is
+   * a week the app is quietly guessing about -- and the grid draws that as twenty-one
+   * light days, which reads as good news rather than as missing information.
+   *
+   * `protectedRest` is excluded deliberately: rest the optimizer pinned is fixed load the
+   * student did not put there, and counting it would let the app fall silent about a
+   * timetable it still has never seen.
+   */
+  const hasFixedLoad = schedule.items.some((item) => item.fixed && !item.protectedRest)
+
   const grid = openDay === null ? null : dayGrid(schedule, openDay)
 
   return (
     <div className="flex flex-col gap-4">
+      {!hasFixedLoad && (
+        <p data-testid="no-fixed-load" className="text-sm text-ink-soft">
+          Your week has no classes or shifts in it. Add them and the forecast gets a lot
+          sharper.
+        </p>
+      )}
+
       <ul className="grid grid-cols-3 gap-2 md:grid-cols-7">
         {cells.map((cell) => {
           const parts = [dayLabel(cell.dayIndex, cell.date), BAND_LABEL[cell.band]]

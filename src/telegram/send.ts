@@ -132,24 +132,51 @@ const ANSWER_CODE: Record<BlockAnswer, string> = {
 const blockAnswerData = (block: BlockLine, answer: BlockAnswer): string =>
   `block:${block.id}:${TYPE_CODE[block.type]}:${block.hours}:${block.dayIndex}:${ANSWER_CODE[answer]}`
 
-export function blocksReply(day: 'today' | 'yesterday', blocks: readonly BlockLine[]): Reply {
+/**
+ * The day's blocks, and one question about the first of them still unanswered.
+ *
+ * `answered` is §8b's durable log, reduced to the ids it holds. Without it this asked about
+ * `blocks[0]` unconditionally, which meant a student who answered their first block was
+ * asked about that same block on every subsequent `/today` while every other block on the
+ * day stayed unreachable from their phone. The app has never worked that way -- `blockToAsk`
+ * skips what the log already holds -- and §8b② is explicit that a student answering in both
+ * places must not meet two different questions.
+ *
+ * Still one question rather than a keyboard per block: that is the today card's discipline
+ * (§8, "one card, three taps, once a day"), and four buttons times a full day is a menu.
+ * Optional and defaulting to empty so callers built before the log was threaded here keep
+ * compiling and behaving as they did.
+ */
+export function blocksReply(
+  day: 'today' | 'yesterday',
+  blocks: readonly BlockLine[],
+  answered: readonly string[] = [],
+): Reply {
   if (blocks.length === 0) {
     return { text: `Nothing was scheduled ${day}.` }
   }
 
-  const first = blocks[0] as BlockLine
   const listed = blocks.map((block) => `• ${clockOf(block.startHour)} ${shorten(block.title)}`)
+  const heading = `${day === 'today' ? 'Today' : 'Yesterday'}:`
+  const ask = blocks.find((block) => !answered.includes(block.id))
+
+  // Everything on the day is already in the log. The list is still worth sending -- they
+  // asked what was on it -- but there is nothing left to ask, and inventing a question
+  // would re-record an answer they have already given.
+  if (ask === undefined) {
+    return { text: [heading, '', ...listed].join('\n') }
+  }
 
   return {
-    text: [`${day === 'today' ? 'Today' : 'Yesterday'}:`, '', ...listed, '', `Did ${shorten(first.title)} happen?`].join('\n'),
+    text: [heading, '', ...listed, '', `Did ${shorten(ask.title)} happen?`].join('\n'),
     // §8b②'s four answers, matching the today card exactly: a student who answers in both
     // places must not meet two different questions.
     buttons: [
       [
-        { label: "Didn't happen", data: blockAnswerData(first, 'didnt') },
-        { label: 'Took less', data: blockAnswerData(first, 'less') },
-        { label: 'About right', data: blockAnswerData(first, 'right') },
-        { label: 'Took longer', data: blockAnswerData(first, 'longer') },
+        { label: "Didn't happen", data: blockAnswerData(ask, 'didnt') },
+        { label: 'Took less', data: blockAnswerData(ask, 'less') },
+        { label: 'About right', data: blockAnswerData(ask, 'right') },
+        { label: 'Took longer', data: blockAnswerData(ask, 'longer') },
       ],
     ],
   }

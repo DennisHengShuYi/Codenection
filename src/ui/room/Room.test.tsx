@@ -25,6 +25,25 @@ const state = (over: Partial<RoomState> = {}): RoomState => ({
  */
 const modelOf = (roomState: RoomState = state()): RoomModel => ({ state: roomState })
 
+/**
+ * CSS 2.1 Appendix E, reduced to the only case the room is: two absolutely positioned
+ * siblings inside one stacking context. They paint in ascending z-index, and a tie is
+ * broken by document order -- the later element wins. So `over` is genuinely on top only
+ * if it out-ranks `under` on z-index, or matches it and comes after it in the tree.
+ *
+ * This is what five presence-and-text assertions could not say: `toBeInTheDocument` is true
+ * of an element painted behind an opaque wall (Ruling 52).
+ */
+const paintsOver = (over: Element, under: Element): boolean => {
+  const depth = (element: Element): number => {
+    const declared = window.getComputedStyle(element).zIndex
+    return declared === '' || declared === 'auto' ? 0 : Number(declared)
+  }
+
+  if (depth(over) !== depth(under)) return depth(over) > depth(under)
+  return Boolean(under.compareDocumentPosition(over) & Node.DOCUMENT_POSITION_FOLLOWING)
+}
+
 describe('Room', () => {
   // §10: a viewBox and no fixed width is the whole argument for hand-rolling it -- it
   // scales at every breakpoint without a media query.
@@ -98,6 +117,24 @@ describe('Room', () => {
     render(<Room model={modelOf()} />)
 
     expect(screen.getByTestId('room-gauge')).toBeInTheDocument()
+  })
+
+  /**
+   * Ruling 52. The gauge was in the DOM, carried the right number, and was invisible: the
+   * scene `<svg>` is `absolute inset-0`, a later sibling, and neither element declares a
+   * z-index -- so the wall rect painted straight over it and nobody had ever seen it.
+   *
+   * Presence is not visibility. This asserts the stacking relationship instead, which is
+   * the thing that was actually wrong, and it fails on the DOM order that shipped.
+   */
+  it('paints the corner gauge over the room rather than behind its wall', () => {
+    render(<Room model={modelOf()} />)
+    const gauge = screen.getByTestId('room-gauge')
+    const scene = screen.getByTestId('room-scene')
+
+    // Same positioned parent, so one stacking context and the rule above decides.
+    expect(gauge.parentElement).toBe(scene.parentElement)
+    expect(paintsOver(gauge, scene)).toBe(true)
   })
 
   it('reads the reserve off the light level, as a percentage', () => {

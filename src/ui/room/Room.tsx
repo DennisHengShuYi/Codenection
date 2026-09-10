@@ -24,14 +24,6 @@ export function Room({ model }: { model: RoomModel }) {
        over it any more -- but the ratio still reads as a room, so it stays. Capped at the
        viewport so a tall screen does not stretch it. */
     <section className="relative mx-auto aspect-[3/2] max-h-dvh w-full">
-      {/* §1.1: the reserve, in one corner as a compact readout -- no tap required. */}
-      <div
-        data-testid="room-gauge"
-        className="absolute right-2 top-2 rounded-full bg-surface/90 px-3 py-1 text-sm font-semibold text-ink-soft shadow"
-      >
-        {Math.round(state.lightLevel * 100)}%
-      </div>
-
       {/* viewBox and no width: it scales to its container at every breakpoint without a
           media query, which is §10's argument for hand-rolled SVG over an image. */}
       <svg
@@ -137,6 +129,18 @@ export function Room({ model }: { model: RoomModel }) {
 
         <Character state={state.character} />
       </svg>
+
+      {/* §1.1: the reserve, in one corner as a compact readout -- no tap required.
+          AFTER the scene, not before it (Ruling 52). Both are absolutely positioned
+          siblings in one stacking context with no z-index between them, so CSS paints
+          them in document order -- placed first, the gauge rendered correctly and was
+          hidden behind the room's own opaque wall rect. */}
+      <div
+        data-testid="room-gauge"
+        className="absolute right-2 top-2 rounded-full bg-surface/90 px-3 py-1 text-sm font-semibold text-ink-soft shadow"
+      >
+        {Math.round(state.lightLevel * 100)}%
+      </div>
     </section>
   )
 }

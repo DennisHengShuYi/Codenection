@@ -30,6 +30,37 @@ for (const width of [320, 390, 768, 1280]) {
   })
 }
 
+/**
+ * Ruling 52, measured rather than inferred.
+ *
+ * The corner gauge was in the DOM with the right number and painted behind the room's own
+ * wall rect, because the scene `<svg>` is a later absolutely positioned sibling with no
+ * z-index between them. Five unit tests passed on it, all asserting presence or text.
+ *
+ * A real browser can answer the question those could not: hit-test the middle of the
+ * gauge and ask what is actually on top there. On the shipped DOM order the answer is
+ * something inside the scene; it has to be the gauge.
+ */
+test('shows the corner gauge on top of the room, not behind its wall', async ({ page }) => {
+  await openApp(page)
+
+  const gauge = page.getByTestId('room-gauge')
+  await expect(gauge).toBeVisible()
+
+  const box = await gauge.boundingBox()
+  expect(box, 'the gauge has no box to hit-test').not.toBeNull()
+
+  const topmost = await page.evaluate(
+    ([x, y]) => {
+      const hit = document.elementFromPoint(x as number, y as number)
+      return hit === null ? null : (hit.closest('[data-testid]')?.getAttribute('data-testid') ?? hit.tagName)
+    },
+    [box!.x + box!.width / 2, box!.y + box!.height / 2],
+  )
+
+  expect(topmost).toBe('room-gauge')
+})
+
 // §1.5: the picture carries nothing to a screen reader, so the words have to be there.
 test('states the room in words as well as drawing it', async ({ page }) => {
   await openApp(page)

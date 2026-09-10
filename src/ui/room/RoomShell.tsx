@@ -5,6 +5,7 @@ import { describePlacement, placeItems } from '../../domain/placement'
 import { checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
 import { anchorTo, dateFor, isAnchored, todayIndex } from '../../domain/calendar'
 import { accept, lapsed } from '../../domain/commitments'
+import { isDistressed } from '../../domain/distress'
 import { energyHistory } from '../../domain/energyHistory'
 import { paramsFor } from '../../domain/engineParams'
 import { firstAction, isStuck } from '../../domain/microStart'
@@ -92,6 +93,7 @@ export function RoomShell({
   // "not today" of its own any more. §7 retired the recovery card's permanent
   // failed-recovery log: "not today" is now exactly this kind of same-day dismissal rather
   // than a report that suppressed the advice forever.
+  const [distressDismissed, setDistressDismissed] = useState(false)
   const [recoveryDismissed, setRecoveryDismissed] = useState(false)
   const [lapsedDismissed, setLapsedDismissed] = useState(false)
   const [stuckDismissedId, setStuckDismissedId] = useState<string | null>(null)
@@ -273,7 +275,12 @@ export function RoomShell({
   const askSleep = !sleepAnsweredToday
   const showTodayCard = !todayDismissed && (askEnergy || askSleep || blockForToday !== null)
 
+  // §8's floor case. Read off what the student reported rather than the modelled reserves:
+  // a claim this serious must rest on what they actually said, not on the app's guess.
+  const reportedEnergy = energyHistory(profile.predictions)
+
   const cards = visibleCards({
+    distress: !distressDismissed && isDistressed(reportedEnergy),
     recovery: !recoveryDismissed && recoveryPrescription !== null,
     lapsed: !lapsedDismissed && lapsedCommitments.length > 0,
     stuck: stuckItem !== undefined,
@@ -386,6 +393,7 @@ export function RoomShell({
 
           <LiveCards
             cards={cards}
+            onDistressDismiss={() => setDistressDismissed(true)}
             recoveryPrescription={recoveryPrescription}
             onRecoveryAccept={(taken) => setSchedule(scheduleRecovery(week, taken))}
             onRecoveryDismiss={() => setRecoveryDismissed(true)}
@@ -439,7 +447,7 @@ export function RoomShell({
               capacity={overallReserve(week.start)}
               bars={bars}
               projection={projection}
-              history={energyHistory(profile.predictions)}
+              history={reportedEnergy}
             />
           )}
         </>

@@ -5,6 +5,7 @@ import type { Prescription as PrescriptionData } from '../../domain/prescribe'
 import type { MicroStart } from '../../domain/microStart'
 import type { ScheduledItem } from '../../optimizer'
 import type { SleepBucket } from '../today/checkIn'
+import { DistressCard } from '../distress/DistressCard'
 import { RecoveryCard } from '../recovery/RecoveryCard'
 import { LapsedNotice } from '../request/LapsedNotice'
 import { MicroStartCard } from '../microStart/MicroStartCard'
@@ -18,6 +19,7 @@ import type { CardId } from './cardPrecedence'
  */
 export function LiveCards({
   cards,
+  onDistressDismiss,
   recoveryPrescription,
   onRecoveryAccept,
   onRecoveryDismiss,
@@ -36,6 +38,7 @@ export function LiveCards({
   onTodayDismiss,
 }: {
   readonly cards: readonly CardId[]
+  readonly onDistressDismiss: () => void
   readonly recoveryPrescription: PrescriptionData | null
   readonly onRecoveryAccept: (taken: PrescriptionData) => void
   readonly onRecoveryDismiss: () => void
@@ -57,6 +60,8 @@ export function LiveCards({
 }) {
   const renderCard = (id: CardId) => {
     switch (id) {
+      case 'distress':
+        return <DistressCard key="distress" onDismiss={onDistressDismiss} />
       case 'recovery':
         return (
           <RecoveryCard

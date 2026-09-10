@@ -73,6 +73,39 @@ describe('RoomShell with the room', () => {
   })
 
   /**
+   * Coordinator review (combined 12+13): `CapacityDial` -- the semicircular gauge, the five
+   * domain bars each against its own ceiling, and the low-social-flagged-as-warning logic
+   * that is the app's actual differentiator -- had zero production consumers once `Room`'s
+   * tap targets went. §1.1 says it "sits in one corner as a compact readout, no tap
+   * required", not that it is deleted. This is the behavioural RED: a state with a low
+   * social reserve must show the warning without any interaction, and it fails against the
+   * bare-percentage-only room screen.
+   */
+  it('shows the low-social warning with no tap required', async () => {
+    counter += 1
+    const repository = createLocalRepository(`room-dial-${counter}`)
+    await repository.clear()
+    await repository.saveWeek({
+      items: [],
+      start: { mental: 70, physical: 70, social: 20, errands: 70 },
+      horizonDays: HORIZON_DAYS,
+      sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+    })
+
+    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+    expect(screen.getByTestId('warning-social')).toHaveTextContent(/spending a lot of time alone/i)
+  })
+
+  it('still carries the five domain bars and the dial\'s own spoken summary', async () => {
+    await renderWithErrand()
+
+    expect(screen.getAllByRole('meter')).toHaveLength(5)
+    expect(screen.getByTestId('reserve-text-equivalent')).toBeVisible()
+  })
+
+  /**
    * Flagged by Task 12: the room drawing's `aria-label` is already the full, uncapped text
    * equivalent (`describeRoomFully`). The visible paragraph beneath it repeats a subset of
    * the same sentences (character and weather, always, verbatim) for sighted readers.
@@ -124,21 +157,20 @@ describe('RoomShell with the room', () => {
   })
 
   /**
-   * "Move" has no target-picking UI yet (noted in `RoomShell.tsx` and the task report), so
-   * it shares `deferItem` with "Later" for now. This proves that stand-in actually moves
-   * the block rather than silently doing nothing -- the honest-gap choice, exercised.
+   * Coordinator review: "Move" offered no real picker and was indistinguishable in effect
+   * from "Later" -- a silent stub. Dropped from `blockActions.ts` rather than left half-real
+   * (see its doc comment). This is the regression guard: a movable block's sheet must not
+   * offer it.
    */
-  it('moving a block (the stand-in for a mover not yet built) still changes the saved week', async () => {
-    const repository = await renderWithErrand()
+  it('does not offer Move -- there is no picker behind it', async () => {
+    await renderWithErrand()
 
     await userEvent.click(screen.getByTestId('open-week'))
     await userEvent.click(await screen.findByTestId('day-2'))
     await userEvent.click(await screen.findByTestId('block-laundry'))
-    await userEvent.click(await screen.findByRole('button', { name: /^move$/i }))
 
-    await waitFor(async () =>
-      expect((await repository.loadWeek())?.items[0]?.dayIndex).toBeGreaterThan(2),
-    )
+    expect(screen.queryByRole('button', { name: /move/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /^later$/i })).toBeVisible()
   })
 
   // A protected-rest block asks a binary question rather than the four-way duration one.
@@ -180,12 +212,13 @@ describe('RoomShell with the room', () => {
   })
 
   /**
-   * The repository has no operation to retract a recorded answer (`recordBlockAnswer` only
-   * upserts), so Undo -- offered on an already-answered past block -- closes rather than
-   * pretending to do something real. Proven rather than assumed: nothing is recorded, and
-   * the saved week is untouched.
+   * Coordinator review: `Repository.recordBlockAnswer` only upserts, so an "Undo" button on
+   * an already-answered past block would produce no visible change -- a second silent stub.
+   * Replaced with stating what was actually recorded (`blockActions.ts`'s `recordedAnswer`,
+   * rendered by `BlockSheet`). This proves `RoomShell` really threads a real answer from the
+   * block log through to that text, not just that `BlockSheet` can render one in isolation.
    */
-  it('undoing an already-answered block closes the sheet without recording anything new', async () => {
+  it('an already-answered block states what was recorded, with no Undo button', async () => {
     const onAnswerBlock = vi.fn()
     counter += 1
     const repository = createLocalRepository(`room-undo-${counter}`)
@@ -229,9 +262,9 @@ describe('RoomShell with the room', () => {
     await userEvent.click(screen.getByTestId('open-week'))
     await userEvent.click(await screen.findByTestId('day-0'))
     await userEvent.click(await screen.findByTestId('block-answered'))
-    await userEvent.click(await screen.findByRole('button', { name: /^undo$/i }))
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.queryByRole('button', { name: /undo/i })).toBeNull()
+    expect(await screen.findByTestId('recorded-answer')).toHaveTextContent('You said: About right')
     expect(onAnswerBlock).not.toHaveBeenCalled()
   })
 })

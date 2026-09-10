@@ -72,8 +72,9 @@ export function describeRoomFully(state: RoomState): string {
 }
 
 /**
- * The same story, capped at three sentences so a 320px screen keeps its buttons below the
- * fold (the sidebar's row list, not this paragraph, is what still spells out every number).
+ * The same story, capped at three sentences so a 320px screen keeps its buttons above the
+ * fold (the dial's own text equivalent and domain bars, not this paragraph, are what still
+ * spell out every number).
  *
  * Character and weather stay always -- the drawing cannot say either any other way. Then
  * at most one more, in priority order: the door lit, sleep debt, what is on the floor, the

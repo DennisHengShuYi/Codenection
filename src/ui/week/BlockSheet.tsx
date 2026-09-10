@@ -12,8 +12,7 @@ import type { BlockAction, BlockSheetModel } from './blockActions'
  *
  * `blockSheet` (Task 7) already decided which actions a given block offers -- this component
  * renders exactly that set and nothing else. A sheet that rendered every action unconditionally
- * would be the defect the model exists to prevent: Move on a fixed class, Later on a block
- * already in the past.
+ * would be the defect the model exists to prevent: Later on a block already in the past.
  */
 
 const CONFIRM_LABELS: Record<BlockAnswer, string> = {
@@ -28,14 +27,12 @@ const CONFIRM_ORDER: readonly BlockAnswer[] = ['didnt', 'less', 'right', 'longer
 const SIMPLE_LABELS = {
   done: 'Done',
   later: 'Later',
-  move: 'Move',
-  undo: 'Undo',
 } as const
 
 type SimpleAction = keyof typeof SIMPLE_LABELS
 
 const isSimpleAction = (action: BlockAction): action is SimpleAction =>
-  action === 'done' || action === 'later' || action === 'move' || action === 'undo'
+  action === 'done' || action === 'later'
 
 const formatHour = (hour: number): string => `${String(hour).padStart(2, '0')}:00`
 
@@ -56,22 +53,18 @@ export function BlockSheet({
   onClose,
   onDone,
   onLater,
-  onMove,
   onConfirm,
-  onUndo,
   onRested,
 }: {
   readonly model: BlockSheetModel
   readonly onClose: () => void
   readonly onDone: (itemId: string) => void
   readonly onLater: (itemId: string) => void
-  readonly onMove: (itemId: string) => void
   readonly onConfirm: (itemId: string, answer: BlockAnswer) => void
-  readonly onUndo: (itemId: string) => void
   readonly onRested: (itemId: string, rested: boolean) => void
 }): JSX.Element {
   const [revealed, setRevealed] = useState(false)
-  const { item, actions, microStart: given } = model
+  const { item, actions, microStart: given, recordedAnswer } = model
 
   // §4.1's manual trigger: "I can't start this" reveals a first move even for a block the
   // domain has not (yet) called stuck. A block already flagged stuck arrives with `given` set
@@ -81,8 +74,6 @@ export function BlockSheet({
   const simpleHandlers: Record<SimpleAction, (itemId: string) => void> = {
     done: onDone,
     later: onLater,
-    move: onMove,
-    undo: onUndo,
   }
 
   const simpleActions = actions.filter(isSimpleAction)
@@ -132,6 +123,22 @@ export function BlockSheet({
   return (
     <Sheet title={item.title} onClose={onClose} actions={actionBar}>
       <p data-testid="block-when">{whenText(item)}</p>
+
+      {/*
+        §5's table calls this "what you recorded, and Undo" -- but `recordBlockAnswer` only
+        upserts, so there is no way to actually retract an answer yet. Rather than offer a
+        button that produces no visible change (indistinguishable from broken, caught at the
+        combined 12+13 review), this states what was said. Honest, more informative than a
+        dead control, and needs no new storage capability.
+      */}
+      {actions.includes('undo') && (
+        <p data-testid="recorded-answer" className="mt-2 text-sm">
+          {recordedAnswer === null
+            ? 'You already answered this.'
+            : `You said: ${CONFIRM_LABELS[recordedAnswer]}`}
+        </p>
+      )}
+
       {microStart !== null && <MicroStartCard microStart={microStart} />}
     </Sheet>
   )

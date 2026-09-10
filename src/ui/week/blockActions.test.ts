@@ -47,7 +47,10 @@ const record = (over: Partial<BlockRecord> = {}): BlockRecord => ({
 
 describe('blockSheet', () => {
   it('offers the full set for a movable block today or later', () => {
-    expect(sheet(item())?.actions).toEqual(['done', 'later', 'move', 'cantStart'])
+    // `move` is intentionally absent -- see blockActions.ts's doc comment: it was wired
+    // once with no picker behind it, indistinguishable from "Later", and was dropped at
+    // the combined 12+13 review rather than left as a silent stub.
+    expect(sheet(item())?.actions).toEqual(['done', 'later', 'cantStart'])
   })
 
   it('offers only Done for a fixed block, because the optimizer cannot move it either', () => {
@@ -114,5 +117,28 @@ describe('blockSheet', () => {
     expect(
       blockSheet({ schedule: week([]), profile: DEFAULT_PROFILE, itemId: 'gone', today: 0 }),
     ).toBeNull()
+  })
+
+  describe('recordedAnswer', () => {
+    it('is null when there is nothing to undo', () => {
+      expect(sheet(item())?.recordedAnswer).toBeNull()
+    })
+
+    it('carries what was actually said, for a block answered via the log', () => {
+      const logged = record({ answer: 'longer' })
+
+      expect(sheet(item({ dayIndex: 2 }), DEFAULT_PROFILE, 5, [logged])?.recordedAnswer).toBe(
+        'longer',
+      )
+    })
+
+    // The legacy `profile.confirmedItemIds` path records that a block was answered, but not
+    // *what* was said -- only the log carries a `BlockAnswer`. Honest about not knowing
+    // rather than guessing.
+    it('is null for a block answered only via the legacy profile field', () => {
+      const profile = { ...DEFAULT_PROFILE, confirmedItemIds: ['essay'] }
+
+      expect(sheet(item({ dayIndex: 2 }), profile)?.recordedAnswer).toBeNull()
+    })
   })
 })

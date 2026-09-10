@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Repository, Session } from '../../data'
 import { addItems } from '../../domain/addItems'
-import { outcomesFrom, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
+import { checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
 import { anchorTo, dateFor, isAnchored, todayIndex } from '../../domain/calendar'
 import { accept, lapsed } from '../../domain/commitments'
 import { paramsFor } from '../../domain/engineParams'
@@ -11,19 +11,16 @@ import { prescribe } from '../../domain/prescribe'
 import { recordAttempt, attemptsIn } from '../../domain/recoveryLog'
 import { completeItem, deferItem } from '../../domain/scheduleEdits'
 import { scheduleRecovery } from '../../domain/scheduleRecovery'
+import { overallReserve, project } from '../../engine'
 import type { Fix } from '../../optimizer'
+import { toDayInputs } from '../../optimizer'
 import { AccountBar } from '../auth/AccountBar'
 import { PreviewBanner } from '../auth/PreviewBanner'
+import { CapacityDial } from '../dial/CapacityDial'
+import { domainBars } from '../dial/domainBars'
 import { Button } from '../kit/Button'
 import { Sheet } from '../kit/Sheet'
-import { MicroStartCard } from '../microStart/MicroStartCard'
-import { PhotoImportScreen } from '../planner/PhotoImportScreen'
-import { PlannerScreen } from '../planner/PlannerScreen'
-import { Prescription } from '../recovery/Prescription'
-import { LapsedNotice } from '../request/LapsedNotice'
-import { RequestBoxScreen } from '../request/RequestBoxScreen'
 import { LinkTelegram } from '../settings/LinkTelegram'
-import { TodayCard } from '../today/TodayCard'
 import { blockToAsk, withSleep } from '../today/checkIn'
 import { useLowEnergy } from '../useLowEnergy'
 import { useProfile } from '../useProfile'
@@ -34,7 +31,9 @@ import { BlockSheet } from '../week/BlockSheet'
 import { blockSheet } from '../week/blockActions'
 import { runRebalance } from '../week/rebalanceOutcome'
 import { WeekScreen } from '../week/WeekScreen'
-import { visibleCards, type CardId } from './cardPrecedence'
+import { AddSheetStub } from './AddSheetStub'
+import { visibleCards } from './cardPrecedence'
+import { LiveCards } from './LiveCards'
 import { roomModel } from './roomModel'
 import { describeRoom } from './roomText'
 import { Room } from './Room'
@@ -49,8 +48,6 @@ const SEED = 20260908
  *  `describeRoom`'s own three-sentence paragraph rather than re-deriving it. */
 const firstSentence = (paragraph: string): string => paragraph.match(/^[^.]*\./)?.[0] ?? paragraph
 
-type AddWay = 'choose' | 'photo' | 'type' | 'request'
-
 /**
  * The room, as the whole app -- and now the router.
  *
@@ -58,8 +55,8 @@ type AddWay = 'choose' | 'photo' | 'type' | 'request'
  * (the schedule, the profile, the block log, the anchoring and prediction effect, rebalance)
  * and routing between the room, the week, a block sheet, the add sheet and settings. The
  * eleven-case `contentFor` switch this replaced is gone entirely -- every feature it held
- * now belongs to the component that owns it (`WeekScreen`, `BlockSheet`, `TodayCard`, the
- * live cards below) rather than being inlined here.
+ * now belongs to the component that owns it (`WeekScreen`, `BlockSheet`, `TodayCard`,
+ * `LiveCards`, `AddSheetStub`) rather than being inlined here.
  */
 export function RoomShell({
   repository,
@@ -87,7 +84,6 @@ export function RoomShell({
   const [report, setReport] = useState<string | null>(null)
   const [fallback, setFallback] = useState<Fix | null>(null)
   const [working, setWorking] = useState(false)
-  const [addWay, setAddWay] = useState<AddWay>('choose')
 
   // Session-scoped dismissals for the three cards with no domain-level "not today" of their
   // own. Recovery needs none of these: dismissing it already writes through
@@ -154,6 +150,14 @@ export function RoomShell({
   const todayDate = dateFor(week, today)
   const model = roomModel({ schedule: week, profile, today, blockLog })
 
+  // §1.1's dial: the reserve, the five domain bars each against its own ceiling, and the
+  // low-social-flagged-as-warning logic that is the app's own differentiator over a tracker
+  // that would read a quiet week as healthy. Same `checkedIn` wiring as `roomModel.ts`, so
+  // the dial and the room agree about what "silent" means.
+  const days = toDayInputs(week, checkedInDays(blockLog, today, week.horizonDays))
+  const projection = project(week.start, days, params)
+  const bars = domainBars(week.start, projection, days)
+
   async function onRebalance() {
     if (working) return
 
@@ -188,14 +192,6 @@ export function RoomShell({
   }
 
   const closeToRoom = () => setView(back(view))
-  const closeAdd = () => {
-    setAddWay('choose')
-    setView(back(view))
-  }
-  const acceptItems: Parameters<typeof PlannerScreen>[0]['onAccept'] = (items) => {
-    setSchedule(addItems(week, items))
-    closeAdd()
-  }
 
   // §3's card precedence: recovery, then a lapsed commitment, then a stuck task, then the
   // day's own question -- capped to one below the low-energy threshold and two otherwise.
@@ -218,56 +214,6 @@ export function RoomShell({
     today: showTodayCard,
     lowEnergy,
   })
-
-  const renderCard = (id: CardId) => {
-    switch (id) {
-      case 'recovery':
-        return (
-          <Prescription
-            key="recovery"
-            prescription={recoveryPrescription}
-            onAccept={(taken) => setSchedule(scheduleRecovery(week, taken))}
-            onDismiss={(taken) => setSchedule(recordAttempt(week, taken.kind, false))}
-          />
-        )
-      case 'lapsed':
-        return (
-          <LapsedNotice
-            key="lapsed"
-            commitments={lapsedCommitments}
-            onDismiss={() => setLapsedDismissed(true)}
-          />
-        )
-      case 'stuck':
-        return stuckItem === undefined ? null : (
-          <MicroStartCard
-            key="stuck"
-            microStart={firstAction(stuckItem)}
-            onStarted={() => setView(toBlock(stuckItem.id))}
-            onDismiss={() => setStuckDismissedId(stuckItem.id)}
-          />
-        )
-      case 'today':
-        return (
-          <TodayCard
-            key="today"
-            block={blockForToday}
-            askEnergy={askEnergy}
-            askSleep={askSleep}
-            onEnergy={(energy) => {
-              if (todayDate === null) return
-              setProfile({ ...profile, predictions: resolvePrediction(profile.predictions, todayDate, energy) })
-            }}
-            onSleep={(bucket) => {
-              setSchedule(withSleep(week, today, bucket))
-              setSleepAnsweredToday(true)
-            }}
-            onBlock={(itemId, answer) => answerBlock(itemId, answer)}
-            onDismiss={() => setTodayDismissed(true)}
-          />
-        )
-    }
-  }
 
   const isWeekScreen = view.kind === 'week' || view.kind === 'block'
   const blockModel =
@@ -329,7 +275,30 @@ export function RoomShell({
 
           <AccuracyNote predictions={profile.predictions} />
 
-          {cards.map(renderCard)}
+          <LiveCards
+            cards={cards}
+            recoveryPrescription={recoveryPrescription}
+            onRecoveryAccept={(taken) => setSchedule(scheduleRecovery(week, taken))}
+            onRecoveryDismiss={(taken) => setSchedule(recordAttempt(week, taken.kind, false))}
+            lapsedCommitments={lapsedCommitments}
+            onLapsedDismiss={() => setLapsedDismissed(true)}
+            stuckMicroStart={stuckItem === undefined ? null : firstAction(stuckItem)}
+            onStuckStart={() => stuckItem !== undefined && setView(toBlock(stuckItem.id))}
+            onStuckDismiss={() => stuckItem !== undefined && setStuckDismissedId(stuckItem.id)}
+            blockForToday={blockForToday}
+            askEnergy={askEnergy}
+            askSleep={askSleep}
+            onEnergy={(energy) => {
+              if (todayDate === null) return
+              setProfile({ ...profile, predictions: resolvePrediction(profile.predictions, todayDate, energy) })
+            }}
+            onSleep={(bucket) => {
+              setSchedule(withSleep(week, today, bucket))
+              setSleepAnsweredToday(true)
+            }}
+            onBlockAnswer={answerBlock}
+            onTodayDismiss={() => setTodayDismissed(true)}
+          />
 
           <div className="flex items-center justify-between gap-2">
             {!lowEnergy && (
@@ -346,6 +315,18 @@ export function RoomShell({
               +
             </Button>
           </div>
+
+          {/* §1.1: "sits in one corner as a compact readout, no tap required." Placed after
+              the room's two permanent controls rather than before them, so the dial's own
+              bulk (five domain bars, trends, warnings, its spoken summary) cannot push
+              `The week` / `+` below the fold at 320px -- those two stay exactly where they
+              already were, and the dial is additional content beneath. Hidden in low-energy
+              mode: §1.5's "one number and one action" is the corner gauge already in `Room`
+              plus the single live card, and a five-bar breakdown is exactly the dashboard
+              §1.5 says a depleted student should not be handed. */}
+          {!lowEnergy && (
+            <CapacityDial capacity={overallReserve(week.start)} bars={bars} projection={projection} />
+          )}
         </>
       )}
 
@@ -362,21 +343,10 @@ export function RoomShell({
             setSchedule(deferItem(week, itemId))
             closeToRoom()
           }}
-          // "Move" has no target-picking UI yet -- nothing in this plan builds one before
-          // Task 13 -- so it shares `deferItem` with "Later" for now rather than doing
-          // nothing. Flagged in the task report as a real gap for a future task.
-          onMove={(itemId) => {
-            setSchedule(deferItem(week, itemId))
-            closeToRoom()
-          }}
           onConfirm={(itemId, answer) => {
             answerBlock(itemId, answer)
             closeToRoom()
           }}
-          // The repository has no operation to retract a recorded answer yet (`recordBlockAnswer`
-          // only upserts), so Undo cannot yet do anything real. Closing rather than silently
-          // pretending is the honest behaviour until that exists. Flagged in the task report.
-          onUndo={closeToRoom}
           onRested={(itemId, rested) => {
             answerBlock(itemId, rested ? 'right' : 'didnt')
             closeToRoom()
@@ -385,40 +355,13 @@ export function RoomShell({
       )}
 
       {view.kind === 'add' && (
-        <Sheet key="add" title="What's coming at you?" onClose={closeAdd}>
-          {addWay === 'choose' && (
-            <div className="flex flex-col gap-3">
-              <Button data-testid="add-photo" onClick={() => setAddWay('photo')}>
-                Photograph something
-              </Button>
-              <Button data-testid="add-type" onClick={() => setAddWay('type')}>
-                Type it out
-              </Button>
-              <Button data-testid="add-request" onClick={() => setAddWay('request')}>
-                Someone asked me for something
-              </Button>
-            </div>
-          )}
-
-          {addWay === 'photo' && (
-            <PhotoImportScreen onAccept={acceptItems} onCancel={() => setAddWay('choose')} />
-          )}
-
-          {addWay === 'type' && (
-            <PlannerScreen onAccept={acceptItems} onCancel={() => setAddWay('choose')} />
-          )}
-
-          {addWay === 'request' && (
-            <RequestBoxScreen
-              schedule={week}
-              onAccept={(item) => {
-                setSchedule(accept(week, item, today))
-                closeAdd()
-              }}
-              onCancel={() => setAddWay('choose')}
-            />
-          )}
-        </Sheet>
+        <AddSheetStub
+          key="add"
+          schedule={week}
+          onAcceptItems={(items) => setSchedule(addItems(week, items))}
+          onAcceptRequest={(item) => setSchedule(accept(week, item, today))}
+          onClose={closeToRoom}
+        />
       )}
 
       {view.kind === 'settings' && (

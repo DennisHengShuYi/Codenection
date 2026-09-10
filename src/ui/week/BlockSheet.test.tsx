@@ -18,8 +18,9 @@ const model = (over: Partial<BlockSheetModel> = {}): BlockSheetModel => ({
     deadlineDay: null,
     protectedRest: false,
   },
-  actions: ['done', 'later', 'move', 'cantStart'],
+  actions: ['done', 'later', 'cantStart'],
   microStart: null,
+  recordedAnswer: null,
   ...over,
 })
 
@@ -28,9 +29,7 @@ const setup = (over: Partial<BlockSheetModel> = {}) => {
     onClose: vi.fn(),
     onDone: vi.fn(),
     onLater: vi.fn(),
-    onMove: vi.fn(),
     onConfirm: vi.fn(),
-    onUndo: vi.fn(),
     onRested: vi.fn(),
   }
   render(<BlockSheet model={model(over)} {...handlers} />)
@@ -63,7 +62,6 @@ describe('BlockSheet', () => {
     setup({ actions: ['done'] })
 
     expect(screen.queryByRole('button', { name: 'Later' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Move' })).not.toBeInTheDocument()
   })
 
   it('asks a past block how it went, in one four-way answer', async () => {
@@ -114,7 +112,7 @@ describe('BlockSheet', () => {
   })
 
   it('reveals the micro-start when "I can\'t start this" is pressed and none was already shown', async () => {
-    setup({ actions: ['done', 'later', 'move', 'cantStart'], microStart: null })
+    setup({ actions: ['done', 'later', 'cantStart'], microStart: null })
 
     expect(screen.queryByTestId('micro-start')).not.toBeInTheDocument()
 
@@ -135,6 +133,25 @@ describe('BlockSheet', () => {
     const bar = screen.getByTestId('sheet-actions')
     expect(within(bar).getByRole('button', { name: 'Done' })).toBeInTheDocument()
     expect(within(bar).getByRole('button', { name: 'Later' })).toBeInTheDocument()
-    expect(within(bar).getByRole('button', { name: 'Move' })).toBeInTheDocument()
+  })
+
+  /**
+   * §5's "what you recorded, and Undo" case, without a real Undo (see `blockActions.ts`'s
+   * doc comment: there is no repository operation to retract an answer). Showing what was
+   * said replaces the button that would otherwise do nothing.
+   */
+  describe('an already-answered past block', () => {
+    it('states what was recorded rather than offering a dead Undo button', () => {
+      setup({ actions: ['undo'], recordedAnswer: 'longer' })
+
+      expect(screen.queryByRole('button', { name: /undo/i })).not.toBeInTheDocument()
+      expect(screen.getByTestId('recorded-answer')).toHaveTextContent('You said: Took longer')
+    })
+
+    it('says so plainly even when the specific answer is not known', () => {
+      setup({ actions: ['undo'], recordedAnswer: null })
+
+      expect(screen.getByTestId('recorded-answer')).toHaveTextContent(/already answered/i)
+    })
   })
 })

@@ -19,6 +19,76 @@ export const FRAGMENTATION_WEIGHT = 0.1
  */
 export const DEFICIT_AREA_WEIGHT = 0.001
 
+/**
+ * §20's weight, and a tiebreaker rather than a fourth objective -- for the same reason
+ * `DEFICIT_AREA_WEIGHT` is tiny.
+ *
+ * Sized so that leaving a substantial piece of work to its deadline costs well under a
+ * point: less than any real gain in the floor, and less than a single deficit day. If it
+ * were larger the solver would wreck a student's worst day to move an essay one day
+ * earlier, which inverts §2.1's whole ordering.
+ */
+export const DEADLINE_PRESSURE_WEIGHT = 0.008
+
+/**
+ * How much it would cost to leave this piece of work until the last moment.
+ *
+ * Derived, never asked for. §20 is explicit that no student should be made to rank their
+ * own work, because everybody marks everything high and the ranking carries no information
+ * once they have. This reads the two things the app already knows: what kind of load it is,
+ * and how big it is. Four hours of final-year project and four hours of laundry stop being
+ * interchangeable without anybody being asked which they care about.
+ *
+ * `typeIntensity` appears here as well as in drain, and the two are different questions:
+ * there it is how tiring the work is, here it is what it costs to be late with it. That
+ * they happen to rank load types the same way is a fact about study being both heavier and
+ * more consequential than laundry, not a double count of one effect.
+ */
+const consequenceOf = (item: ScheduledItem, params: EngineParams): number =>
+  params.typeIntensity[item.type] * item.hours
+
+/**
+ * §20's missing term: what it costs to defer work toward its own deadline.
+ *
+ * The solver could always defer an item to protect the floor, and nothing scored that as a
+ * bad trade -- two blocks differing only in `typeIntensity` were interchangeable load, and
+ * `deadlineProximityWeight` models something else entirely (the anticipatory stress a
+ * looming deadline causes, collapsed to one nearest-deadline figure per day).
+ *
+ * Charged only in the last day or two before the deadline, and that sparseness is
+ * deliberate rather than a simplification.
+ *
+ * The first version fell off smoothly as `1 / (1 + buffer)`, which sounds better and is
+ * worse: it gives the objective a gradient at *every* item on *every* week, so the hill
+ * climber always has another fractional improvement available and grinds on chasing it.
+ * Measured, that took an ordinary fortnight from 402 evaluations and 73ms to 2,407 and
+ * 222ms -- past §2.1's sub-100ms budget, to express a difference between five days of
+ * buffer and six that the model has no basis for claiming.
+ *
+ * So it charges nothing until the buffer is genuinely gone. "Due tomorrow" and "due in a
+ * week" are different in kind; "due in five days" and "due in six" are not, and pretending
+ * otherwise cost twice the search for no better answer.
+ *
+ * An item already past its deadline is a constraint violation and `constraints.ts` handles
+ * it. Undated work has no deadline to be late for and costs nothing.
+ */
+const NO_BUFFER_LEFT_DAYS = 1
+
+function deadlinePressure(schedule: Schedule, params: EngineParams): number {
+  let total = 0
+
+  for (const item of schedule.items) {
+    if (item.deadlineDay === null) continue
+
+    const buffer = Math.max(0, item.deadlineDay - item.dayIndex)
+    if (buffer > NO_BUFFER_LEFT_DAYS) continue
+
+    total += consequenceOf(item, params) * (NO_BUFFER_LEFT_DAYS + 1 - buffer)
+  }
+
+  return total
+}
+
 /** Rest and sleep are recovery, not load, and must not count against the daily cap or
  *  the fragmentation penalty. */
 const isWork = (kind: string): boolean => kind !== 'rest' && kind !== 'sleep'
@@ -163,6 +233,7 @@ export function score(schedule: Schedule, params: EngineParams): number {
     projection.worstFloor -
     DEFICIT_DAY_WEIGHT * projection.deficitDays -
     FRAGMENTATION_WEIGHT * fragmentationOf(byDay) -
-    DEFICIT_AREA_WEIGHT * projection.deficitArea
+    DEFICIT_AREA_WEIGHT * projection.deficitArea -
+    DEADLINE_PRESSURE_WEIGHT * deadlinePressure(schedule, params)
   )
 }

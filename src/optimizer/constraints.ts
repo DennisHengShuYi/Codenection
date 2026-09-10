@@ -1,7 +1,20 @@
 import type { EngineParams } from '../engine'
 import type { Schedule, ScheduledItem } from './types'
 
-const overlaps = (a: ScheduledItem, b: ScheduledItem): boolean =>
+/**
+ * Whether two blocks occupy any of the same hours on the same day.
+ *
+ * Exported because the manual edit form asks the same question `violations` does, about a
+ * block that is not in the schedule yet. Two definitions of "overlap" -- one here, one in
+ * the form -- would eventually disagree about a half-hour boundary, and the one the student
+ * saw would be the wrong one.
+ *
+ * Note this is the raw geometry only. Whether an overlap is a *violation* is a separate
+ * judgement, and one `violations` below and the edit form deliberately make differently:
+ * the solver tolerates two movable blocks on top of each other, and a student who has just
+ * put them there does not want that tolerated silently.
+ */
+export const overlaps = (a: ScheduledItem, b: ScheduledItem): boolean =>
   a.dayIndex === b.dayIndex &&
   a.startHour < b.startHour + b.hours &&
   b.startHour < a.startHour + a.hours

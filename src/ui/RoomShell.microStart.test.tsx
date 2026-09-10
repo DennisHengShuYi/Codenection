@@ -49,6 +49,10 @@ const renderHome = async (schedule = week()) => {
   render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
   await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
 
+  // Ruling 61: the live cards wait behind the `Waiting` button now, so opening it is part
+  // of arriving at one -- the press a student makes.
+  await userEvent.click(screen.getByTestId('open-notices'))
+
   return repository
 }
 
@@ -69,6 +73,10 @@ describe('RoomShell with a stuck task', () => {
     await repository.saveWeek({ ...week({ items: [item({ dayIndex: 0 })] }), startedOn })
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one is
+    // the press a student makes.
+    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-notices'))
 
     const card = await screen.findByTestId('micro-start')
     expect(card.textContent).toMatch(/find the one detail/i)
@@ -86,6 +94,10 @@ describe('RoomShell with a stuck task', () => {
     })
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one is
+    // the press a student makes.
+    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-notices'))
     await screen.findByTestId('micro-start')
 
     await userEvent.click(screen.getByRole('button', { name: /i'll do that/i }))
@@ -101,6 +113,10 @@ describe('RoomShell with a stuck task', () => {
     await repository.saveWeek({ ...week({ items: [item({ dayIndex: 0 })] }), startedOn })
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one is
+    // the press a student makes.
+    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-notices'))
     const card = await screen.findByTestId('micro-start')
 
     await userEvent.click(within(card).getByRole('button', { name: /not now/i }))

@@ -20,6 +20,7 @@ const parsed = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   kind: 'studyBlock',
   hours: 3,
   deadlineDay: null,
+  startHour: null,
   fixed: false,
   confident: true,
   repeat: null,
@@ -245,5 +246,73 @@ describe('fixThatMakesRoom', () => {
     fixThatMakesRoom(crowded, parsedNeed({ deadlineDay: 3 }), 3, DEFAULT_PARAMS)
 
     expect(JSON.stringify(crowded)).toBe(snapshot)
+  })
+})
+
+/**
+ * §43: a stated hour is the student's, not a suggestion.
+ *
+ * Placement used to choose every hour -- the first free slot on the day, or
+ * `FALLBACK_START_HOUR` when the day was full. That was the only possible behaviour while
+ * `ParsedItem` carried no time; now that a student can say "lecture Tuesday 9am", the app
+ * choosing 10am instead would be overruling them about their own timetable.
+ */
+describe('an item that states its own hour', () => {
+  it('lands on the hour the student stated', () => {
+    const { schedule } = placeItems(empty(), [parsed({ startHour: 9, deadlineDay: 2 })], 0)
+
+    expect(schedule.items[0]?.startHour).toBe(9)
+    expect(schedule.items[0]?.dayIndex).toBe(2)
+  })
+
+  /**
+   * The other half of "pinned": the optimizer may not move it. Without this the hour would
+   * be honoured at the moment of adding and quietly rearranged by the next rebalance,
+   * which is worse than never having honoured it -- the student would have watched it
+   * land correctly.
+   */
+  it('is fixed, so a rebalance may not move it', () => {
+    const { schedule } = placeItems(empty(), [parsed({ startHour: 9, deadlineDay: 2 })], 0)
+
+    expect(schedule.items[0]?.fixed).toBe(true)
+  })
+
+  it('leaves the hour to placement when the student stated none', () => {
+    const { schedule } = placeItems(empty(), [parsed({ startHour: null, deadlineDay: 2 })], 0)
+
+    expect(schedule.items[0]?.fixed).toBe(false)
+    expect(schedule.items[0]?.startHour).toEqual(expect.any(Number))
+  })
+
+  /**
+   * A stated hour on a day with nothing free is still the student's answer. The app says
+   * what it did in the placement note rather than moving the lecture somewhere emptier --
+   * two things at once is a real week, and §16 is about never reshuffling silently.
+   */
+  it('keeps the stated hour even where the day is already busy', () => {
+    const busy = {
+      ...empty(),
+      items: [
+        {
+          id: 'existing',
+          title: 'Lab',
+          type: 'mental' as const,
+          kind: 'studyBlock' as const,
+          hours: 3,
+          intensity: 1,
+          dayIndex: 2,
+          startHour: 9,
+          fixed: true,
+          deadlineDay: null,
+          protectedRest: false,
+        },
+      ],
+    }
+
+    const { schedule } = placeItems(busy, [parsed({ startHour: 9, deadlineDay: 2 })], 0)
+    const added = schedule.items.find((item) => item.id !== 'existing')
+
+    expect(added?.startHour).toBe(9)
+    expect(added?.dayIndex).toBe(2)
   })
 })

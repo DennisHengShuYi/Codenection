@@ -28,6 +28,16 @@ const replySchema = z.object({
           .min(0)
           .max(HORIZON_DAYS - 1)
           .nullable(),
+        /**
+         * §43. Optional with a null default rather than required: a model that forgets the
+         * field is saying "no time stated", and `parseModelReply` is all-or-nothing, so
+         * requiring it would take a whole otherwise-good import down over one absent hour.
+         *
+         * Bounded like every other number here. An integer 0-23 is an hour of the day;
+         * 24, -1 and 9.5 are a model inventing structure, and the student would be shown a
+         * time their own week could not contain.
+         */
+        startHour: z.number().int().min(0).max(23).nullable().default(null),
         hard: z.boolean(),
         /**
          * Whether the model actually read this row, or reconstructed it.

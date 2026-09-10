@@ -50,6 +50,12 @@ const renderHome = async (schedule = week()) => {
   render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
   await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
 
+  // Ruling 61: the today card and everything else the band used to hold wait behind the
+  // `Waiting` button, so opening it is part of arriving at them -- the press a student
+  // makes. Done here rather than in each test, since every test below is about what is
+  // inside.
+  await userEvent.click(screen.getByTestId('open-notices'))
+
   return repository
 }
 
@@ -92,6 +98,10 @@ describe('RoomShell with a block to confirm', () => {
     await repository.saveWeek(week({ items: [item({ dayIndex: 0 })] }))
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={onAnswerBlock} />)
+    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one starts
+    // with the press a student would make.
+    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-notices'))
     await waitFor(() => expect(screen.getByTestId('answer-longer')).toBeVisible())
 
     await userEvent.click(screen.getByTestId('answer-longer'))
@@ -113,6 +123,10 @@ describe('RoomShell with a block to confirm', () => {
     await repository.saveWeek(week({ items: [item({ dayIndex: 0 })] }))
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={onAnswerBlock} />)
+    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one starts
+    // with the press a student would make.
+    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-notices'))
     await waitFor(() => expect(screen.getByTestId('answer-didnt')).toBeVisible())
 
     await userEvent.click(screen.getByTestId('answer-didnt'))
@@ -224,6 +238,10 @@ describe('RoomShell with a block to confirm', () => {
     }))
 
     render(<RoomShell repository={repository} blockLog={overran} onAnswerBlock={vi.fn()} />)
+    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one starts
+    // with the press a student would make.
+    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-notices'))
 
     await waitFor(() =>
       expect(screen.getByTestId('bias-line')).toHaveTextContent(

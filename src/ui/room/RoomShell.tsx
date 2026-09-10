@@ -41,7 +41,7 @@ import { LiveCards } from './LiveCards'
 import { roomModel } from './roomModel'
 import { describeRoom } from './roomText'
 import { Room } from './Room'
-import { ROOM, toAdd, toBlock, toReserves, toSettings, toWeek } from './view'
+import { ROOM, toAdd, toBlock, toNotices, toReserves, toSettings, toWeek } from './view'
 import { useUrlView } from './useUrlView'
 import { useTidyUp } from './useTidyUp'
 
@@ -314,6 +314,119 @@ export function RoomShell({
    * its own full-bleed stage now (Ruling 54), and duplicating forty lines of sheet wiring
    * across the two branches is how one of them quietly stops opening.
    */
+  /**
+   * How much is waiting, and said out loud for the button's accessible name.
+   *
+   * The live cards, and only those. The paragraph and the accuracy line are always present,
+   * so counting them would make the number a constant -- a badge that reads the same on a
+   * quiet week as on a bad one teaches the student to ignore it, which is the one thing a
+   * notification count must never do. The preview notice is not counted because it is not
+   * behind the button at all: it sits on the room, under the controls.
+   */
+  const noticeCount = cards.length
+  const noticeLabel =
+    noticeCount === 0
+      ? 'Nothing waiting'
+      : `${noticeCount} waiting`
+
+  /**
+   * Everything the room used to stack beneath its drawing (Ruling 61).
+   *
+   * Defined once and rendered in one of two places, never both: behind the `Waiting`
+   * button for an ordinary week, or -- below §1.5's threshold, where a card behind a button
+   * is not an action anyone has been handed -- in the band under the room, as it always
+   * was. Sharing the definition is what keeps the collapsed interface showing the same
+   * card, in the same precedence, as the sheet does.
+   */
+  const noticesBody = (
+    <>
+        {/* Flagged by Task 12: the drawing's own `aria-label` (`describeRoomFully`) is
+            already the complete text equivalent a screen reader needs, and this capped
+            paragraph repeats a subset of the same sentences verbatim -- character and
+            weather always, in the same words. Left as visible-and-announced, the two
+            would read out back to back: the full version, then a partial repeat of it.
+            `aria-hidden` keeps it for sighted readers (still worth having as running text
+            rather than only inside an SVG's accessible name) without saying anything
+            twice to assistive tech. */}
+        <p data-testid="room-text-equivalent" aria-hidden="true" className="text-sm text-ink-soft">
+          {paragraph}
+        </p>
+
+        {/* §16: never silently reshuffle. What was added, where it went, and -- only when
+            something had to give -- the single move that would help, offered rather than
+            taken. "Leave it" is the healthy default: doing nothing keeps the week the
+            student decided on. */}
+        {placementLines.length > 0 && (
+          <Card role="status" data-testid="placement-note" className="flex flex-col gap-2">
+            {placementLines.map((line, index) => (
+              <p key={`${line}-${index}`} className="text-sm">
+                {line}
+              </p>
+            ))}
+
+            {placementFix !== null && (
+              <>
+                <p className="text-sm text-ink-soft">Or: {placementFix.move.description}.</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    data-testid="placement-do"
+                    onClick={() => {
+                      setSchedule(placementFix.move.apply(week))
+                      setPlacementLines([])
+                      setPlacementFix(null)
+                    }}
+                  >
+                    Do that
+                  </Button>
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    data-testid="placement-leave"
+                    onClick={() => {
+                      setPlacementLines([])
+                      setPlacementFix(null)
+                    }}
+                  >
+                    Leave it
+                  </Button>
+                </div>
+              </>
+            )}
+          </Card>
+        )}
+
+        <AccuracyNote predictions={profile.predictions} />
+
+        <LiveCards
+          cards={cards}
+          onDistressDismiss={() => setDistressDismissed(true)}
+          recoveryPrescription={recoveryPrescription}
+          onRecoveryAccept={(taken) => setSchedule(scheduleRecovery(week, taken))}
+          onRecoveryDismiss={() => setRecoveryDismissed(true)}
+          lapsedCommitments={lapsedCommitments}
+          onLapsedDismiss={() => setLapsedDismissed(true)}
+          stuckMicroStart={stuckItem === undefined ? null : firstAction(stuckItem)}
+          onStuckStart={() => stuckItem !== undefined && setView(toBlock(stuckItem.id))}
+          onStuckDismiss={() => stuckItem !== undefined && setStuckDismissedId(stuckItem.id)}
+          blockForToday={blockForToday}
+          askEnergy={askEnergy}
+          askSleep={askSleep}
+          outcomes={outcomes}
+          onEnergy={(energy) => {
+            if (todayDate === null) return
+            setProfile({ ...profile, predictions: resolvePrediction(profile.predictions, todayDate, energy) })
+          }}
+          onSleep={(bucket) => {
+            setSchedule(withSleep(week, today, bucket))
+            setSleepAnsweredToday(true)
+          }}
+          onBlockAnswer={answerBlock}
+          onTodayDismiss={() => setTodayDismissed(true)}
+        />
+    </>
+  )
+
   const sheets = (
     <>
       {view.kind === 'block' && blockModel !== null && (
@@ -386,6 +499,12 @@ export function RoomShell({
           history={reportedEnergy}
           onClose={closeToRoom}
         />
+      )}
+
+      {view.kind === 'notices' && !lowEnergy && (
+        <Sheet key="notices" title="What's waiting" onClose={closeToRoom}>
+          <div className="flex flex-col gap-3">{noticesBody}</div>
+        </Sheet>
       )}
 
       {view.kind === 'settings' && (
@@ -525,20 +644,68 @@ export function RoomShell({
         />
 
         {/* One control row across the top of the room, packed to the left: `Settings`, then
-            `The week`, then `+` beside it. The row stops where its buttons stop, leaving the
-            opposite corner to the gauge. */}
-        <div className="absolute left-2 top-2 flex items-center gap-2">
+            `The week`, then `Waiting`, then `+`.
+            
+            Three things keep it out of the gauge's way, and the fourth control is what made
+            all three necessary -- at 320px the row is wider than the screen. `pr-14` holds
+            the corner open, `flex-wrap` puts the overflow on a second line rather than
+            pushing it under the gauge, and the container itself takes no pointer events, so
+            even where its empty box reaches across the gauge it cannot swallow the press.
+            That last one is not belt and braces: the row's transparent box intercepting the
+            gauge is exactly how `dial.spec.ts` failed at 320 and 390. */}
+        <div className="pointer-events-none absolute inset-x-2 top-2 flex flex-wrap items-center gap-2 pr-14 [&>*]:pointer-events-auto">
           {settingsButton}
           {!lowEnergy && (
             <Button variant="secondary" data-testid="open-week" onClick={() => setView(toWeek())}>
               The week
             </Button>
           )}
+          {/* Ruling 61: everything the band used to stack under the drawing, behind one
+              button that says how much of it there is. Absent in low-energy mode, where the
+              one card §1.5 keeps is still rendered in place: a card behind a button is not
+              an action the student has been handed. */}
+          {!lowEnergy && (
+            <Button
+              variant="secondary"
+              data-testid="open-notices"
+              aria-label={noticeLabel}
+              onClick={() => setView(toNotices())}
+            >
+              <span aria-hidden="true">Waiting</span>
+              {noticeCount > 0 && (
+                <span
+                  data-testid="notices-count"
+                  aria-hidden="true"
+                  className="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-ink px-1.5 text-xs font-semibold text-on-color"
+                >
+                  {noticeCount}
+                </span>
+              )}
+            </Button>
+          )}
+
           <Button data-testid="open-add" aria-label="Add something" onClick={() => setView(toAdd())}>
             +
           </Button>
         </div>
 
+        {/* The one thing that does NOT go behind the `Waiting` button (Ruling 61). A student
+            who does not know their week is not being saved will lose it, and a warning about
+            losing work that has to be pressed for is a warning that arrives after the loss.
+
+            Along the bottom rather than under the controls, and that is Ruling 55 deciding
+            rather than taste: at 320x568 there are 74px between the control row and the top
+            of the character, and this banner is 108px tall, so directly under the controls
+            it lands on the character's face -- which `room.spec.ts` hit-tests at four
+            viewports. The foot of the stage is clear of the drawing's subject at every
+            width. */}
+        {session === null && (
+          <div className="absolute inset-x-2 bottom-2">
+            <PreviewBanner onSignIn={onSignIn} />
+          </div>
+        )}
+
+        {lowEnergy && (
         <section
           data-testid="room-band"
           className="absolute inset-x-0 bottom-0 flex max-h-[calc(100%-min(52.33vw,60.38%)-1rem)] flex-col gap-3 border-t border-line bg-surface/85 p-3 backdrop-blur-sm"
@@ -547,97 +714,10 @@ export function RoomShell({
             data-testid="room-band-content"
             className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
           >
-            {/* The one thing that is not furniture, and first in the band for that reason. A
-                student who does not know their week is not being saved will lose it, and a
-                warning about data loss must not be something they scroll to. */}
-            {session === null && <PreviewBanner onSignIn={onSignIn} />}
-
-            {/* Flagged by Task 12: the drawing's own `aria-label` (`describeRoomFully`) is
-                already the complete text equivalent a screen reader needs, and this capped
-                paragraph repeats a subset of the same sentences verbatim -- character and
-                weather always, in the same words. Left as visible-and-announced, the two
-                would read out back to back: the full version, then a partial repeat of it.
-                `aria-hidden` keeps it for sighted readers (still worth having as running text
-                rather than only inside an SVG's accessible name) without saying anything
-                twice to assistive tech. */}
-            <p data-testid="room-text-equivalent" aria-hidden="true" className="text-sm text-ink-soft">
-              {paragraph}
-            </p>
-
-            {/* §16: never silently reshuffle. What was added, where it went, and -- only when
-                something had to give -- the single move that would help, offered rather than
-                taken. "Leave it" is the healthy default: doing nothing keeps the week the
-                student decided on. */}
-            {placementLines.length > 0 && (
-              <Card role="status" data-testid="placement-note" className="flex flex-col gap-2">
-                {placementLines.map((line, index) => (
-                  <p key={`${line}-${index}`} className="text-sm">
-                    {line}
-                  </p>
-                ))}
-
-                {placementFix !== null && (
-                  <>
-                    <p className="text-sm text-ink-soft">Or: {placementFix.move.description}.</p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        data-testid="placement-do"
-                        onClick={() => {
-                          setSchedule(placementFix.move.apply(week))
-                          setPlacementLines([])
-                          setPlacementFix(null)
-                        }}
-                      >
-                        Do that
-                      </Button>
-                      <Button
-                        variant="quiet"
-                        size="sm"
-                        data-testid="placement-leave"
-                        onClick={() => {
-                          setPlacementLines([])
-                          setPlacementFix(null)
-                        }}
-                      >
-                        Leave it
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </Card>
-            )}
-
-            <AccuracyNote predictions={profile.predictions} />
-
-            <LiveCards
-              cards={cards}
-              onDistressDismiss={() => setDistressDismissed(true)}
-              recoveryPrescription={recoveryPrescription}
-              onRecoveryAccept={(taken) => setSchedule(scheduleRecovery(week, taken))}
-              onRecoveryDismiss={() => setRecoveryDismissed(true)}
-              lapsedCommitments={lapsedCommitments}
-              onLapsedDismiss={() => setLapsedDismissed(true)}
-              stuckMicroStart={stuckItem === undefined ? null : firstAction(stuckItem)}
-              onStuckStart={() => stuckItem !== undefined && setView(toBlock(stuckItem.id))}
-              onStuckDismiss={() => stuckItem !== undefined && setStuckDismissedId(stuckItem.id)}
-              blockForToday={blockForToday}
-              askEnergy={askEnergy}
-              askSleep={askSleep}
-              outcomes={outcomes}
-              onEnergy={(energy) => {
-                if (todayDate === null) return
-                setProfile({ ...profile, predictions: resolvePrediction(profile.predictions, todayDate, energy) })
-              }}
-              onSleep={(bucket) => {
-                setSchedule(withSleep(week, today, bucket))
-                setSleepAnsweredToday(true)
-              }}
-              onBlockAnswer={answerBlock}
-              onTodayDismiss={() => setTodayDismissed(true)}
-            />
+            {noticesBody}
           </div>
         </section>
+        )}
 
         </main>
 

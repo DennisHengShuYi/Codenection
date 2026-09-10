@@ -29,7 +29,11 @@ describe('RoomShell', () => {
     renderHome()
 
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
-    expect(screen.getByTestId('room-text-equivalent')).toBeVisible()
+
+    // Ruling 61: the room in words moved behind the `Waiting` button with everything else
+    // that used to be stacked beneath the drawing.
+    await userEvent.click(screen.getByTestId('open-notices'))
+    expect(await screen.findByTestId('room-text-equivalent')).toBeVisible()
   })
 
   describe('routing', () => {

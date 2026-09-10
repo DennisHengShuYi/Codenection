@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
+import { CHARACTER_BOTTOM } from './room/scene/palette'
 import { HORIZON_DAYS } from '../engine'
 import { RoomShell } from './room/RoomShell'
 
@@ -143,8 +144,14 @@ describe('the low-energy override, reachable from the settings sheet', () => {
     // if `open-settings` is one of the things low-energy mode hides.
     await userEvent.click(screen.getByTestId('open-settings'))
     await userEvent.click(await screen.findByRole('radio', { name: /full interface/i }))
+    await userEvent.click(screen.getByRole('button', { name: /close/i }))
 
     await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+
+    // Ruling 61: out of the collapsed interface, the paragraph is no longer under the room
+    // -- it waits behind the `Waiting` button with the rest of what there is to read. The
+    // uncapped version is what proves the mode really came off.
+    await userEvent.click(screen.getByTestId('open-notices'))
     expect(visibleSentences()).toBeGreaterThan(1)
   })
 
@@ -314,5 +321,43 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
 
     expect(await screen.findByRole('dialog', { name: /reserves/i })).toBeVisible()
     expect(screen.getAllByRole('meter').length).toBeGreaterThan(0)
+  })
+})
+
+describe('the collapsed interface, measured against the character', () => {
+
+  /**
+   * Moved here by Ruling 61, which emptied the band for an ordinary week: the only room
+   * that still has one is the collapsed interface, holding the single card §1.5 keeps. The
+   * cap is what stops that card growing over the character, so it is measured where the
+   * band actually renders.
+   *
+   * The other end of `Character.test.tsx`'s measurement, and the reason that one is worth
+   * having: the band's cap is a Tailwind arbitrary value, which cannot read a TypeScript
+   * constant, so nothing made the cap and the artwork move together. `room.spec.ts` catches
+   * the drift at four viewports in a real browser -- but only as an unexplained geometric
+   * failure, and only for the pair of numbers that happen to be in the string today.
+   *
+   * So the percentages are re-derived here from `CHARACTER_BOTTOM` and the fill viewBox the
+   * room draws into (`Room.tsx`: `0 0 300 260`). The character sits at
+   * `CHARACTER_BOTTOM x min(stageWidth/300, stageHeight/260)` down the stage, which is
+   * `min(CHARACTER_BOTTOM/300 of the width, CHARACTER_BOTTOM/260 of the height)`; the band
+   * may have the rest, less a finger's margin. Raise `CHARACTER_BOTTOM` and this fails at
+   * the line that has to change.
+   *
+   * Percentages rather than `dvh`, deliberately: the cap resolves against the stage, and
+   * `App` gives the stage less than the viewport when the degraded-storage notice is above
+   * it. `100dvh` there would cap the band against a height the stage does not have.
+   */
+  it('caps the band at the space the character leaves, derived rather than typed', async () => {
+    await renderDrained()
+    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+
+    const across = ((CHARACTER_BOTTOM / 300) * 100).toFixed(2)
+    const down = ((CHARACTER_BOTTOM / 260) * 100).toFixed(2)
+
+    expect(screen.getByTestId('room-band').className).toContain(
+      `max-h-[calc(100%-min(${across}vw,${down}%)-1rem)]`,
+    )
   })
 })

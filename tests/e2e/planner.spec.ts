@@ -27,6 +27,13 @@ test('turns a brain dump into a week', async ({ page }) => {
 
   await expect(page.getByTestId(/^chip-/).first()).toBeVisible()
 
+  // §43: an item that does not say when it happens cannot be added, so the day is answered
+  // on the chip first -- the same press a student makes. Day 2 rather than today, so what
+  // lands is distinguishable from something the seed put there.
+  for (const select of await page.getByTestId(/^when-day-/).all()) {
+    await select.selectOption('2')
+  }
+
   await page.getByRole('button', { name: /add these/i }).click()
 
   // Back to the room, now drawing a week the student actually entered.
@@ -43,6 +50,13 @@ for (const width of [320, 390, 768, 1280]) {
     await page.getByLabel(/on your mind/i).fill('essay due friday 2000 words, gym, laundry')
     await page.getByRole('button', { name: /read this/i }).click()
     await expect(page.getByTestId(/^chip-/).first()).toBeVisible()
+
+  // §43: an item that does not say when it happens cannot be added, so the day is answered
+  // on the chip first -- the same press a student makes. Day 2 rather than today, so what
+  // lands is distinguishable from something the seed put there.
+  for (const select of await page.getByTestId(/^when-day-/).all()) {
+    await select.selectOption('2')
+  }
 
     const overflows = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

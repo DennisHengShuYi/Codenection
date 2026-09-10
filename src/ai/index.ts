@@ -22,6 +22,7 @@ export {
   MAX_INPUT_LENGTH,
   MAX_ITEMS,
   MAX_REQUEST_LENGTH,
+  type Calendar,
   type ParsedItem,
   type ParseOutcome,
   type PhotoOutcome,

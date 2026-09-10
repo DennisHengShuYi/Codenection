@@ -35,6 +35,9 @@ describe('App', () => {
       expect(screen.getByRole('button', { name: /look around/i })).toBeVisible(),
     )
     await userEvent.click(screen.getByRole('button', { name: /look around/i }))
+
+    // On the room itself, with no press needed: a warning about losing work that has to be
+    // asked for is a warning that arrives after the loss (Ruling 61).
     await waitFor(() => expect(screen.getByTestId('preview-banner')).toBeVisible())
 
     await userEvent.click(screen.getByRole('button', { name: /create an account to keep it/i }))

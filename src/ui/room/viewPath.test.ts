@@ -6,6 +6,7 @@ import {
   toAdd,
   toBlock,
   toPath,
+  toNotices,
   toReserves,
   toSettings,
   toWeek,
@@ -27,6 +28,7 @@ const TABLE: readonly { readonly path: string; readonly view: View }[] = [
   { path: '/week/block/essay', view: toBlock('essay') },
   { path: '/settings', view: toSettings() },
   { path: '/reserves', view: toReserves() },
+  { path: '/notices', view: toNotices() },
   { path: '/add', view: toAdd() },
   { path: '/add/photo', view: toAdd('photo') },
   { path: '/add/type', view: toAdd('type') },
@@ -87,6 +89,7 @@ describe('ascending', () => {
   it('is true when closing a sheet to the room', () => {
     expect(isAscent(toSettings(), ROOM)).toBe(true)
     expect(isAscent(toReserves(), ROOM)).toBe(true)
+    expect(isAscent(toNotices(), ROOM)).toBe(true)
     expect(isAscent(toAdd('type'), ROOM)).toBe(true)
   })
 

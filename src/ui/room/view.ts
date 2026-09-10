@@ -33,6 +33,10 @@ export type View =
    *  screen. Two capacity readings on one screen was the fault Ruling 53 fixed; this keeps
    *  them one behind the other instead. */
   | { readonly kind: 'reserves' }
+  /** Ruling 61: everything the room used to stack in a band beneath the drawing -- the
+   *  preview notice, the room in words, the accuracy line and the live cards -- behind one
+   *  button, so the room is the drawing again. */
+  | { readonly kind: 'notices' }
 
 export const ROOM: View = { kind: 'room' }
 // Not exported: `toWeek()` and `back()` are the module's whole surface for it.
@@ -47,6 +51,8 @@ export const toAdd = (way: AddWay | null = null): View => ({ kind: 'add', way })
 export const toSettings = (): View => ({ kind: 'settings' })
 
 export const toReserves = (): View => ({ kind: 'reserves' })
+
+export const toNotices = (): View => ({ kind: 'notices' })
 
 /**
  * One level up: the Back button's rule (Ruling 60).
@@ -90,6 +96,8 @@ export const toPath = (view: View): string => {
       return '/settings'
     case 'reserves':
       return '/reserves'
+    case 'notices':
+      return '/notices'
   }
 }
 
@@ -124,6 +132,8 @@ export const fromPath = (path: string): View => {
   if (first === 'settings' && parts.length === 1) return toSettings()
 
   if (first === 'reserves' && parts.length === 1) return toReserves()
+
+  if (first === 'notices' && parts.length === 1) return toNotices()
 
   if (first === 'add') {
     if (parts.length === 1) return toAdd()

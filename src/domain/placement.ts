@@ -105,10 +105,22 @@ export function placeItems(
       hours: item.hours,
       intensity: 1,
       dayIndex: slot === null ? start : dayIndex,
-      startHour: slot?.startHour ?? FALLBACK_START_HOUR,
+      /**
+       * §43: the student's own hour wins over the search.
+       *
+       * Placement chose every hour while `ParsedItem` carried no time -- the first free
+       * slot, or `FALLBACK_START_HOUR` on a full day. Now that "lecture Tuesday 9am" can be
+       * read, choosing 10am instead would be the app overruling a student about their own
+       * timetable. A stated hour is taken as given even where the day is already busy: two
+       * things at once is a real week, and the placement note says so rather than moving
+       * the lecture somewhere emptier behind their back (§16).
+       */
+      startHour: item.startHour ?? slot?.startHour ?? FALLBACK_START_HOUR,
       // §5.1 unchanged: what the student ticked may pin a time, and nothing here may ever
-      // create protected rest.
-      fixed: item.fixed,
+      // create protected rest. §43 adds the other half of a stated hour: honouring it once
+      // and letting the next rebalance move it would be worse than never honouring it --
+      // the student would have watched it land correctly and then drift.
+      fixed: item.fixed || item.startHour !== null,
       deadlineDay: item.deadlineDay,
       protectedRest: false,
       // §39: carried through when the item came from a series, absent when it did not.

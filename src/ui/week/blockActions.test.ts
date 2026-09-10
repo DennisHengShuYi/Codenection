@@ -58,6 +58,27 @@ describe('blockSheet', () => {
     expect(sheet(item({ protectedRest: true, fixed: true }))?.actions).toEqual(['didRest'])
   })
 
+  // A past, unanswered protected-rest block keeps rest's own question: "did it happen" is
+  // still the right thing to ask, and it has not been answered yet.
+  it('asks a past protected-rest block that has not been answered whether it happened', () => {
+    expect(sheet(item({ protectedRest: true, fixed: true, dayIndex: 2 }))?.actions).toEqual([
+      'didRest',
+    ])
+  })
+
+  // A past protected-rest block that HAS been answered must still expose that on the only
+  // axis this model has for it -- confirm/undo. Answered rest and never-touched rest cannot
+  // read identically, or the student is asked "did you rest?" cold the day after they already
+  // answered, with no way to undo it -- while every other block kind on the same screen does
+  // offer that.
+  it('offers Undo on a past protected-rest block already answered, not didRest again', () => {
+    const profile = { ...DEFAULT_PROFILE, confirmedItemIds: ['essay'] }
+
+    expect(
+      sheet(item({ protectedRest: true, fixed: true, dayIndex: 2 }), profile)?.actions,
+    ).toEqual(['undo'])
+  })
+
   it('asks a past block that has not been confirmed how it went', () => {
     expect(sheet(item({ dayIndex: 2 }))?.actions).toEqual(['confirm'])
   })

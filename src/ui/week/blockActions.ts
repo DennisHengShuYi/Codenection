@@ -25,13 +25,6 @@ const actionsFor = (
   blockLog: readonly BlockRecord[],
   today: number,
 ): readonly BlockAction[] => {
-  // Rest is asked about rather than ticked off: §5.2's log wants to know whether it helped,
-  // and "Done" on a nap answers a different question. Protected rest is checked first, ahead
-  // of the past-block branch below, because "did it happen" is the specific question that
-  // matters for rest -- a generic confirm/undo would ask the wrong thing about a nap that
-  // already passed and was never answered.
-  if (item.protectedRest) return ['didRest']
-
   if (item.dayIndex < today) {
     // §8b: a block counts as already answered if the durable log says so, or if the
     // profile's own (soon-to-be-retired) record does. Mirrors roomModel.ts and
@@ -40,8 +33,20 @@ const actionsFor = (
     // gone back to being unconfirmed.
     const alreadyAsked =
       answeredIds(blockLog).includes(item.id) || profile.confirmedItemIds.includes(item.id)
+
+    // Rest keeps its own question -- "did it happen", not "how did it go" -- but only while
+    // unanswered. Once answered, confirm/undo is the only axis this model has for exposing
+    // that back to the student, and letting protectedRest short-circuit past it would make
+    // an answered nap and a never-touched one read identically: asked cold again, with no
+    // way to undo, while every other block kind on the same screen does offer that.
+    if (item.protectedRest && !alreadyAsked) return ['didRest']
+
     return alreadyAsked ? ['undo'] : ['confirm']
   }
+
+  // A future or today protected-rest block has nothing to be "answered" about yet -- it
+  // keeps asking whether it happened.
+  if (item.protectedRest) return ['didRest']
 
   // Fixed means classes, shifts and hard deadlines. The optimizer may not move them, so
   // offering Move here would be the interface promising something the model refuses.

@@ -84,6 +84,14 @@ export function WeekScreen(props: {
   readonly onRebalance: () => void
   readonly onSelectBlock: (itemId: string) => void
   /**
+   * The fourth way in, and the only direct one.
+   *
+   * The `+` sheet's three ways all read something -- a photo, a paragraph, a request -- and
+   * then work out where it goes. This one starts from a day the student is already looking
+   * at, so the day is what it hands back and the block lands exactly where they put it.
+   */
+  readonly onAddBlock: (dayIndex: number) => void
+  /**
    * §8b's durable record of what was scheduled and what became of it. Threaded through to
    * `scheduleView` exactly as `roomModel` threads it (`src/ui/room/roomModel.ts`), so a block
    * answered through the log is not mislabelled "not confirmed" on the app's primary surface
@@ -100,6 +108,7 @@ export function WeekScreen(props: {
     fallback = null,
     onRebalance,
     onSelectBlock,
+    onAddBlock,
     blockLog = [],
   } = props
   const [openDay, setOpenDay] = useState<number | null>(null)
@@ -189,45 +198,59 @@ export function WeekScreen(props: {
         )}
       </div>
 
-      {grid !== null && (
-        <div
-          data-testid="day-grid"
-          className="relative mx-auto w-full max-w-2xl rounded-xl border border-line bg-surface"
-          style={{ minHeight: `${(grid.hours.length - 1) * 48}px` }}
-        >
-          {grid.hours.slice(0, -1).map((hour) => (
-            <div
-              key={hour}
-              className="absolute left-0 w-12 border-t border-line text-xs text-ink-soft"
-              style={{
-                top: `${((hour - grid.firstHour) / (grid.lastHour - grid.firstHour)) * 100}%`,
-              }}
-            >
-              {hour}:00
-            </div>
-          ))}
-
-          {grid.blocks.map(({ item, topPercent, heightPercent }) => (
-            <button
-              key={item.id}
-              type="button"
-              data-testid={`block-${item.id}`}
-              onClick={() => onSelectBlock(item.id)}
-              className={`absolute left-14 right-2 min-h-11 break-words rounded-lg p-1 text-left text-xs text-on-color ${TYPE_HUE[item.type]}`}
-              style={{ top: `${topPercent}%`, height: `${heightPercent}%` }}
-            >
-              {/* `break-words` on both lines: a pasted URL or a spaceless course code must
-                  wrap inside the day grid's narrow column rather than push past it -- the
-                  single-column layout only survives 320px if nothing inside it can force a
-                  wider box (§4). */}
-              <div className="break-words">{item.title}</div>
-              <div className="break-words">
-                {TYPE_LABEL[item.type]} — {item.startHour}:00–{item.startHour + item.hours}:00
-                {item.fixed && ' 🔒 fixed'}
-                {item.protectedRest && ' 🛡 protected'}
+      {grid !== null && openDay !== null && (
+        <div className="flex flex-col gap-3">
+          <div
+            data-testid="day-grid"
+            className="relative mx-auto w-full max-w-2xl rounded-xl border border-line bg-surface"
+            style={{ minHeight: `${(grid.hours.length - 1) * 48}px` }}
+          >
+            {grid.hours.slice(0, -1).map((hour) => (
+              <div
+                key={hour}
+                className="absolute left-0 w-12 border-t border-line text-xs text-ink-soft"
+                style={{
+                  top: `${((hour - grid.firstHour) / (grid.lastHour - grid.firstHour)) * 100}%`,
+                }}
+              >
+                {hour}:00
               </div>
-            </button>
-          ))}
+            ))}
+
+            {grid.blocks.map(({ item, topPercent, heightPercent }) => (
+              <button
+                key={item.id}
+                type="button"
+                data-testid={`block-${item.id}`}
+                onClick={() => onSelectBlock(item.id)}
+                className={`absolute left-14 right-2 min-h-11 break-words rounded-lg p-1 text-left text-xs text-on-color ${TYPE_HUE[item.type]}`}
+                style={{ top: `${topPercent}%`, height: `${heightPercent}%` }}
+              >
+                {/* `break-words` on both lines: a pasted URL or a spaceless course code must
+                    wrap inside the day grid's narrow column rather than push past it -- the
+                    single-column layout only survives 320px if nothing inside it can force a
+                    wider box (§4). */}
+                <div className="break-words">{item.title}</div>
+                <div className="break-words">
+                  {TYPE_LABEL[item.type]} — {item.startHour}:00–{item.startHour + item.hours}:00
+                  {item.fixed && ' 🔒 fixed'}
+                  {item.protectedRest && ' 🛡 protected'}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Under the grid rather than above it: this adds to the day, so it has to
+              follow the day it is about -- unlike Rebalance, which acts on the whole
+              fortnight and therefore sits above the grid rather than with it. */}
+          <Button
+            variant="secondary"
+            data-testid="add-block"
+            onClick={() => onAddBlock(openDay)}
+            className="mx-auto w-full max-w-2xl"
+          >
+            + Add a block to this day
+          </Button>
         </div>
       )}
     </div>

@@ -62,6 +62,7 @@ const days = (schedule: Schedule): DayInput[] =>
 const setup = (schedule = week(), over: Partial<Parameters<typeof WeekScreen>[0]> = {}) => {
   const onRebalance = vi.fn()
   const onSelectBlock = vi.fn()
+  const onAddBlock = vi.fn()
   const projection = project(schedule.start, days(schedule), DEFAULT_PARAMS)
 
   render(
@@ -72,11 +73,12 @@ const setup = (schedule = week(), over: Partial<Parameters<typeof WeekScreen>[0]
       report={null}
       onRebalance={onRebalance}
       onSelectBlock={onSelectBlock}
+      onAddBlock={onAddBlock}
       {...over}
     />,
   )
 
-  return { onRebalance, onSelectBlock }
+  return { onRebalance, onSelectBlock, onAddBlock }
 }
 
 describe('WeekScreen', () => {
@@ -357,5 +359,38 @@ describe('WeekScreen with no fixed commitments', () => {
     expect(screen.queryByTestId('week-reserves')).toBeNull()
     expect(screen.queryAllByRole('meter')).toHaveLength(0)
     expect(screen.queryByTestId('reserve-text-equivalent')).toBeNull()
+  })
+})
+
+/**
+ * The fourth way in, and the only direct one. The `+` sheet's three ways all read something
+ * and then work out where it goes; this starts from a day the student is already looking at,
+ * so the day is what it hands back.
+ */
+describe('putting something into a day by hand', () => {
+  it('offers nothing until a day is open', () => {
+    setup(week([item('essay', 3)]))
+
+    expect(screen.queryByTestId('add-block')).toBeNull()
+  })
+
+  it('offers to add to whichever day is open', async () => {
+    const { onAddBlock } = setup(week([item('essay', 3)]))
+
+    await userEvent.click(screen.getByTestId('day-3'))
+    await userEvent.click(screen.getByTestId('add-block'))
+
+    expect(onAddBlock).toHaveBeenCalledWith(3)
+  })
+
+  // The button follows the day it sits under, rather than the first one ever opened.
+  it('follows the open day when it changes', async () => {
+    const { onAddBlock } = setup(week([item('essay', 3), item('lab', 5)]))
+
+    await userEvent.click(screen.getByTestId('day-3'))
+    await userEvent.click(screen.getByTestId('day-5'))
+    await userEvent.click(screen.getByTestId('add-block'))
+
+    expect(onAddBlock).toHaveBeenCalledWith(5)
   })
 })

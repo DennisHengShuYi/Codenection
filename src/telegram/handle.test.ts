@@ -443,6 +443,31 @@ describe('the command surface', () => {
       expect(reply?.text).toMatch(/cannot|right now/i)
       expect(h.saved).toEqual([])
     })
+
+    /**
+     * Predictions are not the block log, and the two failures are judged differently on
+     * purpose. An unreadable log means "we do not know" and the bot says so; unreadable
+     * predictions only mean the calibration falls back to population defaults, which §7.7
+     * says the app must work on anyway. So these still answer.
+     *
+     * A pre-existing gap: every `loadPredictions` fallback in this file was unreached, and
+     * a fallback nobody has run is a guess about what happens, not a fact.
+     */
+    it.each(['week', 'schedule', 'rebalance', 'lapsed'])(
+      'still answers /%s when predictions cannot be read',
+      async (name) => {
+        const h = harness({
+          loadPredictions: async () => {
+            throw new Error('offline')
+          },
+        })
+
+        const reply = await handleIntent(command(name), h.store, 1000)
+
+        expect(reply?.text).toBeTruthy()
+        expect(reply?.text).not.toMatch(/cannot|right now/i)
+      },
+    )
   })
 
   it('answers /rest with one thing to do when something is low', async () => {

@@ -67,7 +67,7 @@ export const replaceCurrent = (ladder: Ladder, rung: Rung): Ladder =>
  * the task reworded, which is the failure the feature exists to fix. Naming the specific
  * task is the model's job, and the model has the title.
  */
-const CHAINS: Record<ActivityKind, readonly Rung[]> = {
+const CHAINS: Record<ActivityKind, readonly [Rung, ...Rung[]]> = {
   studyBlock: [
     { action: 'Open the document. Do not read anything yet.', minutes: 2 },
     { action: 'Write the title at the top. Nothing else.', minutes: 3 },
@@ -113,11 +113,24 @@ const CHAINS: Record<ActivityKind, readonly Rung[]> = {
   ],
 }
 
-export function ruleLadder(item: ScheduledItem): Ladder {
-  // Protected rest is rest whatever kind it carries: a restorative coffee the optimizer has
-  // protected must not be handed the social chain, which would ask the student to get
-  // through it.
-  const kind: ActivityKind = item.protectedRest ? 'rest' : item.kind
+/**
+ * Protected rest is rest whatever kind it carries.
+ *
+ * A restorative coffee the optimizer has protected must not be handed the social chain,
+ * which would ask the student to get through it.
+ */
+const chainKind = (item: ScheduledItem): ActivityKind => (item.protectedRest ? 'rest' : item.kind)
 
-  return { blockId: item.id, rungs: CHAINS[kind], done: 0 }
+export function ruleLadder(item: ScheduledItem): Ladder {
+  return { blockId: item.id, rungs: CHAINS[chainKind(item)], done: 0 }
 }
+
+/**
+ * Rung one, for a surface with no room for a chain -- the Telegram bot's one-message reply,
+ * and §3's stuck card in the room.
+ *
+ * Reads `CHAINS` directly rather than indexing `ruleLadder(item).rungs[0]`, so the type is
+ * total: every chain is declared non-empty, and there is no unreachable "what if it was
+ * empty" branch for a reader to wonder about or a test to have to fake.
+ */
+export const firstRung = (item: ScheduledItem): Rung => CHAINS[chainKind(item)][0]

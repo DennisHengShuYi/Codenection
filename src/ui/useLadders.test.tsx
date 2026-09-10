@@ -105,6 +105,22 @@ describe('useLadders', () => {
     expect(result.current.ladders[0]?.blockId).toBe('b2')
   })
 
+  // The fresh read can fail too. It falls back to the defaults rather than rejecting, so the
+  // ladder is still written -- losing the student's place is a worse outcome than losing a
+  // preference this hook does not own.
+  it('still writes the ladder when the fresh read fails', async () => {
+    const { repo, saveSettings } = repoWith(DEFAULT_SETTINGS)
+    const { result } = renderHook(() => useLadders(repo))
+
+    await waitFor(() => expect(repo.loadSettings).toHaveBeenCalled())
+    vi.mocked(repo.loadSettings).mockRejectedValue(new Error('no storage'))
+
+    act(() => result.current.saveLadder(ladder('b1')))
+
+    await waitFor(() => expect(saveSettings).toHaveBeenCalled())
+    expect(saveSettings.mock.calls.at(-1)?.[0].ladders).toEqual([ladder('b1')])
+  })
+
   // Applied on screen whether or not it persists, exactly as `useLowEnergy` does: a student
   // who ticks a step must see the next one even if the write fails.
   it('advances on screen even when the write fails', async () => {

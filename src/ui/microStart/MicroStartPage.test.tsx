@@ -29,19 +29,19 @@ const ladder: Ladder = {
   done: 1,
 }
 
-const renderPage = (over: Partial<Parameters<typeof MicroStartPage>[0]> = {}) => {
-  const props = {
-    item,
-    ladder,
-    onLadder: vi.fn(),
-    onDone: vi.fn(),
-    onBack: vi.fn(),
-    onClose: vi.fn(),
-    ...over,
-  }
+type PageProps = Parameters<typeof MicroStartPage>[0]
 
-  render(<MicroStartPage {...props} />)
-  return props
+const renderPage = (over: Partial<PageProps> = {}) => {
+  const onLadder = vi.fn<(next: Ladder) => void>()
+  const onDone = vi.fn<(itemId: string) => void>()
+  const onBack = vi.fn()
+  const onClose = vi.fn()
+
+  render(
+    <MicroStartPage item={item} ladder={ladder} {...{ onLadder, onDone, onBack, onClose }} {...over} />,
+  )
+
+  return { onLadder, onDone, onBack, onClose }
 }
 
 const modelReply = {
@@ -165,6 +165,43 @@ describe('MicroStartPage', () => {
     renderPage({ ladder: null })
 
     expect(await screen.findByRole('button', { name: /doesn.t fit/i })).toBeInTheDocument()
+  })
+
+  it('swaps the rung the student rejected without moving the count', async () => {
+    vi.mocked(fetch).mockResolvedValue(modelReply)
+    const props = renderPage({ ladder: null })
+    await screen.findByRole('button', { name: /doesn.t fit/i })
+
+    // The replacement is the first step of whatever the endpoint answers with next.
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        steps: [
+          { action: 'Read the question once.', minutes: 2 },
+          { action: 'Write its title.', minutes: 3 },
+          { action: 'Write one bad sentence.', minutes: 5 },
+        ],
+      }),
+    } as unknown as Response)
+
+    await userEvent.click(screen.getByRole('button', { name: /doesn.t fit/i }))
+
+    expect(await screen.findByText('Read the question once.')).toBeInTheDocument()
+    expect(props.onLadder).toHaveBeenLastCalledWith(expect.objectContaining({ done: 0 }))
+    expect(screen.getByTestId('ladder-progress')).toHaveTextContent('Step 1 of 3')
+  })
+
+  // Pressing it twice while the first call is in flight would ask for two replacements and
+  // apply whichever landed last.
+  it('does not let a second re-roll start while the first is in flight', async () => {
+    vi.mocked(fetch).mockResolvedValue(modelReply)
+    renderPage({ ladder: null })
+    const reroll = await screen.findByRole('button', { name: /doesn.t fit/i })
+
+    vi.mocked(fetch).mockImplementation(() => new Promise(() => undefined))
+    await userEvent.click(reroll)
+
+    expect(reroll).toBeDisabled()
   })
 
   it('names the block it is about', async () => {

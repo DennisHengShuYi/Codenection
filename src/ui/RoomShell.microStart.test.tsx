@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
@@ -40,7 +40,8 @@ const week = (over: Partial<Schedule> = {}): Schedule => ({
 
 let counter = 0
 
-const renderHome = async (schedule = week()) => {
+/** The room, with nothing opened on top of it. */
+const renderRoom = async (schedule = week()) => {
   counter += 1
   const repository = createLocalRepository(`micro-screen-${counter}`)
   await repository.clear()
@@ -48,6 +49,12 @@ const renderHome = async (schedule = week()) => {
 
   render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
   await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+
+  return repository
+}
+
+const renderHome = async (schedule = week()) => {
+  const repository = await renderRoom(schedule)
 
   // Ruling 61: the live cards wait behind the `Waiting` button now, so opening it is part
   // of arriving at one -- the press a student makes.
@@ -83,7 +90,7 @@ describe('RoomShell with a stuck task', () => {
     expect(card.textContent).toMatch(/\d+ minutes/i)
   })
 
-  it('opens the block sheet for the stuck task, not a dead end', async () => {
+  it('opens the ladder for the stuck task, not a dead end', async () => {
     counter += 1
     const repository = createLocalRepository(`micro-opens-${counter}`)
     await repository.clear()
@@ -102,7 +109,10 @@ describe('RoomShell with a stuck task', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /i'll do that/i }))
 
-    expect(await screen.findByRole('dialog', { name: /laundry/i })).toBeVisible()
+    // Ruling: the card offers rung one, so "I'll do that" lands on the chain that continues
+    // it rather than on the block sheet, which was one hop short of the thing being offered.
+    expect(await screen.findByTestId('rung-action')).toBeVisible()
+    expect(window.location.pathname).toMatch(/\/start$/)
   })
 
   it('can be waved off and leaves the room as it was', async () => {
@@ -144,5 +154,115 @@ describe('RoomShell with a stuck task', () => {
     await renderHome()
 
     expect(screen.getByTestId('accuracy-measured').textContent).toMatch(/off by about 9\.8/i)
+  })
+})
+
+/**
+ * The page itself, driven through the real route rather than rendered with props: the
+ * question at this level is whether a student can reach it, and from where.
+ */
+describe('the micro-start page', () => {
+  /** The week, then the day the block sits on, then the block. What a student does. */
+  const openTheOnlyBlock = async () => {
+    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(await screen.findByTestId('day-2'))
+    await userEvent.click(await screen.findByTestId('block-laundry'))
+  }
+
+  it('is reachable from a block', async () => {
+    await renderRoom()
+    await openTheOnlyBlock()
+
+    await userEvent.click(screen.getByTestId('micro-start'))
+
+    expect(await screen.findByTestId('rung-action')).toBeVisible()
+    expect(window.location.pathname).toMatch(/\/start$/)
+  })
+
+  // "Every block, no exceptions". Protected rest used to be one of the exceptions, and it
+  // is safe now because of what the rest chain says, not because the button is missing.
+  it('is reachable from a protected rest block', async () => {
+    await renderRoom(week({ items: [item({ id: 'laundry', title: 'Laundry', protectedRest: true })] }))
+    await openTheOnlyBlock()
+
+    expect(screen.getByTestId('micro-start')).toBeVisible()
+  })
+
+  it('opens straight onto the page from a typed address', async () => {
+    window.history.replaceState(null, '', '/week/block/laundry/start')
+    await renderRoom()
+
+    expect(await screen.findByTestId('rung-action')).toBeVisible()
+  })
+
+  // A block removed since the address was written. The shell lands somewhere real rather
+  // than drawing a page about nothing -- the week, exactly as a stale edit address does.
+  it('falls back to the week for a block that is gone', async () => {
+    window.history.replaceState(null, '', '/week/block/no-such-block/start')
+    await renderRoom()
+
+    await waitFor(() => expect(window.location.pathname).toBe('/week'))
+    expect(screen.queryByTestId('rung-action')).toBeNull()
+  })
+
+  it('goes back to the block it was opened from', async () => {
+    await renderRoom()
+    await openTheOnlyBlock()
+    await userEvent.click(screen.getByTestId('micro-start'))
+    await screen.findByTestId('rung-action')
+
+    await userEvent.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(await screen.findByTestId('block-when')).toBeVisible()
+  })
+
+  it('resumes where the student left off after a remount', async () => {
+    const repository = await renderRoom()
+    await openTheOnlyBlock()
+    await userEvent.click(screen.getByTestId('micro-start'))
+    await screen.findByTestId('rung-action')
+    await userEvent.click(screen.getByRole('button', { name: /next step/i }))
+    await waitFor(() => expect(screen.getByTestId('ladder-progress')).toHaveTextContent('Step 2'))
+    await waitFor(async () => expect((await repository.loadSettings()).ladders).toHaveLength(1))
+
+    cleanup()
+    window.history.replaceState(null, '', '/week/block/laundry/start')
+    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+
+    expect(await screen.findByTestId('ladder-progress')).toHaveTextContent('Step 2')
+  })
+
+  // Walking the whole chain and taking the offer at the end: the block leaves the week and
+  // its stored chain goes with it, because a record must not outlive what it describes.
+  it('finishes the block from the end of the chain and drops the ladder', async () => {
+    const repository = await renderRoom()
+    await openTheOnlyBlock()
+    await userEvent.click(screen.getByTestId('micro-start'))
+    await screen.findByTestId('rung-action')
+
+    // The errands chain is three rungs. Walk to the end of whatever it is.
+    while (screen.queryByRole('button', { name: /next step/i }) !== null) {
+      await userEvent.click(screen.getByRole('button', { name: /next step/i }))
+    }
+
+    await userEvent.click(await screen.findByTestId('finish-block'))
+
+    await waitFor(async () => expect((await repository.loadWeek())?.items).toHaveLength(0))
+    expect((await repository.loadSettings()).ladders).toHaveLength(0)
+  })
+
+  // A stored chain must not outlive the block it describes.
+  it('drops the ladder when its block is removed', async () => {
+    const repository = await renderRoom()
+    await openTheOnlyBlock()
+    await userEvent.click(screen.getByTestId('micro-start'))
+    await screen.findByTestId('rung-action')
+    await waitFor(async () => expect((await repository.loadSettings()).ladders).toHaveLength(1))
+
+    await userEvent.click(screen.getByRole('button', { name: /stop here/i }))
+    await userEvent.click(await screen.findByTestId('remove-block'))
+    await userEvent.click(screen.getByTestId('confirm-remove-yes'))
+
+    await waitFor(async () => expect((await repository.loadSettings()).ladders).toHaveLength(0))
   })
 })

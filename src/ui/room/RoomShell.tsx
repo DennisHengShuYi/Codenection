@@ -17,6 +17,7 @@ import { overallReserve, project } from '../../engine'
 import type { Fix } from '../../optimizer'
 import { toDayInputs } from '../../optimizer'
 import { AddSheet } from '../AddSheet'
+import { MicroStartPage } from '../microStart/MicroStartPage'
 import { AccountBar } from '../auth/AccountBar'
 import { PreviewBanner } from '../auth/PreviewBanner'
 import { domainBars } from '../dial/domainBars'
@@ -31,6 +32,7 @@ import { blockToAsk, withSleep } from '../today/checkIn'
 import { useLowEnergy } from '../useLowEnergy'
 import { useProfile } from '../useProfile'
 import { useReducedMotion } from '../useReducedMotion'
+import { useLadders } from '../useLadders'
 import { useSchedule } from '../useSchedule'
 import { AccuracyNote } from '../validation/AccuracyNote'
 import { BlockSheet } from '../week/BlockSheet'
@@ -49,6 +51,7 @@ import {
   toAdd,
   toBlock,
   toEditBlock,
+  toMicroStart,
   toNewBlock,
   toNotices,
   toRebalance,
@@ -99,6 +102,7 @@ export function RoomShell({
 }) {
   const { schedule, setSchedule, problem: saveProblem } = useSchedule(repository)
   const { profile, setProfile } = useProfile(repository, session)
+  const { ladders, saveLadder, dropLadder } = useLadders(repository)
   /**
    * Ruling 57: where the student is now lives in the address bar as well as in React.
    * `useUrlView` returns exactly what `useState<View>` returned before it, so everything
@@ -143,11 +147,25 @@ export function RoomShell({
 
   const editTargetIsGone = schedule !== null && view.kind === 'editBlock' && editing === null
 
+  /**
+   * The block the micro-start page is about, or null.
+   *
+   * Resolved here for the same reason `editing` is, and with the same failure: an id that no
+   * longer names anything -- a block completed in another tab, a pasted link to something
+   * since removed -- lands somewhere real rather than drawing a page about nothing.
+   */
+  const startTarget =
+    schedule !== null && view.kind === 'microStart'
+      ? (schedule.items.find((candidate) => candidate.id === view.itemId) ?? null)
+      : null
+
+  const startTargetIsGone = schedule !== null && view.kind === 'microStart' && startTarget === null
+
   useEffect(() => {
-    if (proposalIsStale || editTargetIsGone) setView(toWeek())
+    if (proposalIsStale || editTargetIsGone || startTargetIsGone) setView(toWeek())
     // `setView` is rebuilt on every render, so listing it here would re-run this effect on
-    // every render. Whether it should fire is decided entirely by the two flags above.
-  }, [proposalIsStale, editTargetIsGone]) // eslint-disable-line react-hooks/exhaustive-deps
+    // every render. Whether it should fire is decided entirely by the three flags above.
+  }, [proposalIsStale, editTargetIsGone, startTargetIsGone]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Session-scoped dismissals for the four live cards, none of which has a domain-level
   // "not today" of its own any more. §7 retired the recovery card's permanent
@@ -366,6 +384,9 @@ export function RoomShell({
   // day's own question -- capped to one below the low-energy threshold and two otherwise.
   const recoveryPrescription = prescribe(week)
   const lapsedCommitments = lapsed(week, today, params, blockLog)
+  // The card below offers rung one, so its call to action goes to the page carrying the
+  // rest of the chain. It used to open the block sheet, which was one hop short of the
+  // thing the card was offering.
   const stuckItem = week.items.find(
     (item) => item.id !== stuckDismissedId && isStuck(item, Math.max(0, today - item.dayIndex)),
   )
@@ -493,7 +514,7 @@ export function RoomShell({
           lapsedCommitments={lapsedCommitments}
           onLapsedDismiss={() => setLapsedDismissed(true)}
           stuckMicroStart={stuckItem === undefined ? null : firstAction(stuckItem)}
-          onStuckStart={() => stuckItem !== undefined && setView(toBlock(stuckItem.id))}
+          onStuckStart={() => stuckItem !== undefined && setView(toMicroStart(stuckItem.id))}
           onStuckDismiss={() => stuckItem !== undefined && setStuckDismissedId(stuckItem.id)}
           blockForToday={blockForToday}
           askEnergy={askEnergy}
@@ -523,6 +544,7 @@ export function RoomShell({
           onBack={goBack}
           onDone={(itemId) => {
             setSchedule(completeItem(week, itemId))
+            dropLadder(itemId)
             closeToRoom()
           }}
           onLater={(itemId) => {
@@ -538,10 +560,32 @@ export function RoomShell({
             closeToRoom()
           }}
           onEdit={(itemId) => setView(toEditBlock(itemId))}
+          onMicroStart={(itemId) => setView(toMicroStart(itemId))}
           onRemove={(itemId) => {
             setSchedule(removeItem(week, itemId))
+            // A stored chain must not outlive the block it describes.
+            dropLadder(itemId)
             setView(toWeek())
           }}
+        />
+      )}
+
+      {/* §4.1's ladder, under the block it is about. Rendered only with a real target: a
+          stale id corrects itself to the week above rather than drawing a page about
+          nothing. */}
+      {view.kind === 'microStart' && startTarget !== null && (
+        <MicroStartPage
+          key={`start-${view.itemId}`}
+          item={startTarget}
+          ladder={ladders.find((entry) => entry.blockId === view.itemId) ?? null}
+          onLadder={saveLadder}
+          onDone={(itemId) => {
+            setSchedule(completeItem(week, itemId))
+            dropLadder(itemId)
+            closeToRoom()
+          }}
+          onBack={goBack}
+          onClose={closeToRoom}
         />
       )}
 

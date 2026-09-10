@@ -1,5 +1,5 @@
 import type { ScheduledItem } from '../optimizer'
-import { ruleLadder } from './ladder'
+import { firstRung } from './ladder'
 
 /**
  * §4.1's other half of the trigger: three days past first appearance.
@@ -30,14 +30,7 @@ export interface MicroStart {
  * drift apart the first time either was edited alone.
  */
 export function firstAction(item: ScheduledItem): MicroStart {
-  const first = ruleLadder(item).rungs[0]
-
-  // `ruleLadder` returns at least MIN_RUNGS for every kind, so this is unreachable -- but
-  // `noUncheckedIndexedAccess` is right to insist, and a dull honest sentence reaching a
-  // student beats an empty one.
-  if (first === undefined) {
-    return { itemId: item.id, action: 'Start with the smallest part of it.', minutes: 5 }
-  }
+  const first = firstRung(item)
 
   return { itemId: item.id, action: first.action, minutes: first.minutes }
 }

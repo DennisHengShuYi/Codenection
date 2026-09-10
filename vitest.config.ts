@@ -71,10 +71,16 @@ export default defineConfig({
        * client. That closed the gap which had been holding the floor down; what those
        * tests still do not prove is that the adapter works against a real Supabase, which
        * needs the contract suite pointed at a disposable project.
+       *
+       * Branches raised 91 -> 93 by the micro-start ladder branch, which also found this
+       * gate genuinely red: at `0c3ced1` the suite reached 97.12 / 93.53 / 96.78 / 98.42,
+       * so `functions` was already below its floor and `npm test` -- which does not read
+       * this block -- had been passing over it. Covering the `loadPredictions` fallbacks in
+       * `telegram/handle.ts` is what closed it, rather than the number moving down.
        */
       thresholds: {
         statements: 97,
-        branches: 91,
+        branches: 93,
         functions: 97,
         lines: 98,
       },

@@ -55,6 +55,44 @@ describe('Room', () => {
     expect(scene).not.toHaveAttribute('width')
   })
 
+  /**
+   * The artwork this branch shipped without.
+   *
+   * `Room.tsx` drew nine bare `<rect>`s on one flat field, which is why the deployed page
+   * read as coloured boxes rather than a room. The scene modules give it a wall, a floor
+   * and the three pieces of furniture that were specified, drawn but never merged.
+   */
+  it('draws the building it stands in, not one flat field', () => {
+    render(<Room model={modelOf()} />)
+
+    expect(screen.getByTestId('room-wall')).toBeInTheDocument()
+    expect(screen.getByTestId('room-floor')).toBeInTheDocument()
+  })
+
+  it('draws the desk, the mirror and the phone', () => {
+    render(<Room model={modelOf()} />)
+
+    for (const id of ['desk', 'mirror', 'phone']) {
+      expect(screen.getByTestId(`room-${id}`)).toBeInTheDocument()
+    }
+  })
+
+  /**
+   * The lamp glow replaces a full-bleed amber wash over the whole scene, which pushed every
+   * colour toward beige at exactly the moment the student was doing well. A lit room and a
+   * dark one must still be told apart, so the reading is asserted rather than the artwork:
+   * more reserve, more glow.
+   */
+  it('reads the reserve as how lit the room is', () => {
+    const { container: dark } = render(<Room model={modelOf(state({ lightLevel: 0.1 }))} />)
+    const { container: lit } = render(<Room model={modelOf(state({ lightLevel: 0.9 }))} />)
+
+    const glow = (root: HTMLElement): number =>
+      Number(root.querySelector('[data-testid="room-light"] circle')?.getAttribute('opacity'))
+
+    expect(glow(lit)).toBeGreaterThan(glow(dark))
+  })
+
   it('draws all nine objects', () => {
     render(<Room model={modelOf(state({ clutter: [{ id: 'a', title: 'Laundry', dayIndex: 1 }] }))} />)
 

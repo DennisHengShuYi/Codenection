@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { Button } from './Button'
 
 /**
  * The container every button opens.
@@ -51,12 +52,24 @@ export function Sheet({
   actions,
   children,
   size = 'default',
+  onBack,
 }: {
   title: string
+  /** Done with this entirely. Closes the sheet whatever depth it was opened to -- never
+   *  "up one level", which is what `onBack` is for. */
   onClose: () => void
   actions?: ReactNode
   children: ReactNode
   size?: keyof typeof WIDTH
+  /**
+   * Ruling 60: up one level, where there IS one.
+   *
+   * Rendered by the container rather than by each caller, so three sub-flows cannot end up
+   * with three slightly different back buttons -- which is how `Cancel` came to mean "go up
+   * one" in some sheets and "give up entirely" in others. Omitted by a sheet opened
+   * straight from the room, which would otherwise carry two controls doing one job.
+   */
+  onBack?: () => void
 }) {
   const panel = useRef<HTMLDivElement>(null)
 
@@ -133,19 +146,26 @@ export function Sheet({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
 
-        {actions !== undefined && (
+        {(actions !== undefined || onBack !== undefined) && (
           <div
             data-testid="sheet-actions"
             /* Right-aligned as a group, in whatever order the caller passed. NOT reversed:
-               the callers disagree about order on purpose -- `PlannerScreen` leads with
-               Cancel and ends on its primary, `BlockSheet` leads with the primary because
-               its buttons are generated from a precedence list -- so a global flip would
-               put one of them exactly backwards. */
-            className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-line px-5 py-4"
+               the callers disagree about order on purpose -- `PlannerScreen` leads with its
+               quiet action and ends on its primary, `BlockSheet` leads with the primary
+               because its buttons are generated from a precedence list -- so a global flip
+               would put one of them exactly backwards. Back is the exception: it is the
+               container's own control and belongs at the far left, away from the actions
+               that commit to something. */
+            className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-line px-5 py-4"
           >
+            {onBack !== undefined && (
+              <Button variant="quiet" data-testid="sheet-back" onClick={onBack} className="mr-auto">
+                <span aria-hidden="true">&lsaquo;</span> Back
+              </Button>
+            )}
             {actions}
           </div>
-        )}
+                )}
       </div>
     </div>
   )

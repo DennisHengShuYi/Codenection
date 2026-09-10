@@ -274,16 +274,25 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
     expect(screen.queryAllByRole('meter')).toHaveLength(0)
   })
 
-  it('still withholds it on the way back from a block opened by a live card', async () => {
+  /**
+   * The route that started all of this. `fc58d99`'s defect was that a block opened from a
+   * live card parked the depleted student on the week screen -- somewhere they had never
+   * chosen to go -- with the dashboard on it.
+   *
+   * Ruling 60 closes the other half of that: Back follows the history, so a block opened
+   * from the room returns to the ROOM. `back({kind:'block'})` is still the week, but it is
+   * the fallback for a block that was deep-linked, not the answer for one the student
+   * walked into from a card.
+   */
+  it('returns to the room, not the week, from a block opened by a live card', async () => {
     await drainedWithStuckTask('low-energy-stuck-back')
 
     await userEvent.click(screen.getByRole('button', { name: /i'll do that/i }))
     await screen.findByRole('dialog', { name: /laundry/i })
-    await userEvent.click(screen.getByRole('button', { name: /close/i }))
+    await userEvent.click(screen.getByTestId('sheet-back'))
 
-    // `back({kind:'block'})` is WEEK, not ROOM: this is where the student is parked, and
-    // the week carries no capacity reading of its own any more.
-    expect(await screen.findByRole('dialog', { name: /the week/i })).toBeVisible()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByTestId('room-scene')).toBeVisible()
     expect(screen.queryByTestId('week-reserves')).toBeNull()
     expect(screen.queryAllByRole('meter')).toHaveLength(0)
   })

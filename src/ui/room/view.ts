@@ -48,9 +48,21 @@ export const toSettings = (): View => ({ kind: 'settings' })
 
 export const toReserves = (): View => ({ kind: 'reserves' })
 
-/** Everywhere returns to the room -- except a block, which returns to the week it was
- *  opened from. */
-export const back = (view: View): View => (view.kind === 'block' ? WEEK : ROOM)
+/**
+ * One level up: the Back button's rule (Ruling 60).
+ *
+ * NOT the way out. The close control leaves entirely and never consults this, which is the
+ * distinction `Cancel` could not make -- it meant "up one" inside a sub-flow and "give up"
+ * at the chooser, and which one you got depended on the sheet you were in.
+ *
+ * A block returns to the week it was opened from, and an add sub-flow to the chooser it
+ * was chosen from. Everything else was opened straight from the room and returns there.
+ */
+export const back = (view: View): View => {
+  if (view.kind === 'block') return WEEK
+  if (view.kind === 'add' && view.way !== null) return toAdd()
+  return ROOM
+}
 
 /**
  * The address for a view.

@@ -69,6 +69,7 @@ export function AddSheet({
   onClose,
   way,
   onWay,
+  onBack,
 }: {
   readonly schedule: Schedule
   /** §2.4's calibrated params, threaded to the request path so it prices against the
@@ -89,10 +90,12 @@ export function AddSheet({
    *  written into the address, so `/add/photo` could not exist. */
   readonly way: AddWay | null
   readonly onWay: (way: AddWay | null) => void
+  /** Ruling 60: one level up, from a sub-flow to the chooser. The chooser itself is given
+   *  none -- it opens straight from the room, where Back and close would mean the same
+   *  thing and two controls doing one job is how `Cancel` became ambiguous. */
+  readonly onBack: () => void
 }) {
   const close = () => onClose()
-
-  const backToChoice = () => onWay(null)
 
   if (way === 'photo') {
     return (
@@ -102,7 +105,8 @@ export function AddSheet({
           onAcceptItems(items)
           close()
         }}
-        onCancel={backToChoice}
+        onBack={onBack}
+        onClose={close}
       />
     )
   }
@@ -115,7 +119,8 @@ export function AddSheet({
           onAcceptItems(items)
           close()
         }}
-        onCancel={backToChoice}
+        onBack={onBack}
+        onClose={close}
       />
     )
   }
@@ -132,7 +137,8 @@ export function AddSheet({
           onAcceptRequest(item)
           close()
         }}
-        onCancel={backToChoice}
+        onBack={onBack}
+        onClose={close}
       />
     )
   }
@@ -141,11 +147,6 @@ export function AddSheet({
     <Sheet
       title="What's coming at you?"
       onClose={close}
-      actions={
-        <Button variant="quiet" onClick={close}>
-          Cancel
-        </Button>
-      }
     >
       <div className="flex flex-col gap-3">
         {WAYS_IN.map(({ way, testid, label, help }) => (

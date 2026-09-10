@@ -17,11 +17,17 @@ import { ItemChip } from './ItemChip'
  */
 export function PlannerScreen({
   onAccept,
-  onCancel,
+  onBack,
+  onClose,
   suggestRepeat = () => null,
 }: {
   onAccept: (items: readonly ParsedItem[]) => void
-  onCancel: () => void
+  /** Ruling 60: one level up, to the chooser this was chosen from. */
+  onBack: () => void
+  /** Done entirely -- straight to the room, whatever depth this was opened to.
+   *  Wired to `onCancel` before Ruling 60, which meant the sheet's own close control
+   *  quietly dropped the student at the chooser instead of closing. */
+  onClose: () => void
   /**
    * §37: given a freshly parsed item, a weekly series it looks like another instance of.
    *
@@ -62,9 +68,6 @@ export function PlannerScreen({
 
   const actions = (
     <>
-      <Button variant="quiet" onClick={onCancel}>
-        Cancel
-      </Button>
       <Button onClick={() => void onRead()} disabled={reading}>
         {reading ? 'Reading…' : 'Read this'}
       </Button>
@@ -77,7 +80,7 @@ export function PlannerScreen({
   )
 
   return (
-    <Sheet title="What are you carrying?" onClose={onCancel} actions={actions}>
+    <Sheet title="What are you carrying?" onClose={onClose} onBack={onBack} actions={actions}>
       <div className="flex flex-col gap-4">
         <p className="text-sm text-ink-soft">Type it however it comes out. Any order, no formatting.</p>
 

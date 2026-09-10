@@ -124,3 +124,69 @@ describe('the sheet as an object on the screen', () => {
     expect(panel.className).not.toContain('md:max-w-lg')
   })
 })
+
+/**
+ * Ruling 60: two controls with two different jobs.
+ *
+ * `Cancel` had to mean both "go up one" and "give up entirely", and which one it meant
+ * depended on which sheet you were in -- inside a sub-flow it dropped you at the chooser,
+ * at the chooser it closed the whole thing. Now Back steps up one level and `x` closes the
+ * sheet outright, whatever depth it was opened to.
+ *
+ * Back is rendered by the container rather than by each caller, so it cannot drift into
+ * three slightly different buttons, and it appears ONLY where there is a level above --
+ * a sheet opened straight from the room would otherwise carry two controls that do the
+ * same thing.
+ */
+describe('the sheet with somewhere to go back to', () => {
+  it('offers Back when it is given somewhere to go, and calls it', async () => {
+    const onBack = vi.fn()
+    const onClose = vi.fn()
+    render(
+      <Sheet title="Photograph it" onClose={onClose} onBack={onBack}>
+        <p>a timetable</p>
+      </Sheet>,
+    )
+
+    await userEvent.click(screen.getByTestId('sheet-back'))
+
+    expect(onBack).toHaveBeenCalledOnce()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('offers no Back when there is nothing above it', () => {
+    render(
+      <Sheet title="Settings" onClose={vi.fn()}>
+        <p>how much to show</p>
+      </Sheet>,
+    )
+
+    expect(screen.queryByTestId('sheet-back')).toBeNull()
+  })
+
+  /** The close control is unconditional: it means "I am done with this", not "go up one". */
+  it('keeps close closing, with Back beside it rather than instead of it', async () => {
+    const onBack = vi.fn()
+    const onClose = vi.fn()
+    render(
+      <Sheet title="Photograph it" onClose={onClose} onBack={onBack}>
+        <p>a timetable</p>
+      </Sheet>,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: /close/i }))
+
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(onBack).not.toHaveBeenCalled()
+  })
+
+  it('puts Back in the action bar even when the caller passes no actions of its own', () => {
+    render(
+      <Sheet title="Photograph it" onClose={vi.fn()} onBack={vi.fn()}>
+        <p>a timetable</p>
+      </Sheet>,
+    )
+
+    expect(screen.getByTestId('sheet-actions')).toContainElement(screen.getByTestId('sheet-back'))
+  })
+})

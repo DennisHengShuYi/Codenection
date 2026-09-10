@@ -55,7 +55,8 @@ export function RequestBoxScreen({
   blockLog,
   predictions,
   onAccept,
-  onCancel,
+  onBack,
+  onClose,
 }: {
   schedule: Schedule
   /** §2.4's calibrated params -- the student's own measured estimate bias, not the
@@ -72,7 +73,12 @@ export function RequestBoxScreen({
    *  one. This is the call site the identical mistake was made at once already. */
   predictions: readonly EnergyPrediction[]
   onAccept: (item: ParsedItem) => void
-  onCancel: () => void
+  /** Ruling 60: one level up, to the chooser this was chosen from. */
+  onBack: () => void
+  /** Done entirely -- straight to the room, whatever depth this was opened to.
+   *  Wired to `onCancel` before Ruling 60, which meant the sheet's own close control
+   *  quietly dropped the student at the chooser instead of closing. */
+  onClose: () => void
 }) {
   const [text, setText] = useState('')
   const [item, setItem] = useState<ParsedItem | null>(null)
@@ -128,9 +134,6 @@ export function RequestBoxScreen({
 
   const actions = (
     <>
-      <Button variant="quiet" onClick={onCancel}>
-        Cancel
-      </Button>
       <Button onClick={() => void onPrice()} disabled={working}>
         {working ? 'Working it out…' : 'What would this cost?'}
       </Button>
@@ -143,7 +146,7 @@ export function RequestBoxScreen({
   )
 
   return (
-    <Sheet title="Someone asked you for something" onClose={onCancel} actions={actions}>
+    <Sheet title="Someone asked you for something" onClose={onClose} onBack={onBack} actions={actions}>
       <div className="flex flex-col gap-4">
         <p className="text-sm text-ink-soft">
           Paste it here and see what saying yes would actually cost.

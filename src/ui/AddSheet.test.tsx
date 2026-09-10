@@ -32,10 +32,13 @@ const emptySchedule = (): Schedule => ({
  * harness stands in for that here, which keeps every assertion below about what the sheet
  * DOES rather than about where the value happens to live.
  */
-function Harness(props: Omit<ComponentProps<typeof AddSheet>, 'way' | 'onWay'>) {
+function Harness(props: Omit<ComponentProps<typeof AddSheet>, 'way' | 'onWay' | 'onBack'>) {
   const [way, setWay] = useState<AddWay | null>(null)
 
-  return <AddSheet {...props} way={way} onWay={setWay} />
+  // Ruling 60: Back is one level up, which from a sub-flow is the chooser. `RoomShell`
+  // walks the real history for this; here the harness stands in for it, the same way it
+  // stands in for `way`.
+  return <AddSheet {...props} way={way} onWay={setWay} onBack={() => setWay(null)} />
 }
 
 const setup = () => {
@@ -79,31 +82,56 @@ describe('AddSheet', () => {
     await userEvent.click(screen.getByTestId('add-photo'))
     expect(screen.getByTestId('photo-input')).toBeVisible()
 
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    await userEvent.click(screen.getByTestId('sheet-back'))
     await userEvent.click(screen.getByTestId('add-type'))
     expect(screen.getByLabelText(/on your mind/i)).toBeVisible()
     expect(screen.queryByTestId('photo-input')).toBeNull()
 
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    await userEvent.click(screen.getByTestId('sheet-back'))
     await userEvent.click(screen.getByTestId('add-request'))
     expect(screen.getByLabelText(/what.*asked/i)).toBeVisible()
     expect(screen.queryByLabelText(/on your mind/i)).toBeNull()
   })
 
-  it('returns to the choice when a path is cancelled, rather than closing outright', async () => {
+  /**
+   * Ruling 60. `Cancel` used to do both of these and you could not tell which from the
+   * button: inside a path it meant the chooser, at the chooser it meant close. Back means
+   * one level up and close means done, at every depth.
+   */
+  it('returns to the choice when a path is stepped back from, rather than closing outright', async () => {
     const props = setup()
 
     await userEvent.click(screen.getByTestId('add-type'))
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    await userEvent.click(screen.getByTestId('sheet-back'))
 
     expect(screen.getByTestId('add-type')).toBeVisible()
     expect(props.onClose).not.toHaveBeenCalled()
   })
 
-  it('closes on Cancel from the choice screen itself', async () => {
+  it('closes outright from a path, rather than dropping back to the choice', async () => {
     const props = setup()
 
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    await userEvent.click(screen.getByTestId('add-type'))
+    await userEvent.click(screen.getByRole('button', { name: /close/i }))
+
+    expect(props.onClose).toHaveBeenCalledOnce()
+  })
+
+  /** The chooser opens straight from the room, so it has nothing above it to go back to. */
+  it('offers no Back on the choice screen itself, and no Cancel anywhere', async () => {
+    setup()
+
+    expect(screen.queryByTestId('sheet-back')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^cancel$/i })).toBeNull()
+
+    await userEvent.click(screen.getByTestId('add-type'))
+    expect(screen.queryByRole('button', { name: /^cancel$/i })).toBeNull()
+  })
+
+  it('closes from the choice screen itself', async () => {
+    const props = setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /close/i }))
 
     expect(props.onClose).toHaveBeenCalledOnce()
   })

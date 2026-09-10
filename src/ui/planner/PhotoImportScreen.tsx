@@ -20,13 +20,19 @@ import { ItemChip } from './ItemChip'
 export function PhotoImportScreen({
   onAccept,
   suggestRepeat = () => null,
-  onCancel,
+  onBack,
+  onClose,
 }: {
   onAccept: (items: readonly ParsedItem[]) => void
   /** §37, as `PlannerScreen` takes it: a timetable photo is the likeliest place a repeating
    *  class arrives one instance at a time. */
   suggestRepeat?: (item: ParsedItem) => ParsedItem['repeat']
-  onCancel: () => void
+  /** Ruling 60: one level up, to the chooser this was chosen from. */
+  onBack: () => void
+  /** Done entirely -- straight to the room, whatever depth this was opened to.
+   *  Wired to `onCancel` before Ruling 60, which meant the sheet's own close control
+   *  quietly dropped the student at the chooser instead of closing. */
+  onClose: () => void
 }) {
   const [items, setItems] = useState<ParsedItem[] | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -67,15 +73,12 @@ export function PhotoImportScreen({
 
   const actions = (
     <>
-      <Button variant="quiet" onClick={onCancel}>
-        Cancel
-      </Button>
       {canAccept && <Button onClick={() => onAccept(items)}>Add these to my week</Button>}
     </>
   )
 
   return (
-    <Sheet title="Photograph it" onClose={onCancel} actions={actions}>
+    <Sheet title="Photograph it" onClose={onClose} onBack={onBack} actions={actions}>
       <div className="flex flex-col gap-4">
         <p className="text-sm text-ink-soft">
           An assignment brief, your planner page, a whiteboard, a slide with dates on it.

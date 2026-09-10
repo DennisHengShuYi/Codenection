@@ -41,7 +41,7 @@ import { LiveCards } from './LiveCards'
 import { roomModel } from './roomModel'
 import { describeRoom } from './roomText'
 import { Room } from './Room'
-import { back, ROOM, toAdd, toBlock, toReserves, toSettings, toWeek } from './view'
+import { ROOM, toAdd, toBlock, toReserves, toSettings, toWeek } from './view'
 import { useUrlView } from './useUrlView'
 import { useTidyUp } from './useTidyUp'
 
@@ -91,7 +91,7 @@ export function RoomShell({
    * below this line is unchanged -- the URL is a projection of this value, not a second
    * place the app stores it.
    */
-  const [view, setView] = useUrlView()
+  const [view, setView, goBack] = useUrlView()
   const [report, setReport] = useState<string | null>(null)
   const [fallback, setFallback] = useState<Fix | null>(null)
   const [working, setWorking] = useState(false)
@@ -268,7 +268,13 @@ export function RoomShell({
     })
   }
 
-  const closeToRoom = () => setView(back(view))
+  /**
+   * Done with whatever is open -- straight to the room, from any depth (Ruling 60). This
+   * is the close control's meaning and it never consults `back()`: that is the Back
+   * button's rule, and the two used to be the same function, which is why `Cancel` could
+   * not say which one it meant.
+   */
+  const closeToRoom = () => setView(ROOM)
 
   // §3's card precedence: recovery, then a lapsed commitment, then a stuck task, then the
   // day's own question -- capped to one below the low-energy threshold and two otherwise.
@@ -315,6 +321,7 @@ export function RoomShell({
           key={view.itemId}
           model={blockModel}
           onClose={closeToRoom}
+          onBack={goBack}
           onDone={(itemId) => {
             setSchedule(completeItem(week, itemId))
             closeToRoom()
@@ -339,6 +346,7 @@ export function RoomShell({
           key="add"
           way={view.way}
           onWay={(way) => setView(toAdd(way))}
+          onBack={goBack}
           schedule={week}
           params={params}
           today={today}

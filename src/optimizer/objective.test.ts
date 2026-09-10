@@ -259,3 +259,76 @@ describe('score and what it costs to leave something until the deadline', () => 
     expect(score(latePlusEasy, DEFAULT_PARAMS)).toBeGreaterThan(score(safeButCrushing, DEFAULT_PARAMS))
   })
 })
+
+/**
+ * §21: on a fortnight with almost nothing fixed, the objective inverts from flattening peaks
+ * to defending a floor.
+ *
+ * The reason is that burnout there has a different cause. A student with a timetable burns
+ * out from overload -- too much crammed against a frame they cannot move -- so spreading the
+ * load matters. A student with almost nothing fixed burns out from drift: there is no frame,
+ * nothing forces a heavy day, and tidying their week into one block per day is solving a
+ * problem they do not have while ignoring how low it gets.
+ *
+ * So the peak-flattening term stops applying and depth below the threshold counts for more.
+ * The floor itself is untouched in both: §2.1's ordering never lets the solver trade a
+ * genuinely higher worst day for a tidier week.
+ */
+describe('score and the shape of the week', () => {
+  /** Twelve short fixed blocks on days 0-11: a timetable. */
+  const timetable = () =>
+    Array.from({ length: 12 }, (_, index) => ({
+      ...studyItem(`class-${index}`, index, 2),
+      fixed: true,
+    }))
+
+  // Placed on days 15 and 16, clear of the timetable above, so the difference between these
+  // two arrangements is the only thing the fragmentation term can see.
+  const clustered = () => [
+    studyItem('w-a', 15, 2),
+    { ...studyItem('w-b', 15, 2), startHour: 13 },
+  ]
+
+  const spread = () => [studyItem('w-a', 15, 2), studyItem('w-b', 16, 2)]
+
+  it('still prefers a spread week when there is a timetable to fit around', () => {
+    const tidy = score(makeSchedule([...timetable(), ...spread()]), DEFAULT_PARAMS)
+    const heaped = score(makeSchedule([...timetable(), ...clustered()]), DEFAULT_PARAMS)
+
+    expect(tidy).toBeGreaterThan(heaped)
+  })
+
+  /**
+   * With no frame, how the work is grouped is not the thing hurting anybody -- so the term
+   * that tidies it yields. It does not fall silent: a student who has not entered a
+   * timetable yet is a low-structure week by this measure, and §42 exists because that is
+   * the common case, so switching tidying off entirely would stop spreading their work for
+   * a reason they never chose.
+   */
+  it('minds how work is grouped less when there is no frame to fit it around', () => {
+    const framed =
+      score(makeSchedule([...timetable(), ...spread()]), DEFAULT_PARAMS) -
+      score(makeSchedule([...timetable(), ...clustered()]), DEFAULT_PARAMS)
+
+    const unframed = score(makeSchedule(spread()), DEFAULT_PARAMS) - score(makeSchedule(clustered()), DEFAULT_PARAMS)
+
+    expect(unframed).toBeGreaterThan(0)
+    expect(unframed).toBeLessThan(framed)
+  })
+
+  /**
+   * §2.1's ordering survives the inversion. Whatever else changes, the solver may never
+   * trade a genuinely higher worst day for a week that merely looks better arranged.
+   */
+  it('never lets the floor be traded away, whatever shape the week is', () => {
+    // Every day of the fortnight buried, on four hours' sleep. The floor genuinely falls
+    // here, which is what makes the comparison mean anything.
+    const crushing = makeSchedule(
+      Array.from({ length: 21 }, (_, day) => studyItem(`heavy-${day}`, day, 12)),
+      4,
+    )
+    const gentle = makeSchedule(clustered(), 4)
+
+    expect(score(gentle, DEFAULT_PARAMS)).toBeGreaterThan(score(crushing, DEFAULT_PARAMS))
+  })
+})

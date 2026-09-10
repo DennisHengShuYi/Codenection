@@ -70,7 +70,7 @@ export function roomModel({ schedule, profile, today, blockLog = [] }: RoomModel
   // model no longer decides whether a prescription belongs to the bed, the door or the
   // phone -- `RoomShell` reads `prescribe` directly for the card, and none of the three rows
   // below light up for it any more.
-  const lapsedNow = lapsed(schedule, today, params)
+  const lapsedNow = lapsed(schedule, today, params, blockLog)
 
   // §8b/Task 17: the durable log is the only record of what has already been asked about.
   const alreadyAsked = (id: string) => answeredIds(blockLog).includes(id)

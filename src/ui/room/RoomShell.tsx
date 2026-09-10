@@ -34,14 +34,15 @@ import { useSchedule } from '../useSchedule'
 import { AccuracyNote } from '../validation/AccuracyNote'
 import { BlockSheet } from '../week/BlockSheet'
 import { blockSheet } from '../week/blockActions'
-import { runRebalance } from '../../domain/rebalanceOutcome'
+import { runRebalance, type RebalanceOutcome } from '../../domain/rebalanceOutcome'
+import { RebalancePreview } from '../week/RebalancePreview'
 import { WeekScreen } from '../week/WeekScreen'
 import { visibleCards } from './cardPrecedence'
 import { LiveCards } from './LiveCards'
 import { roomModel } from './roomModel'
 import { describeRoom } from './roomText'
 import { Room } from './Room'
-import { ROOM, toAdd, toBlock, toReserves, toSettings, toWeek } from './view'
+import { ROOM, toAdd, toBlock, toRebalance, toReserves, toSettings, toWeek } from './view'
 import { useUrlView } from './useUrlView'
 import { useTidyUp } from './useTidyUp'
 
@@ -95,6 +96,31 @@ export function RoomShell({
   const [report, setReport] = useState<string | null>(null)
   const [fallback, setFallback] = useState<Fix | null>(null)
   const [working, setWorking] = useState(false)
+  /**
+   * The solve waiting to be answered, or null.
+   *
+   * Session state rather than storage, deliberately: a proposal is about a moment, and one
+   * held across a reload would be an offer to rearrange a week that may have changed since
+   * it was made. The address knows the student is looking at a proposal; only this knows
+   * which one, which is why a cold `/week/rebalance` corrects itself to the week below.
+   */
+  const [proposal, setProposal] = useState<RebalanceOutcome | null>(null)
+  /**
+   * A proposal address with no proposal behind it -- a reload, a pasted link, a Back into a
+   * discarded one -- corrects itself to the week.
+   *
+   * The same rule `fromPath` already applies to an address the app does not recognise: land
+   * somewhere real and fix the bar, rather than go on asserting a state the app is not in.
+   * Re-solving instead would be worse: it would hand the student a fresh proposal they never
+   * asked for, on a week that may have moved on since the link was made.
+   */
+  const proposalIsStale = view.kind === 'rebalance' && proposal === null
+
+  useEffect(() => {
+    if (proposalIsStale) setView(toWeek())
+    // `setView` is rebuilt on every render, so listing it here would re-run this effect on
+    // every render. Whether it should fire is decided entirely by the flag above.
+  }, [proposalIsStale]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Session-scoped dismissals for the four live cards, none of which has a domain-level
   // "not today" of its own any more. §7 retired the recovery card's permanent
@@ -220,10 +246,20 @@ export function RoomShell({
 
     try {
       const outcome = runRebalance(week, params, SEED)
-      setSchedule(outcome.schedule)
-      setReport(outcome.report)
-      setFallback(outcome.fallback)
-      play()
+
+      // Nothing to approve is not the same as nothing to say. Where the solver found no
+      // moves, `describeRebalance` already tells a healthy week from an overloaded one and
+      // `smallestFixes` may still have a suggestion -- so the week says both, on the spot,
+      // rather than opening a door onto an empty list and asking for consent to nothing.
+      if (outcome.moves.length === 0) {
+        setProposal(null)
+        setReport(outcome.report)
+        setFallback(outcome.fallback)
+        return
+      }
+
+      setProposal(outcome)
+      setView(toRebalance())
     } finally {
       setWorking(false)
     }
@@ -275,6 +311,30 @@ export function RoomShell({
    * not say which one it meant.
    */
   const closeToRoom = () => setView(ROOM)
+
+  /**
+   * Adopting a proposal: the one place the solver's week is ever written.
+   *
+   * The tidy-up sequence plays here rather than at the moment of solving, because §1.3
+   * calls it the visible payoff for a change the student just agreed to -- and until this
+   * line, they had not agreed to anything.
+   */
+  const approveProposal = () => {
+    if (proposal === null) return
+
+    setSchedule(proposal.schedule)
+    setReport(proposal.report)
+    setFallback(proposal.fallback)
+    setProposal(null)
+    play()
+    setView(toWeek())
+  }
+
+  const discardProposal = () => {
+    setProposal(null)
+    setView(toWeek())
+  }
+
 
   // §3's card precedence: recovery, then a lapsed commitment, then a stuck task, then the
   // day's own question -- capped to one below the low-energy threshold and two otherwise.
@@ -371,6 +431,20 @@ export function RoomShell({
             blockLog={blockLog}
           />
         </Sheet>
+      )}
+
+      {view.kind === 'rebalance' && proposal !== null && (
+        <RebalancePreview
+          key="rebalance"
+          proposal={proposal}
+          onApprove={approveProposal}
+          onDiscard={discardProposal}
+          onBack={discardProposal}
+          onClose={() => {
+            setProposal(null)
+            closeToRoom()
+          }}
+        />
       )}
 
       {/* Ruling 56's gate, moved with what it guards. §1.5: "a student at 12% reserve

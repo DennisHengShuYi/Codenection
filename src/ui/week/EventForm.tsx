@@ -4,15 +4,16 @@ import { editWarnings } from '../../domain/editWarnings'
 import type { ItemFields } from '../../domain/scheduleEdits'
 import {
   BLOCK_KINDS,
+  HORIZON_DAYS,
   LOAD_TYPES,
   type ActivityKind,
   type EngineParams,
   type LoadType,
 } from '../../engine'
-import type { Schedule, ScheduledItem } from '../../optimizer'
+import { DAY_END_HOUR, type Schedule, type ScheduledItem } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { Field } from '../kit/Field'
-import { BLOCK_KIND_LABELS, LOAD_TYPE_LABELS } from '../kit/labels'
+import { BLOCK_KIND_LABELS, hourLabel, LOAD_TYPE_LABELS } from '../kit/labels'
 import { Sheet } from '../kit/Sheet'
 import { blankDraft, candidate, draftFrom, isComplete, toFields, validate } from './eventDraft'
 
@@ -38,9 +39,7 @@ import { blankDraft, candidate, draftFrom, isComplete, toFields, validate } from
 
 const INPUT = 'min-h-11 w-full rounded border border-line bg-surface px-2 py-1 text-sm text-ink'
 
-const formatHour = (hour: number): string => `${String(hour).padStart(2, '0')}:00`
-
-const HOURS_OF_DAY = Array.from({ length: 24 }, (_, hour) => hour)
+const HOURS_OF_DAY = Array.from({ length: DAY_END_HOUR }, (_, hour) => hour)
 
 /** What being pinned means, said once, in the terms the student would use for it. */
 const pinnedNote = (item: ScheduledItem | null): string | null => {
@@ -89,7 +88,13 @@ export function EventForm({
   const warnings = editWarnings({ schedule, item: candidate(draft, item), params })
   const note = pinnedNote(item)
 
-  const days = Array.from({ length: schedule.horizonDays }, (_, index) => index)
+  /*
+   * `HORIZON_DAYS`, not `schedule.horizonDays`. `validate` and `fromPath` both bound the day
+   * by the constant, so a stored week claiming a longer horizon would have the picker
+   * offering a day the form then refuses to save -- Save greyed out with a message about a
+   * day the student can plainly see in the list.
+   */
+  const days = Array.from({ length: Math.min(schedule.horizonDays, HORIZON_DAYS) }, (_, index) => index)
 
   return (
     <Sheet
@@ -173,7 +178,7 @@ export function EventForm({
             >
               {HOURS_OF_DAY.map((hour) => (
                 <option key={hour} value={hour}>
-                  {formatHour(hour)}
+                  {hourLabel(hour)}
                 </option>
               ))}
             </select>

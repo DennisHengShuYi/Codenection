@@ -4,6 +4,7 @@ import { IN_THEIR_WORDS } from '../../domain/realityCheck'
 import type { BlockAnswer } from '../../domain/blockLog'
 import { Button, type ButtonVariant } from '../kit/Button'
 import { Card } from '../kit/Card'
+import { hourLabel } from '../kit/labels'
 import { Sheet } from '../kit/Sheet'
 import type { BlockAction, BlockSheetModel } from './blockActions'
 
@@ -34,10 +35,8 @@ type SimpleAction = keyof typeof SIMPLE_LABELS
 const isSimpleAction = (action: BlockAction): action is SimpleAction =>
   action === 'done' || action === 'later'
 
-const formatHour = (hour: number): string => `${String(hour).padStart(2, '0')}:00`
-
 const whenText = (item: BlockSheetModel['item']): string =>
-  `${formatHour(item.startHour)}–${formatHour(item.startHour + item.hours)} · ${IN_THEIR_WORDS[item.type]} · ${item.hours} hours`
+  `${hourLabel(item.startHour)}–${hourLabel(item.startHour + item.hours)} · ${IN_THEIR_WORDS[item.type]} · ${item.hours} hours`
 
 function MicroStartCard({ microStart }: { readonly microStart: MicroStart }): JSX.Element {
   return (

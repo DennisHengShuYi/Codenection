@@ -360,7 +360,6 @@ export function RoomShell({
     setView(toWeek())
   }
 
-
   // §3's card precedence: recovery, then a lapsed commitment, then a stuck task, then the
   // day's own question -- capped to one below the low-energy threshold and two otherwise.
   const recoveryPrescription = prescribe(week)

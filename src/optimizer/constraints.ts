@@ -19,7 +19,17 @@ export const overlaps = (a: ScheduledItem, b: ScheduledItem): boolean =>
   a.startHour < b.startHour + b.hours &&
   b.startHour < a.startHour + a.hours
 
-const isWork = (item: ScheduledItem): boolean =>
+/**
+ * Whether a block counts against the daily hours cap.
+ *
+ * Exported alongside `overlaps` and for the same reason: the edit form asks the same
+ * question when it warns a student that a day will not hold, and a second copy of "what
+ * counts as work" would let the warning and the constraint drift apart.
+ *
+ * Sleep enters through `Schedule.sleepByDay` rather than as a block, and rest is what
+ * recovers from the load -- neither is what the cap is capping.
+ */
+export const isWork = (item: ScheduledItem): boolean =>
   item.kind !== 'rest' && item.kind !== 'sleep'
 
 /**

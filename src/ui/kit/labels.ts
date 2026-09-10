@@ -33,3 +33,13 @@ export const BLOCK_KIND_LABELS: Record<ActivityKind, string> = {
   rest: 'Rest',
   sleep: 'Sleep',
 }
+
+/**
+ * An hour of the day as a student reads a clock.
+ *
+ * Shared because the block sheet and the edit form both show one, and two copies of a
+ * formatter is how "09:00" and "9:00" end up on two screens describing the same block.
+ * `telegram/render.ts` keeps its own, deliberately: it floors a possibly-fractional hour
+ * for a text message, which is a different question from labelling a whole-hour picker.
+ */
+export const hourLabel = (hour: number): string => `${String(hour).padStart(2, '0')}:00`

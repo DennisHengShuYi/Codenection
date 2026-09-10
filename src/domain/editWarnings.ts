@@ -1,5 +1,5 @@
 import type { EngineParams } from '../engine'
-import { overlaps, type Schedule, type ScheduledItem } from '../optimizer'
+import { DAY_END_HOUR, isWork, overlaps, type Schedule, type ScheduledItem } from '../optimizer'
 
 /**
  * What a hand-placed block clashes with, said to the student rather than to the solver.
@@ -15,15 +15,10 @@ import { overlaps, type Schedule, type ScheduledItem } from '../optimizer'
  * the entry is wrong about its own subject, and the fortnight it then holds is a fiction
  * every forecast is computed from. The double-booking is precisely the signal they came for.
  *
- * `overlaps` comes from `constraints.ts` rather than being redefined here, so the two can
- * never disagree about a boundary.
+ * `overlaps` and `isWork` both come from `constraints.ts` rather than being redefined here,
+ * so the warning and the constraint can never disagree about what counts as an overlap or
+ * about what counts as work.
  */
-
-/** Sleep enters through `Schedule.sleepByDay`, and rest is what recovers from the load --
- *  neither is what the daily cap is capping. Matches `constraints.ts`'s own predicate. */
-const isWork = (item: ScheduledItem): boolean => item.kind !== 'rest' && item.kind !== 'sleep'
-
-const HOURS_IN_A_DAY = 24
 
 /** One decimal, so a half-hour block does not report "7.000000000000001 hours". */
 const round = (hours: number): number => Math.round(hours * 10) / 10
@@ -47,7 +42,7 @@ export function editWarnings({
   const found: string[] = []
   const others = schedule.items.filter((candidate) => candidate.id !== item.id)
 
-  if (item.startHour + item.hours > HOURS_IN_A_DAY) {
+  if (item.startHour + item.hours > DAY_END_HOUR) {
     found.push('This runs past midnight, so part of it falls outside the day it is on.')
   }
 

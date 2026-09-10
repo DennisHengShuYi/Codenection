@@ -23,6 +23,7 @@ import { domainBars } from '../dial/domainBars'
 import { Button } from '../kit/Button'
 import { Card } from '../kit/Card'
 import { Sheet } from '../kit/Sheet'
+import { CalendarConnection } from '../settings/CalendarConnection'
 import { LinkTelegram } from '../settings/LinkTelegram'
 import { LowEnergyControl } from '../settings/LowEnergyControl'
 import { ReservesSheet } from '../reserves/ReservesSheet'
@@ -408,6 +409,10 @@ export function RoomShell({
               <>
                 <AccountBar session={session} />
                 <LinkTelegram />
+                {/* Beside the Telegram unlink, and for the same reason: a standing grant
+                    over somebody's calendar needs a way back that is in this app, not
+                    buried in a Google settings page they do not know exists. */}
+                <CalendarConnection />
               </>
             ) : (
               // Ruling 58: a row rather than a sentence floating in an acre of white. Same

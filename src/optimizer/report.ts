@@ -1,5 +1,5 @@
 import { summarise, type EngineParams } from '../engine'
-import { toDayInputs } from './objective'
+import { ALL_PRESENT, toDayInputs } from './objective'
 import type { MoveKind, RebalanceResult, Schedule } from './types'
 
 const round = (value: number): number => Math.round(value)
@@ -39,12 +39,12 @@ function describeGain(result: RebalanceResult, params: EngineParams): string {
 
   const daysBefore = summarise(
     result.before.start,
-    toDayInputs(result.before),
+    toDayInputs(result.before, ALL_PRESENT),
     params,
   ).deficitDays
   const daysAfter = summarise(
     result.schedule.start,
-    toDayInputs(result.schedule),
+    toDayInputs(result.schedule, ALL_PRESENT),
     params,
   ).deficitDays
 
@@ -64,7 +64,7 @@ export function describeRebalance(result: RebalanceResult, params: EngineParams)
     // news for an overloaded one, so the two get different sentences.
     const deficitDays = summarise(
       result.schedule.start,
-      toDayInputs(result.schedule),
+      toDayInputs(result.schedule, ALL_PRESENT),
       params,
     ).deficitDays
 

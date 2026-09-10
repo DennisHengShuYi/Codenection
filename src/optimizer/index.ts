@@ -14,7 +14,7 @@ export type {
   ScheduledItem,
 } from './types'
 export { isValid, violations } from './constraints'
-export { DEFICIT_DAY_WEIGHT, FRAGMENTATION_WEIGHT, score, toDayInputs } from './objective'
+export { ALL_PRESENT, DEFICIT_DAY_WEIGHT, FRAGMENTATION_WEIGHT, score, toDayInputs } from './objective'
 export { neighbours } from './neighbours'
 export { makeRng, type Rng } from './rng'
 export { rebalance } from './hillClimb'

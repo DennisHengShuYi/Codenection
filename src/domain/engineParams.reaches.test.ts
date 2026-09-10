@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS, HORIZON_DAYS, project } from '../engine'
-import { toDayInputs, type Schedule, type ScheduledItem } from '../optimizer'
+import { ALL_PRESENT, toDayInputs, type Schedule, type ScheduledItem } from '../optimizer'
 import type { BlockOutcome } from './calibration'
 import { paramsFor } from './engineParams'
 
@@ -57,8 +57,8 @@ const overran = (count: number): BlockOutcome[] =>
 describe('what the app measures reaches what it projects', () => {
   it('projects a heavier week for a student who consistently overruns', () => {
     const schedule = week()
-    const uncalibrated = project(schedule.start, toDayInputs(schedule), DEFAULT_PARAMS)
-    const calibrated = project(schedule.start, toDayInputs(schedule), paramsFor(overran(5)))
+    const uncalibrated = project(schedule.start, toDayInputs(schedule, ALL_PRESENT), DEFAULT_PARAMS)
+    const calibrated = project(schedule.start, toDayInputs(schedule, ALL_PRESENT), paramsFor(overran(5)))
 
     expect(lowestOf(calibrated, 'mental')).toBeLessThan(lowestOf(uncalibrated, 'mental'))
   })
@@ -66,8 +66,8 @@ describe('what the app measures reaches what it projects', () => {
   it('projects identically for a student with no logged outcomes', () => {
     const schedule = week()
 
-    expect(project(schedule.start, toDayInputs(schedule), paramsFor([]))).toEqual(
-      project(schedule.start, toDayInputs(schedule), DEFAULT_PARAMS),
+    expect(project(schedule.start, toDayInputs(schedule, ALL_PRESENT), paramsFor([]))).toEqual(
+      project(schedule.start, toDayInputs(schedule, ALL_PRESENT), DEFAULT_PARAMS),
     )
   })
 
@@ -75,10 +75,10 @@ describe('what the app measures reaches what it projects', () => {
   it('applies the bias to the measured type and leaves the others alone', () => {
     const schedule = week({ items: [item({ type: 'errands', kind: 'errands' })] })
     // Measured on errands this time, so errands should move and mental should not.
-    const uncalibrated = project(schedule.start, toDayInputs(schedule), DEFAULT_PARAMS)
+    const uncalibrated = project(schedule.start, toDayInputs(schedule, ALL_PRESENT), DEFAULT_PARAMS)
     const calibrated = project(
       schedule.start,
-      toDayInputs(schedule),
+      toDayInputs(schedule, ALL_PRESENT),
       paramsFor(
         Array.from({ length: 5 }, () => ({
           type: 'errands' as const,

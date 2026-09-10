@@ -1,5 +1,5 @@
 import { overallReserve, project, type EngineParams } from '../engine'
-import { toDayInputs, type Schedule } from '../optimizer'
+import { ALL_PRESENT, toDayInputs, type Schedule } from '../optimizer'
 import { checkedInDays, type BlockRecord } from './blockLog'
 import { dateFor, todayIndex } from './calendar'
 
@@ -34,10 +34,11 @@ export const PREDICTION_HORIZON_DAYS = 2
  * Deliberately not a separate predictor. A second model would be scoring something the
  * student never saw, and the published number has to be about the app they actually used.
  *
- * `checkedIn` is optional and, left unset, `toDayInputs` treats every day as answered --
- * unchanged from before this took the parameter. `predictionsAfter` is the caller that
- * supplies §6.5's real signal; direct callers (and this function's own tests) that have no
- * check-in log to thread keep exactly the behaviour they had.
+ * `checkedIn` is optional here and, left unset, reads every day as answered -- unchanged
+ * from before `toDayInputs` made the same parameter required. `predictionsAfter` is the
+ * caller that supplies §6.5's real signal; direct callers (and this function's own tests)
+ * that have no check-in log to thread keep exactly the behaviour they had, via the same
+ * `ALL_PRESENT` the optimizer's own callers now name explicitly.
  */
 export function predictEnergy(
   schedule: Schedule,
@@ -45,7 +46,7 @@ export function predictEnergy(
   forDay: number,
   checkedIn?: readonly boolean[],
 ): number | null {
-  const projection = project(schedule.start, toDayInputs(schedule, checkedIn), params)
+  const projection = project(schedule.start, toDayInputs(schedule, checkedIn ?? ALL_PRESENT), params)
   const day = projection.central[forDay]
 
   return day ? Math.round(overallReserve(day) * 10) / 10 : null

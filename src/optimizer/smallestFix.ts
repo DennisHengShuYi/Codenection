@@ -1,6 +1,6 @@
 import { summarise, type EngineParams } from '../engine'
 import { neighbours } from './neighbours'
-import { toDayInputs } from './objective'
+import { ALL_PRESENT, toDayInputs } from './objective'
 import type { Move, Schedule } from './types'
 
 export interface Fix {
@@ -23,8 +23,9 @@ interface Measured {
   readonly deficitArea: number
 }
 
+// No check-in data exists for a candidate move under evaluation -- `ALL_PRESENT` names that.
 const measure = (schedule: Schedule, params: EngineParams): Measured => {
-  const projection = summarise(schedule.start, toDayInputs(schedule), params)
+  const projection = summarise(schedule.start, toDayInputs(schedule, ALL_PRESENT), params)
   return {
     worstFloor: projection.worstFloor,
     deficitDays: projection.deficitDays,

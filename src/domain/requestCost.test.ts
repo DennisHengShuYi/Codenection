@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ParsedItem } from '../ai'
 import { DEFAULT_PARAMS, HORIZON_DAYS, project } from '../engine'
-import { toDayInputs, type Schedule, type ScheduledItem } from '../optimizer'
+import { ALL_PRESENT, toDayInputs, type Schedule, type ScheduledItem } from '../optimizer'
 import type { BlockRecord } from './blockLog'
 import { firstDeficitDay, priceRequest } from './requestCost'
 
@@ -58,7 +58,7 @@ const priceOf = (schedule: Schedule, item = request()) =>
 
 describe('firstDeficitDay', () => {
   it('is null for a fortnight that never crosses', () => {
-    const projection = project(week().start, toDayInputs(week()), DEFAULT_PARAMS)
+    const projection = project(week().start, toDayInputs(week(), ALL_PRESENT), DEFAULT_PARAMS)
 
     expect(firstDeficitDay(projection)).toBeNull()
   })
@@ -70,7 +70,7 @@ describe('firstDeficitDay', () => {
    */
   it('names the first day the floor falls into deficit', () => {
     const exhausted = week({ start: { mental: 8, physical: 8, social: 8, errands: 8 } })
-    const projection = project(exhausted.start, toDayInputs(exhausted), DEFAULT_PARAMS)
+    const projection = project(exhausted.start, toDayInputs(exhausted, ALL_PRESENT), DEFAULT_PARAMS)
 
     expect(firstDeficitDay(projection)).toBe(0)
   })

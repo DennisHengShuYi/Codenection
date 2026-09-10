@@ -23,13 +23,6 @@ export const DEFICIT_AREA_WEIGHT = 0.001
  *  the fragmentation penalty. */
 const isWork = (kind: string): boolean => kind !== 'rest' && kind !== 'sleep'
 
-/**
- * Turns a schedule into the per-day inputs the engine consumes.
- *
- * The engine knows nothing about scheduling and the optimizer knows nothing about
- * reserves; this function is the only place the two vocabularies meet, which is what
- * keeps either one replaceable without touching the other.
- */
 /** One pass over the items instead of one pass per day. The search calls this for every
  *  candidate it scores, so filtering the whole schedule 21 times over is 21x the work to
  *  answer a question a single grouping pass answers. */
@@ -69,20 +62,39 @@ function nearestDeadlineByDay(schedule: Schedule): (number | null)[] {
 }
 
 /**
- * @param checkedIn §8b's missing-data signal, one entry per horizon day. Defaults to
- * everybody present, which is what every one of the search's thousands of internal calls
- * per solve already assumed -- the optimizer has no notion of missed check-ins, and giving
- * it one would only slow the search down for a signal it cannot act on. Only the app's own
- * projection, built from the real block log via `checkedInDays`, has real data to pass.
+ * §8b's missing-data signal, one entry per horizon day, for a caller with no real check-in
+ * data to thread -- the search's own thousands of internal calls per solve, which have no
+ * notion of a missed check-in and nothing to gain from one. Deliberately a required
+ * argument rather than a default: `checkedIn` used to be optional and silently defaulted to
+ * "everybody present", which is exactly how that mechanism sat dead once -- every caller
+ * that forgot to pass the real signal kept compiling and kept passing, quietly. Passing
+ * `ALL_PRESENT` states the same choice out loud, so the search's own pessimism-free
+ * evaluation is a deliberate property of *the search*, not an accident of an omitted
+ * argument. Indexing an out-of-range day still reads as present -- `dayInputsFrom` below --
+ * which is what makes an empty array work as this constant regardless of horizon length.
  */
-export function toDayInputs(schedule: Schedule, checkedIn?: readonly boolean[]): DayInput[] {
+export const ALL_PRESENT: readonly boolean[] = []
+
+/**
+ * Turns a schedule into the per-day inputs the engine consumes.
+ *
+ * The engine knows nothing about scheduling and the optimizer knows nothing about
+ * reserves; this function is the only place the two vocabularies meet, which is what
+ * keeps either one replaceable without touching the other.
+ *
+ * @param checkedIn §8b's missing-data signal, one entry per horizon day. Required rather
+ * than defaulted -- see `ALL_PRESENT`'s own doc for why. Only the app's own projection,
+ * built from the real block log via `checkedInDays`, has real data to pass; everything else
+ * passes `ALL_PRESENT` explicitly.
+ */
+export function toDayInputs(schedule: Schedule, checkedIn: readonly boolean[]): DayInput[] {
   return dayInputsFrom(schedule, groupByDay(schedule), checkedIn)
 }
 
 function dayInputsFrom(
   schedule: Schedule,
   byDay: readonly ScheduledItem[][],
-  checkedIn?: readonly boolean[],
+  checkedIn: readonly boolean[],
 ): DayInput[] {
   const nearestDeadline = nearestDeadlineByDay(schedule)
 
@@ -106,7 +118,7 @@ function dayInputsFrom(
       // one place are the exception rather than the rule for a student crossing campus.
       venueChanges: Math.max(0, workingBlocks - 1),
       daysToNearestDeadline: deadline === null ? null : deadline - dayIndex,
-      checkedIn: checkedIn?.[dayIndex] ?? true,
+      checkedIn: checkedIn[dayIndex] ?? true,
     }
   })
 }
@@ -143,7 +155,9 @@ export function score(schedule: Schedule, params: EngineParams): number {
   // Grouped once and shared. The search calls this for every candidate on every
   // iteration, so a second pass over the same items to count fragmentation is pure waste.
   const byDay = groupByDay(schedule)
-  const projection = summarise(schedule.start, dayInputsFrom(schedule, byDay), params)
+  // The search's own thousands of calls per solve: no check-in data exists for a candidate
+  // being explored, and it is not the search's place to invent any. `ALL_PRESENT` says so.
+  const projection = summarise(schedule.start, dayInputsFrom(schedule, byDay, ALL_PRESENT), params)
 
   return (
     projection.worstFloor -

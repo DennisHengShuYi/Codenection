@@ -1,40 +1,41 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS, HORIZON_DAYS, project } from '../engine'
-import { score, toDayInputs } from './objective'
+import { ALL_PRESENT, score, toDayInputs } from './objective'
 import { makeSchedule, restItem, socialBaseline, studyItem } from './testSupport'
 
 describe('toDayInputs', () => {
   it('produces one day per horizon day, even where nothing is scheduled', () => {
-    expect(toDayInputs(makeSchedule([studyItem('a', 3, 2)]))).toHaveLength(21)
+    expect(toDayInputs(makeSchedule([studyItem('a', 3, 2)]), ALL_PRESENT)).toHaveLength(21)
   })
 
   it('places each item on its own day', () => {
-    const days = toDayInputs(makeSchedule([studyItem('a', 3, 2)]))
+    const days = toDayInputs(makeSchedule([studyItem('a', 3, 2)]), ALL_PRESENT)
 
     expect(days[3]!.activities).toHaveLength(1)
     expect(days[2]!.activities).toHaveLength(0)
   })
 
   it('counts down to the nearest pending deadline', () => {
-    const days = toDayInputs(makeSchedule([{ ...studyItem('a', 1, 2), deadlineDay: 5 }]))
+    const days = toDayInputs(makeSchedule([{ ...studyItem('a', 1, 2), deadlineDay: 5 }]), ALL_PRESENT)
 
     expect(days[0]!.daysToNearestDeadline).toBe(5)
     expect(days[5]!.daysToNearestDeadline).toBe(0)
   })
 
   it('stops counting a deadline once it has passed', () => {
-    const days = toDayInputs(makeSchedule([{ ...studyItem('a', 1, 2), deadlineDay: 5 }]))
+    const days = toDayInputs(makeSchedule([{ ...studyItem('a', 1, 2), deadlineDay: 5 }]), ALL_PRESENT)
 
     expect(days[6]!.daysToNearestDeadline).toBeNull()
   })
 
   /**
    * §8b: the optimizer's search calls this thousands of times per solve and has no notion
-   * of missed check-ins, so the default has to be exactly what every internal call already
-   * assumed -- everybody present -- and only the app's own projection passes real data.
+   * of missed check-ins, so `ALL_PRESENT` -- an explicit, named argument rather than an
+   * omitted one -- has to read as exactly what every internal call already assumed:
+   * everybody present. Only the app's own projection passes real data.
    */
-  it('defaults every day to checked in when no override is given', () => {
-    const days = toDayInputs(makeSchedule([studyItem('a', 3, 2)]))
+  it('reads every day as checked in when ALL_PRESENT is passed', () => {
+    const days = toDayInputs(makeSchedule([studyItem('a', 3, 2)]), ALL_PRESENT)
 
     expect(days.every((day) => day.checkedIn)).toBe(true)
   })
@@ -167,8 +168,8 @@ describe('score', () => {
       5,
     )
 
-    const nineProjection = project(nine.start, toDayInputs(nine), DEFAULT_PARAMS)
-    const tenProjection = project(ten.start, toDayInputs(ten), DEFAULT_PARAMS)
+    const nineProjection = project(nine.start, toDayInputs(nine, ALL_PRESENT), DEFAULT_PARAMS)
+    const tenProjection = project(ten.start, toDayInputs(ten, ALL_PRESENT), DEFAULT_PARAMS)
 
     expect(nineProjection.worstFloor).toBe(tenProjection.worstFloor)
     expect(nineProjection.deficitDays).toBe(tenProjection.deficitDays)

@@ -44,3 +44,42 @@ describe('palette discipline', () => {
     expect(offenders).toEqual([])
   })
 })
+
+/**
+ * Ruling 50: the guard's own capability, asserted rather than assumed.
+ *
+ * The sweep above passes on a clean tree whatever `TAILWIND_COLOUR` happens to contain --
+ * which is how Ruling 43's defect survived a green suite, and how Ruling 43's own fix
+ * would have survived being reverted. A probe file proved the widened pattern once at
+ * authoring time and was then deleted, taking the evidence with it. These fixtures are
+ * that evidence, kept: revert any alternative and this file goes red on a clean tree.
+ */
+describe('the palette guard itself', () => {
+  it.each([
+    // Ruling 7's named syntax -- the three forms that used to pass straight through.
+    'bg-[--color-ink]',
+    'bg-[#0f172a]',
+    'border-[var(--color-line)]',
+    'text-[rgb(15,23,42)]',
+    // The family-number and bare forms the guard has always been for.
+    'bg-slate-500',
+    'text-white',
+    'bg-black/50',
+    'bg-transparent',
+  ])('catches %s', (utility) => {
+    expect(TAILWIND_COLOUR.test(`<div className="${utility}" />`)).toBe(true)
+  })
+
+  it.each([
+    // Arbitrary values are not colour-only: sizing must keep passing.
+    'text-[13px]',
+    'border-[3px]',
+    'w-[42rem]',
+    'grid-cols-[1fr_auto]',
+    // Nothing to do with colour utilities at all.
+    'bg-surface',
+    'text-ink',
+  ])('leaves %s alone', (utility) => {
+    expect(TAILWIND_COLOUR.test(`<div className="${utility}" />`)).toBe(false)
+  })
+})

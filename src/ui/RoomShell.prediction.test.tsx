@@ -131,3 +131,78 @@ describe('RoomShell scoring its own predictions', () => {
     expect(screen.getByTestId('accuracy-measured').textContent).toMatch(/off by about 10/i)
   })
 })
+
+/**
+ * The brief asks for a stress tracker that logs how you feel over time. Every energy answer
+ * has always been stored and dated on the profile; the only thing that ever read it was the
+ * accuracy figure, which reduces the whole history to one mean error.
+ *
+ * Proved here rather than only at the component, because the defect was never that a chart
+ * could not be drawn -- it was that the stored history reached nothing.
+ */
+describe('RoomShell showing reported energy over time', () => {
+  const seedReported = async (repository: Awaited<ReturnType<typeof renderHome>>, values: number[]) => {
+    const settings = await repository.loadSettings()
+    await repository.saveSettings({
+      ...settings,
+      calibration: {
+        ...(settings.calibration ?? { predictions: [] }),
+        predictions: values.map((reported, index) => ({
+          forDate: `2026-08-${String(index + 1).padStart(2, '0')}`,
+          predicted: 60,
+          reported,
+        })),
+      } as NonNullable<typeof settings.calibration>,
+    })
+  }
+
+  it('plots the days the student has reported on', async () => {
+    counter += 1
+    const repository = createLocalRepository(`prediction-trend-${counter}`)
+    await repository.clear()
+    await repository.saveWeek(week())
+    await seedReported(repository, [30, 50, 70, 90])
+
+    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByTestId('sparkline')).toBeInTheDocument())
+    expect(screen.getByTestId('sparkline').getAttribute('points')?.split(' ')).toHaveLength(4)
+    expect(screen.getByTestId('sparkline-text')).toHaveTextContent(/going up/i)
+  })
+
+  /**
+   * §0's no cold start: a student who has answered nothing sees a room, not an empty axis
+   * implying data that does not exist.
+   *
+   * Seeded explicitly empty rather than just left alone, because the preview profile ships
+   * with demo history -- which is the point of the fixture, and would make "fresh" mean the
+   * opposite of what this test is about.
+   */
+  it('draws nothing for a student who has never answered', async () => {
+    counter += 1
+    const repository = createLocalRepository(`prediction-notrend-${counter}`)
+    await repository.clear()
+    await repository.saveWeek(week())
+    await seedReported(repository, [])
+
+    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+
+    expect(screen.queryByTestId('sparkline')).not.toBeInTheDocument()
+  })
+
+  /** Two dots are not a trend, and a line through them asserts a direction nobody
+   *  measured. The floor is enforced in the domain and must survive the wiring. */
+  it('draws nothing until there is enough to be a trend', async () => {
+    counter += 1
+    const repository = createLocalRepository(`prediction-tooshort-${counter}`)
+    await repository.clear()
+    await repository.saveWeek(week())
+    await seedReported(repository, [40, 60])
+
+    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+
+    expect(screen.queryByTestId('sparkline')).not.toBeInTheDocument()
+  })
+})

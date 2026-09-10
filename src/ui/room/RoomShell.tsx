@@ -4,6 +4,7 @@ import { addItems } from '../../domain/addItems'
 import { checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
 import { anchorTo, dateFor, isAnchored, todayIndex } from '../../domain/calendar'
 import { accept, lapsed } from '../../domain/commitments'
+import { energyHistory } from '../../domain/energyHistory'
 import { paramsFor } from '../../domain/engineParams'
 import { firstAction, isStuck } from '../../domain/microStart'
 import { predictionsAfter, resolvePrediction } from '../../domain/predictions'
@@ -357,7 +358,12 @@ export function RoomShell({
               plus the single live card, and a five-bar breakdown is exactly the dashboard
               §1.5 says a depleted student should not be handed. */}
           {!lowEnergy && (
-            <CapacityDial capacity={overallReserve(week.start)} bars={bars} projection={projection} />
+            <CapacityDial
+              capacity={overallReserve(week.start)}
+              bars={bars}
+              projection={projection}
+              history={energyHistory(profile.predictions)}
+            />
           )}
         </>
       )}

@@ -10,6 +10,7 @@ import {
 } from '../engine'
 import { toDayInputs, type Schedule } from '../optimizer'
 import { addItems } from './addItems'
+import { checkedInDays, type BlockRecord } from './blockLog'
 
 /**
  * Hours of restorative company that one "evening" stands for.
@@ -105,17 +106,34 @@ export function firstDeficitDay(projection: Projection): number | null {
  * §2.3: never "this takes 6 hours", always what it costs you. The work is done by adding it
  * to a *copy* of the week and reading the difference out of the projection that already
  * exists -- the model already knows the answer, because it has just been asked to carry it.
+ *
+ * `today` and `blockLog` are REQUIRED, and that is Ruling 41's enabler rather than a style
+ * preference. They used to default to `0` and `[]`, and the defaults are precisely what let
+ * the Telegram `/ask` call site be silently wrong for as long as it existed: it priced every
+ * request against day 0 of the fortnight with no check-in evidence, compiled, read
+ * reasonably, and tested green. A caller that genuinely means "no evidence" says so, in
+ * writing, at the call site -- which is a thing a reviewer can see.
+ *
+ * With them supplied, the price is judged against the fortnight the student is actually
+ * living, including §6.5's missing-data pessimism, the same way `roomModel` and `lapsed` do.
  */
 export function priceRequest(
   schedule: Schedule,
   item: ParsedItem,
   params: EngineParams,
+  today: number,
+  blockLog: readonly BlockRecord[],
 ): RequestCost {
-  const before = project(schedule.start, toDayInputs(schedule), params)
+  const checkedIn = checkedInDays(blockLog, today, schedule.horizonDays)
+  const before = project(schedule.start, toDayInputs(schedule, checkedIn), params)
 
   // addItems returns a new week, so the caller's is never touched.
   const withRequest = addItems(schedule, [item])
-  const after = project(withRequest.start, toDayInputs(withRequest), params)
+  const after = project(
+    withRequest.start,
+    toDayInputs(withRequest, checkedInDays(blockLog, today, withRequest.horizonDays)),
+    params,
+  )
 
   const floorBefore = lowestOf(before, item.type)
   const floorAfter = lowestOf(after, item.type)

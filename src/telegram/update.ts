@@ -1,3 +1,5 @@
+import type { BlockAnswer } from '../domain/blockLog'
+import type { LoadType } from '../engine'
 import { readCommand, type CommandName } from './commands'
 import { readStartCode } from './linkCode'
 
@@ -16,7 +18,15 @@ export type Intent =
   // dispatcher switches on the name either way, and six near-identical shapes would be six
   // places to keep in step for no gain.
   | { kind: 'command'; chatId: number; name: CommandName; argument: string }
-  | { kind: 'blockAnswer'; chatId: number; blockId: string; answer: 'yes' | 'no' | 'partly' }
+  | {
+      kind: 'blockAnswer'
+      chatId: number
+      blockId: string
+      type: LoadType
+      plannedHours: number
+      dayIndex: number
+      answer: BlockAnswer
+    }
   | { kind: 'restAnswer'; chatId: number; startHour: number | null; accepted: boolean }
   | { kind: 'photo'; chatId: number; fileId: string; bytes: number }
   | { kind: 'voice'; chatId: number; fileId: string; seconds: number; bytes: number }
@@ -65,6 +75,35 @@ function largestPhoto(value: unknown): { fileId: string; bytes: number } | null 
   return best
 }
 
+/**
+ * §8b②'s callback payload, decoded.
+ *
+ * The bot has the week in hand when it builds the buttons in `send.ts`, and this callback is
+ * the only place that information survives the round trip -- so it carries the block's type
+ * and planned hours back alongside the answer, not just the id. Both are encoded as a single
+ * character rather than the word itself, because a long block id plus four readable words
+ * would risk Telegram's 64-byte limit on `callback_data`; the block id is the part with no
+ * fixed length, so everything else is kept as small as it can honestly be.
+ *
+ * This is untrusted input -- anyone can post to the webhook -- so both maps are total over
+ * exactly the characters the regex admits, and nothing here is trusted before it is looked up.
+ */
+const TYPE_BY_CODE: Record<string, LoadType> = {
+  m: 'mental',
+  p: 'physical',
+  s: 'social',
+  e: 'errands',
+}
+
+/** §8b②'s four-way answer, replacing yes/no/partly. Order is arbitrary; what matters is that
+ *  it matches the codes `send.ts` writes into a button's `data`. */
+const ANSWER_BY_CODE: Record<string, BlockAnswer> = {
+  '0': 'didnt',
+  '1': 'less',
+  '2': 'right',
+  '3': 'longer',
+}
+
 /** A held-to-talk voice note and an audio file are the same thing to a student. */
 function audioIn(
   message: Record<string, unknown>,
@@ -96,14 +135,19 @@ export function readUpdate(update: unknown): Intent {
       return { kind: 'confirm', chatId, dumpId: dump[2] as string, accepted: dump[1] === 'confirm' }
     }
 
-    // Only the three answers §7.9 names. Anything else is a button we did not send.
-    const block = /^block:(.+):(yes|no|partly)$/.exec(data)
+    // §8b②'s shape: id, type code, planned hours, day index, answer code. The character
+    // classes are the validation -- anything outside them cannot reach `TYPE_BY_CODE` or
+    // `ANSWER_BY_CODE`, so a lookup here can never miss.
+    const block = /^block:(.+):([mpse]):(\d+(?:\.\d+)?):(\d+):([0-3])$/.exec(data)
     if (block !== null) {
       return {
         kind: 'blockAnswer',
         chatId,
         blockId: block[1] as string,
-        answer: block[2] as 'yes' | 'no' | 'partly',
+        type: TYPE_BY_CODE[block[2] as string] as LoadType,
+        plannedHours: Number(block[3]),
+        dayIndex: Number(block[4]),
+        answer: ANSWER_BY_CODE[block[5] as string] as BlockAnswer,
       }
     }
 

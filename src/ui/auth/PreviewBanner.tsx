@@ -1,3 +1,6 @@
+import { CARD_TONES } from '../kit/Card'
+import { Button } from '../kit/Button'
+
 /**
  * The honest half of letting people use the app signed out.
  *
@@ -10,12 +13,12 @@ export function PreviewBanner({ onSignIn }: { onSignIn: () => void }) {
     <div
       role="status"
       data-testid="preview-banner"
-      className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-100 px-3 py-2 text-sm"
+      className={`flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm ${CARD_TONES.attention}`}
     >
       <span>You are looking at a preview. This week is not being saved.</span>
-      <button type="button" onClick={onSignIn} className="font-medium underline">
+      <Button variant="quiet" size="sm" onClick={onSignIn} className="font-medium">
         Create an account to keep it
-      </button>
+      </Button>
     </div>
   )
 }

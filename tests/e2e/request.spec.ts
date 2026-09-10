@@ -7,10 +7,16 @@ import { expect, test, type Page } from '@playwright/test'
  * fallbacks, so the whole feature works with no key and these tests prove the whole thing
  * rather than a refusal path. That is also the state the demo laptop is in.
  */
+/**
+ * §6's `+` sheet is the one way in now: the room is display only, so the request box is
+ * reached through `Add something` and then "Someone asked me for something", not through a
+ * tap on the phone.
+ */
 async function openRequest(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: /look around/i }).click()
-  await page.getByTestId('object-phone').click()
+  await page.getByTestId('open-add').click()
+  await page.getByTestId('add-request').click()
 }
 
 async function priceIt(page: Page) {

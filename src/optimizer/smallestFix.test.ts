@@ -80,6 +80,40 @@ describe('smallestFixes', () => {
     expect(fixes.every((fix) => fix.move.kind === 'insertSocial')).toBe(true)
   })
 
+  /**
+   * Pins the boundary the fallback in `rebalanceOutcome.ts` relies on: it fires when the
+   * hill climb finds nothing *and* `smallestFixes` still has at least one candidate (see
+   * the divergence documented above `smallestFixes`), but it must not fire when there is
+   * truly nothing to move at all -- the climb and this search both call the same
+   * `neighbours()`, so an empty candidate set here means the climb had nothing either, and
+   * that case is already `describeRebalance`'s own "nothing left to move" copy, not a job
+   * for this fallback.
+   */
+  it('is null-shaped for a fallback caller when there are no candidate moves at all', () => {
+    const saturated = makeSchedule([
+      ...Array.from({ length: 21 }, (_, day) => restItem(`rest-${day}`, day, 20)),
+      ...socialBaseline(),
+      ...Array.from({ length: 21 }, (_, day) => day)
+        .filter((day) => day % 7 !== 2 && day % 7 !== 5)
+        .map((day) => ({
+          id: `extra-social-${day}`,
+          title: 'Seeing people',
+          type: 'social' as const,
+          kind: 'socialRestorative' as const,
+          hours: 2,
+          intensity: 1,
+          dayIndex: day,
+          startHour: 18,
+          fixed: true,
+          deadlineDay: null,
+          protectedRest: true,
+        })),
+    ])
+
+    // The shape `runRebalance` actually builds its fallback with: `[0] ?? null`.
+    expect(smallestFixes(saturated, DEFAULT_PARAMS, 1)[0] ?? null).toBeNull()
+  })
+
   it('returns nothing when every day is already protected and nothing can move', () => {
     // Rest *and* company on every day: with both of the solver's add-from-nothing moves
     // already taken and everything else protected, there is genuinely nothing left.

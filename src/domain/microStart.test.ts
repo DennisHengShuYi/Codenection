@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ScheduledItem } from '../optimizer'
-import { firstAction, isStuck, MICRO_START_MINUTES, STUCK_AFTER_MISSES } from './microStart'
+import { firstAction, isStuck, MICRO_START_MINUTES } from './microStart'
 
 const item = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
   id: 'essay',
@@ -61,32 +61,26 @@ describe('firstAction', () => {
 
 describe('isStuck', () => {
   /**
-   * §4.1's automatic trigger: two scheduled slots missed, or three days past first
-   * appearance. A block that repeatedly returns "no" is a stuck task, which fires
-   * Micro-Start without the student having to admit they are stuck.
+   * §4.1's automatic trigger, honestly stated: three days past first appearance. The other
+   * half of §4.1's trigger -- two scheduled slots missed -- needs a miss counter nothing in
+   * the codebase builds, so `misses` was hardcoded `0` at all three call sites and half the
+   * trigger could never fire. Deleted rather than wired with a fake counter (§11 records the
+   * gap); this only tests the half that is real.
    */
-  it('reads a task missed twice as stuck', () => {
-    expect(isStuck(item(), STUCK_AFTER_MISSES, 0)).toBe(true)
-  })
-
-  it('does not call one miss stuck', () => {
-    expect(isStuck(item(), 1, 0)).toBe(false)
-  })
-
   it('reads a task three days past its first appearance as stuck', () => {
-    expect(isStuck(item(), 0, 3)).toBe(true)
+    expect(isStuck(item(), 3)).toBe(true)
   })
 
   it('leaves a fresh task alone', () => {
-    expect(isStuck(item(), 0, 0)).toBe(false)
+    expect(isStuck(item(), 0)).toBe(false)
   })
 
   // Protected rest is not a task somebody is failing to start.
   it('never calls protected rest stuck', () => {
-    expect(isStuck(item({ protectedRest: true }), 5, 10)).toBe(false)
+    expect(isStuck(item({ protectedRest: true }), 10)).toBe(false)
   })
 
   it('never calls a rest block stuck', () => {
-    expect(isStuck(item({ kind: 'rest' }), 5, 10)).toBe(false)
+    expect(isStuck(item({ kind: 'rest' }), 10)).toBe(false)
   })
 })

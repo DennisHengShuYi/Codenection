@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { BLOCK_KINDS } from '../engine'
 import { parseModelReply } from './schema'
 
 const good = {
   items: [
-    { title: 'WIA3001 essay', type: 'mental', hours: 4, deadlineDay: 5, hard: true },
-    { title: 'Laundry', type: 'errands', hours: 1, deadlineDay: null, hard: false },
+    { title: 'WIA3001 essay', type: 'mental', kind: 'studyBlock', hours: 4, deadlineDay: 5, hard: true },
+    { title: 'Laundry', type: 'errands', kind: 'errands', hours: 1, deadlineDay: null, hard: false },
   ],
 }
 
@@ -34,6 +35,27 @@ describe('parseModelReply', () => {
    */
   it('rejects a load type the model invented', () => {
     expect(parseModelReply({ items: [{ ...good.items[0], type: 'spiritual' }] })).toBeNull()
+  })
+
+  /**
+   * Ruling 46. `sleep` is an `ActivityKind` but not a kind a *block* may carry: it enters
+   * through `Schedule.sleepByDay` and never as a scheduled activity, which
+   * `engine/reachable.test.ts` records as a deliberate decision. `ItemChip` stopped
+   * offering it, which narrowed the picker -- and left the boundary still admitting it from
+   * a model reply, which is the weaker half of the fix. A sleep block is charged nothing by
+   * `drain.ts` while `sleepByDay` counts the same hours again, so it is not a harmless
+   * extra: it is a block that quietly does not exist to the model.
+   */
+  it('rejects a sleep block, which the model may not originate', () => {
+    expect(parseModelReply({ items: [{ ...good.items[0], kind: 'sleep' }] })).toBeNull()
+  })
+
+  // The rest of the enum must keep working, so the narrowing cannot be mistaken for the
+  // whole field being rejected.
+  it('still accepts every kind a block may actually carry', () => {
+    for (const kind of BLOCK_KINDS) {
+      expect(parseModelReply({ items: [{ ...good.items[0], kind }] })).toHaveLength(1)
+    }
   })
 
   it('rejects a reply that is not an object at all', () => {
@@ -71,5 +93,21 @@ describe('parseModelReply', () => {
   // data rather than a habit of the interface.
   it('marks everything from the model as needing confirmation', () => {
     expect(parseModelReply(good)?.every((item) => item.confident)).toBe(false)
+  })
+
+  it('rejects a kind the engine does not have', () => {
+    const reply = {
+      items: [{ title: 'gym', type: 'physical', kind: 'crossfit', hours: 2, deadlineDay: null, hard: false }],
+    }
+
+    expect(parseModelReply(reply)).toBeNull()
+  })
+
+  it('keeps a kind the engine does have', () => {
+    const reply = {
+      items: [{ title: 'gym', type: 'physical', kind: 'hardExercise', hours: 2, deadlineDay: null, hard: false }],
+    }
+
+    expect(parseModelReply(reply)?.[0]?.kind).toBe('hardExercise')
   })
 })

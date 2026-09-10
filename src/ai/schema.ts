@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { HORIZON_DAYS, LOAD_TYPES } from '../engine'
+import { BLOCK_KINDS, HORIZON_DAYS, LOAD_TYPES } from '../engine'
 import { MAX_ITEMS, type ParsedItem } from './types'
 
 /**
@@ -9,6 +9,10 @@ import { MAX_ITEMS, type ParsedItem } from './types'
  * place it becomes data, and a load type the model invented would corrupt every projection
  * from here on -- so the enum is the engine's own list rather than a copy that could drift
  * away from it.
+ *
+ * `kind` is `BLOCK_KINDS`, not `ACTIVITY_KINDS`: `sleep` is an activity but not a block, and
+ * the boundary admitting one the picker had already stopped offering is exactly the shape
+ * this rule exists to refuse (Ruling 46).
  */
 const replySchema = z.object({
   items: z
@@ -16,6 +20,7 @@ const replySchema = z.object({
       z.object({
         title: z.string().trim().min(1).max(200),
         type: z.enum(LOAD_TYPES),
+        kind: z.enum(BLOCK_KINDS),
         hours: z.number().positive().max(24),
         deadlineDay: z
           .number()

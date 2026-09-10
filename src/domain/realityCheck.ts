@@ -18,8 +18,10 @@ export const MIN_SAMPLES = 3
 const MAX_PADDING = 3
 
 /** The student's words for each kind of load. §7.6's lines are read by a person, not by the
- *  model, and "mental load" is a modelling term. */
-const IN_THEIR_WORDS: Record<LoadType, string> = {
+ *  model, and "mental load" is a modelling term. Exported so any other surface naming a load
+ *  type in student-facing text -- `BlockSheet` included -- reuses this map instead of writing
+ *  a second one that can drift from it. */
+export const IN_THEIR_WORDS: Record<LoadType, string> = {
   mental: 'study and writing',
   physical: 'physical things',
   social: 'seeing people',

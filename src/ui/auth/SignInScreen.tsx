@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { readDataConfig, register, signIn, signInWithGoogle, type Session } from '../../data'
+import { Button } from '../kit/Button'
+import { Field } from '../kit/Field'
 import { GoogleMark } from './GoogleMark'
 
 export function SignInScreen({
@@ -59,7 +61,7 @@ export function SignInScreen({
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-6 p-6">
       <header>
         <h1 className="text-2xl font-semibold">Codenection</h1>
-        <p className="text-sm opacity-70">
+        <p className="text-sm text-ink-soft">
           {creating
             ? 'Create an account and your week is kept, on any device.'
             : 'Sign in to pick up where you left off.'}
@@ -67,43 +69,37 @@ export function SignInScreen({
       </header>
 
       <form onSubmit={onSubmit} className="flex flex-col gap-3">
-        <label className="flex flex-col gap-1 text-sm">
-          Email
+        <Field label="Email">
           <input
             type="email"
             autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2"
+            className="rounded-lg border border-line px-3 py-2"
           />
-        </label>
+        </Field>
 
-        <label className="flex flex-col gap-1 text-sm">
-          Password
+        <Field label="Password">
           <input
             type="password"
             autoComplete={creating ? 'new-password' : 'current-password'}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2"
+            className="rounded-lg border border-line px-3 py-2"
           />
-        </label>
+        </Field>
 
         {/* role=alert so assistive technology is told what went wrong, rather than the
             message appearing for sighted users only. */}
         {error !== null && (
-          <p role="alert" className="text-sm text-rose-700">
+          <p role="alert" className="text-sm text-attention">
             {error}
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full rounded-lg bg-slate-900 px-4 py-3 text-base font-medium text-white disabled:opacity-60"
-        >
+        <Button type="submit" disabled={busy} className="w-full">
           {creating ? 'Create account' : 'Sign in'}
-        </button>
+        </Button>
       </form>
 
       {canUseGoogle && (
@@ -111,32 +107,32 @@ export function SignInScreen({
           {/* aria-hidden: the divider is a visual separator, and "or" read aloud between
               two buttons tells a screen reader user nothing they cannot already tell. */}
           <div aria-hidden="true" className="flex items-center gap-3 text-xs opacity-60">
-            <span className="h-px flex-1 bg-slate-300" />
+            <span className="h-px flex-1 bg-line" />
             or
-            <span className="h-px flex-1 bg-slate-300" />
+            <span className="h-px flex-1 bg-line" />
           </div>
 
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={() => void onGoogle()}
             disabled={busy}
-            className="flex w-full items-center justify-center gap-3 rounded-lg border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-900 disabled:opacity-60"
+            className="w-full justify-center gap-3"
           >
             <GoogleMark />
             Continue with Google
-          </button>
+          </Button>
         </div>
       )}
 
       <div className="flex flex-col gap-2 text-sm">
-        <button type="button" onClick={() => setCreating(!creating)} className="underline">
+        <Button variant="quiet" size="sm" onClick={() => setCreating(!creating)} className="self-start">
           {creating ? 'I already have an account' : 'Create an account'}
-        </button>
+        </Button>
 
         {/* §0: no cold start, and no login wall between a judge and a working demo. */}
-        <button type="button" onClick={onSkip} className="underline opacity-70">
+        <Button variant="quiet" size="sm" onClick={onSkip} className="self-start">
           Look around without an account
-        </button>
+        </Button>
       </div>
     </main>
   )

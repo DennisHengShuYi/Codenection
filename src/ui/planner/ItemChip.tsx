@@ -1,5 +1,8 @@
 import type { ParsedItem } from '../../ai'
-import { LOAD_TYPES, type LoadType } from '../../engine'
+import { BLOCK_KINDS, LOAD_TYPES, type ActivityKind, type LoadType } from '../../engine'
+import { Button } from '../kit/Button'
+import { CARD_TONES } from '../kit/Card'
+import { Field } from '../kit/Field'
 
 /** The engine's vocabulary in a student's words. "Mental load" is a modelling term; "study
  *  and thinking" is what someone recognises as their own week. */
@@ -10,6 +13,31 @@ const LABELS: Record<LoadType, string> = {
   errands: 'Life admin',
 }
 
+/** §6.6's kinds in a student's words -- what the activity leaves behind, not the modelling
+ *  term for it. A gym session and a walk are both "Body & movement" above, but this is
+ *  where the student says which one it actually was. */
+const KIND_LABELS: Record<ActivityKind, string> = {
+  hardExercise: 'Hard exercise',
+  lightExercise: 'Light exercise',
+  studyBlock: 'Study',
+  socialDraining: 'Seeing people (draining)',
+  socialRestorative: 'Seeing people (restorative)',
+  errands: 'Life admin',
+  rest: 'Rest',
+  sleep: 'Sleep',
+}
+
+/**
+ * Every kind a *block* may carry, from the engine's own list rather than a local filter.
+ *
+ * It was `ACTIVITY_KINDS.filter(kind => kind !== 'sleep')` here, which was right and was
+ * also the only place the rule was written down -- so `ai/schema.ts` went on accepting
+ * `kind: 'sleep'` from a model reply after the picker stopped offering it. `BLOCK_KINDS`
+ * is now the single list both use (Ruling 46), guarded against drifting from
+ * `ACTIVITY_KINDS` by `engine/types.test.ts`.
+ */
+const SELECTABLE_KINDS = BLOCK_KINDS
+
 export function ItemChip({
   item,
   onChange,
@@ -19,24 +47,31 @@ export function ItemChip({
   onChange: (next: ParsedItem) => void
   onRemove: (id: string) => void
 }) {
+  // A list item, not `Card` -- `Card` renders a `<div>`, and this always sits inside the
+  // screens' `<ul>` of chips, where a `<div>` would be invalid list markup. `CARD_TONES` is
+  // `Card`'s own tone map, borrowed rather than retyped, so a flagged chip still reads as
+  // the same "needs you" state used everywhere else (§1.5).
   return (
-    <li data-testid={`chip-${item.id}`} className="flex flex-col gap-2 rounded-lg bg-slate-100 p-3">
-      <label className="flex flex-col gap-1 text-xs">
-        What
+    <li
+      data-testid={`chip-${item.id}`}
+      className={`flex flex-col gap-3 rounded-xl border p-3 ${
+        item.confident ? 'border-line bg-surface' : CARD_TONES.attention
+      }`}
+    >
+      <Field label="What">
         <input
           value={item.title}
           onChange={(event) => onChange({ ...item, title: event.target.value })}
-          className="rounded border border-slate-300 px-2 py-1 text-sm"
+          className="rounded border border-line bg-surface px-2 py-1 text-sm text-ink"
         />
-      </label>
+      </Field>
 
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-xs">
-          Kind
+        <Field label="Kind">
           <select
             value={item.type}
             onChange={(event) => onChange({ ...item, type: event.target.value as LoadType })}
-            className="rounded border border-slate-300 px-2 py-1 text-sm"
+            className="min-h-11 rounded border border-line bg-surface px-2 py-1 text-sm text-ink"
           >
             {LOAD_TYPES.map((type) => (
               <option key={type} value={type}>
@@ -44,29 +79,42 @@ export function ItemChip({
               </option>
             ))}
           </select>
-        </label>
+        </Field>
 
-        <label className="flex flex-col gap-1 text-xs">
-          Hours
+        <Field label="Detail">
+          <select
+            value={item.kind}
+            onChange={(event) => onChange({ ...item, kind: event.target.value as ActivityKind })}
+            className="min-h-11 rounded border border-line bg-surface px-2 py-1 text-sm text-ink"
+          >
+            {SELECTABLE_KINDS.map((kind) => (
+              <option key={kind} value={kind}>
+                {KIND_LABELS[kind]}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Hours">
           <input
             type="number"
             min={0.5}
             step={0.5}
             value={item.hours}
             onChange={(event) => onChange({ ...item, hours: Number(event.target.value) })}
-            className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
+            className="w-20 min-h-11 rounded border border-line bg-surface px-2 py-1 text-sm text-ink"
           />
-        </label>
+        </Field>
 
-        <button type="button" onClick={() => onRemove(item.id)} className="ml-auto text-sm underline">
+        <Button variant="quiet" size="sm" className="ml-auto" onClick={() => onRemove(item.id)}>
           Remove
-        </button>
+        </Button>
       </div>
 
       {/* §1.4: flagged rather than silently guessed. A student cannot correct what they
           were never shown. */}
       {!item.confident && (
-        <p data-testid={`unsure-${item.id}`} className="text-xs text-amber-800">
+        <p data-testid={`unsure-${item.id}`} className="text-xs text-attention">
           Not sure about this one — check it before adding.
         </p>
       )}

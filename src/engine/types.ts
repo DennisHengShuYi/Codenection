@@ -20,15 +20,47 @@ export type Reserves = Readonly<Record<LoadType, number>>
  * bucket it drained: a hard session and a walk are both physical load, and they have
  * opposite effects on the study block that follows.
  */
-export type ActivityKind =
-  | 'hardExercise'
-  | 'lightExercise'
-  | 'studyBlock'
-  | 'socialDraining'
-  | 'socialRestorative'
-  | 'errands'
-  | 'rest'
-  | 'sleep'
+export const ACTIVITY_KINDS = [
+  'hardExercise',
+  'lightExercise',
+  'studyBlock',
+  'socialDraining',
+  'socialRestorative',
+  'errands',
+  'rest',
+  'sleep',
+] as const
+
+export type ActivityKind = (typeof ACTIVITY_KINDS)[number]
+
+/**
+ * Every kind a scheduled *block* may carry -- which is every `ActivityKind` except `sleep`.
+ *
+ * Sleep is an activity the model reasons about, but it enters through `Schedule.sleepByDay`
+ * and never as a block on the grid; `engine/reachable.test.ts` records that as a deliberate
+ * decision rather than an omission. A sleep block would be charged nothing by `drain.ts`
+ * while `sleepByDay` counted the same hours again, so it is a block that quietly does not
+ * exist to the model.
+ *
+ * One list, used by both places that must agree about it: `ItemChip`'s picker and
+ * `ai/schema.ts`'s validation of a model reply (Ruling 46). Narrowing only the picker left
+ * the boundary still admitting what the UI had stopped offering -- and the project rule is
+ * that untrusted input never becomes trusted by passing through a layer.
+ *
+ * Written out rather than filtered so it can be a literal tuple, which `z.enum` needs.
+ * `types.test.ts` guards it against drifting from `ACTIVITY_KINDS`.
+ */
+export const BLOCK_KINDS = [
+  'hardExercise',
+  'lightExercise',
+  'studyBlock',
+  'socialDraining',
+  'socialRestorative',
+  'errands',
+  'rest',
+] as const satisfies readonly ActivityKind[]
+
+export type BlockKind = (typeof BLOCK_KINDS)[number]
 
 export interface Activity {
   readonly kind: ActivityKind
@@ -67,10 +99,15 @@ export interface EngineParams {
   /**
    * Hours of sleep that count as breaking even for this student.
    *
-   * A parameter rather than a constant because §7.3 says the painter's measured baseline
-   * sets it: seven hours is a gain for somebody who normally gets six and a deficit for
-   * somebody who normally gets nine, and scoring both against one number would tell one of
-   * them something false about their own week.
+   * A parameter rather than a constant because seven hours is a gain for somebody who
+   * normally gets six and a deficit for somebody who normally gets nine, and scoring both
+   * against one number would tell one of them something false about their own week.
+   *
+   * §7.3 had the sleep painter measure it. The painter was deleted in Task 17 and §11
+   * records the consequence in terms: nothing measures a personal baseline any more, so
+   * this falls back to the population figure in `DEFAULT_PARAMS`, and §8's sleep row is what
+   * makes that defensible. Stated here because the parameter still reads as though something
+   * fills it in.
    */
   readonly sleepBaselineHours: number
   /** Reserve points returned per hour of scheduled rest. */

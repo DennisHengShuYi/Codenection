@@ -1,4 +1,6 @@
 import type { ParsedItem } from '../ai'
+import type { BlockAnswer } from '../domain/blockLog'
+import type { LoadType } from '../engine'
 
 /**
  * What the bot says, kept apart from the endpoint that says it.
@@ -92,14 +94,43 @@ export const helpReply = (): Reply => ({
 })
 
 /** The shape a check-in needs from a block, so this module does not depend on the whole
- *  scheduling model to write a sentence. */
+ *  scheduling model to write a sentence. `type`, `hours` and `dayIndex` exist only so they
+ *  can be carried back in the callback -- see `blockAnswerData` -- since the callback is the
+ *  only place that information survives the round trip to `recordBlockAnswer` (§8b②). */
 export interface BlockLine {
   readonly id: string
   readonly title: string
   readonly startHour: number
+  readonly type: LoadType
+  readonly hours: number
+  readonly dayIndex: number
 }
 
 const clockOf = (hour: number): string => `${String(Math.floor(hour)).padStart(2, '0')}:00`
+
+/** The single letter each load type is encoded as in `callback_data`. Kept to one character
+ *  because the block id is the part of the payload with no fixed length, and Telegram caps
+ *  `callback_data` at 64 bytes. */
+const TYPE_CODE: Record<LoadType, string> = {
+  mental: 'm',
+  physical: 'p',
+  social: 's',
+  errands: 'e',
+}
+
+/** The single digit each of §8b②'s four answers is encoded as. `update.ts` holds the
+ *  matching reverse map -- if either changes, so must the other. */
+const ANSWER_CODE: Record<BlockAnswer, string> = {
+  didnt: '0',
+  less: '1',
+  right: '2',
+  longer: '3',
+}
+
+/** One button's payload: the block's identity and the evidence `recordBlockAnswer` needs to
+ *  compute an outcome from, plus which of the four answers this button is. */
+const blockAnswerData = (block: BlockLine, answer: BlockAnswer): string =>
+  `block:${block.id}:${TYPE_CODE[block.type]}:${block.hours}:${block.dayIndex}:${ANSWER_CODE[answer]}`
 
 export function blocksReply(day: 'today' | 'yesterday', blocks: readonly BlockLine[]): Reply {
   if (blocks.length === 0) {
@@ -111,13 +142,14 @@ export function blocksReply(day: 'today' | 'yesterday', blocks: readonly BlockLi
 
   return {
     text: [`${day === 'today' ? 'Today' : 'Yesterday'}:`, '', ...listed, '', `Did ${shorten(first.title)} happen?`].join('\n'),
-    // §7.9's three answers. "Partly" is the honest answer for most blocks, and dropping it
-    // pushes people into a yes or a no that is not true.
+    // §8b②'s four answers, matching the today card exactly: a student who answers in both
+    // places must not meet two different questions.
     buttons: [
       [
-        { label: 'Yes', data: `block:${first.id}:yes` },
-        { label: 'Partly', data: `block:${first.id}:partly` },
-        { label: 'No', data: `block:${first.id}:no` },
+        { label: "Didn't happen", data: blockAnswerData(first, 'didnt') },
+        { label: 'Took less', data: blockAnswerData(first, 'less') },
+        { label: 'About right', data: blockAnswerData(first, 'right') },
+        { label: 'Took longer', data: blockAnswerData(first, 'longer') },
       ],
     ],
   }
@@ -127,9 +159,10 @@ export function blocksReply(day: 'today' | 'yesterday', blocks: readonly BlockLi
  * §7.9's "never punish a miss", and §1.3's mirror-not-scold rule.
  *
  * A student who did not do the thing is exactly the one whose data is most worth having,
- * and a comment on it is how they stop answering. So a no reads the same as a yes.
+ * and a comment on it is how they stop answering. So "didn't happen" reads the same as any
+ * other answer.
  */
-export const blockAnsweredReply = (_answer: 'yes' | 'no' | 'partly'): Reply => ({
+export const blockAnsweredReply = (_answer: BlockAnswer): Reply => ({
   text: 'Noted.',
 })
 

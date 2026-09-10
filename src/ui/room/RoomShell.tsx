@@ -1,98 +1,120 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Repository, Session } from '../../data'
 import { addItems } from '../../domain/addItems'
+import { checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
 import { anchorTo, dateFor, isAnchored, todayIndex } from '../../domain/calendar'
-import { accept } from '../../domain/commitments'
+import { accept, lapsed } from '../../domain/commitments'
 import { paramsFor } from '../../domain/engineParams'
-import { firstAction } from '../../domain/microStart'
+import { firstAction, isStuck } from '../../domain/microStart'
 import { predictionsAfter, resolvePrediction } from '../../domain/predictions'
 import { prescribe } from '../../domain/prescribe'
-import { recordAttempt, attemptsIn } from '../../domain/recoveryLog'
 import { completeItem, deferItem } from '../../domain/scheduleEdits'
 import { scheduleRecovery } from '../../domain/scheduleRecovery'
-import { describeRebalance, makeRng, rebalance } from '../../optimizer'
+import { overallReserve, project } from '../../engine'
+import type { Fix } from '../../optimizer'
+import { toDayInputs } from '../../optimizer'
+import { AddSheet } from '../AddSheet'
 import { AccountBar } from '../auth/AccountBar'
+import { PreviewBanner } from '../auth/PreviewBanner'
 import { CapacityDial } from '../dial/CapacityDial'
 import { domainBars } from '../dial/domainBars'
-import { overallReserve, project } from '../../engine'
-import { toDayInputs } from '../../optimizer'
-import { PreviewBanner } from '../auth/PreviewBanner'
-import { BlockConfirm } from '../calibration/BlockConfirm'
-import { CalibrationScreen } from '../calibration/CalibrationScreen'
-import { useCalibration } from '../calibration/useCalibration'
-import { MicroStartCard } from '../microStart/MicroStartCard'
-import { PhotoImportScreen } from '../planner/PhotoImportScreen'
-import { PlannerScreen } from '../planner/PlannerScreen'
-import { Prescription } from '../recovery/Prescription'
-import { LapsedNotice } from '../request/LapsedNotice'
-import { RequestBoxScreen } from '../request/RequestBoxScreen'
-import { LowEnergyView } from '../LowEnergyView'
+import { Button } from '../kit/Button'
+import { Sheet } from '../kit/Sheet'
+import { LinkTelegram } from '../settings/LinkTelegram'
+import { LowEnergyControl } from '../settings/LowEnergyControl'
+import { blockToAsk, withSleep } from '../today/checkIn'
 import { useLowEnergy } from '../useLowEnergy'
+import { useProfile } from '../useProfile'
 import { useReducedMotion } from '../useReducedMotion'
 import { useSchedule } from '../useSchedule'
 import { AccuracyNote } from '../validation/AccuracyNote'
-import { EnergyCheckIn } from '../validation/EnergyCheckIn'
-import { DoorPanel } from '../recovery/DoorPanel'
-import { LinkTelegram } from '../settings/LinkTelegram'
-import { isClutterId, type ObjectId } from './objects'
-import { Room } from './Room'
+import { BlockSheet } from '../week/BlockSheet'
+import { blockSheet } from '../week/blockActions'
+import { runRebalance } from '../week/rebalanceOutcome'
+import { WeekScreen } from '../week/WeekScreen'
+import { visibleCards } from './cardPrecedence'
+import { LiveCards } from './LiveCards'
 import { roomModel } from './roomModel'
-import { RoomButtons } from './RoomButtons'
-import { RoomSidebar } from './RoomSidebar'
-import { back, ROOM, toWords, zoomTo, type View } from './view'
-import { ZoomLayer } from './ZoomLayer'
+import { describeRoom } from './roomText'
+import { Room } from './Room'
+import { back, ROOM, toAdd, toBlock, toSettings, toWeek, type View } from './view'
 import { useTidyUp } from './useTidyUp'
 
 /** §2.1's search takes its randomness as a parameter; a fixed seed keeps what the student
  *  sees reproducible between renders rather than shifting under them. */
 const SEED = 20260908
 
+/** The one sentence the room can never say another way (§3): character state, capped from
+ *  `describeRoom`'s own three-sentence paragraph rather than re-deriving it. */
+const firstSentence = (paragraph: string): string => paragraph.match(/^[^.]*\./)?.[0] ?? paragraph
+
 /**
- * The room, as the whole app.
+ * The room, as the whole app -- and now the router.
  *
- * This replaces `HomeScreen`, which was a switchboard: seven booleans, four early returns
- * that swapped the room out entirely, and nine cards stacked in a scroll above and below it.
- * §1.1 said the room was the surface; it was a section of a page.
- *
- * Here every feature is reached by touching furniture, every notification is a state of the
- * object it concerns, and the sidebar is the same thing in words.
+ * §3 turns the old 507-line switchboard into two things only: the data every screen needs
+ * (the schedule, the profile, the block log, the anchoring and prediction effect, rebalance)
+ * and routing between the room, the week, a block sheet, the add sheet and settings. The
+ * eleven-case `contentFor` switch this replaced is gone entirely -- every feature it held
+ * now belongs to the component that owns it (`WeekScreen`, `BlockSheet`, `TodayCard`,
+ * `LiveCards`, `AddSheet`) rather than being inlined here.
  */
 export function RoomShell({
   repository,
   session = null,
   onSignOut = () => undefined,
   onSignIn = () => undefined,
+  // Ruling 12: required rather than defaulted to `[]`. `RoomShell` is being rewritten
+  // wholesale in this task, which is exactly the point Task 8b's own note named as the
+  // moment to stop treating the log as optional -- the caller now has somewhere to load a
+  // real one from (`useBlockLog`) and a reason to (the today card and the block sheet both
+  // write to it here for the first time).
+  blockLog,
+  onAnswerBlock,
 }: {
   repository: Repository
   session?: Session | null
   onSignOut?: () => void
   onSignIn?: () => void
+  blockLog: readonly BlockRecord[]
+  onAnswerBlock: (record: BlockRecord) => void
 }) {
   const { schedule, setSchedule } = useSchedule(repository)
-  const { profile, setProfile } = useCalibration(repository)
+  const { profile, setProfile } = useProfile(repository, session)
   const [view, setView] = useState<View>(ROOM)
   const [report, setReport] = useState<string | null>(null)
+  const [fallback, setFallback] = useState<Fix | null>(null)
   const [working, setWorking] = useState(false)
-  /** Which way in the desk is currently offering. §1.4 ranks the camera above typing, so it
-   *  is named first -- but neither is chosen for the student. */
-  const [deskWay, setDeskWay] = useState<'choose' | 'type' | 'photograph'>('choose')
-  /** The object a button just opened, so the furniture pulses and the mapping is absorbed
-   *  without ever being needed. Cleared on close. */
-  const [pulsing, setPulsing] = useState<ObjectId | null>(null)
+
+  // Session-scoped dismissals for the four live cards, none of which has a domain-level
+  // "not today" of its own any more. §7 retired the recovery card's permanent
+  // failed-recovery log: "not today" is now exactly this kind of same-day dismissal rather
+  // than a report that suppressed the advice forever.
+  const [recoveryDismissed, setRecoveryDismissed] = useState(false)
+  const [lapsedDismissed, setLapsedDismissed] = useState(false)
+  const [stuckDismissedId, setStuckDismissedId] = useState<string | null>(null)
+  const [todayDismissed, setTodayDismissed] = useState(false)
+  const [sleepAnsweredToday, setSleepAnsweredToday] = useState(false)
 
   const reducedMotion = useReducedMotion()
   const { play } = useTidyUp(reducedMotion)
 
-  const params = useMemo(() => paramsFor(profile), [profile])
+  // §8b/Task 17: the durable log is the only source `paramsFor` reads now -- see
+  // `roomModel.ts`'s matching call for why the profile's `confirmations` side is gone.
+  const params = useMemo(() => paramsFor(outcomesFrom(blockLog)), [blockLog])
   const floor = schedule
     ? Math.min(schedule.start.mental, schedule.start.physical, schedule.start.social, schedule.start.errands)
     : 100
-  const { active: lowEnergy, setOverride } = useLowEnergy(repository, floor)
+  // §1.5's mode, read AND written. `setOverride` reaches `LowEnergyControl` in the settings
+  // sheet below, which is the whole of Ruling 45: the preference was honoured here while
+  // nothing in the app could set it, because the control lived on `LowEnergyView` and Task
+  // 17 deleted the view. Both directions matter -- a depleted student turning the collapsed
+  // interface off, and a rested student turning it on -- and both are asserted end to end in
+  // `RoomShell.lowEnergy.test.tsx` rather than only at the hook.
+  const { active: lowEnergy, override: lowEnergyOverride, setOverride } = useLowEnergy(repository, floor)
 
   /**
    * §8.1's two prerequisites: anchor the fortnight to a real day, and claim something about a
-   * real day two days out. The clock enters here and nowhere deeper -- `calendar.ts` takes it
-   * as a parameter and the engine never sees it, which is what keeps the model pure.
+   * real day two days out. The clock enters here and nowhere deeper.
    */
   useEffect(() => {
     if (!schedule) return
@@ -102,9 +124,16 @@ export function RoomShell({
       return
     }
 
-    const next = predictionsAfter(profile.predictions, schedule, paramsFor(profile), new Date())
+    const next = predictionsAfter(
+      profile.predictions,
+      schedule,
+      paramsFor(outcomesFrom(blockLog)),
+      new Date(),
+      blockLog,
+    )
     if (next.length !== profile.predictions.length) setProfile({ ...profile, predictions: next })
-  }, [schedule, profile, setSchedule, setProfile])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schedule, profile, blockLog, setSchedule, setProfile])
 
   if (!schedule) {
     // A sentence rather than a spinner: a spinner tells a student nothing about what is
@@ -116,11 +145,43 @@ export function RoomShell({
     )
   }
 
-  // Bound once, after the guard: narrowing does not survive into the closures below, and
-  // threading `schedule!` through every one of them would be noise.
   const week = schedule
-  const today = todayIndex(week, new Date()) ?? 0
-  const model = roomModel({ schedule: week, profile, today })
+  const now = new Date()
+  const today = todayIndex(week, now)
+
+  // `todayIndex` returns `null` on purpose (see `calendar.ts`): an unanchored week has no
+  // real day to be on, and a week whose fortnight has already elapsed is not "day 0" of a
+  // new one either. Collapsing either case to 0 would re-mark every genuinely silent day as
+  // checked in (§6.5) and point the whole room at the wrong day -- confidently wrong is
+  // worse than honestly unsure. The anchoring effect above already resolves the first case
+  // on the next render for a fresh week; what is left here is the elapsed-fortnight case,
+  // which this app does not yet have a "start the next one" flow for, so it says so rather
+  // than pretending.
+  if (today === null) {
+    return (
+      <main className="mx-auto max-w-screen-md p-4">
+        <p data-testid="day-unlocated">
+          This fortnight has run its course and the app cannot tell which day you are on.
+          Reopen once a new one has started.
+        </p>
+      </main>
+    )
+  }
+
+  // Threaded alongside `today` from the same clock read -- see the comment above this
+  // effect block: the clock enters here and nowhere deeper, so `checkIn.ts` takes it as a
+  // parameter rather than reading one itself.
+  const nowHour = now.getHours()
+  const todayDate = dateFor(week, today)
+  const model = roomModel({ schedule: week, today, blockLog })
+
+  // §1.1's dial: the reserve, the five domain bars each against its own ceiling, and the
+  // low-social-flagged-as-warning logic that is the app's own differentiator over a tracker
+  // that would read a quiet week as healthy. Same `checkedIn` wiring as `roomModel.ts`, so
+  // the dial and the room agree about what "silent" means.
+  const days = toDayInputs(week, checkedInDays(blockLog, today, week.horizonDays))
+  const projection = project(week.start, days, params)
+  const bars = domainBars(week.start, projection, days)
 
   async function onRebalance() {
     if (working) return
@@ -131,379 +192,241 @@ export function RoomShell({
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     try {
-      const result = rebalance(week, params, makeRng(SEED))
-      setSchedule(result.schedule)
-      setReport(describeRebalance(result, params))
+      const outcome = runRebalance(week, params, SEED)
+      setSchedule(outcome.schedule)
+      setReport(outcome.report)
+      setFallback(outcome.fallback)
       play()
     } finally {
       setWorking(false)
     }
   }
 
-  const close = () => {
-    setDeskWay('choose')
-    setPulsing(null)
-    setView(back(view))
+  function answerBlock(itemId: string, answer: BlockAnswer) {
+    const item = week.items.find((candidate) => candidate.id === itemId)
+    if (!item) return
+
+    onAnswerBlock({
+      blockId: item.id,
+      type: item.type,
+      plannedHours: item.hours,
+      dayIndex: item.dayIndex,
+      answer,
+      answeredAt: Date.now(),
+    })
   }
 
-  const openObject = (id: ObjectId) => {
-    setPulsing(id)
-    setView(zoomTo(view, id))
-  }
+  const closeToRoom = () => setView(back(view))
 
-  /** What each object shows once you have walked up to it. */
-  function contentFor(objectId: ObjectId) {
-    if (isClutterId(objectId)) {
-      const id = objectId.replace('clutter-', '')
-      const item = week.items.find((candidate) => candidate.id === id)
+  // §3's card precedence: recovery, then a lapsed commitment, then a stuck task, then the
+  // day's own question -- capped to one below the low-energy threshold and two otherwise.
+  const recoveryPrescription = prescribe(week)
+  const lapsedCommitments = lapsed(week, today, params, blockLog)
+  const stuckItem = week.items.find(
+    (item) => item.id !== stuckDismissedId && isStuck(item, Math.max(0, today - item.dayIndex)),
+  )
+  const blockForToday = blockToAsk({ schedule: week, today, nowHour, blockLog })
+  const askEnergy = profile.predictions.some(
+    (prediction) => prediction.forDate === todayDate && prediction.reported === null,
+  )
+  const askSleep = !sleepAnsweredToday
+  const showTodayCard = !todayDismissed && (askEnergy || askSleep || blockForToday !== null)
 
-      return (
+  const cards = visibleCards({
+    recovery: !recoveryDismissed && recoveryPrescription !== null,
+    lapsed: !lapsedDismissed && lapsedCommitments.length > 0,
+    stuck: stuckItem !== undefined,
+    today: showTodayCard,
+    lowEnergy,
+  })
+
+  const isWeekScreen = view.kind === 'week' || view.kind === 'block'
+  const blockModel =
+    view.kind === 'block' ? blockSheet({ schedule: week, itemId: view.itemId, today, blockLog }) : null
+
+  const paragraph = lowEnergy ? firstSentence(describeRoom(model.state)) : describeRoom(model.state)
+
+  return (
+    <main className="mx-auto flex min-h-dvh max-w-screen-md flex-col gap-4 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-sm font-semibold tracking-wide text-ink-soft">Codenection</h1>
+        <Button
+          variant="quiet"
+          size="sm"
+          data-testid="open-settings"
+          onClick={() => setView(toSettings())}
+        >
+          Settings
+        </Button>
+      </div>
+
+      {isWeekScreen ? (
         <>
-          <MicroStartCard
-            microStart={item ? firstAction(item) : null}
-            onStarted={close}
-            onDismiss={close}
+          <Button variant="quiet" size="sm" data-testid="week-back" onClick={() => setView(ROOM)} className="self-start">
+            Back to the room
+          </Button>
+          <WeekScreen
+            schedule={week}
+            today={today}
+            working={working}
+            report={report}
+            fallback={fallback}
+            onRebalance={() => void onRebalance()}
+            onSelectBlock={(itemId) => setView(toBlock(itemId))}
+            blockLog={blockLog}
           />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setSchedule(completeItem(week, id))
-                close()
-              }}
-              className="rounded-lg bg-slate-900 px-3 py-2 text-white"
-            >
-              Done
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSchedule(deferItem(week, id))
-                close()
-              }}
-              className="rounded-lg border border-slate-400 px-3 py-2"
-            >
-              Later
-            </button>
-          </div>
         </>
-      )
-    }
+      ) : (
+        <>
+          {/* The one thing that is not furniture. A student who does not know their week is
+              not being saved will lose it, and a warning about data loss must not require
+              discovering an object first. */}
+          {session === null && <PreviewBanner onSignIn={onSignIn} />}
 
-    switch (objectId) {
-      case 'desk': {
-        // Two forms stacked on one surface gave two Cancel buttons and no way to tell which
-        // was which. The desk offers the choice instead -- one job, two ways to do it.
-        const accepted = (items: Parameters<typeof addItems>[1]) => {
-          setSchedule(addItems(week, items))
-          close()
-        }
+          <Room model={model} />
 
-        if (deskWay === 'type') {
-          return <PlannerScreen onAccept={accepted} onCancel={() => setDeskWay('choose')} />
-        }
+          {/* Flagged by Task 12: the drawing's own `aria-label` (`describeRoomFully`) is
+              already the complete text equivalent a screen reader needs, and this capped
+              paragraph repeats a subset of the same sentences verbatim -- character and
+              weather always, in the same words. Left as visible-and-announced, the two
+              would read out back to back: the full version, then a partial repeat of it.
+              `aria-hidden` keeps it for sighted readers (§1.5, still worth having as
+              running text rather than only inside an SVG's accessible name) without
+              saying anything twice to assistive tech. */}
+          <p data-testid="room-text-equivalent" aria-hidden="true" className="text-sm text-ink-soft">
+            {paragraph}
+          </p>
 
-        if (deskWay === 'photograph') {
-          return <PhotoImportScreen onAccept={accepted} onCancel={() => setDeskWay('choose')} />
-        }
+          <AccuracyNote predictions={profile.predictions} />
 
-        return (
-          <div className="flex flex-col gap-3">
-            <h2 className="text-lg font-medium">What are you carrying?</h2>
-            <p className="text-sm opacity-70">Photograph it, or type it out. Either works.</p>
-            <div className="flex flex-wrap gap-2">
-              {/* §1.4 ranks the camera above typing, because deadlines cause the pile-up and
-                  a brief is where the deadlines are. */}
-              <button
-                type="button"
-                data-testid="desk-photograph"
-                onClick={() => setDeskWay('photograph')}
-                className="rounded-lg bg-slate-900 px-4 py-3 text-white"
-              >
-                Photograph a brief
-              </button>
-              <button
-                type="button"
-                data-testid="desk-type"
-                onClick={() => setDeskWay('type')}
-                className="rounded-lg border border-slate-400 px-4 py-3"
-              >
-                Type it out
-              </button>
-            </div>
-          </div>
-        )
-      }
-      case 'phone':
-        return (
-          <>
-            <LapsedNotice
-              commitments={model.rows.some((row) => row.id === 'phone' && row.attention)
-                ? (week.commitments ?? [])
-                : []}
-              onDismiss={close}
-            />
-            <Prescription
-              prescription={
-                prescribe(week, attemptsIn(week))?.kind === 'socialRestorative'
-                  ? prescribe(week, attemptsIn(week))
-                  : null
-              }
-              onAccept={(taken) => {
-                setSchedule(scheduleRecovery(week, taken))
-                close()
-              }}
-              onDismiss={(taken) => {
-                setSchedule(recordAttempt(week, taken.kind, false))
-                close()
-              }}
-            />
-            <RequestBoxScreen
-              schedule={week}
-              onAccept={(item) => {
-                setSchedule(accept(week, item, today))
-                close()
-              }}
-              onCancel={close}
-            />
-            {session !== null && <LinkTelegram />}
-          </>
-        )
-      case 'mirror':
-        return (
-          <>
-            {session !== null && <AccountBar session={session} onSignOut={onSignOut} />}
-            <CalibrationScreen profile={profile} onChange={setProfile} onDone={close} />
-          </>
-        )
-      case 'papers': {
-        const block = week.items.find(
-          (candidate) =>
-            candidate.dayIndex === today && !profile.confirmedItemIds.includes(candidate.id),
-        )
-
-        return (
-          <BlockConfirm
-            block={block ?? null}
-            onAnswer={(happened, difficulty) => {
-              if (!block) return
-
-              // "Partly" counts as half the planned time, "no" as none. Both feed §2.4 as
-              // real data rather than being discarded -- §7.9 is explicit that a student who
-              // did not do the thing is the one whose data is most needed.
-              const done = happened === 'yes' ? 1 : happened === 'partly' ? 0.5 : 0
-              const overrun = difficulty === 'harder' ? 1.5 : difficulty === 'easier' ? 0.75 : 1
-
-              setProfile({
-                ...profile,
-                confirmedItemIds: [...profile.confirmedItemIds, block.id],
-                confirmations: [
-                  ...profile.confirmations,
-                  {
-                    type: block.type,
-                    plannedHours: block.hours,
-                    actualHours: block.hours * done * overrun,
-                  },
-                ],
-              })
-              close()
+          <LiveCards
+            cards={cards}
+            recoveryPrescription={recoveryPrescription}
+            onRecoveryAccept={(taken) => setSchedule(scheduleRecovery(week, taken))}
+            onRecoveryDismiss={() => setRecoveryDismissed(true)}
+            lapsedCommitments={lapsedCommitments}
+            onLapsedDismiss={() => setLapsedDismissed(true)}
+            stuckMicroStart={stuckItem === undefined ? null : firstAction(stuckItem)}
+            onStuckStart={() => stuckItem !== undefined && setView(toBlock(stuckItem.id))}
+            onStuckDismiss={() => stuckItem !== undefined && setStuckDismissedId(stuckItem.id)}
+            blockForToday={blockForToday}
+            askEnergy={askEnergy}
+            askSleep={askSleep}
+            onEnergy={(energy) => {
+              if (todayDate === null) return
+              setProfile({ ...profile, predictions: resolvePrediction(profile.predictions, todayDate, energy) })
             }}
-            onDismiss={close}
+            onSleep={(bucket) => {
+              setSchedule(withSleep(week, today, bucket))
+              setSleepAnsweredToday(true)
+            }}
+            onBlockAnswer={answerBlock}
+            onTodayDismiss={() => setTodayDismissed(true)}
           />
-        )
-      }
-      case 'bed': {
-        const suggestion = prescribe(week, attemptsIn(week))
 
-        return (
-          <Prescription
-            prescription={suggestion}
-            onAccept={(taken) => {
-              setSchedule(scheduleRecovery(week, taken))
-              close()
-            }}
-            onDismiss={(taken) => {
-              setSchedule(recordAttempt(week, taken.kind, false))
-              close()
-            }}
-          />
-        )
-      }
-      case 'door':
-        return (
-          <>
-          <Prescription
-            prescription={
-              prescribe(week, attemptsIn(week))?.kind === 'lightExercise'
-                ? prescribe(week, attemptsIn(week))
-                : null
-            }
-            onAccept={(taken) => {
-              setSchedule(scheduleRecovery(week, taken))
-              close()
-            }}
-            onDismiss={(taken) => {
-              setSchedule(recordAttempt(week, taken.kind, false))
-              close()
-            }}
-          />
-          <DoorPanel
-            gapHours={4}
-            onChoose={(outing) => {
-              setSchedule(
-                scheduleRecovery(week, {
-                  title: outing.title,
-                  type: 'physical',
-                  kind: 'lightExercise',
-                  hours: outing.hours,
-                  dayIndex: today,
-                  startHour: 16,
-                }),
-              )
-              close()
-            }}
-            onClose={close}
-          />
-          </>
-        )
-      case 'character': {
-        const todayDate = dateFor(week, today)
-
-        return (
-          <EnergyCheckIn
-            onReport={(energy) => {
-              if (todayDate !== null) {
-                setProfile({
-                  ...profile,
-                  predictions: resolvePrediction(profile.predictions, todayDate, energy),
-                })
-              }
-              close()
-            }}
-            onDismiss={close}
-          />
-        )
-      }
-      case 'ceiling':
-        return (
-          <div className="flex flex-col gap-3">
-            <button
-              type="button"
-              onClick={() => void onRebalance()}
-              disabled={working}
-              data-testid="rebalance"
-              className="w-full rounded-lg bg-slate-900 px-4 py-3 text-white disabled:opacity-60 sm:w-auto"
+          <div className="flex items-center justify-between gap-2">
+            {!lowEnergy && (
+              <Button variant="quiet" data-testid="open-week" onClick={() => setView(toWeek())}>
+                The week
+              </Button>
+            )}
+            <Button
+              data-testid="open-add"
+              aria-label="Add something"
+              onClick={() => setView(toAdd())}
+              className="ml-auto"
             >
-              {working ? 'Working out a better week…' : 'Rebalance my fortnight'}
-            </button>
-            {report !== null && (
-              <p data-testid="rebalance-report" role="status" className="text-sm">
-                {report}
+              +
+            </Button>
+          </div>
+
+          {/* §1.1: "sits in one corner as a compact readout, no tap required." Placed after
+              the room's two permanent controls rather than before them, so the dial's own
+              bulk (five domain bars, trends, warnings, its spoken summary) cannot push
+              `The week` / `+` below the fold at 320px -- those two stay exactly where they
+              already were, and the dial is additional content beneath. Hidden in low-energy
+              mode: §1.5's "one number and one action" is the corner gauge already in `Room`
+              plus the single live card, and a five-bar breakdown is exactly the dashboard
+              §1.5 says a depleted student should not be handed. */}
+          {!lowEnergy && (
+            <CapacityDial capacity={overallReserve(week.start)} bars={bars} projection={projection} />
+          )}
+        </>
+      )}
+
+      {view.kind === 'block' && blockModel !== null && (
+        <BlockSheet
+          key={view.itemId}
+          model={blockModel}
+          onClose={closeToRoom}
+          onDone={(itemId) => {
+            setSchedule(completeItem(week, itemId))
+            closeToRoom()
+          }}
+          onLater={(itemId) => {
+            setSchedule(deferItem(week, itemId))
+            closeToRoom()
+          }}
+          onConfirm={(itemId, answer) => {
+            answerBlock(itemId, answer)
+            closeToRoom()
+          }}
+          onRested={(itemId, rested) => {
+            answerBlock(itemId, rested ? 'right' : 'didnt')
+            closeToRoom()
+          }}
+        />
+      )}
+
+      {view.kind === 'add' && (
+        <AddSheet
+          key="add"
+          schedule={week}
+          params={params}
+          today={today}
+          blockLog={blockLog}
+          onAcceptItems={(items) => setSchedule(addItems(week, items))}
+          onAcceptRequest={(item) => setSchedule(accept(week, item, today))}
+          onClose={closeToRoom}
+        />
+      )}
+
+      {view.kind === 'settings' && (
+        <Sheet
+          key="settings"
+          title="Settings"
+          onClose={closeToRoom}
+          // §0.2's lower-half-primary rule: sign-out is the one real action this sheet
+          // offers, so it belongs in the pinned bar rather than inside `AccountBar`'s own
+          // scrolling body -- the same place every other sheet puts its actions.
+          actions={
+            session !== null ? (
+              <Button variant="quiet" onClick={onSignOut}>
+                Sign out
+              </Button>
+            ) : undefined
+          }
+        >
+          <div className="flex flex-col gap-4">
+            {/* First, and above the account rows on purpose. This is the one setting that
+                changes what the student can see, and the one a student in low-energy mode
+                came here for -- putting it under sign-in and Telegram would make the way
+                out of a collapsed interface the last thing on the page. It is also the
+                only part of this sheet that works signed out. */}
+            <LowEnergyControl value={lowEnergyOverride} onChange={setOverride} />
+
+            {session !== null ? (
+              <>
+                <AccountBar session={session} />
+                <LinkTelegram />
+              </>
+            ) : (
+              <p className="text-sm text-ink-soft">
+                Sign in to keep this week and link Telegram to it.
               </p>
             )}
           </div>
-        )
-      case 'window':
-        return <AccuracyNote predictions={profile.predictions} />
-      case 'light': {
-        /**
-         * §1.2's dial, on the object that already means the reserve.
-         *
-         * It has to live somewhere: it is in §11's must-build tier, and the first version of
-         * this shell dropped it entirely -- the light reported a percentage and the five
-         * domain bars vanished. Putting it behind the light is the mapping that already
-         * existed in the room's own vocabulary.
-         */
-        const days = toDayInputs(week)
-
-        return (
-          <CapacityDial
-            capacity={overallReserve(week.start)}
-            bars={domainBars(week.start, project(week.start, days, params), days)}
-            projection={project(week.start, days, params)}
-          />
-        )
-      }
-      default: {
-        // The plant reports its reading and nothing more.
-        const row = model.rows.find((candidate) => candidate.id === objectId)
-
-        return <p className="text-sm">{row ? `${row.label}: ${row.reading}` : ''}</p>
-      }
-    }
-  }
-
-  /**
-   * §1.5: a student at 12% reserve should not be handed a dashboard.
-   *
-   * The design said low-energy would become the sidebar trimmed to what matters. Building it
-   * that way lost the shape §1.5 actually asks for -- one number and one action -- because a
-   * list of things needing you is still a list. `LowEnergyView` already gets that right and
-   * is already tested, so it stays, and the sidebar's trimmed mode serves the words view
-   * instead. A deviation from the spec, and the spec was wrong.
-   */
-  if (lowEnergy && view.kind !== 'zoom') {
-    return (
-      <LowEnergyView
-        capacity={overallReserve(week.start)}
-        action="Take twenty minutes outside"
-        onAction={() => void onRebalance()}
-        onExit={() => setOverride('off')}
-      />
-    )
-  }
-
-  return (
-    <main className="flex min-h-dvh flex-col gap-4 p-4 md:flex-row md:gap-6">
-      {/* The rail from 768px up; below that the list is reached by the toggle and takes the
-          screen, because a sidebar and a usable room cannot share 320px. */}
-      <div className="flex min-w-0 flex-1 flex-col gap-3">
-        {/* Not chrome, structure. A page with no h1 has no name to a screen reader and no
-            identity to anybody else, and dropping it was an oversight rather than a
-            decision. Kept small so the room still leads. */}
-        <h1 className="text-sm font-semibold tracking-wide opacity-60">Codenection</h1>
-
-        {/* The one thing that is not furniture. A student who does not know their week is
-            not being saved will lose it, and a warning about data loss must not require
-            discovering an object first. */}
-        {session === null && <PreviewBanner onSignIn={onSignIn} />}
-
-        {/* The room and the buttons sit beside each other rather than stacked, and that is
-            deliberate: laid *over* the room the buttons covered the furniture, so the
-            promise that both routes reach the same place was false -- the phone could not
-            be tapped at all at 768px and up. Both are reachable now: buttons in a column
-            from 768px up, below the room on a phone. */}
-        <div className="flex flex-col gap-3 md:flex-row md:items-start">
-          <div className="min-w-0 flex-1">
-            <Room model={model} onSelect={openObject} pulsing={pulsing} />
-          </div>
-
-          <RoomButtons model={model} onSelect={openObject} />
-        </div>
-
-        <button
-          type="button"
-          data-testid="open-words"
-          onClick={() => setView(toWords(view))}
-          className="self-start text-sm underline md:hidden"
-        >
-          Everything in words
-        </button>
-      </div>
-
-      {view.kind === 'words' && (
-        <div className="fixed inset-0 z-10 overflow-y-auto bg-white p-4">
-          <button type="button" onClick={close} data-testid="words-back" className="mb-2 text-sm underline">
-            Back to the room
-          </button>
-          <RoomSidebar model={model} onSelect={openObject} />
-        </div>
-      )}
-
-      {view.kind === 'zoom' && (
-        <ZoomLayer objectId={view.objectId} onClose={close}>
-          {contentFor(view.objectId)}
-        </ZoomLayer>
+        </Sheet>
       )}
     </main>
   )

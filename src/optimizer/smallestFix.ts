@@ -1,6 +1,6 @@
 import { summarise, type EngineParams } from '../engine'
 import { neighbours } from './neighbours'
-import { toDayInputs } from './objective'
+import { ALL_PRESENT, toDayInputs } from './objective'
 import type { Move, Schedule } from './types'
 
 export interface Fix {
@@ -23,8 +23,9 @@ interface Measured {
   readonly deficitArea: number
 }
 
+// No check-in data exists for a candidate move under evaluation -- `ALL_PRESENT` names that.
 const measure = (schedule: Schedule, params: EngineParams): Measured => {
-  const projection = summarise(schedule.start, toDayInputs(schedule), params)
+  const projection = summarise(schedule.start, toDayInputs(schedule, ALL_PRESENT), params)
   return {
     worstFloor: projection.worstFloor,
     deficitDays: projection.deficitDays,
@@ -40,8 +41,11 @@ const measure = (schedule: Schedule, params: EngineParams): Measured => {
  *
  * A student will do one thing; they will not follow a nine-change reshuffle. So the
  * smallest fix is often the one that actually happens -- which makes it worth more than
- * a better plan nobody enacts. Ranked on the reserve floor rather than the objective
- * score, because the number shown to the student has to be the number they were sold.
+ * a better plan nobody enacts. Ranked on how much the fortnight improves for the student
+ * -- days out of deficit first, then depth, then floor gain -- rather than on `score`
+ * from `objective.ts`, because the number shown to the student has to be the number they
+ * were sold. See `improvement` below for why that is a deliberate divergence from the
+ * hill climb's own ranking, not an inconsistency.
  */
 export function smallestFixes(
   schedule: Schedule,
@@ -57,6 +61,18 @@ export function smallestFixes(
    * returned *nothing* for exactly the person §2.2 is written for. Days out of deficit
    * come first because that is the improvement a student can feel, then depth, and floor
    * gain breaks the remaining ties.
+   *
+   * This ranking is deliberately not `score` from `objective.ts`, and the two are not
+   * meant to be reconciled. `smallestFixes` measures student-visible improvement --
+   * days out of deficit first, because that is what a student can feel -- while `score`
+   * measures the solver's objective, which also weighs fragmentation: a solver that
+   * scatters ten tasks across the fortnight lowers peak load while draining more reserve
+   * overall, and `score` is what makes the hill climb refuse that trade. Because of that,
+   * this fallback surfaces exactly the moves the climb rejected on fragmentation or floor
+   * grounds but that still help the student in a way they can feel. Aligning the two
+   * weightings would silently reintroduce the bottomed-out bug above, and would also make
+   * this fallback fire *never*: any move that scores positively under `score` is one the
+   * hill climb would already have taken, leaving nothing left for this search to find.
    */
   const improvement = (after: Measured): number =>
     (before.deficitDays - after.deficitDays) * 10 +

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { ParsedItem } from '../ai'
+import type { BlockRecord } from './blockLog'
 import { DEFAULT_PARAMS, HORIZON_DAYS } from '../engine'
-import type { Schedule } from '../optimizer'
+import type { Schedule, ScheduledItem } from '../optimizer'
 import { accept, lapsed, REVIEW_DAYS } from './commitments'
 
 const week = (over: Partial<Schedule> = {}): Schedule => ({
@@ -16,12 +17,42 @@ const item = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   id: 'r1',
   title: 'FYP presentation help',
   type: 'mental',
+  kind: 'studyBlock',
   hours: 3,
   deadlineDay: 4,
   hard: false,
   confident: true,
   ...over,
 })
+
+/** 14 straight days of real mental load -- heavy enough that, once missing-data pessimism
+ *  is applied to a silent stretch, the mental reserve overtakes the natural social-isolation
+ *  floor and drags the fortnight's worst point down with it. */
+const dailyMentalLoad = (days: number, hours: number): ScheduledItem[] =>
+  Array.from({ length: days }, (_, dayIndex) => ({
+    id: `daily-${dayIndex}`,
+    title: `daily ${dayIndex}`,
+    type: 'mental' as const,
+    kind: 'studyBlock' as const,
+    hours,
+    intensity: 1,
+    dayIndex,
+    startHour: 9,
+    fixed: false,
+    deadlineDay: null,
+    protectedRest: false,
+  }))
+
+/** One answered block per day, so `checkedInDays` reads every day as checked in. */
+const fullyCheckedInLog = (days: number): BlockRecord[] =>
+  Array.from({ length: days }, (_, dayIndex) => ({
+    blockId: `daily-${dayIndex}`,
+    type: 'mental' as const,
+    plannedHours: 6,
+    dayIndex,
+    answer: 'right' as const,
+    answeredAt: 0,
+  }))
 
 describe('accept', () => {
   it('puts the commitment into the week', () => {
@@ -100,5 +131,31 @@ describe('lapsed', () => {
     expect(old.commitments).toBeUndefined()
     expect(() => lapsed(old, 30, DEFAULT_PARAMS)).not.toThrow()
     expect(lapsed(old, 30, DEFAULT_PARAMS)).toEqual([])
+  })
+
+  /**
+   * §6.5/§8b: `lapsed` must judge a commitment against the same silence-aware projection
+   * the room and the dial already show, not an optimistic one that has never heard the
+   * student went quiet. This is the finding this test locks in: the same heavy fortnight
+   * reads as affordable when the student has been answering block check-ins, and as
+   * unaffordable when they have gone silent -- because a silent past correlates with a bad
+   * week, and the model is supposed to get more worried, not pretend it heard from them.
+   */
+  it('lapses a commitment the optimistic projection alone would have let stand, once the student has gone quiet', () => {
+    const busy = week({
+      start: { mental: 64, physical: 64, social: 64, errands: 64 },
+      items: dailyMentalLoad(14, 6),
+    })
+    const accepted = accept(busy, item({ hours: 3, deadlineDay: 13 }), 7)
+    const today = accepted.commitments?.[0]?.reviewDay ?? -1
+    expect(today).toBe(14)
+
+    // Answering every day: the student was present the whole time, so there is nothing for
+    // missing-data pessimism to react to, and the heavy-but-attended week stands.
+    expect(lapsed(accepted, today, DEFAULT_PARAMS, fullyCheckedInLog(14))).toEqual([])
+
+    // Silent the whole time (the default, unanswered log): the same fortnight now reads as
+    // unaffordable, and the commitment due for review lapses.
+    expect(lapsed(accepted, today, DEFAULT_PARAMS)).toHaveLength(1)
   })
 })

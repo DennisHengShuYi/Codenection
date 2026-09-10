@@ -1,3 +1,4 @@
+import type { BlockRecord } from '../domain/blockLog'
 import type { CalibrationProfile } from '../domain/calibration'
 import { DEFAULT_PROFILE } from '../domain/calibration'
 import type { Schedule } from '../optimizer'
@@ -34,5 +35,15 @@ export interface Repository {
   saveWeek(week: Schedule): Promise<void>
   loadSettings(): Promise<StoredSettings>
   saveSettings(settings: StoredSettings): Promise<void>
+  /**
+   * §8b's durable record of what was scheduled and what became of it.
+   *
+   * Sits behind the repository rather than only in Supabase, because the app works signed
+   * out and Reality Check must not silently stop working for anyone without an account.
+   */
+  loadBlockLog(): Promise<readonly BlockRecord[]>
+  /** Upserts on `blockId`: answering the same block twice corrects the first answer
+   *  rather than stacking a second one. */
+  recordBlockAnswer(record: BlockRecord): Promise<void>
   clear(): Promise<void>
 }

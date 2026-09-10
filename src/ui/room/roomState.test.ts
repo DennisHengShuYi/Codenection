@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS, HORIZON_DAYS, project, type Reserves } from '../../engine'
-import { toDayInputs, type Schedule, type ScheduledItem } from '../../optimizer'
+import { ALL_PRESENT, toDayInputs, type Schedule, type ScheduledItem } from '../../optimizer'
 import { roomStateFor } from './roomState'
 
 const healthy: Reserves = { mental: 80, physical: 80, social: 80, errands: 80 }
@@ -28,7 +28,7 @@ const schedule = (items: ScheduledItem[] = [], sleepHours = 8): Schedule => ({
 })
 
 const stateFor = (reserves: Reserves, week: Schedule = schedule()) =>
-  roomStateFor(reserves, project(reserves, toDayInputs(week), DEFAULT_PARAMS), week)
+  roomStateFor(reserves, project(reserves, toDayInputs(week, ALL_PRESENT), DEFAULT_PARAMS), week)
 
 describe('roomStateFor', () => {
   it('presses the ceiling lower as load rises', () => {

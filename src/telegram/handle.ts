@@ -1,8 +1,10 @@
 import { MAX_IMAGE_BYTES, MAX_INPUT_LENGTH, parseBrainDump, type ParsedItem } from '../ai'
 import { todayIndex } from '../domain/calendar'
 import { blocksOnDay } from '../domain/dayBlocks'
+import type { BlockAnswer, BlockRecord } from '../domain/blockLog'
 import { firstAction } from '../domain/microStart'
 import { prescribe } from '../domain/prescribe'
+import type { LoadType } from '../engine'
 import type { Schedule } from '../optimizer'
 import { tooLongToTranscribe } from './audio'
 import { resolveConfirmation, summarise, type PendingDump } from './brainDump'
@@ -63,9 +65,19 @@ export interface ChatServices {
   readonly readPhotoFile?: (fileId: string) => Promise<readonly ParsedItem[] | null>
   /** Fetches the audio from Telegram and transcribes it. Null when transcription failed. */
   readonly transcribe?: (fileId: string) => Promise<string | null>
+  /**
+   * Ruling 41: `today` and `blockLog` are parameters rather than something this service
+   * invents. `/ask` used to price against day 0 of the fortnight whatever day it was, with
+   * no check-in evidence -- while `RequestBoxScreen` passed both, so the same request got
+   * two different prices depending on which door it came through. Required, not optional:
+   * `priceRequest`'s own optional defaults are what let the wrong call compile in the first
+   * place, and an optional parameter here would put the same trap back one level up.
+   */
   readonly priceAsk?: (
     text: string,
     week: Schedule,
+    today: number,
+    blockLog: readonly BlockRecord[],
   ) => Promise<{
     cost: {
       firstDeficitDayBefore: number | null
@@ -107,14 +119,32 @@ export interface ChatStore {
   savePending(accountId: string, pending: PendingDump): Promise<void>
   findPending(accountId: string, dumpId: string): Promise<PendingDump | null>
   markAnswered(accountId: string, dumpId: string, now: number): Promise<void>
-  /** §7.9's evidence. Recorded, never acted on: Reality Check (§2.4) and the carryover
-   *  matrix (§6.6) will read this, and neither exists yet. */
-  recordBlockAnswer(
-    accountId: string,
-    blockId: string,
-    answer: 'yes' | 'no' | 'partly',
-    now: number,
-  ): Promise<void>
+  /** §8b②'s evidence, at last read by something: Reality Check (§2.4) and the carryover
+   *  matrix (§6.6) both consume the durable block log this writes into. */
+  recordBlockAnswer(accountId: string, answer: BlockAnswerInput, now: number): Promise<void>
+  /**
+   * The same durable log `recordBlockAnswer` writes into, read back.
+   *
+   * §2.4's evidence and §6.5's missing-data pessimism are both computed from it, and
+   * `/ask` needs both to quote the same price the app's own request box quotes. Rejects
+   * rather than returning `[]` when it cannot be read: an empty log and an unreadable one
+   * mean opposite things -- "this student has answered nothing" versus "we do not know" --
+   * and collapsing them prices a request on evidence nobody has.
+   */
+  loadBlockLog(accountId: string): Promise<readonly BlockRecord[]>
+}
+
+/**
+ * What `recordBlockAnswer` needs to write a `BlockRecord` (minus `answeredAt`, which is
+ * `now`) -- §8b②'s evidence, carried through the callback because a week is one jsonb blob
+ * and `blockId` has nothing else to join against.
+ */
+export interface BlockAnswerInput {
+  readonly blockId: string
+  readonly type: LoadType
+  readonly plannedHours: number
+  readonly dayIndex: number
+  readonly answer: BlockAnswer
 }
 
 /** Distinct per dump so a button can only ever answer the parse it was attached to. */
@@ -225,7 +255,17 @@ export async function handleIntent(
         if (!services.priceAsk) return askUnavailableReply()
 
         const week = await store.loadWeek(accountId)
-        const priced = await services.priceAsk(intent.argument, week).catch(() => null)
+
+        // Read before pricing and NOT collapsed to `[]` on failure. Migration 0005 adds the
+        // columns this reads and is not applied automatically, so an unmigrated deployment
+        // fails here -- which must be said rather than quietly priced as "answered
+        // nothing". Ruling 42.
+        const blockLog = await store.loadBlockLog(accountId).catch(() => null)
+        if (blockLog === null) return askUnavailableReply()
+
+        const priced = await services
+          .priceAsk(intent.argument, week, todayFor(week, now), blockLog)
+          .catch(() => null)
 
         // Nothing is ever written here. §2.3 prices a request; agreeing to it is a separate
         // act the student takes in their own words, in their own messaging app.
@@ -235,7 +275,17 @@ export async function handleIntent(
   }
 
   if (intent.kind === 'blockAnswer') {
-    await store.recordBlockAnswer(accountId, intent.blockId, intent.answer, now)
+    await store.recordBlockAnswer(
+      accountId,
+      {
+        blockId: intent.blockId,
+        type: intent.type,
+        plannedHours: intent.plannedHours,
+        dayIndex: intent.dayIndex,
+        answer: intent.answer,
+      },
+      now,
+    )
 
     // The week is deliberately untouched. These answers are evidence for §2.4 and §6.6,
     // and a check-in that quietly edited the schedule would be acting on data nobody has

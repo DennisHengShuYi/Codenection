@@ -172,25 +172,81 @@ describe('readUpdate, the rest of the flows', () => {
 })
 
 describe('readUpdate, answering a block or a prescription', () => {
-  it('reads a block answer', () => {
+  /**
+   * §8b②: the callback is the only place the block's type, planned hours and day index
+   * survive the round trip -- the bot has the week in hand when it builds the buttons, and
+   * nowhere else keeps it. Encoded compactly (a single letter for the type, a single digit
+   * for the answer) so a long block id still fits Telegram's callback_data limit.
+   */
+  it('reads a block answer, with the type, planned hours and day index it was sent with', () => {
     const intent = readUpdate({
-      callback_query: { message: { chat }, data: 'block:b1:partly' },
+      callback_query: { message: { chat }, data: 'block:b1:m:2:1:2' },
     })
 
-    expect(intent).toEqual({ kind: 'blockAnswer', chatId: 4242, blockId: 'b1', answer: 'partly' })
+    expect(intent).toEqual({
+      kind: 'blockAnswer',
+      chatId: 4242,
+      blockId: 'b1',
+      type: 'mental',
+      plannedHours: 2,
+      dayIndex: 1,
+      answer: 'right',
+    })
   })
 
-  it.each(['yes', 'no', 'partly'])('reads a %s answer', (answer) => {
+  // §8b②'s four answers, matching the today card exactly: didnt/less/right/longer, not the
+  // old yes/no/partly.
+  it.each([
+    ['0', 'didnt'],
+    ['1', 'less'],
+    ['2', 'right'],
+    ['3', 'longer'],
+  ])('reads answer code %s as %s', (code, answer) => {
     const intent = readUpdate({
-      callback_query: { message: { chat }, data: `block:b1:${answer}` },
+      callback_query: { message: { chat }, data: `block:b1:m:2:1:${code}` },
     })
 
     expect(intent.kind === 'blockAnswer' && intent.answer).toBe(answer)
   })
 
-  it('ignores an answer that is not one of the three', () => {
+  it.each([
+    ['m', 'mental'],
+    ['p', 'physical'],
+    ['s', 'social'],
+    ['e', 'errands'],
+  ])('reads type code %s as %s', (code, type) => {
+    const intent = readUpdate({
+      callback_query: { message: { chat }, data: `block:b1:${code}:2:1:2` },
+    })
+
+    expect(intent.kind === 'blockAnswer' && intent.type).toBe(type)
+  })
+
+  it('reads planned hours with a fractional value', () => {
+    const intent = readUpdate({
+      callback_query: { message: { chat }, data: 'block:b1:m:1.5:1:2' },
+    })
+
+    expect(intent.kind === 'blockAnswer' && intent.plannedHours).toBe(1.5)
+  })
+
+  it('ignores an answer code that is not one of the four', () => {
     expect(
-      readUpdate({ callback_query: { message: { chat }, data: 'block:b1:maybe' } }).kind,
+      readUpdate({ callback_query: { message: { chat }, data: 'block:b1:m:2:1:9' } }).kind,
+    ).toBe('unhandled')
+  })
+
+  it('ignores a type code that is not one of the four', () => {
+    expect(
+      readUpdate({ callback_query: { message: { chat }, data: 'block:b1:x:2:1:2' } }).kind,
+    ).toBe('unhandled')
+  })
+
+  // The old three-answer vocabulary is a different question (§8b②) and must not parse as if
+  // it still meant something.
+  it('no longer reads the old yes/no/partly vocabulary', () => {
+    expect(
+      readUpdate({ callback_query: { message: { chat }, data: 'block:b1:partly' } }).kind,
     ).toBe('unhandled')
   })
 

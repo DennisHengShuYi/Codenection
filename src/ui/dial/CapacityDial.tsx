@@ -62,7 +62,7 @@ export function CapacityDial({
           stroke="currentColor"
           strokeWidth="12"
           strokeLinecap="round"
-          className={overloaded ? 'text-rose-600' : 'text-emerald-600'}
+          className={overloaded ? 'text-critical' : 'text-ink-soft'}
         />
         <line
           x1={CX}

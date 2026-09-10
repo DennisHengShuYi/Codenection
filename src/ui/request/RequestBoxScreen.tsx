@@ -1,9 +1,14 @@
 import { useState } from 'react'
 import type { Draft, ParsedItem } from '../../ai'
 import { addItems } from '../../domain/addItems'
+import type { BlockRecord } from '../../domain/blockLog'
 import { priceRequest, type RequestCost } from '../../domain/requestCost'
-import { DEFAULT_PARAMS, project } from '../../engine'
+import type { EngineParams } from '../../engine'
 import { toDayInputs, type Schedule } from '../../optimizer'
+import { Button } from '../kit/Button'
+import { Card } from '../kit/Card'
+import { Field } from '../kit/Field'
+import { Sheet } from '../kit/Sheet'
 import { ItemChip } from '../planner/ItemChip'
 import { RoomComparison } from '../room/RoomComparison'
 import { roomModel } from '../room/roomModel'
@@ -15,10 +20,15 @@ const TONE_LABELS: Record<Draft['tone'], string> = {
   accept: 'Yes, with the cost said out loud',
 }
 
-/** The comparison takes models now that the room does, so the two rooms carry their own
- *  controls rather than being inert pictures. */
-const roomFor = (schedule: Schedule) =>
-  roomModel({ schedule, profile: DEFAULT_PROFILE, today: 0 })
+/** `today: 0` on purpose: both rooms are drawn from the same week at the same moment, so
+ *  what differs between them is the request and nothing else.
+ *
+ *  The block log is not: Ruling 51 made `roomModel`'s `blockLog` required, and this call
+ *  site was the one taking the old `[]` default -- so the gauge on both rooms quoted a
+ *  reserve computed as though the student had answered nothing, beside a request cost
+ *  computed from their real calibration. Two numbers for one week, on one screen. */
+const roomFor = (schedule: Schedule, blockLog: readonly BlockRecord[]) =>
+  roomModel({ schedule, today: 0, blockLog })
 
 /**
  * §2.3's request box.
@@ -30,13 +40,28 @@ const roomFor = (schedule: Schedule) =>
  * target is Android-only for PWAs and unsupported on iOS -- so the app does the *work* of
  * declining and hands over the words. There is deliberately no send button, and a test
  * asserts its absence.
+ *
+ * Owns its own `Sheet`, the same as the other two input paths -- its action bar depends on
+ * `working` and on whether a request has been priced yet, both held only here.
  */
 export function RequestBoxScreen({
   schedule,
+  params,
+  today,
+  blockLog,
   onAccept,
   onCancel,
 }: {
   schedule: Schedule
+  /** §2.4's calibrated params -- the student's own measured estimate bias, not the
+   *  population default. `RoomShell` already computes these from the durable block log for
+   *  every other screen; this one must be priced against the same numbers. */
+  params: EngineParams
+  /** Injected rather than read, so this stays pure -- `RoomShell` supplies it. */
+  today: number
+  /** §6.5/§8b's check-in evidence, threaded through so the price shown here is judged
+   *  against the same silence-aware projection the room and the dial already show. */
+  blockLog: readonly BlockRecord[]
   onAccept: (item: ParsedItem) => void
   onCancel: () => void
 }) {
@@ -66,7 +91,7 @@ export function RequestBoxScreen({
         return
       }
 
-      const priced = priceRequest(schedule, read, DEFAULT_PARAMS)
+      const priced = priceRequest(schedule, read, params, today, blockLog)
       setItem(read)
       setCost(priced)
       setEdited({})
@@ -92,121 +117,115 @@ export function RequestBoxScreen({
     }
   }
 
+  const actions = (
+    <>
+      <Button variant="quiet" onClick={onCancel}>
+        Cancel
+      </Button>
+      <Button onClick={() => void onPrice()} disabled={working}>
+        {working ? 'Working it out…' : 'What would this cost?'}
+      </Button>
+      {/* Separate from copying on purpose: a student may copy the decline and want
+          nothing in their week. */}
+      {item !== null && cost !== null && (
+        <Button onClick={() => onAccept(item)}>Take it on</Button>
+      )}
+    </>
+  )
+
   return (
-    <main className="mx-auto flex min-h-dvh max-w-screen-md flex-col gap-4 p-4">
-      <header>
-        <h1 className="text-2xl font-semibold">Someone asked you for something</h1>
-        <p className="text-sm opacity-70">
+    <Sheet title="Someone asked you for something" onClose={onCancel} actions={actions}>
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-ink-soft">
           Paste it here and see what saying yes would actually cost.
         </p>
-      </header>
 
-      <label className="flex flex-col gap-1 text-sm">
-        What you were asked
-        <textarea
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          rows={4}
-          className="rounded-lg border border-slate-300 p-3"
-          placeholder="hey can you help with our FYP presentation next thursday, maybe 3 hours?"
-        />
-      </label>
+        <Field label="What you were asked">
+          <textarea
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            rows={4}
+            className="rounded-lg border border-line bg-surface p-3 text-ink"
+            placeholder="hey can you help with our FYP presentation next thursday, maybe 3 hours?"
+          />
+        </Field>
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => void onPrice()}
-          disabled={working}
-          className="rounded-lg bg-slate-900 px-4 py-3 text-white disabled:opacity-60"
-        >
-          {working ? 'Working it out…' : 'What would this cost?'}
-        </button>
-        <button type="button" onClick={onCancel} className="px-4 py-3 underline">
-          Cancel
-        </button>
-      </div>
-
-      {problem !== null && (
-        <p data-testid="request-problem" role="status" className="text-sm text-amber-900">
-          {problem}
-        </p>
-      )}
-
-      {item !== null && cost !== null && (
-        <>
-          {/* Correctable before it counts: the student must be able to fix "3 hours" before
-              being priced on it. */}
-          <ul className="flex flex-col gap-3">
-            <ItemChip
-              item={item}
-              onChange={(next) => void onPrice(text, next)}
-              onRemove={() => {
-                setItem(null)
-                setCost(null)
-                setDrafts([])
-              }}
-            />
-          </ul>
-
-          {/* Stated in reserve, the app's own unit. §2.3 says "pushes you to 105%", which is
-              committed load against capacity -- a metric this app does not have, and a second
-              percentage moving the opposite way would contradict the dial. */}
-          <p data-testid="request-cost" role="status" className="text-sm">
-            Saying yes takes you from {Math.round(cost.floorBefore)} to{' '}
-            {Math.round(cost.floorAfter)} at your lowest point
-            {cost.eveningsEquivalent >= 1 &&
-              ` — about ${cost.eveningsEquivalent === 1 ? 'an evening' : `${cost.eveningsEquivalent} evenings`} of downtime`}
-            .
-            {cost.firstDeficitDayAfter !== null &&
-              cost.firstDeficitDayAfter !== cost.firstDeficitDayBefore &&
-              ` It brings your deficit forward to day ${cost.firstDeficitDayAfter}.`}
-            {!cost.absorbable && ' Your fortnight cannot really take this.'}
+        {problem !== null && (
+          <p data-testid="request-problem" role="status" className="text-sm text-attention">
+            {problem}
           </p>
+        )}
 
-          {/* §2.3, via §1.3: the warning is shown as two rooms. */}
-          <RoomComparison now={roomFor(schedule)} ifAccepted={roomFor(addItems(schedule, [item]))} />
+        {item !== null && cost !== null && (
+          <>
+            {/* Correctable before it counts: the student must be able to fix "3 hours" before
+                being priced on it. */}
+            <ul className="flex flex-col gap-3">
+              <ItemChip
+                item={item}
+                onChange={(next) => void onPrice(text, next)}
+                onRemove={() => {
+                  setItem(null)
+                  setCost(null)
+                  setDrafts([])
+                }}
+              />
+            </ul>
 
-          {drafts.length > 0 && (
-            <section className="flex flex-col gap-3">
-              <h2 className="text-lg font-medium">What you could say</h2>
+            {/* Stated in reserve, the app's own unit. §2.3 says "pushes you to 105%", which is
+                committed load against capacity -- a metric this app does not have, and a second
+                percentage moving the opposite way would contradict the dial. */}
+            <p data-testid="request-cost" role="status" className="text-sm">
+              Saying yes takes you from {Math.round(cost.floorBefore)} to{' '}
+              {Math.round(cost.floorAfter)} at your lowest point
+              {cost.eveningsEquivalent >= 1 &&
+                ` — about ${cost.eveningsEquivalent === 1 ? 'an evening' : `${cost.eveningsEquivalent} evenings`} of downtime`}
+              .
+              {cost.firstDeficitDayAfter !== null &&
+                cost.firstDeficitDayAfter !== cost.firstDeficitDayBefore &&
+                ` It brings your deficit forward to day ${cost.firstDeficitDayAfter}.`}
+              {!cost.absorbable && ' Your fortnight cannot really take this.'}
+            </p>
 
-              {drafts.map((draft) => (
-                <div key={draft.tone} className="flex flex-col gap-1 rounded-lg bg-slate-100 p-3">
-                  <label className="text-xs font-medium uppercase tracking-wide opacity-70">
-                    {TONE_LABELS[draft.tone]}
-                    <textarea
-                      data-testid={`draft-${draft.tone}`}
-                      value={edited[draft.tone] ?? draft.text}
-                      onChange={(event) =>
-                        setEdited({ ...edited, [draft.tone]: event.target.value })
-                      }
-                      rows={3}
-                      className="mt-1 w-full rounded border border-slate-300 p-2 text-sm font-normal normal-case tracking-normal"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => void onCopy(draft)}
-                    className="self-start text-sm underline"
-                  >
-                    {copied === draft.tone ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
-              ))}
-            </section>
-          )}
+            {/* §2.3, via §1.3: the warning is shown as two rooms. */}
+            <RoomComparison
+              now={roomFor(schedule, blockLog)}
+              ifAccepted={roomFor(addItems(schedule, [item]), blockLog)}
+            />
 
-          {/* Separate from copying on purpose: a student may copy the decline and want
-              nothing in their week. */}
-          <button
-            type="button"
-            onClick={() => onAccept(item)}
-            className="w-full rounded-lg bg-slate-900 px-4 py-3 text-white sm:w-auto"
-          >
-            Take it on
-          </button>
-        </>
-      )}
-    </main>
+            {drafts.length > 0 && (
+              <section className="flex flex-col gap-3">
+                <h3 className="text-lg font-medium text-ink">What you could say</h3>
+
+                {drafts.map((draft) => (
+                  <Card key={draft.tone} className="flex flex-col gap-1">
+                    <label className="text-xs font-medium uppercase tracking-wide text-ink-soft">
+                      {TONE_LABELS[draft.tone]}
+                      <textarea
+                        data-testid={`draft-${draft.tone}`}
+                        value={edited[draft.tone] ?? draft.text}
+                        onChange={(event) =>
+                          setEdited({ ...edited, [draft.tone]: event.target.value })
+                        }
+                        rows={3}
+                        className="mt-1 w-full rounded border border-line bg-surface p-2 text-sm font-normal normal-case tracking-normal text-ink"
+                      />
+                    </label>
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      className="self-start"
+                      onClick={() => void onCopy(draft)}
+                    >
+                      {copied === draft.tone ? 'Copied' : 'Copy'}
+                    </Button>
+                  </Card>
+                ))}
+              </section>
+            )}
+          </>
+        )}
+      </div>
+    </Sheet>
   )
 }

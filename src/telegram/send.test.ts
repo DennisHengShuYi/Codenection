@@ -25,6 +25,7 @@ const item = (title: string): ParsedItem => ({
   id: `item-${title}`,
   title,
   type: 'mental',
+  kind: 'studyBlock',
   hours: 2,
   deadlineDay: null,
   hard: false,
@@ -154,8 +155,8 @@ describe('helpReply', () => {
 
 describe('blocksReply', () => {
   const blocks = [
-    { id: 'b1', title: 'Ethics essay', startHour: 9 },
-    { id: 'b2', title: 'Shift', startHour: 17 },
+    { id: 'b1', title: 'Ethics essay', startHour: 9, type: 'mental' as const, hours: 2, dayIndex: 1 },
+    { id: 'b2', title: 'Shift', startHour: 17, type: 'social' as const, hours: 3, dayIndex: 1 },
   ]
 
   it('names each block and when it was', () => {
@@ -165,14 +166,25 @@ describe('blocksReply', () => {
     expect(reply.text).toContain('Shift')
   })
 
-  // §7.9's three answers, not two. "Partly" is the honest answer for most blocks and
-  // dropping it would push people into a yes or a no that is not true.
-  it('offers yes, no and partly for the first unanswered block', () => {
-    const actions = blocksReply('today', blocks).buttons?.flat().map((b) => b.data) ?? []
+  // §8b②: the same four answers as the today card, in the same order, so a student who
+  // answers in both places is never asked two different questions.
+  it('offers the same four answers as the today card, for the first unanswered block', () => {
+    const buttons = blocksReply('today', blocks).buttons?.flat() ?? []
 
-    expect(actions.some((a) => a.includes('yes'))).toBe(true)
-    expect(actions.some((a) => a.includes('no'))).toBe(true)
-    expect(actions.some((a) => a.includes('partly'))).toBe(true)
+    expect(buttons.map((button) => button.label)).toEqual([
+      "Didn't happen",
+      'Took less',
+      'About right',
+      'Took longer',
+    ])
+  })
+
+  // §8b②: the callback is the only place the block's type, planned hours and day index
+  // survive the round trip back to `recordBlockAnswer`.
+  it("carries the first block's type, planned hours and day index in every button", () => {
+    const actions = blocksReply('today', blocks).buttons?.flat().map((button) => button.data) ?? []
+
+    expect(actions.every((action) => action.startsWith('block:b1:m:2:1:'))).toBe(true)
   })
 
   it('says so plainly when the day had nothing on it', () => {
@@ -190,14 +202,16 @@ describe('blockAnsweredReply', () => {
    * on it is how they stop answering.
    */
   it('answers a miss neutrally, with no comment at all', () => {
-    const text = blockAnsweredReply('no').text
+    const text = blockAnsweredReply('didnt').text
 
     expect(text).not.toMatch(/sorry|shame|try|tomorrow|better|why|ok\?|should/i)
   })
 
-  it('answers a yes just as plainly as a no', () => {
-    expect(blockAnsweredReply('yes').text.length).toBeLessThan(60)
-    expect(blockAnsweredReply('no').text.length).toBeLessThan(60)
+  it('answers every one of the four answers just as plainly', () => {
+    expect(blockAnsweredReply('didnt').text.length).toBeLessThan(60)
+    expect(blockAnsweredReply('less').text.length).toBeLessThan(60)
+    expect(blockAnsweredReply('right').text.length).toBeLessThan(60)
+    expect(blockAnsweredReply('longer').text.length).toBeLessThan(60)
   })
 })
 
@@ -331,7 +345,9 @@ describe('askReply', () => {
 
 describe('the wording at its edges', () => {
   it('labels yesterday as yesterday, not as today', () => {
-    const reply = blocksReply('yesterday', [{ id: 'b1', title: 'Shift', startHour: 17 }])
+    const reply = blocksReply('yesterday', [
+      { id: 'b1', title: 'Shift', startHour: 17, type: 'social', hours: 3, dayIndex: 1 },
+    ])
 
     expect(reply.text).toMatch(/yesterday/i)
   })

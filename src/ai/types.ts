@@ -1,9 +1,16 @@
-import type { LoadType } from '../engine'
+import type { ActivityKind, LoadType } from '../engine'
 
 export interface ParsedItem {
   readonly id: string
   readonly title: string
   readonly type: LoadType
+  /**
+   * What residue the activity leaves, and whether it drains or recovers (§6.6). Coarser
+   * than `type`: a hard session and a walk are both physical load, but opposite in what
+   * they do to the study block that follows -- so this cannot be derived from `type` alone
+   * and must be read from the text itself.
+   */
+  readonly kind: ActivityKind
   readonly hours: number
   /** Day index within the horizon, or null when nothing in the text implied one. */
   readonly deadlineDay: number | null

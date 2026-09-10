@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { BLOCK_KINDS } from '../engine'
 import { askVision } from './vision'
 
 /**
@@ -15,7 +16,9 @@ const reply = (content: string) => ({
 })
 
 const good = JSON.stringify({
-  items: [{ title: 'WIA3001 report', type: 'mental', hours: 8, deadlineDay: 9, hard: true }],
+  items: [
+    { title: 'WIA3001 report', type: 'mental', kind: 'studyBlock', hours: 8, deadlineDay: 9, hard: true },
+  ],
 })
 
 afterEach(() => vi.unstubAllGlobals())
@@ -132,5 +135,23 @@ describe('askVision', () => {
     expect(String((fetchSpy.mock.calls[0] as [string, RequestInit])[1].body)).toMatch(
       /never invent/i,
     )
+  })
+
+  /**
+   * Ruling 46. The prompt used to offer `sleep` in its kind enum while the boundary
+   * accepted it too; now the boundary rejects it, and a prompt that still asked for it
+   * would turn one nap into a REJECTED WHOLE REPLY -- `parseModelReply` is all-or-nothing,
+   * so every other item in the same answer would be lost with it. The prompt and the
+   * schema have to be narrowed together, and this is what says so.
+   */
+  it('does not ask the model for a kind the boundary would reject', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(reply(good))
+    vi.stubGlobal('fetch', fetchSpy)
+
+    await askVision(PHOTO, 'test-key-not-real')
+
+    const body = String((fetchSpy.mock.calls[0] as [string, RequestInit])[1].body)
+    for (const kind of BLOCK_KINDS) expect(body).toContain(kind)
+    expect(body).not.toContain('sleep')
   })
 })

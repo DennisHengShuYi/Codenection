@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { BlockRecord } from '../domain/blockLog'
 import { createFallbackRepository } from './fallbackRepository'
 import { createLocalRepository } from './localRepository'
 import { DEFAULT_SETTINGS, type Repository } from './types'
@@ -8,6 +9,8 @@ const unreachable = (): Repository => ({
   saveWeek: () => Promise.reject(new Error('relation "user_state" does not exist')),
   loadSettings: () => Promise.reject(new Error('relation "user_state" does not exist')),
   saveSettings: () => Promise.reject(new Error('relation "user_state" does not exist')),
+  loadBlockLog: () => Promise.reject(new Error('relation "block_answers" does not exist')),
+  recordBlockAnswer: () => Promise.reject(new Error('relation "block_answers" does not exist')),
   clear: () => Promise.reject(new Error('relation "user_state" does not exist')),
 })
 
@@ -16,6 +19,15 @@ const week = () => ({
   start: { mental: 42, physical: 60, social: 50, errands: 70 },
   horizonDays: 21,
   sleepByDay: Array.from({ length: 21 }, () => 7),
+})
+
+const record = (): BlockRecord => ({
+  blockId: 'essay',
+  type: 'mental',
+  plannedHours: 3,
+  dayIndex: 2,
+  answer: 'right',
+  answeredAt: 1_757_000_000_000,
 })
 
 describe('createFallbackRepository', () => {
@@ -61,6 +73,23 @@ describe('createFallbackRepository', () => {
 
     expect(await repo.loadWeek()).toBeNull()
     expect(await repo.loadSettings()).toEqual(DEFAULT_SETTINGS)
+  })
+
+  // §8b: the block log degrades exactly like the week and settings do -- a broken
+  // primary must not silently stop Reality Check working for anyone.
+  it('falls back to the backup store for the block log too', async () => {
+    const repo = createFallbackRepository(unreachable(), createLocalRepository())
+    await repo.clear()
+
+    await repo.recordBlockAnswer(record())
+
+    expect(await repo.loadBlockLog()).toHaveLength(1)
+  })
+
+  it('returns an empty block log when both stores are unreachable rather than throwing', async () => {
+    const repo = createFallbackRepository(unreachable(), unreachable())
+
+    expect(await repo.loadBlockLog()).toEqual([])
   })
 
   // A silent fallback would hide a misconfiguration forever. It degrades rather than

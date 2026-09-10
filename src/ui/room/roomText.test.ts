@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeRoom } from './roomText'
+import { describeRoom, describeRoomFully } from './roomText'
 import type { RoomState } from './roomState'
 
 const state = (over: Partial<RoomState> = {}): RoomState => ({
@@ -14,6 +14,18 @@ const state = (over: Partial<RoomState> = {}): RoomState => ({
   character: 'steady',
   ...over,
 })
+
+/** Everything at once: flattened, storm, clutter, sleep debt, drooping plant, lit door --
+ *  the state that used to produce all six sentences `describeRoom` could emit. */
+const worstCaseState = (): RoomState =>
+  state({
+    character: 'flattened',
+    weather: 'storm',
+    clutter: [{ id: 'a', title: 'Laundry', dayIndex: 1 }],
+    sleepDebt: 3,
+    plantHealth: 0.1,
+    doorLit: true,
+  })
 
 /**
  * §1.5 makes the text equivalent a primary view rather than a fallback, and the room
@@ -71,6 +83,66 @@ describe('describeRoom', () => {
 
   it('reads as prose rather than a data dump', () => {
     const text = describeRoom(state())
+
+    expect(text).toMatch(/\.$/)
+    expect(text).not.toContain('undefined')
+    expect(text).not.toContain('[object')
+  })
+
+  it('never runs past three sentences, so 320px keeps its buttons', () => {
+    // Everything at once: flattened, storm, clutter, sleep debt, drooping plant, lit door.
+    const loud = describeRoom(worstCaseState())
+
+    expect(loud.split('. ').length).toBeLessThanOrEqual(3)
+  })
+
+  it('always keeps the two things the picture cannot say another way', () => {
+    const loud = describeRoom(worstCaseState())
+
+    expect(loud).toMatch(/flattened/i)
+    expect(loud).toMatch(/storm/i)
+  })
+
+  it('picks door lit over sleep debt, clutter and the plant, in priority order', () => {
+    const text = describeRoom(worstCaseState())
+
+    expect(text).toMatch(/door is lit/i)
+    expect(text).not.toMatch(/sleep|laundry|drooping/i)
+  })
+
+  it('falls back to sleep debt when the door is not lit', () => {
+    const text = describeRoom(
+      state({ sleepDebt: 2, clutter: [{ id: 'a', title: 'Laundry', dayIndex: 1 }], plantHealth: 0.1 }),
+    )
+
+    expect(text).toMatch(/sleep/i)
+    expect(text).not.toMatch(/laundry|drooping/i)
+  })
+})
+
+describe('describeRoomFully', () => {
+  /**
+   * The cap on `describeRoom` is visual only -- a screen reader using the drawing's
+   * aria-label must still hear everything the room can say, so this stays uncapped and
+   * keeps every conditional sentence the six-sentence version used to emit.
+   */
+  it('keeps every applicable sentence, not just one', () => {
+    const text = describeRoomFully(worstCaseState())
+
+    expect(text).toMatch(/flattened/i)
+    expect(text).toMatch(/storm/i)
+    expect(text).toMatch(/laundry/i)
+    expect(text).toMatch(/sleep/i)
+    expect(text).toMatch(/drooping/i)
+    expect(text).toMatch(/door is lit/i)
+  })
+
+  it('says the floor is clear when it is', () => {
+    expect(describeRoomFully(state())).toMatch(/nothing waiting|floor is clear/i)
+  })
+
+  it('reads as prose rather than a data dump', () => {
+    const text = describeRoomFully(state())
 
     expect(text).toMatch(/\.$/)
     expect(text).not.toContain('undefined')

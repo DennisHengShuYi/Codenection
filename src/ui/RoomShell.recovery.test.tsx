@@ -1,17 +1,28 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
 import { RoomShell } from './room/RoomShell'
 
 /**
- * §5 wired into the screen. What this covers that the component tests cannot: that accepting
- * a prescription reaches the *stored* week as protected rest, and that the lit door now
- * opens somewhere to go rather than a sentence.
+ * §5, wired into the screen. §3's card precedence makes recovery a single live card that
+ * needs no tap to appear -- there is no `door` or `phone` object left to carry it. Two of
+ * the old file's cases (the door's own "outings" menu) tested a feature the design spec
+ * marked for deletion (§7, §10's deleted list: `outings.ts`, `DoorPanel.tsx`); that menu
+ * contradicted the "never a menu" premise the card itself already got right, so it was not
+ * relocated -- it was dropped, same as any other reachability this redesign intentionally
+ * removes.
  *
- * Nothing here touches a network -- there is no model in this feature at all.
+ * §7 also retired the permanent failed-recovery log `recordAttempt` used to write. "Not
+ * today" is a same-day dismissal the room screen holds itself now, which is what the last
+ * two cases in this file exist to prove: it hides the card, but it writes nothing durable
+ * and does not survive past this session.
+ *
+ * What this covers that `RecoveryCard`'s own tests cannot: that accepting reaches the
+ * *stored* week as protected rest, and that dismissing is genuinely temporary rather than a
+ * permanent suppression.
  */
 const week = (over: Partial<Schedule> = {}): Schedule => ({
   items: [],
@@ -21,12 +32,9 @@ const week = (over: Partial<Schedule> = {}): Schedule => ({
   ...over,
 })
 
-/** Low enough to prescribe, high enough that §1.5's low-energy view does not take over at
- *  20 -- otherwise the test would exercise that branch instead of this one. */
+/** Low enough to prescribe, high enough that §1.5's low-energy screen does not take over --
+ *  otherwise the test would exercise the one-card cap instead of this one. */
 const socialLow = () => week({ start: { mental: 70, physical: 70, social: 25, errands: 70 } })
-
-/** Both below the door's threshold of 25, which is what lights it. */
-const doorLit = () => week({ start: { mental: 70, physical: 22, social: 22, errands: 70 } })
 
 let counter = 0
 
@@ -36,100 +44,90 @@ const renderHome = async (schedule: Schedule) => {
   await repository.clear()
   await repository.saveWeek(schedule)
 
-  render(<RoomShell repository={repository} />)
+  const view = render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
   await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
 
-  return repository
+  return { repository, ...view }
 }
 
 describe('RoomShell with recovery', () => {
   it('suggests one thing when a reserve is low', async () => {
     await renderHome(socialLow())
 
-    /**
-     * §5.2 matches the advice to the depleted type, so the *furniture* matches it too. A
-     * social prescription marks the phone, because that is where reaching somebody starts --
-     * marking the bed would tell a lonely student to go to sleep, which is the failure the
-     * engine already refuses to make.
-     */
-    expect(screen.getByTestId('object-phone')).toHaveAttribute('data-attention', 'true')
-
-    await userEvent.click(screen.getByTestId('object-phone'))
-    expect(screen.getByTestId('prescription')).toBeVisible()
+    expect(screen.getByTestId('recovery-card')).toBeVisible()
   })
 
   // Advice offered to somebody who is fine is advice ignored when they are not.
   it('suggests nothing when nothing is low', async () => {
     await renderHome(week())
 
-    expect(screen.getByTestId('object-phone')).toHaveAttribute('data-attention', 'false')
+    expect(screen.queryByTestId('recovery-card')).toBeNull()
   })
 
-  // Replacing the room with advice would take away the thing the student came to look at.
+  // Beside the room rather than instead of it: the card offers, the room stays.
   it('sits beside the room rather than instead of it', async () => {
     await renderHome(socialLow())
 
-    // Beside the room rather than instead of it: the object asks, the room stays.
-    expect(screen.getByTestId('object-phone')).toHaveAttribute('data-attention', 'true')
+    expect(screen.getByTestId('recovery-card')).toBeVisible()
     expect(screen.getByTestId('room-scene')).toBeVisible()
   })
 
   /**
    * The point of the unit. Checked against storage rather than the screen, because
-   * everything downstream draws from stored state.
+   * everything downstream draws from stored state. §5.1's guarantee end to end: this is the
+   * only path in the app that creates protected rest, and it must land both flags, not one.
    */
-  it('accepting puts protected rest in the saved week', async () => {
-    const repository = await renderHome(socialLow())
+  it('accepting puts protected, fixed rest in the saved week', async () => {
+    const { repository } = await renderHome(socialLow())
 
-    await userEvent.click(screen.getByTestId('object-phone'))
     await userEvent.click(screen.getByRole('button', { name: /put it in my week/i }))
 
     await waitFor(async () => expect((await repository.loadWeek())?.items).toHaveLength(1))
-
-    // protectedRest is what makes the optimizer unable to move it to fit work in. That
-    // refusal is already proven by the optimizer's own tests; this asserts the flag is set.
-    expect((await repository.loadWeek())?.items[0]?.protectedRest).toBe(true)
+    const [saved] = (await repository.loadWeek())?.items ?? []
+    expect(saved?.protectedRest).toBe(true)
+    expect(saved?.fixed).toBe(true)
   })
 
-  it('dismissing records it and stops offering the same thing', async () => {
-    const repository = await renderHome(socialLow())
+  it('"not today" hides the card immediately', async () => {
+    await renderHome(socialLow())
 
-    await userEvent.click(screen.getByTestId('object-phone'))
-    await userEvent.click(screen.getByRole('button', { name: /does not help/i }))
+    await userEvent.click(screen.getByRole('button', { name: /not today/i }))
 
-    await waitFor(async () => expect((await repository.loadWeek())?.recoveryLog).toHaveLength(1))
-    await waitFor(() =>
-      expect(screen.getByTestId('object-phone')).toHaveAttribute('data-attention', 'false'),
-    )
+    await waitFor(() => expect(screen.queryByTestId('recovery-card')).toBeNull())
   })
 
-  // §5.3: the door already lit. This is the part that was missing.
-  it('tapping the lit door offers somewhere to go', async () => {
-    await renderHome(doorLit())
+  /**
+   * §7's fix, asserted at the screen. The old dismissal called `recordAttempt`, which wrote
+   * a permanent entry the stored week carried forever. This is what replaced it: nothing is
+   * written to storage at all, so the schedule dismissing left behind is indistinguishable
+   * from one nobody ever touched.
+   */
+  it('"not today" writes nothing durable -- the stored week is untouched', async () => {
+    const { repository } = await renderHome(socialLow())
+    const before = await repository.loadWeek()
 
-    await userEvent.click(screen.getByTestId('object-door'))
+    await userEvent.click(screen.getByRole('button', { name: /not today/i }))
+    await waitFor(() => expect(screen.queryByTestId('recovery-card')).toBeNull())
 
-    expect(await screen.findByTestId('door-panel')).toBeVisible()
-    expect(screen.getAllByTestId(/^outing-/).length).toBeGreaterThan(0)
+    expect(await repository.loadWeek()).toEqual(before)
   })
 
-  it('choosing an outing puts it in the saved week as protected rest', async () => {
-    const repository = await renderHome(doorLit())
+  /**
+   * The behavioural proof that this is not the old permanent suppression wearing a new
+   * label: reopening the app -- a fresh mount over the same stored week, standing in for a
+   * later day, since dismissal here is session state rather than anything persisted -- must
+   * offer the same advice again. An implementation that instead persisted the dismissal
+   * (writing it into the week, or keeping it in a module-level variable) would fail this.
+   */
+  it('offers the same advice again once the app is reopened', async () => {
+    const { repository } = await renderHome(socialLow())
 
-    await userEvent.click(screen.getByTestId('object-door'))
-    await userEvent.click((await screen.findAllByTestId(/^outing-/))[0]!)
+    await userEvent.click(screen.getByRole('button', { name: /not today/i }))
+    await waitFor(() => expect(screen.queryByTestId('recovery-card')).toBeNull())
 
-    await waitFor(async () => expect((await repository.loadWeek())?.items).toHaveLength(1))
-    expect((await repository.loadWeek())?.items[0]?.protectedRest).toBe(true)
-  })
+    cleanup()
 
-  // A quiet door still explains itself, exactly as it did before.
-  it('leaves the unlit door saying what it said before', async () => {
-    await renderHome(week())
-
-    await userEvent.click(screen.getByTestId('object-door'))
-
-    // A quiet door still explains itself -- it reads its state rather than doing nothing.
-    expect(await screen.findByTestId('zoom-door')).toBeInTheDocument()
+    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+    await waitFor(() => expect(screen.getByTestId('recovery-card')).toBeVisible())
   })
 })

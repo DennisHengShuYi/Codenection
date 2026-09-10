@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
-import { freeGapOn, prescribe } from './prescribe'
+import { freeSlotOn, prescribe } from './prescribe'
 
 const item = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
   id: 'a',
@@ -18,6 +18,9 @@ const item = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
   ...over,
 })
 
+/** A block whose only purpose is to occupy a stretch of the day in a gap test. */
+const block = item
+
 const week = (over: Partial<Schedule> = {}): Schedule => ({
   items: [],
   start: { mental: 70, physical: 70, social: 70, errands: 70 },
@@ -33,19 +36,48 @@ const low = (type: 'mental' | 'physical' | 'social') => ({
   errands: 70,
 })
 
-describe('freeGapOn', () => {
-  it('reports a usable gap when the day is empty', () => {
-    expect(freeGapOn(week(), 0)).toBeGreaterThan(0)
+describe('freeSlotOn', () => {
+  it('reports a usable slot when the day is empty', () => {
+    expect(freeSlotOn(week(), 0)?.hours).toBeGreaterThan(0)
   })
 
   it('shrinks as the day fills up', () => {
     const busy = week({ items: [item({ hours: 6 }), item({ id: 'b', hours: 6, startHour: 16 })] })
 
-    expect(freeGapOn(busy, 0)).toBeLessThan(freeGapOn(week(), 0))
+    expect(freeSlotOn(busy, 0)?.hours).toBeLessThan(freeSlotOn(week(), 0)?.hours ?? 0)
   })
 
-  it('never reports a negative gap on an overfull day', () => {
-    expect(freeGapOn(week({ items: [item({ hours: 30 })] }), 0)).toBeGreaterThanOrEqual(0)
+  it('never reports a negative-size slot on an overfull day', () => {
+    const slot = freeSlotOn(week({ items: [block({ startHour: 0, hours: 24 })] }), 0)
+
+    expect(slot === null || slot.hours >= 0).toBe(true)
+  })
+
+  it('places the slot where the gap actually is, not always at 16:00', () => {
+    const busyAfternoon = week({ items: [block({ startHour: 15, hours: 4 })] })
+
+    // Not midnight, and not the old hardcoded 16:00 either -- the real free stretch of the
+    // student's day starts at the wake hour, since nothing occupies the morning.
+    expect(freeSlotOn(busyAfternoon, 0)).toEqual({ startHour: 8, hours: 7 })
+  })
+
+  it('never anchors a free slot before the wake hour, even for an ordinary early class', () => {
+    // A completely ordinary fixture: one class at 8-10. The scan must not report the
+    // midnight-to-8 stretch as free -- nobody is awake for it, and sleepByDay already
+    // accounts for it.
+    const earlyClass = week({ items: [block({ startHour: 8, hours: 2 })] })
+
+    expect(freeSlotOn(earlyClass, 0)?.startHour).toBeGreaterThanOrEqual(8)
+  })
+
+  it('reports no slot when the day has no free hour', () => {
+    expect(freeSlotOn(week({ items: [block({ startHour: 0, hours: 24 })] }), 0)).toBeNull()
+  })
+
+  it('finds the free hour after the last block when the day starts busy', () => {
+    const busyMorning = week({ items: [block({ startHour: 0, hours: 10 })] })
+
+    expect(freeSlotOn(busyMorning, 0)).toEqual({ startHour: 10, hours: 14 })
   })
 })
 
@@ -132,7 +164,37 @@ describe('prescribe', () => {
   })
 
   it('says nothing when there is no real gap to put it in', () => {
-    expect(prescribe(week({ start: low('mental'), items: [item({ hours: 24 })] }))).toBeNull()
+    const packedDay = week({ start: low('mental'), items: [item({ startHour: 0, hours: 24 })] })
+
+    expect(prescribe(packedDay)).toBeNull()
+  })
+
+  /**
+   * `ADVICE` has no entry for errands on purpose (see the comment above it), but the old
+   * implementation let that absence suppress advice for the *next* lowest reserve too --
+   * a student whose errands reserve happened to be emptiest got no card at all, even though
+   * mental was also below threshold and has real advice.
+   */
+  it('falls through when the emptiest reserve has no advice of its own', () => {
+    const flat = week({ start: { mental: 25, physical: 70, social: 70, errands: 22 } })
+
+    expect(prescribe(flat)?.kind).toBe('rest')
+  })
+
+  /**
+   * The gate asks whether there is a free hour today; the old insert was hardcoded to 16:00
+   * regardless of where that hour actually was, so the card could land on top of a class.
+   */
+  it('schedules into the gap it found rather than always at 16:00', () => {
+    const busyAfternoon = week({ start: low('mental'), items: [item({ startHour: 15, hours: 4 })] })
+
+    expect(prescribe(busyAfternoon)?.startHour).not.toBe(16)
+  })
+
+  it('offers nothing when the day has no free hour', () => {
+    const packedDay = week({ start: low('mental'), items: [item({ startHour: 0, hours: 24 })] })
+
+    expect(prescribe(packedDay)).toBeNull()
   })
 
   it('places it on a real day within the horizon', () => {

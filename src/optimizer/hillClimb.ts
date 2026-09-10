@@ -1,6 +1,6 @@
 import { summarise, type EngineParams } from '../engine'
 import { candidates, type Candidate } from './neighbours'
-import { score, toDayInputs } from './objective'
+import { ALL_PRESENT, score, toDayInputs } from './objective'
 import type { Rng } from './rng'
 import type { Move, RebalanceResult, Schedule } from './types'
 
@@ -11,8 +11,9 @@ const MAX_ITERATIONS = 200
  *  an improvement and does not spin the loop to its iteration cap. */
 const EPSILON = 1e-9
 
+// No check-in data exists for a schedule under exploration -- `ALL_PRESENT` names that.
 const worstOf = (schedule: Schedule, params: EngineParams): number =>
-  summarise(schedule.start, toDayInputs(schedule), params).worstFloor
+  summarise(schedule.start, toDayInputs(schedule, ALL_PRESENT), params).worstFloor
 
 /**
  * One climb: take the best neighbour while one improves, up to the iteration cap.

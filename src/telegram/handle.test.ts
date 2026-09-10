@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ParsedItem } from '../ai'
+import { outcomesFrom, type BlockRecord } from '../domain/blockLog'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
-import { handleIntent, type ChatStore } from './handle'
+import { handleIntent, type BlockAnswerInput, type ChatStore } from './handle'
 import type { PendingDump } from './brainDump'
+import { blocksReply } from './send'
+import { readUpdate } from './update'
 
 const week = (): Schedule => ({
   items: [],
@@ -16,6 +19,7 @@ const parsed = (title: string): ParsedItem => ({
   id: `id-${title}`,
   title,
   type: 'mental',
+  kind: 'studyBlock',
   hours: 2,
   deadlineDay: null,
   hard: false,
@@ -25,7 +29,7 @@ const parsed = (title: string): ParsedItem => ({
 interface Harness {
   store: ChatStore
   saved: Schedule[]
-  blockAnswers: Array<{ blockId: string; answer: string }>
+  blockAnswers: BlockAnswerInput[]
   pendings: PendingDump[]
   answered: string[]
   linked: Array<{ chatId: number; accountId: string }>
@@ -33,7 +37,7 @@ interface Harness {
 
 function harness(over: Partial<ChatStore> = {}): Harness {
   const saved: Schedule[] = []
-  const blockAnswers: Array<{ blockId: string; answer: string }> = []
+  const blockAnswers: BlockAnswerInput[] = []
   const pendings: PendingDump[] = []
   const answered: string[] = []
   const linked: Array<{ chatId: number; accountId: string }> = []
@@ -55,9 +59,10 @@ function harness(over: Partial<ChatStore> = {}): Harness {
     markAnswered: async (_accountId, dumpId) => {
       answered.push(dumpId)
     },
-    recordBlockAnswer: async (_accountId, blockId, answer) => {
-      blockAnswers.push({ blockId, answer })
+    recordBlockAnswer: async (_accountId, answer) => {
+      blockAnswers.push(answer)
     },
+    loadBlockLog: async () => [],
     ...over,
   }
 
@@ -346,15 +351,40 @@ describe('the command surface', () => {
 })
 
 describe('answering a block', () => {
-  const answer = (blockId = 'b1', value: 'yes' | 'no' | 'partly' = 'yes') =>
-    ({ kind: 'blockAnswer', chatId: 7, blockId, answer: value }) as never
+  const answer = (
+    blockId = 'b1',
+    value: BlockAnswerInput['answer'] = 'right',
+    rest: Partial<BlockAnswerInput> = {},
+  ) =>
+    ({
+      kind: 'blockAnswer',
+      chatId: 7,
+      blockId,
+      type: 'mental',
+      plannedHours: 2,
+      dayIndex: 1,
+      answer: value,
+      ...rest,
+    }) as never
 
-  it('records the answer', async () => {
+  // §8b②: the record carries what `outcomesFrom` needs -- type and planned hours -- taken
+  // from the week the bot already loaded, not just the answer and an id nothing can join.
+  it('records the answer with the block\'s type, planned hours and day index', async () => {
     const h = harness()
 
-    await handleIntent(answer('b1', 'partly'), h.store, 1000)
+    await handleIntent(answer('b1', 'right'), h.store, 1000)
 
-    expect(h.blockAnswers).toEqual([{ blockId: 'b1', answer: 'partly' }])
+    expect(h.blockAnswers).toEqual([
+      { blockId: 'b1', type: 'mental', plannedHours: 2, dayIndex: 1, answer: 'right' },
+    ])
+  })
+
+  it.each(['didnt', 'less', 'right', 'longer'] as const)('records a "%s" answer', async (value) => {
+    const h = harness()
+
+    await handleIntent(answer('b1', value), h.store, 1000)
+
+    expect(h.blockAnswers[0]?.answer).toBe(value)
   })
 
   /**
@@ -364,7 +394,7 @@ describe('answering a block', () => {
   it('answers a miss with no comment at all', async () => {
     const h = harness()
 
-    const reply = await handleIntent(answer('b1', 'no'), h.store, 1000)
+    const reply = await handleIntent(answer('b1', 'didnt'), h.store, 1000)
 
     expect(reply?.text).not.toMatch(/sorry|shame|tomorrow|better|why|should/i)
   })
@@ -385,6 +415,64 @@ describe('answering a block', () => {
     await handleIntent(answer(), h.store, 1000)
 
     expect(h.blockAnswers).toEqual([])
+  })
+})
+
+/**
+ * Task 17b's central assertion: the bot and the today card must produce identical evidence
+ * for identical facts. Two writers and two stores were never one loop until this held --
+ * `grep block_answers` used to find exactly one hit, the line that wrote it, and nothing
+ * ever read it back.
+ *
+ * This does not merely check that both paths produce *something*. It drives the actual
+ * button (`blocksReply`) through the actual parser (`readUpdate`) through `handleIntent`,
+ * captures the record `recordBlockAnswer` was actually called with, and compares the
+ * `BlockOutcome` `outcomesFrom` derives from it against the `BlockOutcome` derived from a
+ * `BlockRecord` built the way the today card builds one -- real values, through the real
+ * function both readers use.
+ */
+describe('the bot and the card produce the same outcome', () => {
+  it('turns a callback answer into the same BlockOutcome the today card would have written', async () => {
+    const block = {
+      id: 'b1',
+      title: 'Ethics essay',
+      startHour: 9,
+      type: 'mental' as const,
+      hours: 3,
+      dayIndex: 2,
+    }
+
+    // The bot's own path: the exact buttons /yesterday would send, and the exact callback
+    // Telegram sends back for a press on "Took longer".
+    const reply = blocksReply('yesterday', [block])
+    const pressed = reply.buttons?.flat().find((button) => button.label === 'Took longer')
+    if (pressed === undefined) throw new Error('no "Took longer" button was offered')
+
+    const intent = readUpdate({
+      callback_query: { message: { chat: { id: 4242 } }, data: pressed.data },
+    })
+
+    const h = harness()
+    await handleIntent(intent, h.store, 5000)
+
+    const captured = h.blockAnswers[0]
+    if (captured === undefined) throw new Error('nothing was recorded')
+
+    const fromBot: BlockRecord = { ...captured, answeredAt: 5000 }
+
+    // The card's own path: the same block, answered the same way, in the shape
+    // `checkIn.ts` and the Supabase repository already write today for the today card.
+    const fromCard: BlockRecord = {
+      blockId: block.id,
+      type: block.type,
+      plannedHours: block.hours,
+      dayIndex: block.dayIndex,
+      answer: 'longer',
+      answeredAt: 5000,
+    }
+
+    expect(fromBot).toEqual(fromCard)
+    expect(outcomesFrom([fromBot])).toEqual(outcomesFrom([fromCard]))
   })
 })
 
@@ -520,6 +608,62 @@ describe('pricing a request', () => {
     await handleIntent(ask('cover my shift'), h.store, 1000, { priceAsk })
 
     expect(priceAsk).not.toHaveBeenCalled()
+  })
+
+  /**
+   * Ruling 41. `/ask` priced against day 0 of the fortnight no matter what day it was, with
+   * no check-in evidence at all -- while the app's own request box passed both. The same
+   * question got two answers depending on which door it came through, and `todayFor` was
+   * already in this file and already used by the `today` and `yesterday` branches.
+   */
+  it('prices against the day the student is actually on', async () => {
+    const anchored = {
+      ...week(),
+      // Anchored three days before `now` below, so day 3 is the only correct answer and
+      // day 0 -- what this branch used to imply -- is visibly wrong.
+      startedOn: '2026-03-02',
+    }
+    const h = harness({ loadWeek: async () => anchored as never })
+    const priceAsk = vi.fn().mockResolvedValue(priced)
+
+    await handleIntent(
+      ask('cover my shift'),
+      h.store,
+      Date.parse('2026-03-05T09:00:00Z'),
+      { priceAsk },
+    )
+
+    expect(priceAsk).toHaveBeenCalledWith('cover my shift', anchored, 3, [])
+  })
+
+  // The evidence half. Without it the price is quoted against a fortnight assumed to be
+  // fully checked in, which is the optimistic stand-in §6.5 exists to refuse.
+  it('prices against the block log the account has actually written', async () => {
+    const log: BlockRecord[] = [
+      { blockId: 'b1', type: 'mental', plannedHours: 2, dayIndex: 0, answer: 'longer', answeredAt: 1 },
+    ]
+    const h = harness({ loadBlockLog: async () => log })
+    const priceAsk = vi.fn().mockResolvedValue(priced)
+
+    await handleIntent(ask('cover my shift'), h.store, 1000, { priceAsk })
+
+    expect(priceAsk).toHaveBeenCalledWith('cover my shift', expect.anything(), 0, log)
+  })
+
+  // Ruling 42's shape: a block-log read that cannot reach its columns must be visible, not
+  // swallowed into a price computed as though the student had never answered anything.
+  it('says it cannot price rather than pricing on evidence it could not read', async () => {
+    const h = harness({
+      loadBlockLog: async () => {
+        throw new Error('column "load_type" does not exist')
+      },
+    })
+    const priceAsk = vi.fn().mockResolvedValue(priced)
+
+    const reply = await handleIntent(ask('cover my shift'), h.store, 1000, { priceAsk })
+
+    expect(priceAsk).not.toHaveBeenCalled()
+    expect(reply?.text).toMatch(/cannot price/i)
   })
 })
 

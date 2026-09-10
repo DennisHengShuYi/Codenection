@@ -37,10 +37,30 @@ test('states the room in words as well as drawing it', async ({ page }) => {
   await expect(page.getByTestId('room-text-equivalent')).not.toHaveText('')
 })
 
-test('opens an object when it is tapped', async ({ page }) => {
+/**
+ * The inverse of the test this replaces.
+ *
+ * `opens an object when it is tapped` drove `object-plant` into a `zoom-plant` layer. §3
+ * deleted both: the room is a picture of the week, and every feature it used to hide behind
+ * a tap now has a button of its own (`The week`, `Add something`, `Settings`) or a card on
+ * the screen. So the old assertion is not merely stale, it asserts the opposite of the
+ * design -- and it is worth one test that the tap targets stay gone, because "make the
+ * furniture clickable again" is exactly the kind of change that reads as an improvement.
+ */
+test('draws the room without turning any of it back into a control', async ({ page }) => {
   await openApp(page)
 
-  await page.getByTestId('object-plant').click()
+  const scene = page.getByTestId('room-scene')
+  await expect(scene).toBeVisible()
 
-  await expect(page.getByTestId('zoom-plant')).toBeVisible()
+  // A CSS locator rather than getByRole: the scene declares role="img", which hides its
+  // whole subtree from the accessibility tree, so an aria query inside it would report
+  // zero controls whether or not any existed -- a guard that cannot fail.
+  await expect(scene.locator('button, a, [role="button"], [role="link"]')).toHaveCount(0)
+
+  // And the behavioural half, the exact inverse of the deleted assertion: the plant was
+  // what `opens an object when it is tapped` drove, and tapping it now opens nothing.
+  await scene.getByTestId('room-plant').click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByTestId('sheet')).toHaveCount(0)
 })

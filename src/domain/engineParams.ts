@@ -1,9 +1,6 @@
 import { DEFAULT_PARAMS, LOAD_TYPES, type EngineParams, type Reserves } from '../engine'
-import type { CalibrationProfile } from './calibration'
+import type { BlockOutcome } from './calibration'
 import { paddingFor } from './realityCheck'
-
-/** Outside this, a painted sleep baseline is a mis-tap rather than a measurement. */
-const PLAUSIBLE_SLEEP = { min: 3, max: 14 }
 
 /**
  * Turns what the app has measured about a student into the parameters its model runs on.
@@ -13,22 +10,18 @@ const PLAUSIBLE_SLEEP = { min: 3, max: 14 }
  * §2.4's estimate bias has had a slot in `EngineParams` since the engine was written --
  * `drain` already multiplies by it. It was simply always 1.
  *
- * An uncalibrated student gets the population defaults byte for byte (§7.7). Anything else
- * would mean opening the app quietly changed the model.
+ * Takes the outcomes themselves -- §8b's block log, read through `outcomesFrom` -- rather
+ * than the calibration profile that used to carry them. The profile was never the source of
+ * truth: it was where `confirmations` happened to live before there was a durable record
+ * both the room and the Telegram bot could write to.
+ *
+ * A student with no logged outcomes gets the population defaults byte for byte (§7.7).
+ * Anything else would mean opening the app quietly changed the model.
  */
-export function paramsFor(profile: CalibrationProfile): EngineParams {
+export function paramsFor(outcomes: readonly BlockOutcome[]): EngineParams {
   const estimateBias = Object.fromEntries(
-    LOAD_TYPES.map((type) => [type, paddingFor(profile.confirmations, type)]),
+    LOAD_TYPES.map((type) => [type, paddingFor(outcomes, type)]),
   ) as Reserves
 
-  // Only a painted baseline is a measurement. §7.2: fiction calibrated into the model is
-  // worse than no data, so an unpainted profile keeps the population figure rather than
-  // having its default read back as though somebody had reported it.
-  const painted = profile.painted ? profile.sleepBaselineHours : null
-  const sleepBaselineHours =
-    painted !== null && painted >= PLAUSIBLE_SLEEP.min && painted <= PLAUSIBLE_SLEEP.max
-      ? painted
-      : DEFAULT_PARAMS.sleepBaselineHours
-
-  return { ...DEFAULT_PARAMS, estimateBias, sleepBaselineHours }
+  return { ...DEFAULT_PARAMS, estimateBias }
 }

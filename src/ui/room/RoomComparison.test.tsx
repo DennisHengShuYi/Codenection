@@ -1,14 +1,13 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { RoomComparison } from './RoomComparison'
-import { DEFAULT_PROFILE } from '../../domain/calibration'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule } from '../../optimizer'
 import { roomModel } from './roomModel'
 import type { RoomState } from './roomState'
 
-/** The comparison now takes models, because the room does. Built from a real week so the
- *  rows -- and therefore the controls -- exist. */
+/** The comparison takes models, because the room does. Built from a real week rather than
+ *  a hand-written state, so the derivation is exercised too. */
 const modelOf = (over: Partial<Schedule> = {}) =>
   roomModel({
     schedule: {
@@ -18,8 +17,10 @@ const modelOf = (over: Partial<Schedule> = {}) =>
       sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
       ...over,
     },
-    profile: DEFAULT_PROFILE,
     today: 0,
+    // Nothing answered, said rather than assumed (Ruling 51): these fixtures are about the
+    // side-by-side layout, not about calibration.
+    blockLog: [],
   })
 
 const state = (character: RoomState['character']): RoomState => ({

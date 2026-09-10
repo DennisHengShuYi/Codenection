@@ -3,14 +3,14 @@ import { transcribeAudio } from '../src/ai/groq'
 import { readPhoto } from '../src/ai/readPhoto'
 import { readRequest } from '../src/ai/readRequest'
 import { draftReplies } from '../src/ai/drafts'
-import { DEFAULT_PARAMS } from '../src/engine'
-import { priceRequest } from '../src/domain/requestCost'
+import type { BlockRecord } from '../src/domain/blockLog'
 import { HORIZON_DAYS } from '../src/engine'
 import type { Schedule } from '../src/optimizer'
 import type { PendingDump } from '../src/telegram/brainDump'
 import { checkRequest } from '../src/telegram/guard'
-import { handleIntent, type ChatStore } from '../src/telegram/handle'
+import { handleIntent, type ChatServices, type ChatStore } from '../src/telegram/handle'
 import { hasExpired } from '../src/telegram/linkCode'
+import { priceAskWith } from '../src/telegram/priceAsk'
 import type { Reply } from '../src/telegram/send'
 import { readUpdate } from '../src/telegram/update'
 
@@ -45,7 +45,7 @@ const emptyWeek = (): Schedule => ({
  * Every method takes the account explicitly, and the account is resolved from the chat
  * exactly once inside `handleIntent`. A chat id is never treated as an identity.
  */
-function createStore(client: SupabaseClient): ChatStore {
+export function createStore(client: SupabaseClient): ChatStore {
   return {
     async accountForChat(chatId) {
       const { data } = await client
@@ -122,21 +122,64 @@ function createStore(client: SupabaseClient): ChatStore {
     },
 
     /**
-     * §7.9's evidence, recorded and not acted on.
+     * §8b②'s evidence, now readable: the same four-answer vocabulary and the same three
+     * columns (`load_type`, `planned_hours`, `day_index`) the today card writes through
+     * `supabaseRepository.ts`, so a record written from either place produces the same
+     * `BlockOutcome` once `outcomesFrom` reads it back.
      *
      * Upserted on the account and block together, so answering the same block twice
      * records once -- a student can press a button twice, and Telegram re-sends an update
      * it was not acknowledged for.
      */
-    async recordBlockAnswer(accountId, blockId, answer, now) {
-      await client.from('block_answers').upsert(
+    async recordBlockAnswer(accountId, answer, now) {
+      const { error } = await client.from('block_answers').upsert(
         {
           account_id: accountId,
-          block_id: blockId,
-          answer,
+          block_id: answer.blockId,
+          load_type: answer.type,
+          planned_hours: answer.plannedHours,
+          day_index: answer.dayIndex,
+          answer: answer.answer,
           answered_at: new Date(now).toISOString(),
         },
         { onConflict: 'account_id,block_id' },
+      )
+
+      // Thrown rather than dropped. `0005_block_log.sql` is NOT applied automatically, so
+      // on an unmigrated deployment `load_type`, `planned_hours` and `day_index` do not
+      // exist and every write here fails -- silently, until now, while the student was
+      // told "Noted." `src/data/supabaseRepository.ts` already threw on the same failure;
+      // this side had been swallowing it. Ruling 42.
+      if (error) throw new Error(`Could not record block answer: ${error.message}`)
+    },
+
+    /**
+     * The same rows read back, in the shape `outcomesFrom` and `checkedInDays` expect.
+     *
+     * Deliberately identical to `supabaseRepository.loadBlockLog` -- the columns, the
+     * mapping and the throw -- because §2.4's evidence must not depend on which door the
+     * student came through, which is the whole of Ruling 41.
+     */
+    async loadBlockLog(accountId) {
+      const { data, error } = await client
+        .from('block_answers')
+        .select('block_id, load_type, planned_hours, day_index, answer, answered_at')
+        .eq('account_id', accountId)
+
+      // An empty log and an unreadable one mean opposite things. Collapsing them would
+      // price a request as though the student had answered nothing, which is a real
+      // number computed from an assumption nobody made.
+      if (error) throw new Error(`Could not read block log: ${error.message}`)
+
+      return ((data ?? []) as Record<string, unknown>[]).map(
+        (row): BlockRecord => ({
+          blockId: row.block_id as string,
+          type: row.load_type as BlockRecord['type'],
+          plannedHours: row.planned_hours as number,
+          dayIndex: row.day_index as number,
+          answer: row.answer as BlockRecord['answer'],
+          answeredAt: Date.parse(row.answered_at as string),
+        }),
       )
     },
 
@@ -223,7 +266,7 @@ export default async function handler(request: Request): Promise<Response> {
      * credential. Each is left undefined when its key is absent, which the flows treat as
      * an ordinary state rather than an error -- and which is exactly CI and the demo.
      */
-    const services = groqKey
+    const services: ChatServices = groqKey
       ? {
           readPhotoFile: async (fileId: string) => {
             const blob = await fetchTelegramFile(botToken, fileId)
@@ -245,15 +288,14 @@ export default async function handler(request: Request): Promise<Response> {
 
           // One service rather than three: §2.3's answer is all of it or none. A cost with
           // no drafts is a number to worry about with nothing to do.
-          priceAsk: async (text: string, week: Parameters<typeof priceRequest>[0]) => {
-            const item = await readRequest(text)
-            if (item === null) return null
-
-            const cost = priceRequest(week, item, DEFAULT_PARAMS)
-            const { drafts } = await draftReplies(item, cost)
-
-            return { cost, drafts }
-          },
+          //
+          // A binding rather than a composition: the pricing itself lives in
+          // `src/telegram/priceAsk.ts` where the unit suite can reach it. It was inline
+          // here, and it was wrong in three ways for as long as it existed (Ruling 41) --
+          // day 0, no evidence, population calibration -- precisely because `api/` is
+          // typechecked and untested.
+          priceAsk: (text, week, today, blockLog) =>
+            priceAskWith({ readRequest, draftReplies }, text, week, today, blockLog),
         }
       : {}
 

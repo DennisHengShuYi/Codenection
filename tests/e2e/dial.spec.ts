@@ -15,14 +15,17 @@ async function openApp(page: Page, path = '/') {
  *
  * §0 and §10 make all four widths a standing requirement rather than a polish pass, and
  * an unasserted requirement is one that quietly regresses.
+ *
+ * The dial used to live behind a tap on the light. §1.1 now puts it "in one corner as a
+ * compact readout, no tap required", so it is simply on the room screen -- which is also
+ * what Ruling 28 restored after the two-screen refactor briefly orphaned it. Nothing here
+ * is opened; the widths are measured on the screen the student lands on.
  */
 for (const width of [320, 390, 768, 1280]) {
   test(`the dial fits at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 })
     await openApp(page)
 
-    // §1.2's dial lives behind the light now, which already means the reserve.
-    await page.getByTestId('object-light').click()
     await expect(page.getByTestId('capacity-value')).toBeVisible()
     await expect(page.getByTestId('dial-gauge')).toBeVisible()
 
@@ -37,22 +40,32 @@ for (const width of [320, 390, 768, 1280]) {
 test('shows five domain bars, each against its own ceiling', async ({ page }) => {
   await openApp(page)
 
-  await page.getByTestId('object-light').click()
   await expect(page.getByRole('meter')).toHaveCount(5)
 })
 
-// The one case that proves persistence end to end, through real browser storage rather
-// than an in-memory stand-in.
+/**
+ * The one case that proves persistence end to end, through real browser storage rather
+ * than an in-memory stand-in.
+ *
+ * It reads a block the student added rather than the dial's own percentage, which is what
+ * it used to compare across the reload. That comparison could never have failed: the
+ * capacity figure is `overallReserve(week.start)`, and a week that failed to persist falls
+ * back to the same seeded fortnight with the same starting reserves -- so the number was
+ * identical whether or not anything was stored. A block that exists only because it was
+ * typed in cannot come back from the seed.
+ */
 test('keeps the week after a reload', async ({ page }) => {
+  const title = 'persistedreloadmarker'
+
   await openApp(page)
 
-  await page.getByTestId('object-ceiling').click()
-  await page.getByTestId('rebalance').click()
-  await expect(page.getByTestId('rebalance-report')).toBeVisible()
-
-  await page.getByTestId('zoom-back').click()
-  await page.getByTestId('object-light').click()
-  const after = await page.getByTestId('capacity-value').textContent()
+  await page.getByTestId('open-add').click()
+  await page.getByTestId('add-type').click()
+  await page.getByLabel(/on your mind/i).fill(title)
+  await page.getByRole('button', { name: /read this/i }).click()
+  await expect(page.getByTestId(/^chip-/).first()).toBeVisible()
+  await page.getByRole('button', { name: /add these/i }).click()
+  await expect(page.getByTestId('room-scene')).toBeVisible()
 
   // Re-entering through the preview, because choosing to look around is not remembered
   // across a reload -- a signed-out visitor meets the sign-in screen again. That is
@@ -60,7 +73,11 @@ test('keeps the week after a reload', async ({ page }) => {
   // week itself survives in browser storage.
   await page.reload()
   await page.getByRole('button', { name: /look around/i }).click()
-  await page.getByTestId('object-light').click()
 
-  await expect(page.getByTestId('capacity-value')).toHaveText(after ?? '')
+  await page.getByTestId('open-week').click()
+  // Day 2 is `addItems`' DEFAULT_DAY -- where a fragment with no date and no weekday
+  // lands. Same reasoning as `week.spec.ts`'s own long-title fixture.
+  await page.getByTestId('day-2').click()
+  await expect(page.getByTestId('day-grid')).toBeVisible()
+  await expect(page.getByText(title)).toBeVisible()
 })

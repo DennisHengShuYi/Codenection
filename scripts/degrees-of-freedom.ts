@@ -19,6 +19,7 @@
 import { DEFAULT_PARAMS, floorReserve, overallReserve, project } from '../src/engine'
 import { umCrunchWeek, umSemesterWeek } from '../src/fixtures/umWeek'
 import {
+  ALL_PRESENT,
   describeRebalance,
   makeRng,
   neighbours,
@@ -54,7 +55,7 @@ function measure(name: string, schedule: Schedule): Measured {
   const byKind = new Map<string, number>()
   for (const move of options) byKind.set(move.kind, (byKind.get(move.kind) ?? 0) + 1)
 
-  const before = project(schedule.start, toDayInputs(schedule), params)
+  const before = project(schedule.start, toDayInputs(schedule, ALL_PRESENT), params)
   const result = rebalance(schedule, params, makeRng(SEED))
   const fixes = smallestFixes(schedule, params)
 
@@ -77,7 +78,7 @@ function measure(name: string, schedule: Schedule): Measured {
   say(`| Starting floor reserve | ${floorReserve(schedule.start).toFixed(1)} |`)
   say(`| Worst floor before | ${before.worstFloor.toFixed(1)} |`)
   say(`| Worst floor after | ${result.worstAfter.toFixed(1)} |`)
-  const after = project(result.schedule.start, toDayInputs(result.schedule), params)
+  const after = project(result.schedule.start, toDayInputs(result.schedule, ALL_PRESENT), params)
   say(`| Deficit days before | ${before.deficitDays} |`)
   say(`| Deficit days after | ${after.deficitDays} |`)
   say(`| Deficit area before | ${before.deficitArea.toFixed(0)} |`)

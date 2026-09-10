@@ -1,5 +1,6 @@
 import { overallReserve, project, type EngineParams } from '../engine'
 import { toDayInputs, type Schedule } from '../optimizer'
+import { checkedInDays, type BlockRecord } from './blockLog'
 import { dateFor, todayIndex } from './calendar'
 
 /**
@@ -25,20 +26,29 @@ export interface EnergyPrediction {
  * intervenes** — which is exactly what the 21-day projection cannot do, and why that one is a
  * decision aid rather than a validated claim (§8.2).
  */
-export const PREDICTION_HORIZON_DAYS = 2
+// Not exported: nothing outside this module has ever read it, and `predictionsAfter` is
+// where the horizon is applied.
+const PREDICTION_HORIZON_DAYS = 2
 
 /**
  * Reads the prediction off the same projection the rest of the app runs on.
  *
  * Deliberately not a separate predictor. A second model would be scoring something the
  * student never saw, and the published number has to be about the app they actually used.
+ *
+ * `checkedIn` is REQUIRED, for the same reason `toDayInputs`' is (Ruling 39): an
+ * optional parameter that silently defaults to "everybody answered" is exactly how §6.5's
+ * missing-data pessimism sat dead once already. A caller with no check-in log to thread
+ * passes `ALL_PRESENT` explicitly, so the choice is visible at the call site rather than
+ * hidden in this signature.
  */
 export function predictEnergy(
   schedule: Schedule,
   params: EngineParams,
   forDay: number,
+  checkedIn: readonly boolean[],
 ): number | null {
-  const projection = project(schedule.start, toDayInputs(schedule), params)
+  const projection = project(schedule.start, toDayInputs(schedule, checkedIn), params)
   const day = projection.central[forDay]
 
   return day ? Math.round(overallReserve(day) * 10) / 10 : null
@@ -51,12 +61,21 @@ export function predictEnergy(
  * no real dates, a week whose fortnight has passed has no "today", and a day beyond the
  * horizon has no projection. None of those is an error — they are simply days on which no
  * claim can be made, and inventing one would be worse than making none.
+ *
+ * `blockLog` defaults to empty, matching `roomModel`'s and `lapsed`'s own default: an empty
+ * log is a real state (nothing answered yet), not a placeholder. §8.1's claim is only
+ * honest when it is scored against what the student actually saw, which since §6.5 already
+ * means a silent past read as a bad sign -- so this reads the same missing-data pessimism
+ * the room and the dial do, via the same `checkedInDays`. A silent student gets a *more
+ * pessimistic* prediction, which is *harder* to hit, so this can only make the published
+ * accuracy figure more honest, never flatter it.
  */
 export function predictionsAfter(
   predictions: readonly EnergyPrediction[],
   schedule: Schedule,
   params: EngineParams,
   now: Date,
+  blockLog: readonly BlockRecord[] = [],
 ): EnergyPrediction[] {
   const today = todayIndex(schedule, now)
   if (today === null) return [...predictions]
@@ -65,7 +84,8 @@ export function predictionsAfter(
   const forDate = dateFor(schedule, forDay)
   if (forDate === null) return [...predictions]
 
-  const predicted = predictEnergy(schedule, params, forDay)
+  const checkedIn = checkedInDays(blockLog, today, schedule.horizonDays)
+  const predicted = predictEnergy(schedule, params, forDay, checkedIn)
   if (predicted === null) return [...predictions]
 
   return recordPrediction(predictions, forDate, predicted)

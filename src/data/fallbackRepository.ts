@@ -1,3 +1,4 @@
+import type { BlockRecord } from '../domain/blockLog'
 import type { Schedule } from '../optimizer'
 import { DEFAULT_SETTINGS, type Repository, type StoredSettings } from './types'
 
@@ -67,6 +68,20 @@ export function createFallbackRepository(
       withFallback(
         () => primary.saveSettings(settings),
         () => backup.saveSettings(settings),
+        undefined,
+      ),
+
+    loadBlockLog: () =>
+      withFallback<readonly BlockRecord[]>(
+        () => primary.loadBlockLog(),
+        () => backup.loadBlockLog(),
+        [],
+      ),
+
+    recordBlockAnswer: (record) =>
+      withFallback(
+        () => primary.recordBlockAnswer(record),
+        () => backup.recordBlockAnswer(record),
         undefined,
       ),
 

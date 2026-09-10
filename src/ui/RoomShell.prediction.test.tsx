@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
@@ -22,15 +22,18 @@ const renderHome = async (schedule = week()) => {
   await repository.clear()
   await repository.saveWeek(schedule)
 
-  render(<RoomShell repository={repository} />)
+  render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
   await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
 
   return repository
 }
 
 /**
- * §8.1 end to end, and the reason this file exists: the scoring machinery was built, tested
- * and never called. A module with passing tests that nothing invokes is not a feature.
+ * §8.1 end to end, and the reason this file exists: the scoring machinery was built,
+ * tested and never called. A module with passing tests that nothing invokes is not a
+ * feature. §3 moves the energy question off the `character` object -- there is no tap
+ * target left to carry it -- and onto the today card, which is on screen whenever there is
+ * something to ask.
  */
 describe('RoomShell scoring its own predictions', () => {
   /**
@@ -53,12 +56,14 @@ describe('RoomShell scoring its own predictions', () => {
     })
   })
 
-  it('leaves the prediction unscored until somebody says how the day went', async () => {
+  // §8b: `umProfile` seeds predictions that are already resolved, so the accuracy line has
+  // a real number to publish from the first render.
+  it('carries the seeded prediction already scored, rather than a placeholder', async () => {
     const repository = await renderHome()
 
     await waitFor(async () => {
       const saved = (await repository.loadSettings()).calibration?.predictions ?? []
-      expect(saved[0]?.reported).toBeNull()
+      expect(saved[0]?.reported).toBe(50)
     })
   })
 
@@ -66,7 +71,8 @@ describe('RoomShell scoring its own predictions', () => {
   it('does not ask about energy when there is nothing to score', async () => {
     await renderHome()
 
-    expect(screen.getByTestId('object-character')).toHaveAttribute('data-attention', 'false')
+    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+    expect(screen.queryByTestId('energy-70')).toBeNull()
   })
 
   /**
@@ -74,7 +80,7 @@ describe('RoomShell scoring its own predictions', () => {
    * claim scored. Before this existed, the accuracy note read "not enough data" forever no
    * matter how long the app was used.
    */
-  it('scores a prediction once the student reports on that day', async () => {
+  it('scores a prediction once the student reports on the today card', async () => {
     counter += 1
     const repository = createLocalRepository(`prediction-loop-${counter}`)
     await repository.clear()
@@ -91,14 +97,10 @@ describe('RoomShell scoring its own predictions', () => {
       } as NonNullable<typeof settings.calibration>,
     })
 
-    render(<RoomShell repository={repository} />)
-    // The check-in lives on the character: it is a question about you.
-    await waitFor(() =>
-      expect(screen.getByTestId('object-character')).toHaveAttribute('data-attention', 'true'),
-    )
+    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+    const card = await screen.findByRole('region', { name: /today's check-in/i })
 
-    await userEvent.click(screen.getByTestId('object-character'))
-    await userEvent.click(screen.getByTestId('energy-70'))
+    await userEvent.click(within(card).getByTestId('energy-70'))
 
     await waitFor(async () => {
       const saved = (await repository.loadSettings()).calibration?.predictions ?? []
@@ -123,11 +125,9 @@ describe('RoomShell scoring its own predictions', () => {
       } as NonNullable<typeof settings.calibration>,
     })
 
-    render(<RoomShell repository={repository} />)
+    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
 
-    await waitFor(() => expect(screen.getByTestId('object-window')).toBeVisible())
-    await userEvent.click(screen.getByTestId('object-window'))
-
+    await waitFor(() => expect(screen.getByTestId('accuracy-measured')).toBeVisible())
     expect(screen.getByTestId('accuracy-measured').textContent).toMatch(/off by about 10/i)
   })
 })

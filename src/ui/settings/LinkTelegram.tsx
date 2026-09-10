@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { hasTelegramLink, requestLinkCode, unlinkTelegram } from '../../data'
+import { Button, buttonClassName } from '../kit/Button'
 
 type Offer = { code: string; url: string }
 
@@ -66,54 +67,48 @@ export function LinkTelegram() {
   if (linked === null) return null
 
   return (
-    <section className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 text-sm">
+    <section className="flex flex-col gap-2 rounded-lg border border-line p-3 text-sm">
       <h2 className="font-medium">Telegram</h2>
 
       {linked ? (
         <>
-          <p className="opacity-70">
+          <p className="text-ink-soft">
             Linked. Send the bot a message and it will turn it into a week.
           </p>
-          <button
-            type="button"
-            onClick={() => void onUnlink()}
-            disabled={busy}
-            className="self-start underline disabled:opacity-60"
-          >
+          <Button variant="quiet" size="sm" onClick={() => void onUnlink()} disabled={busy} className="self-start">
             Unlink Telegram
-          </button>
+          </Button>
         </>
       ) : (
         <>
-          <p className="opacity-70">
+          <p className="text-ink-soft">
             Add to your week by messaging a bot, without opening the app.
           </p>
 
           {offer === null ? (
-            <button
-              type="button"
-              onClick={() => void onLink()}
-              disabled={busy}
-              className="self-start rounded-lg bg-slate-900 px-3 py-2 text-white disabled:opacity-60"
-            >
+            <Button size="sm" onClick={() => void onLink()} disabled={busy} className="self-start">
               Link Telegram
-            </button>
+            </Button>
           ) : (
             <>
               {/* The link is the path anybody on a phone should take. The code is shown as
-                  well for the case where the app and Telegram are on different devices. */}
+                  well for the case where the app and Telegram are on different devices.
+                  This stays an <a>, not a `Button`, because a real <button> would break
+                  middle-click and open-in-new-tab for a navigation link -- but it borrows
+                  `Button`'s own class list rather than retyping the primary button's
+                  classes a nineteenth time. */}
               <a
                 href={offer.url}
                 target="_blank"
                 rel="noreferrer"
-                className="self-start rounded-lg bg-slate-900 px-3 py-2 text-white"
+                className={buttonClassName('primary', 'sm', 'self-start')}
               >
                 Open Telegram
               </a>
-              <p className="opacity-70">
+              <p className="text-ink-soft">
                 Or send the bot this code: <strong>{offer.code}</strong>
               </p>
-              <p className="opacity-70">It stops working after ten minutes.</p>
+              <p className="text-ink-soft">It stops working after ten minutes.</p>
             </>
           )}
         </>
@@ -122,7 +117,7 @@ export function LinkTelegram() {
       {/* role=alert so assistive technology is told what went wrong, matching every other
           failure in the app. */}
       {error !== null && (
-        <p role="alert" className="text-rose-700">
+        <p role="alert" className="text-attention">
           {error}
         </p>
       )}

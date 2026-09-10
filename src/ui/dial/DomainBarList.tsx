@@ -12,9 +12,9 @@ const TREND_WORDS: Record<Trend, string> = {
  *  where it matters, a written warning -- so severity survives greyscale, colour
  *  blindness and a screen reader alike (§1.5). */
 const FILL: Record<DomainBar['status'], string> = {
-  healthy: 'bg-emerald-600',
-  stretched: 'bg-amber-500',
-  critical: 'bg-rose-600',
+  healthy: 'bg-ink-soft',
+  stretched: 'bg-attention',
+  critical: 'bg-critical',
 }
 
 export function DomainBarList({ bars }: { bars: readonly DomainBar[] }) {
@@ -44,7 +44,7 @@ export function DomainBarList({ bars }: { bars: readonly DomainBar[] }) {
             aria-valuenow={Math.round(bar.value)}
             aria-valuemin={0}
             aria-valuemax={bar.ceiling}
-            className="h-2 w-full overflow-hidden rounded-full bg-slate-200"
+            className="h-2 w-full overflow-hidden rounded-full bg-line"
           >
             <div
               className={`h-full ${FILL[bar.status]}`}

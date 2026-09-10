@@ -15,6 +15,7 @@ const parsed = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   id: 'a',
   title: 'Essay',
   type: 'mental',
+  kind: 'studyBlock',
   hours: 3,
   deadlineDay: null,
   hard: false,
@@ -72,15 +73,25 @@ describe('addItems', () => {
   })
 
   /**
-   * A parse cannot tell a restorative coffee from an obligation, so the cautious error is
-   * chosen. Crediting recovery a student never got would report them as fine while they
-   * sink -- the same failure the engine already refuses when it will not let sleep cure
-   * loneliness.
+   * The parse itself carries the kind now -- addItems no longer invents one from the type.
+   * §6.6's cross-effect table keys on kind, and a fixed four-row table by type made
+   * `hardExercise`, `socialRestorative`, `rest` and `sleep` unreachable from any text.
    */
-  it('treats a parsed social item as draining rather than restorative', () => {
-    const item = addItems(empty(), [parsed({ type: 'social', title: 'Group meeting' })]).items[0]
+  it('carries the parsed kind through rather than deriving one from the type', () => {
+    const item = addItems(empty(), [parsed({ type: 'physical', kind: 'hardExercise' })]).items[0]
 
-    expect(item?.kind).toBe('socialDraining')
+    expect(item?.kind).toBe('hardExercise')
+  })
+
+  /**
+   * Kind `rest` is not the `protectedRest` flag. §5.1's guarantee is that nothing from a
+   * parse may be immovable -- a movable rest block is a different thing and is safe.
+   */
+  it('still refuses to let a parse pin anything, whatever kind it claims', () => {
+    const item = addItems(empty(), [parsed({ type: 'mental', kind: 'rest' })]).items[0]
+
+    expect(item?.fixed).toBe(false)
+    expect(item?.protectedRest).toBe(false)
   })
 
   it('gives every added item a distinct id', () => {

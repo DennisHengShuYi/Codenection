@@ -15,7 +15,9 @@ afterEach(() => vi.unstubAllGlobals())
 describe('readPhoto', () => {
   it('returns what the model read', async () => {
     respondWith(200, {
-      items: [{ title: 'WIA3001 report', type: 'mental', hours: 8, deadlineDay: 9, hard: true }],
+      items: [
+        { title: 'WIA3001 report', type: 'mental', kind: 'studyBlock', hours: 8, deadlineDay: 9, hard: true },
+      ],
     })
 
     const outcome = await readPhoto(photo())

@@ -1,31 +1,87 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_PARAMS, project } from '../engine'
-import { score, toDayInputs } from './objective'
+import { DEFAULT_PARAMS, HORIZON_DAYS, project } from '../engine'
+import { ALL_PRESENT, score, toDayInputs } from './objective'
 import { makeSchedule, restItem, socialBaseline, studyItem } from './testSupport'
 
 describe('toDayInputs', () => {
   it('produces one day per horizon day, even where nothing is scheduled', () => {
-    expect(toDayInputs(makeSchedule([studyItem('a', 3, 2)]))).toHaveLength(21)
+    expect(toDayInputs(makeSchedule([studyItem('a', 3, 2)]), ALL_PRESENT)).toHaveLength(21)
   })
 
   it('places each item on its own day', () => {
-    const days = toDayInputs(makeSchedule([studyItem('a', 3, 2)]))
+    const days = toDayInputs(makeSchedule([studyItem('a', 3, 2)]), ALL_PRESENT)
 
     expect(days[3]!.activities).toHaveLength(1)
     expect(days[2]!.activities).toHaveLength(0)
   })
 
   it('counts down to the nearest pending deadline', () => {
-    const days = toDayInputs(makeSchedule([{ ...studyItem('a', 1, 2), deadlineDay: 5 }]))
+    const days = toDayInputs(makeSchedule([{ ...studyItem('a', 1, 2), deadlineDay: 5 }]), ALL_PRESENT)
 
     expect(days[0]!.daysToNearestDeadline).toBe(5)
     expect(days[5]!.daysToNearestDeadline).toBe(0)
   })
 
   it('stops counting a deadline once it has passed', () => {
-    const days = toDayInputs(makeSchedule([{ ...studyItem('a', 1, 2), deadlineDay: 5 }]))
+    const days = toDayInputs(makeSchedule([{ ...studyItem('a', 1, 2), deadlineDay: 5 }]), ALL_PRESENT)
 
     expect(days[6]!.daysToNearestDeadline).toBeNull()
+  })
+
+  /**
+   * §8b: the optimizer's search calls this thousands of times per solve and has no notion
+   * of missed check-ins, so `ALL_PRESENT` -- an explicit, named argument rather than an
+   * omitted one -- has to read as exactly what every internal call already assumed:
+   * everybody present. Only the app's own projection passes real data.
+   */
+  it('reads every day as checked in when ALL_PRESENT is passed', () => {
+    const days = toDayInputs(makeSchedule([studyItem('a', 3, 2)]), ALL_PRESENT)
+
+    expect(days.every((day) => day.checkedIn)).toBe(true)
+  })
+
+  it('carries a provided checkedIn override through, one entry per day', () => {
+    const checkedIn = Array.from({ length: HORIZON_DAYS }, (_, day) => day !== 2)
+    const days = toDayInputs(makeSchedule([studyItem('a', 3, 2)]), checkedIn)
+
+    expect(days[2]!.checkedIn).toBe(false)
+    expect(days[0]!.checkedIn).toBe(true)
+  })
+
+  it('passes real check-in data through rather than asserting everyone checked in', () => {
+    // The third dead mechanism: this was hardcoded `true`, so §6.5's missing-data pessimism
+    // could never fire in the whole app.
+    const days = toDayInputs(makeSchedule([studyItem('a', 3, 2)]), [false, true, true])
+
+    expect(days[0]?.checkedIn).toBe(false)
+  })
+
+  /**
+   * The trap the brief calls out by name: wiring §6.5's missing-data pessimism up means
+   * nothing unless it is verified to actually move the number a student is shown.
+   */
+  it('projects more pessimistically when a past day went unanswered than when it did not', () => {
+    // Heavy enough that mental reserve does not simply saturate back at the ceiling every
+    // night on recovery alone -- otherwise a single day's bias difference has nothing to
+    // bite into.
+    const schedule = makeSchedule([
+      ...socialBaseline(),
+      ...Array.from({ length: 14 }, (_, day) => studyItem(`s${day}`, day, 9)),
+    ])
+    const allAnswered = Array.from({ length: HORIZON_DAYS }, () => true)
+    // Silent for every day up to and including the one being read: the penalty is
+    // computed from that day's own missed run, so a check-in on the day itself would
+    // reset it to zero and mask the very effect this proves.
+    const silentThroughTheDrain = allAnswered.map((value, day) => (day <= 13 ? false : value))
+
+    const answered = project(schedule.start, toDayInputs(schedule, allAnswered), DEFAULT_PARAMS)
+    const silent = project(
+      schedule.start,
+      toDayInputs(schedule, silentThroughTheDrain),
+      DEFAULT_PARAMS,
+    )
+
+    expect(silent.central[13]!.mental).toBeLessThan(answered.central[13]!.mental)
   })
 })
 
@@ -112,8 +168,8 @@ describe('score', () => {
       5,
     )
 
-    const nineProjection = project(nine.start, toDayInputs(nine), DEFAULT_PARAMS)
-    const tenProjection = project(ten.start, toDayInputs(ten), DEFAULT_PARAMS)
+    const nineProjection = project(nine.start, toDayInputs(nine, ALL_PRESENT), DEFAULT_PARAMS)
+    const tenProjection = project(ten.start, toDayInputs(ten, ALL_PRESENT), DEFAULT_PARAMS)
 
     expect(nineProjection.worstFloor).toBe(tenProjection.worstFloor)
     expect(nineProjection.deficitDays).toBe(tenProjection.deficitDays)

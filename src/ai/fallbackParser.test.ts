@@ -104,4 +104,40 @@ describe('parseWithRules', () => {
 
     expect(parseWithRules(huge).length).toBeLessThanOrEqual(25)
   })
+
+  it('tells hard training from a walk, using signal words it already has', () => {
+    expect(parseWithRules('gym')[0]?.kind).toBe('hardExercise')
+    expect(parseWithRules('walk')[0]?.kind).toBe('lightExercise')
+  })
+
+  it('lets a student type rest and get rest, rather than a study block', () => {
+    const [nap] = parseWithRules('nap for an hour')
+
+    expect(nap?.kind).toBe('rest')
+  })
+
+  it('keeps social pessimistic, because a parse cannot tell a friend from a group project', () => {
+    expect(parseWithRules('coffee with sarah')[0]?.kind).toBe('socialDraining')
+  })
+
+  /**
+   * §1.4/doctrine in `addItems`: crediting recovery that never happened reports a student as
+   * fine while they sink. `REST_WORDS` matched with bare `includes`, so "restaurant" and
+   * "breakfast" silently became confident rest -- a social obligation recorded as recovery,
+   * unflagged for correction. Word-boundary matching closes it.
+   */
+  it('does not read "restaurant" as rest just because it contains "rest"', () => {
+    const item = parseWithRules('dinner at the restaurant')[0]
+
+    expect(item?.kind).not.toBe('rest')
+  })
+
+  it('does not read "breakfast" as rest just because it contains "break"', () => {
+    const item = parseWithRules('breakfast with mum')[0]
+
+    expect(item?.kind).not.toBe('rest')
+    // Nothing in "breakfast with mum" is a real signal word, so it must be flagged rather
+    // than confidently misread.
+    expect(item?.confident).toBe(false)
+  })
 })

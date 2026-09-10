@@ -7,14 +7,11 @@ import type { Schedule } from '../optimizer'
 import { RoomShell } from './room/RoomShell'
 
 /**
- * The planner wired into the screen, rather than the components in isolation.
+ * The planner wired into the screen, rather than the component in isolation.
  *
- * What this covers that the component tests cannot: that accepting chips actually reaches
- * the stored week. Everything downstream -- the room, the dial, the solver -- draws from
- * that, so an accept that never persists would look like it worked and lose the student's
- * week the moment they reload.
- *
- * The endpoint is stubbed unreachable, so this exercises the rule-based path.
+ * What this covers that `PlannerScreen.test.tsx` cannot: that accepting chips typed into
+ * the `+` sheet's typing way actually reaches the stored week. The endpoint is stubbed
+ * unreachable, so this exercises the rule-based path.
  */
 beforeEach(() => vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no endpoint'))))
 afterEach(() => vi.unstubAllGlobals())
@@ -28,48 +25,34 @@ const emptyWeek = (): Schedule => ({
 
 let counter = 0
 
-const renderHome = async () => {
+const openPlanner = async () => {
   counter += 1
   const repository = createLocalRepository(`planner-screen-${counter}`)
   await repository.clear()
   await repository.saveWeek(emptyWeek())
 
-  render(<RoomShell repository={repository} />)
-  // The desk is the way in now: §3.1's planner is what is on it.
-  await waitFor(() => expect(screen.getByTestId('object-desk')).toBeVisible())
+  render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+  await waitFor(() => expect(screen.getByTestId('open-add')).toBeVisible())
+  await userEvent.click(screen.getByTestId('open-add'))
+  await userEvent.click(screen.getByTestId('add-type'))
 
   return repository
 }
 
 describe('RoomShell with the planner', () => {
-  it('offers a way to say what you are carrying', async () => {
-    await renderHome()
-
-    // Asserted through the surface a student actually meets: a named control in the room,
-    // and the same one in the sidebar.
-    expect(screen.getByTestId('object-desk')).toHaveAccessibleName(/plan my week/i)
-    expect(screen.getByTestId('button-desk')).toBeVisible()
-  })
-
   it('opens the planner and can come back without changing anything', async () => {
-    const repository = await renderHome()
+    const repository = await openPlanner()
 
-    await userEvent.click(screen.getByTestId('object-desk'))
-    await userEvent.click(screen.getByTestId('desk-type'))
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
-    await userEvent.click(screen.getByTestId('zoom-back'))
+    await waitFor(() => expect(screen.getByTestId('add-type')).toBeVisible())
 
-    await waitFor(() => expect(screen.queryByTestId('zoom-desk')).toBeNull())
-    expect(screen.getByTestId('room-scene')).toBeVisible()
     expect((await repository.loadWeek())?.items).toHaveLength(0)
   })
 
   // The point of the whole unit: accepted chips become the student's real, stored week.
   it('accepted items reach the saved week', async () => {
-    const repository = await renderHome()
+    const repository = await openPlanner()
 
-    await userEvent.click(screen.getByTestId('object-desk'))
-    await userEvent.click(screen.getByTestId('desk-type'))
     await userEvent.type(screen.getByLabelText(/on your mind/i), 'gym, laundry')
     await userEvent.click(screen.getByRole('button', { name: /read this/i }))
     await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(2))
@@ -77,6 +60,7 @@ describe('RoomShell with the planner', () => {
     await userEvent.click(screen.getByRole('button', { name: /add these/i }))
 
     await waitFor(async () => expect((await repository.loadWeek())?.items).toHaveLength(2))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(screen.getByTestId('room-scene')).toBeVisible()
   })
 })

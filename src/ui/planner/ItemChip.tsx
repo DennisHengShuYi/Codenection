@@ -3,29 +3,7 @@ import { BLOCK_KINDS, LOAD_TYPES, type ActivityKind, type LoadType } from '../..
 import { Button } from '../kit/Button'
 import { CARD_TONES } from '../kit/Card'
 import { Field } from '../kit/Field'
-
-/** The engine's vocabulary in a student's words. "Mental load" is a modelling term; "study
- *  and thinking" is what someone recognises as their own week. */
-const LABELS: Record<LoadType, string> = {
-  mental: 'Study & thinking',
-  physical: 'Body & movement',
-  social: 'People',
-  errands: 'Life admin',
-}
-
-/** §6.6's kinds in a student's words -- what the activity leaves behind, not the modelling
- *  term for it. A gym session and a walk are both "Body & movement" above, but this is
- *  where the student says which one it actually was. */
-const KIND_LABELS: Record<ActivityKind, string> = {
-  hardExercise: 'Hard exercise',
-  lightExercise: 'Light exercise',
-  studyBlock: 'Study',
-  socialDraining: 'Seeing people (draining)',
-  socialRestorative: 'Seeing people (restorative)',
-  errands: 'Life admin',
-  rest: 'Rest',
-  sleep: 'Sleep',
-}
+import { BLOCK_KIND_LABELS, LOAD_TYPE_LABELS } from '../kit/labels'
 
 /**
  * Every kind a *block* may carry, from the engine's own list rather than a local filter.
@@ -87,7 +65,7 @@ export function ItemChip({
           >
             {LOAD_TYPES.map((type) => (
               <option key={type} value={type}>
-                {LABELS[type]}
+                {LOAD_TYPE_LABELS[type]}
               </option>
             ))}
           </select>
@@ -101,7 +79,7 @@ export function ItemChip({
           >
             {SELECTABLE_KINDS.map((kind) => (
               <option key={kind} value={kind}>
-                {KIND_LABELS[kind]}
+                {BLOCK_KIND_LABELS[kind]}
               </option>
             ))}
           </select>

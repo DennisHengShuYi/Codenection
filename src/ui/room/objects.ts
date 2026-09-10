@@ -16,7 +16,6 @@ export type Opens =
   | 'confirmBlock'
   | 'microStart'
   | 'rest'
-  | 'outings'
   | 'energyCheckIn'
   | 'accuracy'
   | 'rebalance'
@@ -81,7 +80,10 @@ export const OBJECT_ORDER = [
 
 const META: Record<Exclude<ObjectId, ClutterId> | typeof CLUTTER_PLACEHOLDER, Omit<ObjectMeta, 'id'>> = {
   desk: { label: 'Plan my week', opens: 'input' },
-  door: { label: 'Get outside', opens: 'outings' },
+  // §7 deleted the door's own outings menu -- the "getting outside" advice now lives in the
+  // single recovery card, not behind a tap on the furniture. The door goes back to being a
+  // pure readout, like the plant and the light: it reports lit or quiet and opens nothing.
+  door: { label: 'Get outside', opens: null },
   [CLUTTER_PLACEHOLDER]: { label: 'Things to clear', opens: 'microStart' },
   papers: { label: 'What I did today', opens: 'confirmBlock' },
   bed: { label: 'How Im sleeping', opens: 'rest' },

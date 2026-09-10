@@ -7,7 +7,6 @@
  */
 export type {
   Commitment,
-  RecoveryAttempt,
   Move,
   MoveKind,
   RebalanceResult,

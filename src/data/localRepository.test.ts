@@ -1,6 +1,8 @@
 import { set } from 'idb-keyval'
 import { describe, expect, it, vi } from 'vitest'
 import type { BlockRecord } from '../domain/blockLog'
+import { HORIZON_DAYS } from '../engine'
+import type { Schedule } from '../optimizer'
 import { createLocalRepository } from './localRepository'
 import { describeRepositoryContract } from './repositoryContract'
 
@@ -23,6 +25,33 @@ const record = (over: Partial<BlockRecord> = {}): BlockRecord => ({
   answer: 'right',
   answeredAt: 1_757_000_000_000,
   ...over,
+})
+
+/**
+ * §7 deleted `Schedule.recoveryLog` from the type, but weeks saved before this change carry
+ * one in storage and must still load -- the field is ignored, not rejected. Nothing in this
+ * repository validates the shape it stores, so the risk is only ever in a consumer choking
+ * on the unexpected key; this proves the round trip stays silent about it.
+ */
+describe('a week persisted with the retired recoveryLog field', () => {
+  it('still loads, with the legacy field simply along for the ride', async () => {
+    const repo = createLocalRepository(`local-legacy-recovery-log-${Date.now()}`)
+    const legacyWeek = {
+      items: [],
+      start: { mental: 70, physical: 70, social: 70, errands: 70 },
+      horizonDays: HORIZON_DAYS,
+      sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+      // A week saved by the app before this task shipped.
+      recoveryLog: [{ kind: 'rest', helped: false }],
+    }
+
+    await expect(repo.saveWeek(legacyWeek as unknown as Schedule)).resolves.toBeUndefined()
+
+    const loaded = await repo.loadWeek()
+    expect(loaded).not.toBeNull()
+    expect(loaded?.items).toEqual([])
+    expect(loaded?.start.mental).toBe(70)
+  })
 })
 
 describe('localRepository write queue', () => {

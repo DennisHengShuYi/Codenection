@@ -1,5 +1,5 @@
 import { LOAD_TYPES, type ActivityKind, type LoadType, type Reserves } from '../engine'
-import type { RecoveryAttempt, Schedule } from '../optimizer'
+import type { Schedule } from '../optimizer'
 
 /** Below the comfortable band, but above §1.5's low-energy threshold of 20 -- so advice
  *  arrives before the reduced view takes over, rather than after. */
@@ -124,11 +124,12 @@ const sortedByReserve = (reserves: Reserves): readonly LoadType[] =>
  * everywhere else in the model too. A student whose today is full gets no suggestion even if
  * tomorrow is open; widening that would mean inventing a notion of "soon" the model does not
  * have.
+ *
+ * Takes no memory of what was tried before. §7 replaced the permanent failed-recovery log
+ * with a same-day dismissal the room screen holds itself: "not today" is a way out, not a
+ * verdict on the advice, and this function has nothing to say about what happens tomorrow.
  */
-export function prescribe(
-  schedule: Schedule,
-  log: readonly RecoveryAttempt[] = [],
-): Prescription | null {
+export function prescribe(schedule: Schedule): Prescription | null {
   // Sorted ascending so the emptiest reserve with no advice of its own (errands) never
   // silently suppresses advice for whichever reserve is next lowest.
   const type = sortedByReserve(schedule.start).find(
@@ -138,9 +139,6 @@ export function prescribe(
 
   const advice = ADVICE[type]
   if (!advice) return null
-
-  // §5.2's last line: what did not work stops being suggested.
-  if (log.some((attempt) => attempt.kind === advice.kind && !attempt.helped)) return null
 
   const slot = freeSlotOn(schedule, 0)
   if (!slot) return null

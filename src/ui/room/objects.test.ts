@@ -9,17 +9,16 @@ describe('the room objects', () => {
   })
 
   /**
-   * Everything else opens something, so two objects that only report a number could read as
-   * broken. They are deliberate: the plant and the light carry state and nothing more, and
-   * tapping them states the reading rather than doing nothing at all -- silence is what
-   * teaches people to stop tapping.
+   * Everything else opens something, so an object that only reports a number could read as
+   * broken. The plant and the door are deliberate: they carry state and nothing more, and
+   * tapping the plant states the reading rather than doing nothing at all -- silence is what
+   * teaches people to stop tapping. The door lost its own outings menu in §7 and has nothing
+   * left behind it.
    */
-  it('opens something for every object except the two that only report', () => {
+  it('opens something for every object except the ones that only report', () => {
     for (const id of OBJECT_ORDER) {
       const { opens } = metaFor(id)
-      // Only the plant reports and nothing more. The light carries §1.2's dial, because it
-      // already means the reserve.
-      if (id === 'plant') expect(opens, id).toBeNull()
+      if (id === 'plant' || id === 'door') expect(opens, id).toBeNull()
       else expect(opens, id).not.toBeNull()
     }
   })

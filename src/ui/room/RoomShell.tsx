@@ -8,7 +8,6 @@ import { paramsFor } from '../../domain/engineParams'
 import { firstAction, isStuck } from '../../domain/microStart'
 import { predictionsAfter, resolvePrediction } from '../../domain/predictions'
 import { prescribe } from '../../domain/prescribe'
-import { recordAttempt, attemptsIn } from '../../domain/recoveryLog'
 import { completeItem, deferItem } from '../../domain/scheduleEdits'
 import { scheduleRecovery } from '../../domain/scheduleRecovery'
 import { overallReserve, project } from '../../engine'
@@ -85,9 +84,11 @@ export function RoomShell({
   const [fallback, setFallback] = useState<Fix | null>(null)
   const [working, setWorking] = useState(false)
 
-  // Session-scoped dismissals for the three cards with no domain-level "not today" of their
-  // own. Recovery needs none of these: dismissing it already writes through
-  // `recordAttempt`, which is what makes it not offer the same thing again across a reload.
+  // Session-scoped dismissals for the four live cards, none of which has a domain-level
+  // "not today" of its own any more. §7 retired the recovery card's permanent
+  // failed-recovery log: "not today" is now exactly this kind of same-day dismissal rather
+  // than a report that suppressed the advice forever.
+  const [recoveryDismissed, setRecoveryDismissed] = useState(false)
   const [lapsedDismissed, setLapsedDismissed] = useState(false)
   const [stuckDismissedId, setStuckDismissedId] = useState<string | null>(null)
   const [todayDismissed, setTodayDismissed] = useState(false)
@@ -195,7 +196,7 @@ export function RoomShell({
 
   // §3's card precedence: recovery, then a lapsed commitment, then a stuck task, then the
   // day's own question -- capped to one below the low-energy threshold and two otherwise.
-  const recoveryPrescription = prescribe(week, attemptsIn(week))
+  const recoveryPrescription = prescribe(week)
   const lapsedCommitments = lapsed(week, today, params)
   const stuckItem = week.items.find(
     (item) => item.id !== stuckDismissedId && isStuck(item, 0, Math.max(0, today - item.dayIndex)),
@@ -208,7 +209,7 @@ export function RoomShell({
   const showTodayCard = !todayDismissed && (askEnergy || askSleep || blockForToday !== null)
 
   const cards = visibleCards({
-    recovery: recoveryPrescription !== null,
+    recovery: !recoveryDismissed && recoveryPrescription !== null,
     lapsed: !lapsedDismissed && lapsedCommitments.length > 0,
     stuck: stuckItem !== undefined,
     today: showTodayCard,
@@ -279,7 +280,7 @@ export function RoomShell({
             cards={cards}
             recoveryPrescription={recoveryPrescription}
             onRecoveryAccept={(taken) => setSchedule(scheduleRecovery(week, taken))}
-            onRecoveryDismiss={(taken) => setSchedule(recordAttempt(week, taken.kind, false))}
+            onRecoveryDismiss={() => setRecoveryDismissed(true)}
             lapsedCommitments={lapsedCommitments}
             onLapsedDismiss={() => setLapsedDismissed(true)}
             stuckMicroStart={stuckItem === undefined ? null : firstAction(stuckItem)}

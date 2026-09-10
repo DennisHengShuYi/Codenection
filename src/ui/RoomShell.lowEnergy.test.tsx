@@ -89,7 +89,7 @@ describe('RoomShell in low energy', () => {
 
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
     const cards = [
-      screen.queryByTestId('prescription'),
+      screen.queryByTestId('recovery-card'),
       screen.queryByTestId('lapsed-notice'),
       screen.queryByTestId('micro-start'),
       screen.queryByRole('region', { name: /today's check-in/i }),

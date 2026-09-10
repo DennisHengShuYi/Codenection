@@ -4,8 +4,6 @@ import { lapsed } from '../../domain/commitments'
 import { dateFor } from '../../domain/calendar'
 import { paramsFor } from '../../domain/engineParams'
 import { isStuck } from '../../domain/microStart'
-import { prescribe } from '../../domain/prescribe'
-import { attemptsIn } from '../../domain/recoveryLog'
 import { project } from '../../engine'
 import { toDayInputs, type Schedule } from '../../optimizer'
 import {
@@ -71,24 +69,10 @@ export function roomModel({ schedule, profile, today, blockLog = [] }: RoomModel
   const projection = project(schedule.start, toDayInputs(schedule, checkedIn), params)
   const state = roomStateFor(schedule.start, projection, schedule)
 
-  const prescription = prescribe(schedule, attemptsIn(schedule))
-
-  /**
-   * Which object a prescription belongs to.
-   *
-   * §5.2 matches the advice to the depleted type, so the *furniture* has to match it too --
-   * otherwise a social prescription marks nothing and the student is told to see somebody by
-   * an app that shows them nowhere to do it. Rest is the bed, movement is the door, and
-   * seeing people is the phone, because that is where reaching somebody starts.
-   */
-  const prescribedOn =
-    prescription === null
-      ? null
-      : prescription.kind === 'rest'
-        ? 'bed'
-        : prescription.kind === 'socialRestorative'
-          ? 'phone'
-          : 'door'
+  // §7 made recovery a single room-screen card rather than furniture-routed advice, so this
+  // model no longer decides whether a prescription belongs to the bed, the door or the
+  // phone -- `RoomShell` reads `prescribe` directly for the card, and none of the three rows
+  // below light up for it any more.
   const lapsedNow = lapsed(schedule, today, params)
 
   // §8b: a block counts as already asked about if the durable log says so, or if the
@@ -123,7 +107,7 @@ export function roomModel({ schedule, profile, today, blockLog = [] }: RoomModel
             id,
             label,
             reading: state.doorLit ? 'lit' : 'quiet',
-            attention: state.doorLit || prescribedOn === 'door',
+            attention: state.doorLit,
           },
         ]
       case 'papers':
@@ -141,7 +125,7 @@ export function roomModel({ schedule, profile, today, blockLog = [] }: RoomModel
             id,
             label,
             reading: `${Math.round(state.sleepDebt * 10) / 10}h owed`,
-            attention: prescribedOn === 'bed',
+            attention: false,
           },
         ]
       case 'phone':
@@ -150,7 +134,7 @@ export function roomModel({ schedule, profile, today, blockLog = [] }: RoomModel
             id,
             label,
             reading: lapsedNow.length > 0 ? `${lapsedNow.length} lapsed` : 'nothing waiting',
-            attention: lapsedNow.length > 0 || prescribedOn === 'phone',
+            attention: lapsedNow.length > 0,
           },
         ]
       case 'character':

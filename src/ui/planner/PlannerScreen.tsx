@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import type { ParsedItem } from '../../ai'
+import { Button } from '../kit/Button'
+import { Field } from '../kit/Field'
+import { Sheet } from '../kit/Sheet'
 import { ItemChip } from './ItemChip'
 
 /**
@@ -7,6 +10,10 @@ import { ItemChip } from './ItemChip'
  * the way in: type it however it comes out, in any order, with no formatting.
  *
  * Nothing typed here reaches the week until the chips are accepted (§3.2).
+ *
+ * Owns its own `Sheet` -- the way `BlockSheet` does -- rather than being wrapped by one,
+ * because its action bar depends on state (`reading`, whether there is anything to accept)
+ * that only this component holds.
  */
 export function PlannerScreen({
   onAccept,
@@ -39,48 +46,48 @@ export function PlannerScreen({
     }
   }
 
-  return (
-    <main className="mx-auto flex min-h-dvh max-w-screen-md flex-col gap-4 p-4">
-      <header>
-        <h1 className="text-2xl font-semibold">What are you carrying?</h1>
-        <p className="text-sm opacity-70">Type it however it comes out. Any order, no formatting.</p>
-      </header>
+  const canAccept = items !== null && items.length > 0
 
-      <label className="flex flex-col gap-1 text-sm">
-        What is on your mind
-        <textarea
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          rows={5}
-          className="rounded-lg border border-slate-300 p-3"
-          placeholder="essay due friday 2000 words haven't started, mums birthday sunday, gym, laundry"
-        />
-      </label>
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => void onRead()}
-          disabled={reading}
-          className="rounded-lg bg-slate-900 px-4 py-3 text-white disabled:opacity-60"
-        >
-          {reading ? 'Reading…' : 'Read this'}
-        </button>
-        <button type="button" onClick={onCancel} className="px-4 py-3 underline">
-          Cancel
-        </button>
-      </div>
-
-      {items !== null && items.length === 0 && (
-        <p className="text-sm opacity-80">
-          I could not find anything in that. Type something and try again.
-        </p>
+  const actions = (
+    <>
+      <Button variant="quiet" onClick={onCancel}>
+        Cancel
+      </Button>
+      <Button onClick={() => void onRead()} disabled={reading}>
+        {reading ? 'Reading…' : 'Read this'}
+      </Button>
+      {canAccept && (
+        <Button variant="primary" onClick={() => onAccept(items)}>
+          Add these to my week
+        </Button>
       )}
+    </>
+  )
 
-      {items !== null && items.length > 0 && (
-        <>
-          {/* A gate, not a preview. The list wraps rather than scrolling sideways, per
-              §10's width requirement. */}
+  return (
+    <Sheet title="What are you carrying?" onClose={onCancel} actions={actions}>
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-ink-soft">Type it however it comes out. Any order, no formatting.</p>
+
+        <Field label="What is on your mind">
+          <textarea
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            rows={5}
+            className="rounded-lg border border-line bg-surface p-3 text-ink"
+            placeholder="essay due friday 2000 words haven't started, mums birthday sunday, gym, laundry"
+          />
+        </Field>
+
+        {items !== null && items.length === 0 && (
+          <p className="text-sm text-ink-soft">
+            I could not find anything in that. Type something and try again.
+          </p>
+        )}
+
+        {items !== null && items.length > 0 && (
+          // A gate, not a preview. The list wraps rather than scrolling sideways, per
+          // §10's width requirement.
           <ul className="flex flex-col gap-3">
             {items.map((item) => (
               <ItemChip
@@ -93,16 +100,8 @@ export function PlannerScreen({
               />
             ))}
           </ul>
-
-          <button
-            type="button"
-            onClick={() => onAccept(items)}
-            className="w-full rounded-lg bg-slate-900 px-4 py-3 text-white sm:w-auto"
-          >
-            Add these to my week
-          </button>
-        </>
-      )}
-    </main>
+        )}
+      </div>
+    </Sheet>
   )
 }

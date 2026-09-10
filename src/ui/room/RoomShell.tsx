@@ -14,6 +14,7 @@ import { scheduleRecovery } from '../../domain/scheduleRecovery'
 import { overallReserve, project } from '../../engine'
 import type { Fix } from '../../optimizer'
 import { toDayInputs } from '../../optimizer'
+import { AddSheet } from '../AddSheet'
 import { AccountBar } from '../auth/AccountBar'
 import { PreviewBanner } from '../auth/PreviewBanner'
 import { CapacityDial } from '../dial/CapacityDial'
@@ -31,7 +32,6 @@ import { BlockSheet } from '../week/BlockSheet'
 import { blockSheet } from '../week/blockActions'
 import { runRebalance } from '../week/rebalanceOutcome'
 import { WeekScreen } from '../week/WeekScreen'
-import { AddSheetStub } from './AddSheetStub'
 import { visibleCards } from './cardPrecedence'
 import { LiveCards } from './LiveCards'
 import { roomModel } from './roomModel'
@@ -56,7 +56,7 @@ const firstSentence = (paragraph: string): string => paragraph.match(/^[^.]*\./)
  * and routing between the room, the week, a block sheet, the add sheet and settings. The
  * eleven-case `contentFor` switch this replaced is gone entirely -- every feature it held
  * now belongs to the component that owns it (`WeekScreen`, `BlockSheet`, `TodayCard`,
- * `LiveCards`, `AddSheetStub`) rather than being inlined here.
+ * `LiveCards`, `AddSheet`) rather than being inlined here.
  */
 export function RoomShell({
   repository,
@@ -355,7 +355,7 @@ export function RoomShell({
       )}
 
       {view.kind === 'add' && (
-        <AddSheetStub
+        <AddSheet
           key="add"
           schedule={week}
           onAcceptItems={(items) => setSchedule(addItems(week, items))}

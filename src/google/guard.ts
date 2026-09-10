@@ -71,3 +71,78 @@ export function checkCallback(
 
   return { ok: true }
 }
+
+/**
+ * More events than a fortnight of a plausible week could hold.
+ *
+ * Each one is a write into somebody's real calendar, so a payload that got away from
+ * itself is not just a large response -- it is a large number of outward actions.
+ */
+export const MAX_PUSH_EVENTS = 300
+
+/** A local wall clock with no offset and no zone: `2026-09-11T09:00:00`. The zone travels
+ *  once, beside the list, rather than being restated on every event. */
+const WALL_CLOCK = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/
+
+/** The four things an event is, and deliberately nothing else. */
+export interface PushRequestEvent {
+  readonly blockId: string
+  readonly summary: string
+  readonly startsAt: string
+  readonly endsAt: string
+}
+
+export type PushRequest =
+  | { ok: true; events: readonly PushRequestEvent[]; timeZone: string }
+  | { ok: false; status: number; body: string }
+
+const text = (value: unknown): value is string => typeof value === 'string' && value.length > 0
+
+const readEvent = (value: unknown): PushRequestEvent | null => {
+  if (typeof value !== 'object' || value === null) return null
+
+  const raw = value as Record<string, unknown>
+
+  if (!text(raw.blockId) || !text(raw.summary)) return null
+  if (!text(raw.startsAt) || !WALL_CLOCK.test(raw.startsAt)) return null
+  if (!text(raw.endsAt) || !WALL_CLOCK.test(raw.endsAt)) return null
+
+  // Rebuilt field by field rather than passed through. Whatever else was posted -- an
+  // attendee list, a conference link, a visibility -- does not survive this line, so it can
+  // never ride along into a request this app makes to Google on a student's behalf.
+  return {
+    blockId: raw.blockId,
+    summary: raw.summary,
+    startsAt: raw.startsAt,
+    endsAt: raw.endsAt,
+  }
+}
+
+/**
+ * The posted body, checked before anything is written.
+ *
+ * The browser computes these events with the same pure function that produced the summary
+ * the student agreed to, and that is the right place for the decision. It is not, however,
+ * a reason to trust what arrives: what reaches this endpoint is whatever was actually
+ * posted, by whatever was posting, and this is the boundary where that stops being an open
+ * question. Nothing downstream re-checks it, so nothing downstream may assume it was
+ * checked elsewhere.
+ */
+export function readPushRequest(body: unknown): PushRequest {
+  const bad = { ok: false, status: 400, body: 'That is not a week I can write.' } as const
+
+  if (typeof body !== 'object' || body === null) return bad
+
+  const { events, timeZone } = body as Record<string, unknown>
+
+  if (!Array.isArray(events) || events.length > MAX_PUSH_EVENTS) return bad
+  if (!text(timeZone)) return bad
+
+  const read = events.map(readEvent)
+
+  // All or nothing. Writing the readable ones and silently dropping the rest would leave a
+  // calendar holding part of a week while the student was told the week went out.
+  if (read.some((event) => event === null)) return bad
+
+  return { ok: true, events: read as PushRequestEvent[], timeZone }
+}

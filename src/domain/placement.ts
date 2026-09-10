@@ -149,6 +149,9 @@ export function placeItems(
       protectedRest: false,
       // §39: carried through when the item came from a series, absent when it did not.
       ...(item.seriesId === undefined ? {} : { seriesId: item.seriesId }),
+      // Carried for the push, which must not send a block back to the calendar it was
+      // read from.
+      ...(item.sourceId === undefined ? {} : { sourceId: item.sourceId }),
     }
 
     notes.push({

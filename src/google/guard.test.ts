@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkCallback, checkStart } from './guard'
+import { checkCallback, checkStart, MAX_PUSH_EVENTS, readPushRequest } from './guard'
 
 const configured = {
   clientId: 'client-123',
@@ -108,5 +108,82 @@ describe('checkCallback', () => {
       expect(refusal.ok).toBe(false)
       if (!refusal.ok) expect(refusal.body).not.toMatch(/state|signature|secret|code/i)
     }
+  })
+})
+
+/**
+ * The push payload, validated at the boundary before a single write happens.
+ *
+ * The browser computes the events, which is right -- one pure function decides what a week
+ * means in a calendar. But computed by our code and arriving over the network are not the
+ * same claim: what reaches this endpoint is whatever was actually posted, by whatever was
+ * posting. It is checked here like any other third-party payload, and nothing downstream
+ * treats it as already-checked.
+ */
+describe('readPushRequest', () => {
+  const event = () => ({
+    blockId: 'b1',
+    summary: 'FYP writing',
+    startsAt: '2026-09-11T09:00:00',
+    endsAt: '2026-09-11T11:00:00',
+  })
+
+  it('accepts a well-formed push', () => {
+    const read = readPushRequest({ events: [event()], timeZone: 'Asia/Kuala_Lumpur' })
+
+    expect(read.ok).toBe(true)
+    expect(read.ok === true && read.events).toEqual([event()])
+    expect(read.ok === true && read.timeZone).toBe('Asia/Kuala_Lumpur')
+  })
+
+  it('accepts an empty push, which is how a cleared week is written', () => {
+    const read = readPushRequest({ events: [], timeZone: 'UTC' })
+
+    expect(read.ok === true && read.events).toEqual([])
+  })
+
+  it('refuses a body that is not a push at all', () => {
+    expect(readPushRequest(null).ok).toBe(false)
+    expect(readPushRequest('events').ok).toBe(false)
+    expect(readPushRequest({ timeZone: 'UTC' }).ok).toBe(false)
+  })
+
+  it('refuses an event missing any of the four things an event is', () => {
+    for (const key of ['blockId', 'summary', 'startsAt', 'endsAt']) {
+      const broken = { ...event(), [key]: undefined }
+
+      expect(readPushRequest({ events: [broken], timeZone: 'UTC' }).ok).toBe(false)
+    }
+  })
+
+  /** Times are written into somebody's real calendar. Google would reject most nonsense,
+   *  but a shape check here is what keeps a malformed one from ever being sent. */
+  it('refuses a time that is not a local wall clock', () => {
+    const wrong = { ...event(), startsAt: '2026-09-11T09:00:00+08:00' }
+
+    expect(readPushRequest({ events: [wrong], timeZone: 'UTC' }).ok).toBe(false)
+  })
+
+  it('refuses a zone that is not a zone name', () => {
+    expect(readPushRequest({ events: [event()], timeZone: '' }).ok).toBe(false)
+    expect(readPushRequest({ events: [event()], timeZone: 7 }).ok).toBe(false)
+  })
+
+  /** More than a fortnight can hold. A runaway payload must not become a runaway number of
+   *  writes into somebody's calendar. */
+  it('refuses more events than a fortnight could contain', () => {
+    const many = Array.from({ length: MAX_PUSH_EVENTS + 1 }, () => event())
+
+    expect(readPushRequest({ events: many, timeZone: 'UTC' }).ok).toBe(false)
+  })
+
+  /** Nothing beyond the four fields is carried through: an attribute this app never
+   *  intended to set cannot ride along into a Google request. */
+  it('carries only the fields an event is made of', () => {
+    const extra = { ...event(), attendees: [{ email: 'someone@else.com' }] }
+
+    const read = readPushRequest({ events: [extra], timeZone: 'UTC' })
+
+    expect(read.ok === true && read.events[0]).toEqual(event())
   })
 })

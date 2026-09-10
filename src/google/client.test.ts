@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
-import { beginConnect, disconnectCalendar, readCalendar } from './client'
+import { beginConnect, disconnectCalendar, pushCalendar, readCalendar } from './client'
 
 const token = vi.fn<() => Promise<string | null>>()
 
@@ -185,5 +185,81 @@ describe('disconnectCalendar', () => {
 
     expect(await disconnectCalendar()).toBe(false)
     expect(fetched).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The outward write, from the browser's side.
+ *
+ * What goes over the wire is the finished list of events, computed here by `plannedEvents`,
+ * rather than the week for the endpoint to interpret. One place decides what a week means
+ * in a calendar, it is pure, and it is the same function whose output the student was shown
+ * before pressing the button.
+ */
+describe('pushCalendar', () => {
+  const events = [
+    {
+      blockId: 'b1',
+      summary: 'FYP writing',
+      startsAt: '2026-09-11T09:00:00',
+      endsAt: '2026-09-11T11:00:00',
+    },
+  ]
+
+  it('sends the events and the zone they are meant in', async () => {
+    const fetched = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ created: 1, updated: 0, removed: 0 }),
+    })
+    vi.stubGlobal('fetch', fetched)
+
+    expect(await pushCalendar(events, 'Asia/Kuala_Lumpur')).toEqual({
+      created: 1,
+      updated: 0,
+      removed: 0,
+    })
+
+    const [url, options] = fetched.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/google-push')
+    expect(options.method).toBe('POST')
+    expect(JSON.parse(options.body as string)).toEqual({
+      events,
+      timeZone: 'Asia/Kuala_Lumpur',
+    })
+  })
+
+  it('never asks Google directly, only this app', async () => {
+    const fetched = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) })
+    vi.stubGlobal('fetch', fetched)
+
+    await pushCalendar(events, 'UTC')
+
+    const [url] = fetched.mock.calls[0] as [string]
+    expect(url).not.toMatch(/googleapis|google\.com/)
+  })
+
+  /** A failed write must not report a written week. Somebody told their calendar is up to
+   *  date, whose calendar is not, has no reason to look again. */
+  it('throws rather than claiming a week was written', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
+
+    await expect(pushCalendar(events, 'UTC')).rejects.toThrow()
+  })
+
+  it('refuses for somebody who is not signed in', async () => {
+    token.mockResolvedValue(null)
+    const fetched = vi.fn()
+    vi.stubGlobal('fetch', fetched)
+
+    await expect(pushCalendar(events, 'UTC')).rejects.toThrow()
+    expect(fetched).not.toHaveBeenCalled()
+  })
+
+  /** Counts absent from the reply read as nothing done, rather than as `undefined` reaching
+   *  a sentence the student is shown. */
+  it('reads a reply with no counts as nothing written', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }))
+
+    expect(await pushCalendar(events, 'UTC')).toEqual({ created: 0, updated: 0, removed: 0 })
   })
 })

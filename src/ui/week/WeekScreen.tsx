@@ -8,6 +8,7 @@ import type { DomainBar } from '../dial/domainBars'
 import { Button } from '../kit/Button'
 import { dayGrid } from './dayGrid'
 import { scheduleView, type LoadBand } from '../../domain/scheduleView'
+import { PushToCalendar } from './PushToCalendar'
 
 /**
  * §4's primary surface: the whole horizon, one day expanded beneath it, and Rebalance.
@@ -180,6 +181,11 @@ export function WeekScreen(props: {
             {report}
           </p>
         )}
+
+        {/* The outward write, under the actions rather than beside Rebalance: it is the one
+            control on this screen that reaches outside the app, and it should not sit at
+            the same weight as the one a student presses several times a week. */}
+        <PushToCalendar schedule={schedule} today={today} />
 
         {fallback !== null && (
           <p data-testid="rebalance-fallback" role="status" className="text-sm text-ink-soft">

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { ParsedItem } from '../ai'
 import { HORIZON_DAYS } from '../engine'
-import type { Schedule } from '../optimizer'
+import type { Schedule, ScheduledItem } from '../optimizer'
 import { addItems } from './addItems'
+import { DAY_END_HOUR, WAKE_HOUR } from './slotFinder'
 
 const empty = (): Schedule => ({
   items: [],
@@ -160,5 +161,77 @@ describe('addItems and what the student pinned', () => {
 
     expect(essay?.deadlineDay).toBe(4)
     expect(essay?.fixed).toBe(false)
+  })
+})
+
+/**
+ * The pile-up.
+ *
+ * Every added item used to land at 19:00, and undated ones all on day 2 -- so five items
+ * from one brain dump arrived stacked on top of each other. Nothing in the system objected:
+ * `constraints.ts` deliberately does not count movable-movable overlap as a violation, and
+ * `objective.ts`'s fragmentation term counts blocks per day without looking at start hours.
+ * So the week the student was shown was a lie no part of the model had any pressure to fix.
+ */
+describe('addItems finding room', () => {
+  const overlaps = (a: ScheduledItem, b: ScheduledItem): boolean =>
+    a.dayIndex === b.dayIndex &&
+    a.startHour < b.startHour + b.hours &&
+    b.startHour < a.startHour + a.hours
+
+  it('does not stack a brain dump on top of itself', () => {
+    const dump = Array.from({ length: 5 }, (_, index) =>
+      parsed({ id: `x${index}`, title: `Task ${index}`, hours: 2 }),
+    )
+
+    const { items } = addItems(empty(), dump)
+
+    expect(items).toHaveLength(5)
+    for (const [i, a] of items.entries()) {
+      for (const b of items.slice(i + 1)) expect(overlaps(a, b)).toBe(false)
+    }
+  })
+
+  it('works around what is already on the day', () => {
+    const busy = addItems(empty(), [parsed({ id: 'first', hours: 3, deadlineDay: 2 })])
+
+    const { items } = addItems(busy, [parsed({ id: 'second', hours: 3, deadlineDay: 2 })])
+
+    expect(items).toHaveLength(2)
+    expect(overlaps(items[0] as ScheduledItem, items[1] as ScheduledItem)).toBe(false)
+  })
+
+  it('keeps every added block inside the waking day', () => {
+    const dump = Array.from({ length: 4 }, (_, index) => parsed({ id: `y${index}`, hours: 2 }))
+
+    for (const item of addItems(empty(), dump).items) {
+      expect(item.startHour).toBeGreaterThanOrEqual(WAKE_HOUR)
+      expect(item.startHour + item.hours).toBeLessThanOrEqual(DAY_END_HOUR)
+    }
+  })
+
+  /**
+   * Placement is a convenience, never a gate. A day with no room left must still accept the
+   * item -- the optimizer's whole job is weeks that do not fit, and refusing to record
+   * something because it is inconvenient would lose the student's own data.
+   */
+  it('still adds an item even when nothing will fit', () => {
+    const full = addItems(empty(), [parsed({ id: 'huge', hours: 16, deadlineDay: 2 })])
+
+    const { items } = addItems(full, [parsed({ id: 'squeezed', hours: 4, deadlineDay: 2 })])
+
+    expect(items).toHaveLength(2)
+    expect(items[1]?.title).toBe('Essay')
+  })
+
+  it('never moves anything that was already in the week', () => {
+    const before = addItems(empty(), [parsed({ id: 'first', hours: 3, deadlineDay: 2 })])
+    const settled = before.items.map(({ id, dayIndex, startHour }) => ({ id, dayIndex, startHour }))
+
+    const after = addItems(before, [parsed({ id: 'second', hours: 3, deadlineDay: 2 })])
+
+    expect(after.items.slice(0, 1).map(({ id, dayIndex, startHour }) => ({ id, dayIndex, startHour }))).toEqual(
+      settled,
+    )
   })
 })

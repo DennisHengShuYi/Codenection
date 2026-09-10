@@ -1,6 +1,7 @@
 import type { ParsedItem } from '../ai'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
+import { slotOn } from './slotFinder'
 
 /** Placed in the evening by default: undated work is what a student fits around fixed
  *  commitments, and the optimizer is free to move it anyway. */
@@ -26,24 +27,42 @@ const DEFAULT_DAY = 2
 export function addItems(schedule: Schedule, items: readonly ParsedItem[]): Schedule {
   const stamp = Date.now()
 
-  const added: ScheduledItem[] = items.map((item, index) => ({
-    id: `added-${stamp}-${index}-${item.id}`,
-    title: item.title,
-    type: item.type,
-    kind: item.kind,
-    hours: item.hours,
-    intensity: 1,
-    dayIndex:
-      item.deadlineDay === null ? DEFAULT_DAY : Math.min(item.deadlineDay, HORIZON_DAYS - 1),
-    startHour: DEFAULT_START_HOUR,
-    // What the student confirmed on the chip, not what the model claimed. The two are
-    // different things: `hard` arrives as the model's reading of the page and seeds the
-    // checkbox, and the accept is what commits it -- so a lecture can finally be a lecture
-    // rather than a suggestion the optimizer is free to move to Thursday.
-    fixed: item.fixed,
-    deadlineDay: item.deadlineDay,
-    protectedRest: false,
-  }))
+  // Threaded through the fold rather than computed against the original week, so each item
+  // sees the ones placed before it. Without this, five items from one dump each find the
+  // same "first free" slot and land on top of each other -- which is the pile-up itself,
+  // one level further in.
+  return items.reduce((current, item, index) => {
+    const dayIndex =
+      item.deadlineDay === null ? DEFAULT_DAY : Math.min(item.deadlineDay, HORIZON_DAYS - 1)
 
-  return { ...schedule, items: [...schedule.items, ...added] }
+    const slot = slotOn(current, dayIndex, {
+      hours: item.hours,
+      type: item.type,
+      kind: item.kind,
+    })
+
+    const added: ScheduledItem = {
+      id: `added-${stamp}-${index}-${item.id}`,
+      title: item.title,
+      type: item.type,
+      kind: item.kind,
+      hours: item.hours,
+      intensity: 1,
+      dayIndex,
+      // Placement is a convenience, never a gate. When the day has no room the item is
+      // still added, at the evening default -- the optimizer exists precisely for weeks
+      // that do not fit, and refusing to record something because it is inconvenient would
+      // lose the student's own data to make the picture look tidier.
+      startHour: slot?.startHour ?? DEFAULT_START_HOUR,
+      // What the student confirmed on the chip, not what the model claimed. The two are
+      // different things: `hard` arrives as the model's reading of the page and seeds the
+      // checkbox, and the accept is what commits it -- so a lecture can finally be a lecture
+      // rather than a suggestion the optimizer is free to move to Thursday.
+      fixed: item.fixed,
+      deadlineDay: item.deadlineDay,
+      protectedRest: false,
+    }
+
+    return { ...current, items: [...current.items, added] }
+  }, schedule)
 }

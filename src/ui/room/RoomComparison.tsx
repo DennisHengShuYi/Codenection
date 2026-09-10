@@ -13,19 +13,22 @@ import type { RoomModel } from './roomModel'
  *
  * §3 made `Room` a picture rather than a control surface, so there is nothing left for a
  * tap on either room to report -- `onSelect` went with it.
+ *
+ * Both rooms are framed `inline`: these are two elements on a scrolling screen, not the
+ * screen itself, and `fill` would have each of them cover the request box behind it.
  */
 export function RoomComparison({ now, ifAccepted }: { now: RoomModel; ifAccepted?: RoomModel }) {
-  if (!ifAccepted) return <Room model={now} />
+  if (!ifAccepted) return <Room model={now} frame="inline" />
 
   return (
     <div data-testid="room-comparison" className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <div className="flex flex-col gap-1">
         <h3 className="text-xs font-medium uppercase tracking-wide text-ink-soft">Now</h3>
-        <Room model={now} />
+        <Room model={now} frame="inline" />
       </div>
       <div className="flex flex-col gap-1">
         <h3 className="text-xs font-medium uppercase tracking-wide text-ink-soft">If you accept</h3>
-        <Room model={ifAccepted} />
+        <Room model={ifAccepted} frame="inline" />
       </div>
     </div>
   )

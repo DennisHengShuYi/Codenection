@@ -165,6 +165,7 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         params={DEFAULT_PARAMS}
         today={0}
         blockLog={[]}
+        predictions={[]}
         onAcceptItems={vi.fn()}
         onAcceptRequest={vi.fn()}
         onClose={vi.fn()}
@@ -194,6 +195,7 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         params={DEFAULT_PARAMS}
         today={0}
         blockLog={[]}
+        predictions={[]}
         onAccept={vi.fn()}
         onCancel={vi.fn()}
       />,

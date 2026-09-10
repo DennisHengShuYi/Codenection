@@ -30,6 +30,7 @@ const setup = () => {
     params: DEFAULT_PARAMS,
     today: 0,
     blockLog: [],
+    predictions: [],
     onAcceptItems: vi.fn(),
     onAcceptRequest: vi.fn(),
     onClose: vi.fn(),

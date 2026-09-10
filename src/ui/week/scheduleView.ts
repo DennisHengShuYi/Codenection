@@ -1,6 +1,7 @@
 import { answeredIds, checkedInDays, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
 import { dateFor } from '../../domain/calendar'
 import { paramsFor } from '../../domain/engineParams'
+import type { EnergyPrediction } from '../../domain/predictions'
 import { DEFICIT_THRESHOLD, HORIZON_DAYS, overallReserve, project } from '../../engine'
 import { toDayInputs, type Schedule } from '../../optimizer'
 
@@ -44,6 +45,9 @@ export interface ScheduleViewInput {
    * caller built before the log existed keeps compiling and behaving exactly as it did.
    */
   readonly blockLog?: readonly BlockRecord[]
+  /** §8.1's resolved predictions, for the learned recovery coefficients. Optional and
+   *  defaulting to empty, exactly as `blockLog` is. */
+  readonly predictions?: readonly EnergyPrediction[]
 }
 
 const bandFor = (hours: number): LoadBand =>
@@ -53,8 +57,11 @@ export function scheduleView({
   schedule,
   today,
   blockLog = [],
+  predictions = [],
 }: ScheduleViewInput): readonly DayCell[] {
-  const params = paramsFor(outcomesFrom(blockLog))
+  // Same reason `roomModel` takes these: the week grid and the room must not run two
+  // different models over one fortnight.
+  const params = paramsFor(outcomesFrom(blockLog), predictions)
   // §6.5/§8b: the same signal `roomModel.ts` threads into its own projection, so the week
   // overview's deficit marks and the room's dial agree about what "silent" means instead
   // of reading one fortnight two different ways.

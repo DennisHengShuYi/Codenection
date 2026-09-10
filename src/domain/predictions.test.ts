@@ -255,3 +255,126 @@ describe('predictionsAfter', () => {
     expect(silent[0]?.predicted).toBeLessThan(checkedIn[0]?.predicted ?? Infinity)
   })
 })
+
+/**
+ * The half of a prediction that makes it learnable.
+ *
+ * A resolved prediction gives a residual -- how far the app's claim was from what the
+ * student reported -- but a residual alone cannot be attributed to anything. `predicted` is
+ * one scalar collapsed from four reserves through two days of coupling, drain, efficiency
+ * and carryover, and the sleep it assumed is overwritten in place by `withSleep` before the
+ * prediction ever resolves. So the derivative has to be captured while the week that
+ * produced the claim still exists.
+ */
+describe('what a prediction records about how it was made', () => {
+  /**
+   * Deliberately a hard week starting low. On a light one every reserve saturates at 100
+   * and stays there, so how much sleep restores this student genuinely cannot change the
+   * claim -- the sensitivity is zero and the sample is uninformative. That is correct, and
+   * it is asserted on its own below.
+   */
+  const anchoredWeek = (over: Partial<Schedule> = {}) =>
+    anchorTo(
+      week({
+        start: { mental: 45, physical: 45, social: 45, errands: 45 },
+        items: dailyMentalLoad(10, 8),
+        ...over,
+      }),
+      at('2026-09-01'),
+    )
+
+  const basisOf = (schedule: Schedule) =>
+    predictionsAfter([], schedule, DEFAULT_PARAMS, at('2026-09-03'))[0]?.basis
+
+  it('records what it assumed about sleep and rest', () => {
+    const basis = basisOf(anchoredWeek())
+
+    expect(basis?.assumedSleepHours).toBeGreaterThan(0)
+    expect(Number.isFinite(basis?.assumedRestHours ?? NaN)).toBe(true)
+  })
+
+  it('records how far the claim would move if sleep mattered more to this student', () => {
+    const basis = basisOf(anchoredWeek({ sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 9) }))
+
+    expect(Math.abs(basis?.sleepScaleSensitivity ?? 0)).toBeGreaterThan(0)
+  })
+
+  /**
+   * A student already at full reserve cannot be restored further -- the model clamps at
+   * 100 -- so a comfortable week says nothing about how much sleep does for them either.
+   * Another uninformative sample, correctly reported as such rather than as a small number
+   * the learner would mistake for evidence.
+   */
+  it('records no sensitivity for a week that never leaves full reserve', () => {
+    const easy = anchorTo(
+      week({
+        start: { mental: 100, physical: 100, social: 100, errands: 100 },
+        sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 9),
+      }),
+      at('2026-09-01'),
+    )
+
+    expect(basisOf(easy)?.sleepScaleSensitivity).toBeCloseTo(0)
+  })
+
+  /**
+   * A week with no rest blocks in it says nothing whatever about how much rest restores
+   * that student. Recording a sensitivity of zero is what later lets the learner throw the
+   * sample away instead of reading noise as evidence.
+   */
+  it('records no rest sensitivity for a week containing no rest', () => {
+    expect(basisOf(anchoredWeek())?.restScaleSensitivity).toBeCloseTo(0)
+  })
+
+  /**
+   * The engine credits `max(0, sleepHours - sleepBaselineHours)`. A student sleeping below
+   * the baseline is on the flat part of that floor, so changing how much sleep restores
+   * them changes nothing -- and a sample from such a week is not evidence either.
+   */
+  it('records no sleep sensitivity for a week spent below the sleep baseline', () => {
+    const starved = anchoredWeek({ sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 3) })
+
+    expect(basisOf(starved)?.sleepScaleSensitivity).toBeCloseTo(0)
+  })
+
+  /**
+   * `predictEnergy` rounds to one decimal place. A finite difference taken through that
+   * rounding quantises to 0.1 and reads exactly zero most of the time -- which would make
+   * every sample look unattributable and quietly switch the whole loop off.
+   */
+  it('measures the difference finely enough to survive the rounding on the claim itself', () => {
+    const basis = basisOf(anchoredWeek({ sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 9) }))
+    const sensitivity = Math.abs(basis?.sleepScaleSensitivity ?? 0)
+
+    expect(sensitivity).toBeGreaterThan(0)
+    expect(sensitivity % 0.1).not.toBe(0)
+  })
+
+  /** It has to survive the round trip through storage: this lives inside the settings blob,
+   *  which both adapters persist as opaque JSON. */
+  it('survives being written to storage and read back', () => {
+    const recorded = predictionsAfter([], anchoredWeek(), DEFAULT_PARAMS, at('2026-09-03'))
+
+    expect(JSON.parse(JSON.stringify(recorded))).toEqual(recorded)
+  })
+
+  /** §8.1: a scored prediction is never rewritten, and that includes the basis it was made
+   *  on -- otherwise the evidence could be revised to suit the answer. */
+  it('keeps the basis untouched when the prediction resolves', () => {
+    const recorded = predictionsAfter([], anchoredWeek(), DEFAULT_PARAMS, at('2026-09-03'))
+    const forDate = recorded[0]?.forDate as string
+
+    const resolved = resolvePrediction(recorded, forDate, 55)
+
+    expect(resolved[0]?.basis).toEqual(recorded[0]?.basis)
+  })
+
+  /** Predictions stored before this existed have no basis and must keep loading, scoring
+   *  and displaying exactly as they did. */
+  it('still scores a prediction recorded before any of this existed', () => {
+    const old: EnergyPrediction[] = [{ forDate: '2026-01-01', predicted: 60, reported: 50 }]
+
+    expect(old[0]?.basis).toBeUndefined()
+    expect(meanAbsoluteError(old)).toBeCloseTo(10)
+  })
+})

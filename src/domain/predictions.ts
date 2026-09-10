@@ -1,4 +1,4 @@
-import { overallReserve, project, type EngineParams } from '../engine'
+import { overallReserve, project, type EngineParams, type Reserves } from '../engine'
 import { toDayInputs, type Schedule } from '../optimizer'
 import { checkedInDays, type BlockRecord } from './blockLog'
 import { dateFor, todayIndex } from './calendar'
@@ -14,11 +14,46 @@ import { dateFor, todayIndex } from './calendar'
  * `reported` is null until the student says how that day actually went. The gap is the whole
  * point: a prediction nobody has checked is not evidence of anything.
  */
+/**
+ * What the claim assumed, and how far it would move if a recovery coefficient did.
+ *
+ * Captured at prediction time because the week that produced the claim is gone before the
+ * claim resolves: `withSleep` rewrites `sleepByDay` in place, so a record holding only a
+ * number could never afterwards be attributed to anything. This is the difference between
+ * measuring the app's error and being able to learn from it.
+ *
+ * The sensitivities are with respect to a *scale* on the coefficient rather than the
+ * coefficient itself, which makes them dimensionless and means the update rule needs no
+ * knowledge of what the population defaults happen to be.
+ *
+ * Four plain numbers. No functions, no dates, nothing that does not survive
+ * `JSON.stringify` -- this persists inside `StoredSettings.calibration`, which both adapters
+ * store as one opaque blob.
+ */
+export interface PredictionBasis {
+  /** Mean nightly sleep over the days the claim spans. */
+  readonly assumedSleepHours: number
+  /** Total rest-block hours over the same span. */
+  readonly assumedRestHours: number
+  /** How far `predicted` moves per unit of scale applied to `kSleep`. */
+  readonly sleepScaleSensitivity: number
+  /** The same, for `kRest`. */
+  readonly restScaleSensitivity: number
+}
+
 export interface EnergyPrediction {
   /** YYYY-MM-DD, the day this is a claim about. */
   readonly forDate: string
   readonly predicted: number
   readonly reported: number | null
+  /**
+   * Absent on every prediction recorded before this existed.
+   *
+   * Optional rather than migrated: an old record still scores in `meanAbsoluteError` and
+   * still displays, and the learner simply skips it. The same move `calibration?` itself
+   * made in `StoredSettings` -- no adapter change, no version field, no migration pass.
+   */
+  readonly basis?: PredictionBasis
 }
 
 /**
@@ -42,16 +77,94 @@ const PREDICTION_HORIZON_DAYS = 2
  * passes `ALL_PRESENT` explicitly, so the choice is visible at the call site rather than
  * hidden in this signature.
  */
+/**
+ * The same reading, unrounded.
+ *
+ * `predictEnergy` rounds to one decimal because that is what gets published. A finite
+ * difference taken through that rounding quantises to 0.1 and comes out exactly zero most
+ * of the time, which would make every sample look unattributable and silently switch the
+ * whole learning loop off. So the sensitivities are measured here and only the stored claim
+ * is rounded.
+ */
+function rawPredict(
+  schedule: Schedule,
+  params: EngineParams,
+  forDay: number,
+  checkedIn: readonly boolean[],
+): number | null {
+  const day = project(schedule.start, toDayInputs(schedule, checkedIn), params).central[forDay]
+
+  return day ? overallReserve(day) : null
+}
+
 export function predictEnergy(
   schedule: Schedule,
   params: EngineParams,
   forDay: number,
   checkedIn: readonly boolean[],
 ): number | null {
-  const projection = project(schedule.start, toDayInputs(schedule, checkedIn), params)
-  const day = projection.central[forDay]
+  const raw = rawPredict(schedule, params, forDay, checkedIn)
 
-  return day ? Math.round(overallReserve(day) * 10) / 10 : null
+  return raw === null ? null : Math.round(raw * 10) / 10
+}
+
+/**
+ * How much a 20% bump is, when measuring how much a coefficient matters to this claim.
+ *
+ * Large enough to sit well clear of floating-point noise, small enough that the projection
+ * is still behaving locally rather than being pushed somewhere qualitatively different.
+ */
+const SENSITIVITY_STEP = 0.2
+
+/** Scales a per-type coefficient, leaving exact zeros exactly zero. See `engineParams`:
+ *  `kSleep.social = 0` is load-bearing, not a prior. */
+const scaledReserves = (reserves: Reserves, scale: number): Reserves => ({
+  mental: reserves.mental === 0 ? 0 : reserves.mental * scale,
+  physical: reserves.physical === 0 ? 0 : reserves.physical * scale,
+  social: reserves.social === 0 ? 0 : reserves.social * scale,
+  errands: reserves.errands === 0 ? 0 : reserves.errands * scale,
+})
+
+/**
+ * What this claim assumed, and how sensitive it is to each recovery coefficient.
+ *
+ * Both bumped runs reuse the prediction's own `checkedIn` array, or the derivative would be
+ * taken at a different point from the claim it is about -- §6.5's missing-data pessimism
+ * changes the shape of the projection, so a sensitivity measured without it describes a
+ * week the student was never shown.
+ */
+function basisFor(
+  schedule: Schedule,
+  params: EngineParams,
+  forDay: number,
+  checkedIn: readonly boolean[],
+): PredictionBasis | null {
+  const base = rawPredict(schedule, params, forDay, checkedIn)
+  if (base === null) return null
+
+  const bumpedBy = (next: EngineParams): number => {
+    const moved = rawPredict(schedule, next, forDay, checkedIn)
+    return moved === null ? 0 : (moved - base) / SENSITIVITY_STEP
+  }
+
+  const span = schedule.sleepByDay.slice(0, forDay + 1)
+  const restHours = schedule.items
+    .filter((item) => item.kind === 'rest' && item.dayIndex <= forDay)
+    .reduce((total, item) => total + item.hours, 0)
+
+  return {
+    assumedSleepHours:
+      span.length === 0 ? 0 : span.reduce((total, hours) => total + hours, 0) / span.length,
+    assumedRestHours: restHours,
+    sleepScaleSensitivity: bumpedBy({
+      ...params,
+      kSleep: scaledReserves(params.kSleep, 1 + SENSITIVITY_STEP),
+    }),
+    restScaleSensitivity: bumpedBy({
+      ...params,
+      kRest: scaledReserves(params.kRest, 1 + SENSITIVITY_STEP),
+    }),
+  }
 }
 
 /**
@@ -88,19 +201,25 @@ export function predictionsAfter(
   const predicted = predictEnergy(schedule, params, forDay, checkedIn)
   if (predicted === null) return [...predictions]
 
-  return recordPrediction(predictions, forDate, predicted)
+  return recordPrediction(
+    predictions,
+    forDate,
+    predicted,
+    basisFor(schedule, params, forDay, checkedIn) ?? undefined,
+  )
 }
 
 export function recordPrediction(
   predictions: readonly EnergyPrediction[],
   forDate: string,
   predicted: number,
+  basis?: PredictionBasis,
 ): EnergyPrediction[] {
   // One prediction per day. Recording a second would let the app quietly keep whichever
   // turned out closer.
   if (predictions.some((prediction) => prediction.forDate === forDate)) return [...predictions]
 
-  return [...predictions, { forDate, predicted, reported: null }]
+  return [...predictions, { forDate, predicted, reported: null, ...(basis ? { basis } : {}) }]
 }
 
 /**

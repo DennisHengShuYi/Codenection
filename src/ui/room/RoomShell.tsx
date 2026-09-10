@@ -191,7 +191,7 @@ export function RoomShell({
   // parameter rather than reading one itself.
   const nowHour = now.getHours()
   const todayDate = dateFor(week, today)
-  const model = roomModel({ schedule: week, today, blockLog })
+  const model = roomModel({ schedule: week, today, blockLog, predictions: profile.predictions })
 
   // §1.1's dial: the reserve, the five domain bars each against its own ceiling, and the
   // low-social-flagged-as-warning logic that is the app's own differentiator over a tracker
@@ -484,6 +484,7 @@ export function RoomShell({
           params={params}
           today={today}
           blockLog={blockLog}
+          predictions={profile.predictions}
           onAcceptItems={(items) => acceptItems(items)}
           onAcceptRequest={(item) => setSchedule(accept(week, item, today))}
           onClose={closeToRoom}

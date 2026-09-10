@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Draft, ParsedItem } from '../../ai'
 import { addItems } from '../../domain/addItems'
+import type { EnergyPrediction } from '../../domain/predictions'
 import type { BlockRecord } from '../../domain/blockLog'
 import { priceRequest, type RequestCost } from '../../domain/requestCost'
 import type { EngineParams } from '../../engine'
@@ -27,8 +28,11 @@ const TONE_LABELS: Record<Draft['tone'], string> = {
  *  site was the one taking the old `[]` default -- so the gauge on both rooms quoted a
  *  reserve computed as though the student had answered nothing, beside a request cost
  *  computed from their real calibration. Two numbers for one week, on one screen. */
-const roomFor = (schedule: Schedule, blockLog: readonly BlockRecord[]) =>
-  roomModel({ schedule, today: 0, blockLog })
+const roomFor = (
+  schedule: Schedule,
+  blockLog: readonly BlockRecord[],
+  predictions: readonly EnergyPrediction[],
+) => roomModel({ schedule, today: 0, blockLog, predictions })
 
 /**
  * §2.3's request box.
@@ -49,6 +53,7 @@ export function RequestBoxScreen({
   params,
   today,
   blockLog,
+  predictions,
   onAccept,
   onCancel,
 }: {
@@ -62,6 +67,10 @@ export function RequestBoxScreen({
   /** §6.5/§8b's check-in evidence, threaded through so the price shown here is judged
    *  against the same silence-aware projection the room and the dial already show. */
   blockLog: readonly BlockRecord[]
+  /** §8.1's resolved predictions, for the same reason the block log is here: both rooms
+   *  drawn on this screen must run the model the rest of the app runs, not the population
+   *  one. This is the call site the identical mistake was made at once already. */
+  predictions: readonly EnergyPrediction[]
   onAccept: (item: ParsedItem) => void
   onCancel: () => void
 }) {
@@ -189,8 +198,8 @@ export function RequestBoxScreen({
 
             {/* §2.3, via §1.3: the warning is shown as two rooms. */}
             <RoomComparison
-              now={roomFor(schedule, blockLog)}
-              ifAccepted={roomFor(addItems(schedule, [item]), blockLog)}
+              now={roomFor(schedule, blockLog, predictions)}
+              ifAccepted={roomFor(addItems(schedule, [item]), blockLog, predictions)}
             />
 
             {drafts.length > 0 && (

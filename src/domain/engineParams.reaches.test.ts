@@ -3,6 +3,7 @@ import { DEFAULT_PARAMS, HORIZON_DAYS, project } from '../engine'
 import { ALL_PRESENT, toDayInputs, type Schedule, type ScheduledItem } from '../optimizer'
 import type { BlockOutcome } from './calibration'
 import { paramsFor } from './engineParams'
+import type { EnergyPrediction } from './predictions'
 
 const item = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
   id: 'essay',
@@ -90,5 +91,55 @@ describe('what the app measures reaches what it projects', () => {
 
     expect(lowestOf(calibrated, 'errands')).toBeLessThan(lowestOf(uncalibrated, 'errands'))
     expect(lowestOf(calibrated, 'mental')).toBe(lowestOf(uncalibrated, 'mental'))
+  })
+})
+
+/**
+ * The other half of the same question, for the parameter that learns from prediction error.
+ *
+ * A learned coefficient that does not move a projection is a number in a settings blob, not
+ * a model of anybody -- and the accuracy figure has been measured and discarded for long
+ * enough that "it is computed somewhere" is not evidence it does anything.
+ */
+describe('what the prediction loop has learned reaching the engine', () => {
+  const sleepSamples = (n: number, residual: number): EnergyPrediction[] =>
+    Array.from({ length: n }, (_, index) => ({
+      forDate: `2026-09-${String(index + 1).padStart(2, '0')}`,
+      predicted: 50,
+      reported: 50 + residual,
+      basis: {
+        assumedSleepHours: 8,
+        assumedRestHours: 0,
+        sleepScaleSensitivity: 10,
+        restScaleSensitivity: 0,
+      },
+    }))
+
+  /** A hard fortnight on good sleep: reserves stay off both the floor and the ceiling, so
+   *  what sleep restores is actually visible in the numbers. */
+  const strained = week({
+    start: { mental: 45, physical: 45, social: 45, errands: 45 },
+    items: Array.from({ length: 10 }, (_, dayIndex) =>
+      item({ id: `d${dayIndex}`, dayIndex, hours: 8 }),
+    ),
+    sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 9),
+  })
+
+  const worstOn = (predictions: EnergyPrediction[]) =>
+    project(strained.start, toDayInputs(strained, ALL_PRESENT), paramsFor([], predictions))
+      .worstOverall
+
+  it('leaves a student it has learned nothing about exactly where they were', () => {
+    expect(worstOn([])).toBeCloseTo(
+      project(strained.start, toDayInputs(strained, ALL_PRESENT), DEFAULT_PARAMS).worstOverall,
+    )
+  })
+
+  it('carries a student sleep restores more than average further through the fortnight', () => {
+    expect(worstOn(sleepSamples(8, 8))).toBeGreaterThan(worstOn([]))
+  })
+
+  it('and one it restores less, not as far', () => {
+    expect(worstOn(sleepSamples(8, -8))).toBeLessThan(worstOn([]))
   })
 })

@@ -16,6 +16,7 @@ const input = (over: Partial<RoomModelInput> = {}): RoomModelInput => ({
   schedule: week(),
   today: 0,
   blockLog: [],
+  predictions: [],
   ...over,
 })
 
@@ -94,8 +95,8 @@ describe('roomModel', () => {
     }))
 
     it('reads as calm when every day up to today answered, and as a storm when none did', () => {
-      const silent = roomModel({ schedule: heavySchedule, today: 20, blockLog: [] })
-      const checkedIn = roomModel({ schedule: heavySchedule, today: 20, blockLog: fullyAnswered })
+      const silent = roomModel({ schedule: heavySchedule, today: 20, blockLog: [], predictions: [] })
+      const checkedIn = roomModel({ schedule: heavySchedule, today: 20, blockLog: fullyAnswered, predictions: [] })
 
       expect(silent.state.weather).toBe('storm')
       expect(checkedIn.state.weather).toBe('clear')
@@ -104,7 +105,7 @@ describe('roomModel', () => {
     it('treats every day from today onward as checked in, never inflating the horizon itself', () => {
       // A day still ahead has nothing to check in about (§8b). Confirms `today` is passed
       // through rather than e.g. `today - 1`, which would wrongly mark today missed too.
-      const atDayZero = roomModel({ schedule: heavySchedule, today: 0, blockLog: [] })
+      const atDayZero = roomModel({ schedule: heavySchedule, today: 0, blockLog: [], predictions: [] })
 
       // With nothing yet lived, there is nothing to be silent about -- the fortnight
       // should read exactly as it would with the old hardcoded `true`.

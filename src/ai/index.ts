@@ -13,6 +13,7 @@ export { readPhoto } from './readPhoto'
 export { readImageFile, type ImageResult } from './image'
 export { readRequest } from './readRequest'
 export { draftReplies, type DraftOutcome } from './drafts'
+export { buildLadder, replaceRung, type LadderOutcome } from './ladder'
 export { templateDrafts, type Draft, type Tone } from './draftTemplates'
 export { parseDraftReply } from './draftSchema'
 export {

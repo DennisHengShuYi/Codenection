@@ -2,8 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { Room } from './Room'
 import { describeRoomFully } from './roomText'
-import { clutterIdFor, metaFor, OBJECT_ORDER, CLUTTER_PLACEHOLDER } from './objects'
-import type { RoomModel, RoomRow } from './roomModel'
+import type { RoomModel } from './roomModel'
 import type { RoomState } from './roomState'
 
 const state = (over: Partial<RoomState> = {}): RoomState => ({
@@ -20,32 +19,11 @@ const state = (over: Partial<RoomState> = {}): RoomState => ({
 })
 
 /**
- * The room takes the model rather than the raw state, because the model is what the
- * sidebar draws from too -- that is what stops the two views drifting. This builds a model
- * around a given state so every assertion below can stay focused on the drawing.
+ * `RoomModel` is `{ state }` and nothing else since the sidebar's `rows` were deleted, so
+ * this is a one-line wrapper -- kept as a helper rather than inlined because every case
+ * below reads better as `modelOf(state({ ... }))`.
  */
-const modelOf = (roomState: RoomState = state()): RoomModel => ({
-  state: roomState,
-  rows: OBJECT_ORDER.flatMap((entry): RoomRow[] => {
-    if (entry === CLUTTER_PLACEHOLDER) {
-      return roomState.clutter.map((box) => ({
-        id: clutterIdFor(box.id),
-        label: box.title,
-        reading: `day ${box.dayIndex}`,
-        attention: false,
-      }))
-    }
-
-    return [
-      {
-        id: entry,
-        label: metaFor(entry).label,
-        reading: 'x',
-        attention: entry === 'door' ? roomState.doorLit : false,
-      },
-    ]
-  }),
-})
+const modelOf = (roomState: RoomState = state()): RoomModel => ({ state: roomState })
 
 describe('Room', () => {
   // §10: a viewBox and no fixed width is the whole argument for hand-rolling it -- it

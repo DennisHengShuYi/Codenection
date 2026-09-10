@@ -20,10 +20,9 @@ const TONE_LABELS: Record<Draft['tone'], string> = {
   accept: 'Yes, with the cost said out loud',
 }
 
-/** The comparison takes models now that the room does, so the two rooms carry their own
- *  controls rather than being inert pictures. */
-const roomFor = (schedule: Schedule) =>
-  roomModel({ schedule, profile: DEFAULT_PROFILE, today: 0 })
+/** `today: 0` on purpose: both rooms are drawn from the same week at the same moment, so
+ *  what differs between them is the request and nothing else. */
+const roomFor = (schedule: Schedule) => roomModel({ schedule, today: 0 })
 
 /**
  * §2.3's request box.

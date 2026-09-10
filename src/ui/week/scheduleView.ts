@@ -1,4 +1,4 @@
-import { answeredIds, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
+import { answeredIds, checkedInDays, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
 import { dateFor } from '../../domain/calendar'
 import { paramsFor } from '../../domain/engineParams'
 import { DEFICIT_THRESHOLD, HORIZON_DAYS, overallReserve, project } from '../../engine'
@@ -55,7 +55,11 @@ export function scheduleView({
   blockLog = [],
 }: ScheduleViewInput): readonly DayCell[] {
   const params = paramsFor(outcomesFrom(blockLog))
-  const projection = project(schedule.start, toDayInputs(schedule), params)
+  // §6.5/§8b: the same signal `roomModel.ts` threads into its own projection, so the week
+  // overview's deficit marks and the room's dial agree about what "silent" means instead
+  // of reading one fortnight two different ways.
+  const checkedIn = checkedInDays(blockLog, today, schedule.horizonDays)
+  const projection = project(schedule.start, toDayInputs(schedule, checkedIn), params)
 
   const alreadyAsked = (id: string) => answeredIds(blockLog).includes(id)
 

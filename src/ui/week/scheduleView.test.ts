@@ -98,6 +98,59 @@ describe('scheduleView', () => {
     expect(view().some((cell) => cell.deficit)).toBe(false)
   })
 
+  /**
+   * Ruling 16: wiring §6.5's missing-data pessimism into `scheduleView` (to match
+   * `roomModel.ts`, which already had it) means nothing unless it is shown to actually move
+   * what the overview marks. Draining all four reserves every day makes the fourteen-day
+   * silence's compounding penalty large enough to cross `DEFICIT_THRESHOLD`, rather than
+   * only nudging a number that was never close to the line either way.
+   */
+  it('marks a day in deficit when the fortnight has gone unanswered, but not when it was confirmed', () => {
+    const drainDay = (dayIndex: number): ScheduledItem[] =>
+      (['mental', 'physical', 'social', 'errands'] as const).map((type, i) => ({
+        id: `${type}-${dayIndex}`,
+        title: type,
+        type,
+        kind:
+          type === 'mental'
+            ? 'studyBlock'
+            : type === 'physical'
+              ? 'hardExercise'
+              : type === 'social'
+                ? 'socialDraining'
+                : 'errands',
+        hours: 3,
+        intensity: 1,
+        dayIndex,
+        startHour: 8 + i * 2,
+        fixed: false,
+        deadlineDay: null,
+        protectedRest: false,
+      }))
+
+    const days = 14
+    const items = Array.from({ length: days }, (_, day) => drainDay(day)).flat()
+    const schedule = week(items, {
+      start: { mental: 46, physical: 46, social: 46, errands: 46 },
+    })
+    const today = days
+
+    const confirmed: BlockRecord[] = items.map((entry) => ({
+      blockId: entry.id,
+      type: entry.type,
+      plannedHours: entry.hours,
+      dayIndex: entry.dayIndex,
+      answer: 'right',
+      answeredAt: 0,
+    }))
+
+    const confirmedCells = scheduleView({ schedule, today, blockLog: confirmed })
+    const silentCells = scheduleView({ schedule, today, blockLog: [] })
+
+    expect(confirmedCells[days - 1]?.deficit).toBe(false)
+    expect(silentCells[days - 1]?.deficit).toBe(true)
+  })
+
   it('carries the real date when the week is anchored, and null when it is not', () => {
     expect(view()[0]?.date).toBeNull()
     expect(view(week([], { startedOn: '2026-09-01' }))[0]?.date).toBe('2026-09-01')

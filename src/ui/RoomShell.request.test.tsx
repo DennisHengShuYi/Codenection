@@ -102,6 +102,10 @@ describe('RoomShell with a lapsed commitment', () => {
     )
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one is
+    // the press a student makes.
+    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-notices'))
 
     expect(await screen.findByTestId('lapsed-notice')).toHaveTextContent('Committee meeting')
   })
@@ -134,6 +138,10 @@ describe('RoomShell with a lapsed commitment', () => {
     )
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one is
+    // the press a student makes.
+    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-notices'))
     await screen.findByTestId('lapsed-notice')
 
     await userEvent.click(screen.getByRole('button', { name: /got it/i }))

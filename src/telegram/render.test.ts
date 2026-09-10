@@ -33,6 +33,7 @@ const item = (title: string): ParsedItem => ({
   kind: 'studyBlock',
   hours: 2,
   deadlineDay: null,
+  startHour: null,
   fixed: false,
   confident: true,
   repeat: null,

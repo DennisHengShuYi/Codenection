@@ -1,5 +1,5 @@
 import { parseBrainDump } from './parseBrainDump'
-import { MAX_REQUEST_LENGTH, type ParsedItem } from './types'
+import { MAX_REQUEST_LENGTH, type Calendar, type ParsedItem } from './types'
 
 /**
  * Turns a pasted request into one proposed commitment.
@@ -12,11 +12,15 @@ import { MAX_REQUEST_LENGTH, type ParsedItem } from './types'
  * would show up as the request box reading a message differently from the planner reading
  * the same words.
  */
-export async function readRequest(text: string): Promise<ParsedItem | null> {
+export async function readRequest(
+  text: string,
+  /** §44: which real day day 0 is, so "next thursday" in a request means that thursday. */
+  calendar?: Calendar,
+): Promise<ParsedItem | null> {
   const trimmed = text.trim()
   if (trimmed === '' || trimmed.length > MAX_REQUEST_LENGTH) return null
 
-  const outcome = await parseBrainDump(trimmed)
+  const outcome = await parseBrainDump(trimmed, calendar)
   const [first, ...rest] = outcome.items
   if (!first) return null
 

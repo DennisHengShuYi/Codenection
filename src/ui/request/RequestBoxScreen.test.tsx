@@ -29,7 +29,10 @@ const setup = (over: Partial<Parameters<typeof RequestBoxScreen>[0]> = {}) => {
     blockLog: [],
     predictions: [],
     onAccept: vi.fn(),
-    onBack: vi.fn(), onClose: vi.fn(),
+    onBack: vi.fn(),
+    onClose: vi.fn(),
+    dayLabels: ['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep'],
+    calendar: { today: 0, startWeekday: 5, todayLabel: '11 September 2026' },
     ...over,
   }
   const { unmount } = render(<RequestBoxScreen {...props} />)

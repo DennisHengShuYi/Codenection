@@ -20,6 +20,11 @@ async function openApp(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: /look around/i }).click()
   await expect(page.getByTestId('room-scene')).toBeVisible()
+
+  // Ruling 61: the live cards wait behind the `Waiting` button rather than stacking under
+  // the drawing, so reaching the advice starts with the press a student would make.
+  await page.getByTestId('open-notices').click()
+  await expect(page.getByRole('dialog', { name: /waiting/i })).toBeVisible()
 }
 
 // Advice with nothing to discover first: no object to find, no tap to guess at.
@@ -44,8 +49,8 @@ test('offers something to do rather than a sentence to read', async ({ page }) =
   await expect(card.getByRole('button', { name: /not today/i })).toBeVisible()
 })
 
-// §0 and §10 make all four widths a standing requirement. The card is extra content below
-// the room, so this measures the room *with* advice on it rather than the room alone.
+// §0 and §10 make all four widths a standing requirement. Since Ruling 61 the card is in
+// the sheet rather than below the room, so this measures the sheet with advice in it.
 for (const width of [320, 390, 768, 1280]) {
   test(`the room and any advice fit at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 })

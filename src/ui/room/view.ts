@@ -50,6 +50,10 @@ export type View =
   /** A block being added to a named day, which is why the day is in the address: the form
    *  is opened FROM a day the student was already looking at. */
   | { readonly kind: 'newBlock'; readonly dayIndex: number }
+  /** Ruling 61: everything the room used to stack in a band beneath the drawing -- the
+   *  preview notice, the room in words, the accuracy line and the live cards -- behind one
+   *  button, so the room is the drawing again. */
+  | { readonly kind: 'notices' }
 
 export const ROOM: View = { kind: 'room' }
 // Not exported: `toWeek()` and `back()` are the module's whole surface for it.
@@ -71,6 +75,7 @@ export const toRebalance = (): View => REBALANCE
 export const toEditBlock = (itemId: string): View => ({ kind: 'editBlock', itemId })
 
 export const toNewBlock = (dayIndex: number): View => ({ kind: 'newBlock', dayIndex })
+export const toNotices = (): View => ({ kind: 'notices' })
 
 /**
  * One level up: the Back button's rule (Ruling 60).
@@ -124,6 +129,8 @@ export const toPath = (view: View): string => {
       return `/week/block/${encodeURIComponent(view.itemId)}/edit`
     case 'newBlock':
       return `/week/new/${view.dayIndex}`
+    case 'notices':
+      return '/notices'
   }
 }
 
@@ -176,6 +183,8 @@ export const fromPath = (path: string): View => {
   if (first === 'settings' && parts.length === 1) return toSettings()
 
   if (first === 'reserves' && parts.length === 1) return toReserves()
+
+  if (first === 'notices' && parts.length === 1) return toNotices()
 
   if (first === 'add') {
     if (parts.length === 1) return toAdd()

@@ -7,6 +7,7 @@ import type { AddWay } from './room/view'
 import { Button } from './kit/Button'
 import { Sheet } from './kit/Sheet'
 import { suggestRepeat } from '../domain/recurrence'
+import { calendarFor, dayLabelsFor } from './planner/dayLabels'
 import { PhotoImportScreen } from './planner/PhotoImportScreen'
 import { PlannerScreen } from './planner/PlannerScreen'
 import { RequestBoxScreen } from './request/RequestBoxScreen'
@@ -97,9 +98,21 @@ export function AddSheet({
 }) {
   const close = () => onClose()
 
+  /**
+   * §43: computed once here rather than in each of the three screens.
+   *
+   * This is the only component in the add flow holding both the week and today, which is
+   * what the labels need -- the screens below it take the finished list and hand it to the
+   * chip.
+   */
+  const dayLabels = dayLabelsFor(schedule, today)
+  /** §44: and the same week, said in the terms the two readers need. */
+  const calendar = calendarFor(schedule, today)
+
   if (way === 'photo') {
     return (
       <PhotoImportScreen
+        dayLabels={dayLabels}
         suggestRepeat={(item) => suggestRepeat(item, schedule)}
         onAccept={(items) => {
           onAcceptItems(items)
@@ -114,6 +127,8 @@ export function AddSheet({
   if (way === 'type') {
     return (
       <PlannerScreen
+        dayLabels={dayLabels}
+        calendar={calendar}
         suggestRepeat={(item) => suggestRepeat(item, schedule)}
         onAccept={(items) => {
           onAcceptItems(items)
@@ -128,6 +143,8 @@ export function AddSheet({
   if (way === 'request') {
     return (
       <RequestBoxScreen
+        dayLabels={dayLabels}
+        calendar={calendar}
         schedule={schedule}
         params={params}
         today={today}

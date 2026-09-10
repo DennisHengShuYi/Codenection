@@ -184,13 +184,23 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
   })
 
   it('PhotoImportScreen: Back is in the bar', () => {
-    render(<PhotoImportScreen onAccept={vi.fn()} onBack={vi.fn()} onClose={vi.fn()} />)
+    render(
+      <PhotoImportScreen
+        onAccept={vi.fn()}
+        onBack={vi.fn()}
+        onClose={vi.fn()}
+        dayLabels={['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep']}
+      />,
+    )
 
     expect(within(actionBar()).getByTestId('sheet-back')).toBeVisible()
   })
 
   it('PlannerScreen: Back and Read this are in the bar', () => {
-    render(<PlannerScreen onAccept={vi.fn()} onBack={vi.fn()} onClose={vi.fn()} />)
+    render(
+      <PlannerScreen onAccept={vi.fn()} onBack={vi.fn()} onClose={vi.fn()} dayLabels={['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep']}
+        calendar={{ today: 0, startWeekday: 5, todayLabel: '11 September 2026' }} />,
+    )
 
     expect(within(actionBar()).getByTestId('sheet-back')).toBeVisible()
     expect(within(actionBar()).getByRole('button', { name: /read this/i })).toBeVisible()
@@ -207,6 +217,8 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         onAccept={vi.fn()}
         onBack={vi.fn()}
         onClose={vi.fn()}
+        dayLabels={['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep']}
+        calendar={{ today: 0, startWeekday: 5, todayLabel: '11 September 2026' }}
       />,
     )
 

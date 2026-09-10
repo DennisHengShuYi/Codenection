@@ -1,6 +1,25 @@
 import type { Repeat } from '../domain/recurrence'
 import type { ActivityKind, LoadType } from '../engine'
 
+/**
+ * §44: which real day the horizon's day 0 is.
+ *
+ * Both readers needed it and neither had it. The rules computed a named weekday from
+ * `today % 7`, which assumes day 0 is a Sunday; the model was told "day index from 0
+ * (today)" and never told what day today was, so it had to guess -- guess Monday, and a
+ * stated Thursday comes back as day 3. Either way "gym thursday" landed on the wrong day,
+ * and §43's Day select is what finally showed it to the student.
+ *
+ * `startWeekday` is 0 for Sunday, matching `Date.getUTCDay` and `Repeat.weekdays`.
+ */
+export interface Calendar {
+  readonly today: number
+  readonly startWeekday: number
+  /** How to say day 0 to a model, e.g. "Friday 11 September 2026". Absent for a week that
+   *  has never been dated, where there is nothing true to say. */
+  readonly todayLabel?: string
+}
+
 export interface ParsedItem {
   readonly id: string
   readonly title: string
@@ -15,6 +34,19 @@ export interface ParsedItem {
   readonly hours: number
   /** Day index within the horizon, or null when nothing in the text implied one. */
   readonly deadlineDay: number | null
+  /**
+   * §43: the hour of the day the student actually said, or null when they said none.
+   *
+   * The schema carried a day and never a time, so "WIA3001 lecture Tuesday 9am" arrived as
+   * Tuesday and nothing else, and `placement.ts` then picked an hour -- a free slot, or a
+   * fallback constant. The app was deciding when a student's own lecture happened, and the
+   * student never saw the answer before accepting it.
+   *
+   * Null is a real answer, not a missing one: an essay due Friday has a deadline and no
+   * time of day, and the optimizer should keep its freedom to place it. A stated hour
+   * removes that freedom -- see `fixed`, which the accept sets alongside it.
+   */
+  readonly startHour: number | null
   /**
    * Whether this is pinned to a *time* -- a lecture, a lab, a shift.
    *

@@ -30,7 +30,9 @@ beforeEach(() => respondWith(503, {}))
 afterEach(() => vi.unstubAllGlobals())
 
 const setup = () => {
-  const props = { onAccept: vi.fn(), onBack: vi.fn(), onClose: vi.fn() }
+  const props = { onAccept: vi.fn(), onBack: vi.fn(),
+    onClose: vi.fn(),
+    dayLabels: ['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep'] }
   render(<PhotoImportScreen {...props} />)
   return props
 }

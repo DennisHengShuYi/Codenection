@@ -38,6 +38,10 @@ const openWith = async (reported: number[]) => {
   render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
   await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
 
+  // Ruling 61: the live cards wait behind the `Waiting` button now, so opening it is part
+  // of arriving at one -- the press a student makes.
+  await userEvent.click(screen.getByTestId('open-notices'))
+
   return repository
 }
 

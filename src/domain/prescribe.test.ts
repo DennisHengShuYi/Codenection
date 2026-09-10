@@ -56,7 +56,18 @@ describe('freeSlotOn', () => {
   it('places the slot where the gap actually is, not always at 16:00', () => {
     const busyAfternoon = week({ items: [block({ startHour: 15, hours: 4 })] })
 
-    expect(freeSlotOn(busyAfternoon, 0)?.startHour).toBe(0)
+    // Not midnight, and not the old hardcoded 16:00 either -- the real free stretch of the
+    // student's day starts at the wake hour, since nothing occupies the morning.
+    expect(freeSlotOn(busyAfternoon, 0)).toEqual({ startHour: 8, hours: 7 })
+  })
+
+  it('never anchors a free slot before the wake hour, even for an ordinary early class', () => {
+    // A completely ordinary fixture: one class at 8-10. The scan must not report the
+    // midnight-to-8 stretch as free -- nobody is awake for it, and sleepByDay already
+    // accounts for it.
+    const earlyClass = week({ items: [block({ startHour: 8, hours: 2 })] })
+
+    expect(freeSlotOn(earlyClass, 0)?.startHour).toBeGreaterThanOrEqual(8)
   })
 
   it('reports no slot when the day has no free hour', () => {
@@ -66,7 +77,7 @@ describe('freeSlotOn', () => {
   it('finds the free hour after the last block when the day starts busy', () => {
     const busyMorning = week({ items: [block({ startHour: 0, hours: 10 })] })
 
-    expect(freeSlotOn(busyMorning, 0)).toEqual({ startHour: 10, hours: 6 })
+    expect(freeSlotOn(busyMorning, 0)).toEqual({ startHour: 10, hours: 14 })
   })
 })
 

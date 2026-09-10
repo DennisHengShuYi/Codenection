@@ -15,8 +15,15 @@ const MAX_BLOCK_HOURS = 3
 /** Waking hours in a day, once sleep is set aside. */
 const WAKING_HOURS = 16
 
+/** When a student's day actually starts, borrowed from `dayGrid.DEFAULT_FIRST_HOUR` -- the
+ *  codebase's existing answer to the same question. Scanning from midnight instead would let
+ *  a free-looking stretch of the night be reported as an open slot and rest get prescribed
+ *  before anyone is awake for it. */
+const WAKE_HOUR = 8
+
 /** Late afternoon: a gap a student plausibly still has, rather than first thing. Used only
- *  as the tie-break when a day is completely empty and there is no real gap to point at. */
+ *  as the tie-break when a day is completely empty and there is no real gap to point at. It
+ *  sits inside [WAKE_HOUR, WAKE_HOUR + WAKING_HOURS) so it stays a coherent time of day. */
 const DEFAULT_START_HOUR = 16
 
 export interface Prescription {
@@ -82,18 +89,24 @@ export function freeSlotOn(schedule: Schedule, dayIndex: number): FreeSlot | nul
     return { startHour: DEFAULT_START_HOUR, hours: WAKING_HOURS }
   }
 
-  let cursor = 0
+  const dayEnd = WAKE_HOUR + WAKING_HOURS
+  let cursor = WAKE_HOUR
   for (const busyBlock of busy) {
-    const gapEnd = Math.min(busyBlock.start, WAKING_HOURS)
-    if (gapEnd - cursor >= MIN_GAP_HOURS) {
-      return { startHour: cursor, hours: gapEnd - cursor }
+    // Clamp each block to the waking window -- anything before WAKE_HOUR or after dayEnd is
+    // sleep, not a free slot nobody would ever act on.
+    const blockStart = Math.max(busyBlock.start, WAKE_HOUR)
+    const blockEnd = Math.min(busyBlock.end, dayEnd)
+    if (blockEnd <= cursor) continue
+
+    if (blockStart - cursor >= MIN_GAP_HOURS) {
+      return { startHour: cursor, hours: blockStart - cursor }
     }
 
-    cursor = Math.max(cursor, busyBlock.end)
-    if (cursor >= WAKING_HOURS) return null
+    cursor = Math.max(cursor, blockEnd)
+    if (cursor >= dayEnd) return null
   }
 
-  const tailGap = WAKING_HOURS - cursor
+  const tailGap = dayEnd - cursor
   return tailGap >= MIN_GAP_HOURS ? { startHour: cursor, hours: tailGap } : null
 }
 

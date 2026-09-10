@@ -1,8 +1,7 @@
 import { Character } from './Character'
-import { clutterHotspot, HOTSPOTS } from './hotspots'
-import { isClutterId, type ObjectId } from './objects'
 import type { RoomModel } from './roomModel'
 import type { RoomState } from './roomState'
+import { describeRoomFully } from './roomText'
 
 const WEATHER_FILL: Record<RoomState['weather'], string> = {
   clear: '#bae6fd',
@@ -11,33 +10,36 @@ const WEATHER_FILL: Record<RoomState['weather'], string> = {
 }
 
 /**
- * §1.3's room, drawn as one scalable scene.
- *
- * The picture is hidden from assistive technology and the words beneath it are not,
- * because announcing a drawing twice is noise rather than access — and unlike the dial,
- * the drawing alone conveys nothing at all to a screen reader.
+ * §1.3's room, drawn as one scalable scene -- and, per §3, a picture rather than a control
+ * surface. The twelve invisible buttons that used to sit over the artwork are gone, along
+ * with them the only thing that gave the drawing an accessible name. So the drawing now
+ * carries its own: the full, uncapped description as its `aria-label`, so a screen-reader
+ * user loses nothing that the buttons used to say between them.
  */
-export function Room({
-  model,
-  onSelect,
-}: {
-  model: RoomModel
-  onSelect?: (objectId: ObjectId) => void
-}) {
+export function Room({ model }: { model: RoomModel }) {
   const { state } = model
-  const select = (_id: string) => () => undefined
 
   return (
-    /* Locked to the viewBox's 3:2 ratio so the hotspot percentages stay over the artwork at
-       every width, and capped at the viewport so a tall screen does not stretch it. */
+    /* No longer locked to the viewBox's 3:2 ratio for hotspot alignment -- nothing is laid
+       over it any more -- but the ratio still reads as a room, so it stays. Capped at the
+       viewport so a tall screen does not stretch it. */
     <section className="relative mx-auto aspect-[3/2] max-h-dvh w-full">
+      {/* §1.1: the reserve, in one corner as a compact readout -- no tap required. */}
+      <div
+        data-testid="room-gauge"
+        className="absolute right-2 top-2 rounded-full bg-surface/90 px-3 py-1 text-sm font-semibold text-ink-soft shadow"
+      >
+        {Math.round(state.lightLevel * 100)}%
+      </div>
+
       {/* viewBox and no width: it scales to its container at every breakpoint without a
           media query, which is §10's argument for hand-rolled SVG over an image. */}
       <svg
         data-testid="room-scene"
         viewBox="0 0 300 200"
         className="absolute inset-0 h-full w-full rounded-lg bg-slate-900/5"
-        aria-hidden="true"
+        role="img"
+        aria-label={describeRoomFully(state)}
         focusable="false"
       >
         {/* Light level: the reserve, as how lit the room is. */}
@@ -52,12 +54,12 @@ export function Room({
         />
 
         {/* Ceiling weights: total load, pressing lower as it rises. */}
-        <g data-testid="room-ceiling" onClick={select('ceiling')} className="cursor-pointer">
+        <g data-testid="room-ceiling">
           <rect x="0" y="0" width="300" height={10 + state.ceilingPressure * 34} fill="#475569" />
         </g>
 
         {/* Window weather: the projection, rendered literally. */}
-        <g data-testid="room-window" onClick={select('window')} className="cursor-pointer">
+        <g data-testid="room-window">
           <rect
             x="196"
             y="56"
@@ -70,7 +72,7 @@ export function Room({
         </g>
 
         {/* Paper stack: mental load. */}
-        <g data-testid="room-papers" onClick={select('papers')} className="cursor-pointer">
+        <g data-testid="room-papers">
           <rect
             x="40"
             y={150 - state.paperHeight * 40}
@@ -82,7 +84,7 @@ export function Room({
         </g>
 
         {/* Bed: sleep debt. */}
-        <g data-testid="room-bed" onClick={select('bed')} className="cursor-pointer">
+        <g data-testid="room-bed">
           <rect
             x="212"
             y="130"
@@ -94,7 +96,7 @@ export function Room({
         </g>
 
         {/* Plant: physical health, wilting with sleep debt and inactivity. */}
-        <g data-testid="room-plant" onClick={select('plant')} className="cursor-pointer">
+        <g data-testid="room-plant">
           <rect x="20" y="146" width="14" height="14" fill="#b45309" />
           <path
             d={`M 27 146 Q ${27 - (1 - state.plantHealth) * 12} ${132 + (1 - state.plantHealth) * 10} 27 ${124 + (1 - state.plantHealth) * 14}`}
@@ -105,12 +107,7 @@ export function Room({
         </g>
 
         {/* Door: lit when getting outside is the highest-value action. */}
-        <g
-          data-testid="room-door"
-          data-lit={String(state.doorLit)}
-          onClick={select('door')}
-          className="cursor-pointer"
-        >
+        <g data-testid="room-door" data-lit={String(state.doorLit)}>
           <rect
             x="112"
             y="70"
@@ -128,8 +125,6 @@ export function Room({
             <rect
               key={box.id}
               data-testid={`clutter-box-${box.id}`}
-              onClick={select(box.id)}
-              className="cursor-pointer"
               x={44 + index * 22}
               y="166"
               width="18"
@@ -142,36 +137,6 @@ export function Room({
 
         <Character state={state.character} />
       </svg>
-
-      {/*
-        The controls. Real HTML buttons over the drawing rather than elements inside it --
-        see hotspots.ts for why. Rendered in the model's fixed order, so tabbing through the
-        room walks it in the same order the sidebar lists it.
-
-        Attention is named as well as drawn: §1.5's rule that colour alone cannot carry
-        meaning applies to furniture too, and a glow says nothing to somebody who cannot see
-        it.
-      */}
-      {model.rows.map((row) => {
-        const spot = isClutterId(row.id)
-          ? clutterHotspot(state.clutter.findIndex((box) => row.id.endsWith(box.id)))
-          : HOTSPOTS[row.id]
-
-        return (
-          <button
-            key={row.id}
-            type="button"
-            data-testid={`object-${row.id}`}
-            data-attention={String(row.attention)}
-            aria-label={row.attention ? `${row.label} — needs you` : row.label}
-            onClick={() => onSelect?.(row.id)}
-            style={spot}
-            className={`absolute rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
-              row.attention ? 'ring-2 ring-amber-400 ring-offset-1' : ''
-            }`}
-          />
-        )
-      })}
     </section>
   )
 }

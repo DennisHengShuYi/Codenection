@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { Room } from './Room'
-import { clutterIdFor, isClutterId, metaFor, OBJECT_ORDER, CLUTTER_PLACEHOLDER } from './objects'
+import { describeRoomFully } from './roomText'
+import { clutterIdFor, metaFor, OBJECT_ORDER, CLUTTER_PLACEHOLDER } from './objects'
 import type { RoomModel, RoomRow } from './roomModel'
 import type { RoomState } from './roomState'
 
@@ -20,11 +20,11 @@ const state = (over: Partial<RoomState> = {}): RoomState => ({
 })
 
 /**
- * The room now takes the model rather than the raw state, because the controls are driven by
- * the same rows the sidebar uses -- that is what stops the two views drifting. This builds a
- * model around a given state so every assertion below survives the change unaltered.
+ * The room takes the model rather than the raw state, because the model is what the
+ * sidebar draws from too -- that is what stops the two views drifting. This builds a model
+ * around a given state so every assertion below can stay focused on the drawing.
  */
-const modelOf = (roomState: RoomState): RoomModel => ({
+const modelOf = (roomState: RoomState = state()): RoomModel => ({
   state: roomState,
   rows: OBJECT_ORDER.flatMap((entry): RoomRow[] => {
     if (entry === CLUTTER_PLACEHOLDER) {
@@ -105,48 +105,37 @@ describe('Room', () => {
     expect(screen.getByTestId('room-character')).toHaveAttribute('data-state', 'flattened')
   })
 
-  // §1.3: "Tap any object for its numbers."
-  it('tells anyone who taps an object which one it was', async () => {
-    const onSelect = vi.fn()
-    render(<Room model={modelOf(state())} onSelect={onSelect} />)
+  // §3: the room is a picture now, not a control surface -- the twelve invisible tap
+  // targets that used to sit over the artwork are gone, along with `onSelect`. Every
+  // feature they duplicated is reached elsewhere; this just stops the room shouting.
+  it('is a picture, not a control surface', () => {
+    render(<Room model={modelOf()} />)
 
-    await userEvent.click(screen.getByTestId('object-plant'))
-
-    expect(onSelect).toHaveBeenCalledWith('plant')
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
 
-  // A clutter box reports the errand, not "clutter" -- otherwise there is no way to act
-  // on the specific thing that was tapped.
-  it('reports a clutter box by its own id', async () => {
-    const onSelect = vi.fn()
-    render(
-      <Room
-        model={modelOf(state({ clutter: [{ id: 'a', title: 'Laundry', dayIndex: 1 }] }))}
-        onSelect={onSelect}
-      />,
-    )
+  // §1.1: the dial moves in as a compact readout, "no tap required for either" -- it used
+  // to be two taps deep, behind the light object.
+  it('shows the reserve without anybody having to look for it', () => {
+    render(<Room model={modelOf()} />)
 
-    await userEvent.click(screen.getByTestId('object-clutter-a'))
-
-    // Namespaced now, so a clutter box cannot collide with a piece of furniture.
-    expect(onSelect).toHaveBeenCalledWith('clutter-a')
+    expect(screen.getByTestId('room-gauge')).toBeInTheDocument()
   })
 
-  // §1.5: the picture is hidden from assistive technology because the words beside it
-  // carry the same information in a form that can be read. Announcing both is noise.
-  /**
-   * §1.5's text equivalent has moved to the sidebar, which is the words view -- see
-   * RoomSidebar.test.tsx, where this assertion now lives. It is not lost, and it is not
-   * weaker: the sidebar states the room in words *and* lets you operate it, where this
-   * paragraph only described a picture.
-   *
-   * What stays here is that the drawing itself remains decorative, so it is not announced
-   * twice.
-   */
-  it('keeps the drawing decorative, since the words live in the sidebar', () => {
-    render(<Room model={modelOf(state({ character: 'flattened' }))} />)
+  it('reads the reserve off the light level, as a percentage', () => {
+    render(<Room model={modelOf(state({ lightLevel: 0.42 }))} />)
 
-    expect(screen.getByTestId('room-scene')).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.getByTestId('room-gauge')).toHaveTextContent('42%')
+  })
+
+  // §1.5: with no buttons left to carry accessible names, the drawing has to speak for
+  // itself -- so it gets the full, uncapped description as its own aria-label rather than
+  // staying decorative. Screen-reader users lose nothing that used to live on the buttons.
+  it('gives screen reader users everything the drawing shows, not a trimmed version', () => {
+    const roomState = state({ character: 'flattened', doorLit: true })
+    render(<Room model={modelOf(roomState)} />)
+
+    expect(screen.getByTestId('room-scene')).toHaveAttribute('aria-label', describeRoomFully(roomState))
   })
 
   it('renders an empty room without throwing', () => {

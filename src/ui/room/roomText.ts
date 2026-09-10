@@ -15,37 +15,82 @@ const WEATHER_WORDS: Record<RoomState['weather'], string> = {
   storm: 'Through the window there is a storm coming, and it is close.',
 }
 
+const FLOOR_CLEAR_SENTENCE = 'The floor is clear — nothing waiting.'
+
+/** Null when the floor has nothing on it, so the capped paragraph can treat "something is
+ *  waiting" as one of its optional slots rather than something always shown. */
+const clutterItemsSentence = (state: RoomState): string | null =>
+  state.clutter.length === 0
+    ? null
+    : `On the floor: ${state.clutter.map((box) => box.title).join(', ')}.`
+
+/** The unconditional version `describeRoomFully` uses: always says something about the
+ *  floor, clear or not. */
+const clutterSentence = (state: RoomState): string => clutterItemsSentence(state) ?? FLOOR_CLEAR_SENTENCE
+
+const sleepSentence = (state: RoomState): string | null => {
+  if (state.sleepDebt <= 0) return null
+
+  const hours = Math.round(state.sleepDebt * 10) / 10
+  return `The bed shows about ${hours} hours of sleep owed.`
+}
+
+const plantSentence = (state: RoomState): string | null =>
+  state.plantHealth < PLANT_DROOPS_BELOW ? 'The plant is drooping.' : null
+
+const doorSentence = (state: RoomState): string | null =>
+  state.doorLit ? 'The door is lit. Getting outside is the best thing available right now.' : null
+
+/** One sentence, for the capped paragraph -- the two-sentence version above is fine when
+ *  it is the whole story, but here it would use up two of three slots on its own. */
+const doorSentenceShort = (state: RoomState): string | null =>
+  state.doorLit ? 'The door is lit — getting outside is the best thing available right now.' : null
+
 /**
  * §1.5: a full text equivalent of every room object, as a primary view.
  *
  * The room needs this far more than the dial did. A dial at least has a number beside it;
  * a picture of a room carries nothing whatsoever to a screen reader, so anything left out
- * here is not merely unstyled for those users — it is absent.
+ * here is not merely unstyled for those users — it is absent. This is the drawing's
+ * `aria-label`: nothing here is trimmed for space, because there are no buttons beneath it
+ * to lose their footing.
  *
  * The copy follows §1.3's rule that the room reflects and never scolds. It says what is,
  * never what the student should have done.
  */
+export function describeRoomFully(state: RoomState): string {
+  const parts = [
+    CHARACTER_WORDS[state.character],
+    WEATHER_WORDS[state.weather],
+    clutterSentence(state),
+    sleepSentence(state),
+    plantSentence(state),
+    doorSentence(state),
+  ].filter((part): part is string => part !== null)
+
+  return parts.join(' ')
+}
+
+/**
+ * The same story, capped at three sentences so a 320px screen keeps its buttons below the
+ * fold (the sidebar's row list, not this paragraph, is what still spells out every number).
+ *
+ * Character and weather stay always -- the drawing cannot say either any other way. Then
+ * at most one more, in priority order: the door lit, sleep debt, what is on the floor, the
+ * plant. The floor is always "applicable" in the sense that it has something to say (clear
+ * or not), so it is what fills the slot when nothing more urgent does.
+ */
 export function describeRoom(state: RoomState): string {
-  const parts: string[] = [CHARACTER_WORDS[state.character], WEATHER_WORDS[state.weather]]
+  const additional =
+    doorSentenceShort(state) ??
+    sleepSentence(state) ??
+    clutterItemsSentence(state) ??
+    plantSentence(state) ??
+    FLOOR_CLEAR_SENTENCE
 
-  if (state.clutter.length === 0) {
-    parts.push('The floor is clear — nothing waiting.')
-  } else {
-    parts.push(`On the floor: ${state.clutter.map((box) => box.title).join(', ')}.`)
-  }
-
-  if (state.sleepDebt > 0) {
-    const hours = Math.round(state.sleepDebt * 10) / 10
-    parts.push(`The bed shows about ${hours} hours of sleep owed.`)
-  }
-
-  if (state.plantHealth < PLANT_DROOPS_BELOW) {
-    parts.push('The plant is drooping.')
-  }
-
-  if (state.doorLit) {
-    parts.push('The door is lit. Getting outside is the best thing available right now.')
-  }
+  const parts = [CHARACTER_WORDS[state.character], WEATHER_WORDS[state.weather], additional].filter(
+    (part): part is string => part !== null,
+  )
 
   return parts.join(' ')
 }

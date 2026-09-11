@@ -83,7 +83,12 @@ export function MicroStartPage({
     }
     // `onLadder` is deliberately absent from the dependencies: the shell recreates it on
     // every render, and depending on it would regenerate the chain in a loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    //
+    // Stated as a comment rather than an `eslint-disable` directive, because there is no
+    // ESLint in this project to disable -- `typescript-eslint` peers on TypeScript below
+    // 6.1 and this is on 7.0.2, so there is no supported combination to install. A
+    // suppression pointing at a rule nothing runs reads as "reviewed and excepted" when
+    // nothing reviewed it, which is worse than the omission it was covering.
   }, [item, ladder, ready])
 
   const commit = (next: Ladder) => {

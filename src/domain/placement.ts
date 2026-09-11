@@ -4,7 +4,7 @@ import type { EngineParams } from '../engine'
 import { smallestFixes, type Fix, type Schedule, type ScheduledItem } from '../optimizer'
 import { dateFor, WEEKDAY_NAMES } from './calendar'
 import { expandRecurring } from './recurrence'
-import { gapsOn, slotOn, type SlotNeed } from './slotFinder'
+import { slotOn, type SlotNeed } from './slotFinder'
 
 /**
  * Where an undated item goes when nothing says otherwise, counted from today.

@@ -4,7 +4,6 @@ import { RoomComparison } from './RoomComparison'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule } from '../../optimizer'
 import { roomModel } from './roomModel'
-import type { RoomState } from './roomState'
 
 /** The comparison takes models, because the room does. Built from a real week rather than
  *  a hand-written state, so the derivation is exercised too. */
@@ -23,20 +22,6 @@ const modelOf = (over: Partial<Schedule> = {}) =>
     blockLog: [],
     predictions: [],
   })
-
-const state = (character: RoomState['character']): RoomState => ({
-  dayFull: 0.2,
-  paperHeight: 0.2,
-  clutter: [],
-  exerciseWaiting: 0, companyWaiting: 0,
-  windowDark: 0,
-  sleepDebt: 0,
-  weather: 'clear',
-  lightLevel: 0.8,
-  reserve: 0.7,
-  doorLit: false,
-  character,
-})
 
 describe('RoomComparison', () => {
   it('shows one room when there is nothing to compare', () => {

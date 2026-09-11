@@ -190,7 +190,13 @@ export function RoomShell({
     if (proposalIsStale || editTargetIsGone || startTargetIsGone) setView(toWeek())
     // `setView` is rebuilt on every render, so listing it here would re-run this effect on
     // every render. Whether it should fire is decided entirely by the four flags above.
-  }, [proposalIsStale, restPlanIsStale, editTargetIsGone, startTargetIsGone]) // eslint-disable-line react-hooks/exhaustive-deps
+    // Deliberately not exhaustive: `setView` is rebuilt every render, so listing it would
+    // re-run this on every render. The four flags above decide whether it should fire.
+    //
+    // A comment rather than an `eslint-disable`: there is no ESLint here to disable, since
+    // `typescript-eslint` does not support this project's TypeScript version, and a
+    // directive naming a rule nothing runs claims a review that never happened.
+  }, [proposalIsStale, restPlanIsStale, editTargetIsGone, startTargetIsGone])
 
   // Session-scoped dismissals for the live cards, none of which has a domain-level
   // "not today" of its own. §7 retired the last permanent one -- the failed-recovery log --
@@ -253,7 +259,11 @@ export function RoomShell({
       blockLog,
     )
     if (next.length !== profile.predictions.length) setProfile({ ...profile, predictions: next })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deliberately not exhaustive: `today` and `params` are recomputed every render, and
+    // depending on them would re-anchor and re-resolve on every one. What decides whether
+    // this should run is the five values listed.
+    //
+    // A comment rather than an `eslint-disable`, for the reason given on the effect above.
   }, [schedule, profile, blockLog, setSchedule, setProfile])
 
   if (!schedule) {

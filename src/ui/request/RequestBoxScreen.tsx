@@ -6,7 +6,7 @@ import type { EnergyPrediction } from '../../domain/predictions'
 import type { BlockRecord } from '../../domain/blockLog'
 import { priceRequest, type RequestCost } from '../../domain/requestCost'
 import type { EngineParams } from '../../engine'
-import { toDayInputs, type Schedule } from '../../optimizer'
+import type { Schedule } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { Card } from '../kit/Card'
 import { Field } from '../kit/Field'
@@ -15,7 +15,6 @@ import { ItemChip } from '../planner/ItemChip'
 import { saysWhen } from '../planner/when'
 import { RoomComparison } from '../room/RoomComparison'
 import { roomModel } from '../room/roomModel'
-import { DEFAULT_PROFILE } from '../../domain/calibration'
 
 const TONE_LABELS: Record<Draft['tone'], string> = {
   decline: 'A soft no',

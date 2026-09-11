@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, it } from 'vitest'
 import { readDataConfig } from './env'
 import { describeRepositoryContract } from './repositoryContract'
 import { createSupabaseRepository } from './supabaseRepository'

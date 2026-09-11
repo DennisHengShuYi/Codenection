@@ -1,5 +1,4 @@
 import {
-  DEFICIT_THRESHOLD,
   overallReserve,
   project,
   USEFUL_REST_HOURS,

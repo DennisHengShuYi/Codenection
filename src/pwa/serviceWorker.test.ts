@@ -93,7 +93,13 @@ function loadServiceWorker(options: WorkerOptions = {}) {
     return networkResponse
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
+  // `new Function` on purpose, and only here: the service worker ships as a plain script
+  // that no bundler processes, so the only way to test the real file is to evaluate the real
+  // file. The source is read from disk in this repository, not from anywhere a caller could
+  // influence.
+  //
+  // A comment rather than an `eslint-disable`, since there is no ESLint in this project to
+  // disable -- see the effects in `ui/room/RoomShell.tsx` for why.
   new Function('self', 'caches', 'fetch', SW_SOURCE)(self, caches, fetchImpl)
 
   return {

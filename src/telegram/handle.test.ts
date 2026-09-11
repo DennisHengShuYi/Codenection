@@ -264,10 +264,6 @@ describe('the command surface', () => {
     sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
   })
 
-  /** prescribe() only speaks when something is actually low -- see PRESCRIBE_BELOW. A
-   *  comfortable week gets no advice, which is the point rather than a gap. */
-  const depleted = { mental: 20, physical: 70, social: 70, errands: 70 }
-
   const studyBlock = {
     id: 'b1', title: 'Ethics essay', type: 'mental', kind: 'studyBlock', hours: 2,
     intensity: 1, dayIndex: 0, startHour: 9, fixed: true, deadlineDay: null, protectedRest: false,
@@ -1233,9 +1229,6 @@ describe('looking back at yesterday', () => {
  * writes nothing is the failure mode these are guarding against.
  */
 describe('answering from chat', () => {
-  const chatCommand = (name: string, argument = '') =>
-    ({ kind: 'command', chatId: 7, name, argument }) as never
-
   const anchoredWeek = () => ({
     ...week(),
     startedOn: new Date(1000).toISOString().split('T')[0],

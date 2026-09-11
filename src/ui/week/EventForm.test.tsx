@@ -307,13 +307,17 @@ describe('how the days are named', () => {
     expect(screen.getByTestId('deadline-day')).toHaveTextContent(/Tomorrow/)
   })
 
-  it('names the rest by weekday rather than by ISO date', () => {
+  /**
+   * Rewritten: a week with real dates gets a real calendar, where naming the days is the
+   * browser's job and doing it ourselves would mean drawing a month view to put the names
+   * in. The three tests above still cover the naming, because they run on the fallback --
+   * a week with no `startedOn` has no dates to show a calendar of, and that is the seeded
+   * fortnight's ordinary state.
+   */
+  it('offers a calendar once the week has real dates to show', () => {
     setup({ today: 0, schedule: { ...week(), startedOn: '2026-09-12' } })
 
-    const options = screen.getByTestId('deadline-day')
-
-    expect(options).toHaveTextContent(/Sun 13 Sep/)
-    expect(options).not.toHaveTextContent(/2026-09-13/)
+    expect(screen.getByTestId('deadline-day')).toHaveAttribute('type', 'date')
   })
 
   it('names the scheduling day the same way', () => {

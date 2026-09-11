@@ -1,12 +1,10 @@
 import { useState, type JSX } from 'react'
 import type { BlockRecord } from '../../domain/blockLog'
-import { dayLabel } from '../../domain/calendar'
 import { titleVocabulary } from '../../domain/titleVocabulary'
 import { editWarnings } from '../../domain/editWarnings'
 import type { ItemFields } from '../../domain/scheduleEdits'
 import {
   BLOCK_KINDS,
-  HORIZON_DAYS,
   LOAD_TYPES,
   type ActivityKind,
   type EngineParams,
@@ -15,6 +13,7 @@ import {
 import { DAY_END_HOUR, type Schedule, type ScheduledItem } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { Field } from '../kit/Field'
+import { DayPicker } from './DayPicker'
 import { BLOCK_KIND_LABELS, hourLabel, LOAD_TYPE_LABELS } from '../kit/labels'
 import { Sheet } from '../kit/Sheet'
 import { blankDraft, candidate, draftFrom, isComplete, toFields, validate } from './eventDraft'
@@ -107,7 +106,6 @@ export function EventForm({
    * offering a day the form then refuses to save -- Save greyed out with a message about a
    * day the student can plainly see in the list.
    */
-  const days = Array.from({ length: Math.min(schedule.horizonDays, HORIZON_DAYS) }, (_, index) => index)
 
   return (
     <Sheet
@@ -187,23 +185,17 @@ export function EventForm({
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Field label="Day" error={errors.dayIndex}>
-            <select
-              data-testid="day-of-block"
-              value={draft.dayIndex}
-              onChange={(event) => setDraft({ ...draft, dayIndex: Number(event.target.value) })}
-              className={INPUT}
-            >
-              {days.map((day) => (
-                // The real date where the week has been anchored to one, and the day number
-                // otherwise -- the same fallback the week grid's own labels use, so the two
-                // never name one day two different ways.
-                <option key={day} value={day}>
-                  {dayLabel(schedule, day, today)}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <DayPicker
+            schedule={schedule}
+            today={today}
+            value={draft.dayIndex}
+            label="Day"
+            error={errors.dayIndex}
+            testId="day-of-block"
+            // Required: a block has to be somewhere. `DayPicker` only reports null where a
+            // day is optional, so the fallback is unreachable here and states the type.
+            onChange={(dayIndex) => setDraft({ ...draft, dayIndex: dayIndex ?? draft.dayIndex })}
+          />
 
           <Field label="Starts at" error={errors.startHour}>
             <select
@@ -242,26 +234,16 @@ export function EventForm({
             "Not set" is first and is the ordinary answer: most of what a student types in is
             not due on any particular day, and `softDeadlines` covers those by kind.
           */}
-          <Field label="Due by" error={errors.deadlineDay}>
-            <select
-              data-testid="deadline-day"
-              value={draft.deadlineDay === null ? '' : String(draft.deadlineDay)}
-              onChange={(event) =>
-                setDraft({
-                  ...draft,
-                  deadlineDay: event.target.value === '' ? null : Number(event.target.value),
-                })
-              }
-              className={INPUT}
-            >
-              <option value="">Not set</option>
-              {days.map((day) => (
-                <option key={day} value={day}>
-                  {dayLabel(schedule, day, today)}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <DayPicker
+            schedule={schedule}
+            today={today}
+            value={draft.deadlineDay}
+            label="Due by"
+            error={errors.deadlineDay}
+            testId="deadline-day"
+            optional
+            onChange={(deadlineDay) => setDraft({ ...draft, deadlineDay })}
+          />
         </div>
 
         {/* §5.1's boundary, drawn where the student can see it -- the same checkbox

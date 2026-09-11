@@ -53,6 +53,7 @@ import { blockSheet } from '../week/blockActions'
 import { runRebalance, type RebalanceOutcome } from '../../domain/rebalanceOutcome'
 import { reportedNights, reportedOn } from '../../domain/sleepLog'
 import { lastNight, withSleep } from '../../domain/sleepPlan'
+import { nightWindow, nightWindowLabel } from '../../domain/nightWindow'
 import { assumeSleep } from '../../domain/sleepAssumed'
 import { measuredNight, sleepRealityLine } from '../../domain/sleepReality'
 import { sleepForecastLine, squeezeOn } from '../../domain/sleepForecast'
@@ -270,8 +271,10 @@ export function RoomShell({
     hasTarget: hasSleepTarget,
     nights: sleepNights,
     chosenByDate: sleepChosenByDate,
+    wakeHour: sleepWakeHour,
     setTarget: setSleepTarget,
     setChosen: setSleepChosen,
+    setWakeHour: setSleepWakeHour,
     reportNight,
     problem: sleepProblem,
   } = useSleepPlan(repository)
@@ -1072,6 +1075,13 @@ export function RoomShell({
              The assumption is said in words instead, by `realityLine`. */
           tonightHours={(todayDate === null ? undefined : sleepChosenByDate[todayDate]) ?? sleepTarget}
           forecasts={sleepForecasts}
+          wakeHour={sleepWakeHour}
+          /* Counted back from waking off what the app ASSUMES tonight holds, not off what the
+             student typed -- the window has to show the night they will actually get. */
+          tonightWindow={nightWindowLabel(
+            nightWindow(sleepWakeHour, week.sleepByDay[today] ?? sleepTarget),
+          )}
+          onSetWakeHour={setSleepWakeHour}
           /* Withheld in low-energy mode. A measured statement about the student's own habits
              is exactly what §1.5's reduced interface exists to hold back -- the same reason
              the reserve breakdown is withheld -- while the page itself stays reachable. */

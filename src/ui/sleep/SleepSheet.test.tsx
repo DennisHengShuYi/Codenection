@@ -8,6 +8,9 @@ const props = (over: Partial<Parameters<typeof SleepSheet>[0]> = {}) => ({
   tonightHours: 8,
   realityLine: null,
   forecasts: [],
+  wakeHour: 7,
+  tonightWindow: '23:00 → 07:00',
+  onSetWakeHour: vi.fn(),
   onSetTarget: vi.fn(),
   onSetTonight: vi.fn(),
   onClose: vi.fn(),
@@ -49,6 +52,41 @@ describe('SleepSheet', () => {
     render(<SleepSheet {...props()} />)
 
     expect(screen.queryAllByRole('spinbutton')).toHaveLength(2)
+  })
+
+  /**
+   * When the night happens, not only how long it is.
+   *
+   * A night is drawn on the week now, and a drawing needs a clock. Anchored on waking because
+   * the morning is the fixed end of a night -- somebody gets up for a nine o'clock class
+   * whatever time they got to bed -- so bedtime is what moves when a day runs long.
+   *
+   * A picker rather than a typed field: a clock hour is one of twenty-four, which is the same
+   * question the edit form already answers with a `select`. Nothing new to validate.
+   */
+  describe('when the night happens', () => {
+    it('offers the hour the student gets up', () => {
+      render(<SleepSheet {...props({ wakeHour: 6 })} />)
+
+      expect(screen.getByTestId('sleep-wake')).toHaveValue('6')
+    })
+
+    it('reports a new wake hour', async () => {
+      const onSetWakeHour = vi.fn()
+      render(<SleepSheet {...props({ onSetWakeHour })} />)
+
+      await userEvent.selectOptions(screen.getByTestId('sleep-wake'), '9')
+
+      expect(onSetWakeHour).toHaveBeenCalledWith(9)
+    })
+
+    /** The window itself, counted back from waking by the app rather than by this component --
+     *  it is handed the words, the way every other figure on this page is. */
+    it('shows the window tonight actually covers', () => {
+      render(<SleepSheet {...props({ tonightWindow: '01:00 → 07:00' })} />)
+
+      expect(screen.getByTestId('sleep-window')).toHaveTextContent('01:00 → 07:00')
+    })
   })
 
   it('reports a typed target', async () => {

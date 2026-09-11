@@ -69,6 +69,17 @@ export interface StoredSettings {
    * relevance on their own -- once a night is past, what was reported about it is what counts.
    */
   readonly sleepChosenByDate?: Readonly<Record<string, number>>
+  /**
+   * The clock hour the student gets up.
+   *
+   * Stored instead of a bedtime because the morning is the fixed end of a night -- somebody
+   * gets up for a nine o'clock class whatever time they got to bed -- so bedtime is what
+   * moves when a day runs long. `domain/nightWindow` counts back from this.
+   *
+   * A drawing only. Sleep is deliberately not a block on the grid (`engine/types.ts` records
+   * that a sleep block would be double-counted), so this changes no figure the model reads.
+   */
+  readonly sleepWakeHour?: number
 }
 
 export const DEFAULT_SETTINGS: StoredSettings = {

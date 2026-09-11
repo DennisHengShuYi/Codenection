@@ -1,6 +1,7 @@
 import { useState, type JSX } from 'react'
 import { isRealSleepHours, MAX_SLEEP_HOURS } from '../../domain/sleepPlan'
 import { Field } from '../kit/Field'
+import { hourLabel } from '../kit/labels'
 import { Sheet } from '../kit/Sheet'
 
 /**
@@ -27,6 +28,10 @@ import { Sheet } from '../kit/Sheet'
 const INPUT =
   'min-h-11 w-24 rounded border border-line bg-surface px-2 py-1 text-sm tabular-nums text-ink'
 
+/** Every clock hour, for the wake-time picker. The same shape the edit form uses for a start
+ *  hour -- a clock hour is one of twenty-four, not a number to be validated. */
+const HOURS_OF_DAY = Array.from({ length: 24 }, (_, hour) => hour)
+
 /**
  * What a typed field is worth, and what to say when it is worth nothing.
  *
@@ -51,7 +56,10 @@ export function SleepSheet({
   tonightHours,
   realityLine,
   forecasts,
+  wakeHour,
+  tonightWindow,
   onSetTarget,
+  onSetWakeHour,
   onSetTonight,
   onClose,
 }: {
@@ -70,7 +78,14 @@ export function SleepSheet({
   /** Days whose load will come out of a night, each sentence already naming its own day, so
    *  this component derives nothing and cannot disagree with the room about a date. */
   readonly forecasts: readonly string[]
+  /** The clock hour the student gets up, which anchors the night -- see `domain/nightWindow`
+   *  for why the morning is stored and the bedtime counted back from it. */
+  readonly wakeHour: number
+  /** Tonight's window in words, counted back from waking by the caller. Handed over already
+   *  said, the way every other figure on this page is, so this component derives nothing. */
+  readonly tonightWindow: string
   readonly onSetTarget: (hours: number) => void
+  readonly onSetWakeHour: (hour: number) => void
   readonly onSetTonight: (hours: number) => void
   readonly onClose: () => void
 }): JSX.Element {
@@ -174,7 +189,31 @@ export function SleepSheet({
 
       <hr className="my-3 border-line" />
 
+      <Field label="Up at">
+        <select
+          data-testid="sleep-wake"
+          value={wakeHour}
+          onChange={(event) => onSetWakeHour(Number(event.target.value))}
+          className={INPUT}
+        >
+          {HOURS_OF_DAY.map((hour) => (
+            <option key={hour} value={hour}>
+              {hourLabel(hour)}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <hr className="my-3 border-line" />
+
       {hoursField('tonight', 'Tonight', tonightHours, onSetTonight)}
+
+      {/* What tonight actually covers, on a clock. A night is the boundary between two days
+          rather than something inside one, which is why this is a window and not a row on the
+          week's hour grid -- see `domain/nightWindow`. */}
+      <p data-testid="sleep-window" className="mt-1 text-sm tabular-nums text-ink-soft">
+        {tonightWindow}
+      </p>
 
       {forecasts.length > 0 && (
         <ul className="mt-3 flex flex-col gap-1">

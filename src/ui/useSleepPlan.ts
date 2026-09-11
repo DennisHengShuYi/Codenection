@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { DEFAULT_SETTINGS, type Repository, type StoredSettings } from '../data'
 import { recordNight, type SleepNight } from '../domain/sleepLog'
 import { SLEEP_HOURS, type SleepBucket } from '../domain/sleepPlan'
+import { DEFAULT_WAKE_HOUR } from '../domain/nightWindow'
 import { DEFAULT_SLEEP_HOURS } from '../engine'
 import { SAVE_FAILED } from './useSchedule'
 
@@ -32,9 +33,13 @@ export function useSleepPlan(repo: Repository): {
   /** Hours the student chose for the night that began on each date. What the page shows; what
    *  the app assumes is derived from it by `domain/sleepAssumed`. */
   chosenByDate: Readonly<Record<string, number>>
+  /** The clock hour the student gets up, from which `domain/nightWindow` counts a night
+   *  backwards. Defaulted rather than absent, because a drawing needs an hour to draw at. */
+  wakeHour: number
   setTarget: (hours: number) => void
   /** Records a night the student spoke about, keyed by the date it began. */
   setChosen: (isoDate: string, hours: number) => void
+  setWakeHour: (hour: number) => void
   reportNight: (isoDate: string, bucket: SleepBucket) => void
   /** Null while every write has landed. A sentence a student can act on otherwise -- the
    *  convention `useSchedule`, `useBlockLog` and `useLowEnergy` share. */
@@ -43,6 +48,7 @@ export function useSleepPlan(repo: Repository): {
   const [target, setStoredTarget] = useState<number | null>(null)
   const [nights, setNights] = useState<readonly SleepNight[]>([])
   const [chosen, setChosen] = useState<Readonly<Record<string, number>>>({})
+  const [wakeHour, setStoredWakeHour] = useState<number | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
 
   useEffect(() => {
@@ -59,6 +65,7 @@ export function useSleepPlan(repo: Repository): {
         setStoredTarget(saved.sleepTargetHours ?? null)
         setNights(saved.sleepNights ?? [])
         setChosen(saved.sleepChosenByDate ?? {})
+        setStoredWakeHour(saved.sleepWakeHour ?? null)
       })
 
     return () => {
@@ -82,6 +89,11 @@ export function useSleepPlan(repo: Repository): {
     hasTarget: target !== null,
     nights,
     chosenByDate: chosen,
+    wakeHour: wakeHour ?? DEFAULT_WAKE_HOUR,
+    setWakeHour: (hour: number) => {
+      setStoredWakeHour(hour)
+      write({ sleepWakeHour: hour })
+    },
     setChosen: (isoDate: string, hours: number) => {
       const next = { ...chosen, [isoDate]: hours }
       setChosen(next)

@@ -741,7 +741,16 @@ export async function handleIntent(
   }
 
   const pending = await store.findPending(accountId, intent.dumpId)
-  const resolution = resolveConfirmation(pending, intent.accepted, await store.loadWeek(accountId), now)
+  // Read into a variable so the day index can be derived from the same week the items are
+  // placed into. `resolveConfirmation` used to take an unused timestamp here and place from
+  // day zero, which put anything confirmed after day two into days already lived.
+  const weekForDump = await store.loadWeek(accountId)
+  const resolution = resolveConfirmation(
+    pending,
+    intent.accepted,
+    weekForDump,
+    todayFor(weekForDump, now),
+  )
 
   if (resolution.kind === 'applied') {
     // Marked answered before the week is written. If the write then fails the student is

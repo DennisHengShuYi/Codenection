@@ -703,6 +703,7 @@ export function RoomShell({
             onSelectBlock={(itemId) => setView(toBlock(itemId))}
             onAddBlock={(day) => setView(toNewBlock(day))}
             blockLog={blockLog}
+            predictions={profile.predictions}
           />
         </Sheet>
       )}

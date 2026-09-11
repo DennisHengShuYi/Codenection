@@ -7,6 +7,7 @@ import { CapacityDial } from '../dial/CapacityDial'
 import type { DomainBar } from '../dial/domainBars'
 import { Button } from '../kit/Button'
 import { dayGrid } from './dayGrid'
+import type { EnergyPrediction } from '../../domain/predictions'
 import { scheduleView, type LoadBand } from '../../domain/scheduleView'
 import { PushToCalendar } from './PushToCalendar'
 
@@ -100,6 +101,17 @@ export function WeekScreen(props: {
    * caller built before the log existed keeps compiling and behaving exactly as it did.
    */
   readonly blockLog?: readonly BlockRecord[]
+  /**
+   * §8b's learned coefficients, threaded so the grid scores the fortnight the same way the
+   * room does.
+   *
+   * Without it `scheduleView` fell back to `predictions = []`, the population priors -- so
+   * for any calibrated student the week's deficit marks came from one model while the room's
+   * gauge and the rebalancer came from another. The comment on `blockLog` above already
+   * claimed this screen threaded through "exactly as `roomModel` threads it", and it did for
+   * the log and not for these.
+   */
+  readonly predictions?: readonly EnergyPrediction[]
 }) {
   const {
     schedule,
@@ -111,10 +123,11 @@ export function WeekScreen(props: {
     onSelectBlock,
     onAddBlock,
     blockLog = [],
+    predictions = [],
   } = props
   const [openDay, setOpenDay] = useState<number | null>(null)
 
-  const cells = scheduleView({ schedule, today, blockLog })
+  const cells = scheduleView({ schedule, today, blockLog, predictions })
 
   /**
    * Fixed load is the baseline everything else is measured against, so a week with none is

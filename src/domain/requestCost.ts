@@ -141,7 +141,7 @@ export function priceRequest(
   const before = project(schedule.start, toDayInputs(schedule, checkedIn), params)
 
   // addItems returns a new week, so the caller's is never touched.
-  const withRequest = addItems(schedule, [item])
+  const withRequest = addItems(schedule, [item], today)
   const after = project(
     withRequest.start,
     toDayInputs(withRequest, checkedInDays(blockLog, today, withRequest.horizonDays)),

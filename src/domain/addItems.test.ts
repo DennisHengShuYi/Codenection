@@ -28,17 +28,17 @@ const parsed = (over: Partial<ParsedItem> = {}): ParsedItem => ({
 
 describe('addItems', () => {
   it('puts accepted items into the week', () => {
-    expect(addItems(empty(), [parsed()]).items).toHaveLength(1)
+    expect(addItems(empty(), [parsed()], 0).items).toHaveLength(1)
   })
 
   it('keeps what was already there', () => {
-    const once = addItems(empty(), [parsed()])
+    const once = addItems(empty(), [parsed()], 0)
 
-    expect(addItems(once, [parsed({ id: 'b', title: 'Gym' })]).items).toHaveLength(2)
+    expect(addItems(once, [parsed({ id: 'b', title: 'Gym' })], 0).items).toHaveLength(2)
   })
 
   it('carries the title, type and effort across', () => {
-    const item = addItems(empty(), [parsed({ title: 'Lab report', hours: 2.5 })]).items[0]
+    const item = addItems(empty(), [parsed({ title: 'Lab report', hours: 2.5 })], 0).items[0]
 
     expect(item?.title).toBe('Lab report')
     expect(item?.type).toBe('mental')
@@ -47,17 +47,17 @@ describe('addItems', () => {
 
   // Without this the optimizer would happily move the item past a date the student stated.
   it('keeps a stated deadline', () => {
-    expect(addItems(empty(), [parsed({ deadlineDay: 4 })]).items[0]?.deadlineDay).toBe(4)
+    expect(addItems(empty(), [parsed({ deadlineDay: 4 })], 0).items[0]?.deadlineDay).toBe(4)
   })
 
   it('places a deadlined item on or before its deadline', () => {
     expect(
-      addItems(empty(), [parsed({ deadlineDay: 2 })]).items[0]?.dayIndex,
+      addItems(empty(), [parsed({ deadlineDay: 2 })], 0).items[0]?.dayIndex,
     ).toBeLessThanOrEqual(2)
   })
 
   it('leaves an undated item movable', () => {
-    const item = addItems(empty(), [parsed()]).items[0]
+    const item = addItems(empty(), [parsed()], 0).items[0]
 
     expect(item?.deadlineDay).toBeNull()
     expect(item?.fixed).toBe(false)
@@ -72,7 +72,7 @@ describe('addItems', () => {
    * was not confirmed as fixed, so it stays movable on both counts.
    */
   it('never creates protected rest, and leaves an unconfirmed item movable', () => {
-    const item = addItems(empty(), [parsed({ title: 'rest', type: 'mental' })]).items[0]
+    const item = addItems(empty(), [parsed({ title: 'rest', type: 'mental' })], 0).items[0]
 
     expect(item?.protectedRest).toBe(false)
     expect(item?.fixed).toBe(false)
@@ -84,7 +84,7 @@ describe('addItems', () => {
    * `hardExercise`, `socialRestorative`, `rest` and `sleep` unreachable from any text.
    */
   it('carries the parsed kind through rather than deriving one from the type', () => {
-    const item = addItems(empty(), [parsed({ type: 'physical', kind: 'hardExercise' })]).items[0]
+    const item = addItems(empty(), [parsed({ type: 'physical', kind: 'hardExercise' })], 0).items[0]
 
     expect(item?.kind).toBe('hardExercise')
   })
@@ -95,14 +95,14 @@ describe('addItems', () => {
    * safe, and so is a rest block the student pinned to a time.
    */
   it('never turns a claimed rest kind into protected rest', () => {
-    const item = addItems(empty(), [parsed({ type: 'mental', kind: 'rest' })]).items[0]
+    const item = addItems(empty(), [parsed({ type: 'mental', kind: 'rest' })], 0).items[0]
 
     expect(item?.fixed).toBe(false)
     expect(item?.protectedRest).toBe(false)
   })
 
   it('gives every added item a distinct id', () => {
-    const week = addItems(empty(), [parsed(), parsed({ id: 'b' })])
+    const week = addItems(empty(), [parsed(), parsed({ id: 'b' })], 0)
 
     expect(new Set(week.items.map((item) => item.id)).size).toBe(2)
   })
@@ -112,13 +112,13 @@ describe('addItems', () => {
     const before = empty()
     const snapshot = JSON.stringify(before)
 
-    addItems(before, [parsed()])
+    addItems(before, [parsed()], 0)
 
     expect(JSON.stringify(before)).toBe(snapshot)
   })
 
   it('does nothing when nothing was accepted', () => {
-    expect(addItems(empty(), []).items).toEqual([])
+    expect(addItems(empty(), [], 0).items).toEqual([])
   })
 })
 
@@ -135,13 +135,13 @@ describe('addItems', () => {
  */
 describe('addItems and what the student pinned', () => {
   it('pins a block the student confirmed as fixed', () => {
-    const item = addItems(empty(), [parsed({ title: 'WIA3001 lecture', fixed: true })]).items[0]
+    const item = addItems(empty(), [parsed({ title: 'WIA3001 lecture', fixed: true })], 0).items[0]
 
     expect(item?.fixed).toBe(true)
   })
 
   it('leaves a block movable when the student did not confirm it as fixed', () => {
-    expect(addItems(empty(), [parsed({ fixed: false })]).items[0]?.fixed).toBe(false)
+    expect(addItems(empty(), [parsed({ fixed: false })], 0).items[0]?.fixed).toBe(false)
   })
 
   /**
@@ -151,7 +151,7 @@ describe('addItems and what the student pinned', () => {
    * and creating untouchable rest are different powers, and only the first is on offer.
    */
   it('never creates protected rest, however the item was confirmed', () => {
-    const pinned = addItems(empty(), [parsed({ kind: 'rest', fixed: true })]).items[0]
+    const pinned = addItems(empty(), [parsed({ kind: 'rest', fixed: true })], 0).items[0]
 
     expect(pinned?.fixed).toBe(true)
     expect(pinned?.protectedRest).toBe(false)
@@ -159,7 +159,7 @@ describe('addItems and what the student pinned', () => {
 
   /** A fixed class and a deadlined essay must not be collapsed into each other. */
   it('keeps a deadline movable rather than treating it as a pinned time', () => {
-    const essay = addItems(empty(), [parsed({ deadlineDay: 4, fixed: false })]).items[0]
+    const essay = addItems(empty(), [parsed({ deadlineDay: 4, fixed: false })], 0).items[0]
 
     expect(essay?.deadlineDay).toBe(4)
     expect(essay?.fixed).toBe(false)
@@ -186,7 +186,7 @@ describe('addItems finding room', () => {
       parsed({ id: `x${index}`, title: `Task ${index}`, hours: 2 }),
     )
 
-    const { items } = addItems(empty(), dump)
+    const { items } = addItems(empty(), dump, 0)
 
     expect(items).toHaveLength(5)
     for (const [i, a] of items.entries()) {
@@ -195,9 +195,9 @@ describe('addItems finding room', () => {
   })
 
   it('works around what is already on the day', () => {
-    const busy = addItems(empty(), [parsed({ id: 'first', hours: 3, deadlineDay: 2 })])
+    const busy = addItems(empty(), [parsed({ id: 'first', hours: 3, deadlineDay: 2 })], 0)
 
-    const { items } = addItems(busy, [parsed({ id: 'second', hours: 3, deadlineDay: 2 })])
+    const { items } = addItems(busy, [parsed({ id: 'second', hours: 3, deadlineDay: 2 })], 0)
 
     expect(items).toHaveLength(2)
     expect(overlaps(items[0] as ScheduledItem, items[1] as ScheduledItem)).toBe(false)
@@ -206,7 +206,7 @@ describe('addItems finding room', () => {
   it('keeps every added block inside the waking day', () => {
     const dump = Array.from({ length: 4 }, (_, index) => parsed({ id: `y${index}`, hours: 2 }))
 
-    for (const item of addItems(empty(), dump).items) {
+    for (const item of addItems(empty(), dump, 0).items) {
       expect(item.startHour).toBeGreaterThanOrEqual(WAKE_HOUR)
       expect(item.startHour + item.hours).toBeLessThanOrEqual(DAY_END_HOUR)
     }
@@ -218,19 +218,19 @@ describe('addItems finding room', () => {
    * something because it is inconvenient would lose the student's own data.
    */
   it('still adds an item even when nothing will fit', () => {
-    const full = addItems(empty(), [parsed({ id: 'huge', hours: 16, deadlineDay: 2 })])
+    const full = addItems(empty(), [parsed({ id: 'huge', hours: 16, deadlineDay: 2 })], 0)
 
-    const { items } = addItems(full, [parsed({ id: 'squeezed', hours: 4, deadlineDay: 2 })])
+    const { items } = addItems(full, [parsed({ id: 'squeezed', hours: 4, deadlineDay: 2 })], 0)
 
     expect(items).toHaveLength(2)
     expect(items[1]?.title).toBe('Essay')
   })
 
   it('never moves anything that was already in the week', () => {
-    const before = addItems(empty(), [parsed({ id: 'first', hours: 3, deadlineDay: 2 })])
+    const before = addItems(empty(), [parsed({ id: 'first', hours: 3, deadlineDay: 2 })], 0)
     const settled = before.items.map(({ id, dayIndex, startHour }) => ({ id, dayIndex, startHour }))
 
-    const after = addItems(before, [parsed({ id: 'second', hours: 3, deadlineDay: 2 })])
+    const after = addItems(before, [parsed({ id: 'second', hours: 3, deadlineDay: 2 })], 0)
 
     expect(after.items.slice(0, 1).map(({ id, dayIndex, startHour }) => ({ id, dayIndex, startHour }))).toEqual(
       settled,

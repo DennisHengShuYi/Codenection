@@ -22,18 +22,24 @@ const TONE_LABELS: Record<Draft['tone'], string> = {
   accept: 'Yes, with the cost said out loud',
 }
 
-/** `today: 0` on purpose: both rooms are drawn from the same week at the same moment, so
- *  what differs between them is the request and nothing else.
+/** Both rooms are drawn from the same week on the same day, so what differs between them is
+ *  the request and nothing else. That day is now the real one rather than a hardcoded zero.
  *
- *  The block log is not: Ruling 51 made `roomModel`'s `blockLog` required, and this call
- *  site was the one taking the old `[]` default -- so the gauge on both rooms quoted a
- *  reserve computed as though the student had answered nothing, beside a request cost
- *  computed from their real calibration. Two numbers for one week, on one screen. */
+ *  The two have to agree, and that is why this moved with `addItems`. The request is placed
+ *  from `today`, so a room still drawn at day zero would be showing a day the new block is
+ *  not on -- the "if you accept" room would have looked identical to the "now" room, and the
+ *  comparison this screen exists for would have quietly stopped comparing anything.
+ *
+ *  The block log is not defaulted either: Ruling 51 made `roomModel`'s `blockLog` required,
+ *  and this call site was the one taking the old `[]` default -- so the gauge on both rooms
+ *  quoted a reserve computed as though the student had answered nothing, beside a request
+ *  cost computed from their real calibration. Two numbers for one week, on one screen. */
 const roomFor = (
   schedule: Schedule,
   blockLog: readonly BlockRecord[],
   predictions: readonly EnergyPrediction[],
-) => roomModel({ schedule, today: 0, blockLog, predictions })
+  today: number,
+) => roomModel({ schedule, today, blockLog, predictions })
 
 /**
  * §2.3's request box.
@@ -211,8 +217,8 @@ export function RequestBoxScreen({
 
             {/* §2.3, via §1.3: the warning is shown as two rooms. */}
             <RoomComparison
-              now={roomFor(schedule, blockLog, predictions)}
-              ifAccepted={roomFor(addItems(schedule, [item]), blockLog, predictions)}
+              now={roomFor(schedule, blockLog, predictions, today)}
+              ifAccepted={roomFor(addItems(schedule, [item], today), blockLog, predictions, today)}
             />
 
             {drafts.length > 0 && (

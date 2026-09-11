@@ -78,7 +78,7 @@ describe('summarise', () => {
 
 describe('resolveConfirmation', () => {
   it('adds exactly the items that were shown', () => {
-    const result = resolveConfirmation(pending(), true, week(), 1000)
+    const result = resolveConfirmation(pending(), true, week(), 0)
 
     expect(result.kind).toBe('applied')
     expect(result.kind === 'applied' && result.week.items).toHaveLength(2)
@@ -88,15 +88,15 @@ describe('resolveConfirmation', () => {
   // it. The starting week is built through addItems itself, so this cannot drift from the
   // shape the application actually stores.
   it('keeps what was already in the week', () => {
-    const withOne = addItems(week(), [parsed('already there')])
+    const withOne = addItems(week(), [parsed('already there')], 0)
 
-    const result = resolveConfirmation(pending(), true, withOne, 1000)
+    const result = resolveConfirmation(pending(), true, withOne, 0)
 
     expect(result.kind === 'applied' && result.week.items).toHaveLength(3)
   })
 
   it('writes nothing when the student discards it', () => {
-    const result = resolveConfirmation(pending(), false, week(), 1000)
+    const result = resolveConfirmation(pending(), false, week(), 0)
 
     expect(result.kind).toBe('discarded')
   })
@@ -108,7 +108,7 @@ describe('resolveConfirmation', () => {
   it('applies a confirmation that arrives twice only once', () => {
     const already = pending({ answeredAt: 500 })
 
-    const result = resolveConfirmation(already, true, week(), 1000)
+    const result = resolveConfirmation(already, true, week(), 0)
 
     expect(result.kind).toBe('already')
   })
@@ -116,17 +116,17 @@ describe('resolveConfirmation', () => {
   // Refused rather than applied to whatever happens to be current: a stale button must not
   // reach into a week it was never shown.
   it('refuses a confirmation for a dump it does not know', () => {
-    const result = resolveConfirmation(null, true, week(), 1000)
+    const result = resolveConfirmation(null, true, week(), 0)
 
     expect(result.kind).toBe('unknown')
   })
 
   it('says something in every one of those cases', () => {
     const cases = [
-      resolveConfirmation(pending(), true, week(), 1000),
-      resolveConfirmation(pending(), false, week(), 1000),
-      resolveConfirmation(pending({ answeredAt: 500 }), true, week(), 1000),
-      resolveConfirmation(null, true, week(), 1000),
+      resolveConfirmation(pending(), true, week(), 0),
+      resolveConfirmation(pending(), false, week(), 0),
+      resolveConfirmation(pending({ answeredAt: 500 }), true, week(), 0),
+      resolveConfirmation(null, true, week(), 0),
     ]
 
     for (const result of cases) expect(result.reply.text.length).toBeGreaterThan(0)

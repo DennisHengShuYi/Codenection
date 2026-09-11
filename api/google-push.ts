@@ -11,7 +11,7 @@ import {
 } from '../src/google/push'
 import { unseal } from '../src/google/secretBox'
 import { readServiceRoleKey, readSupabasePair, readSupabaseUrl } from '../src/data/serverEnv'
-import { callerFrom } from '../src/data/sessionCheck'
+import { bearerFrom, callerFrom } from '../src/data/sessionCheck'
 
 /** Declared rather than inferred, matching the other endpoints. */
 export const config = { runtime: 'edge' }
@@ -114,8 +114,11 @@ export default async function handler(request: Request): Promise<Response> {
     return new Response('Calendar writing is not available here.', { status: 503 })
   }
 
-  const authorization = request.headers.get('authorization')
-  if (authorization === null) return new Response('Sign in first.', { status: 401 })
+  // The token, not the header: a global `authorization` does not replace the
+  // `Authorization` supabase-js writes for the anon key, so both went out on one line
+  // and every session was refused. See `bearerFrom`.
+  const sessionToken = bearerFrom(request.headers.get('authorization'))
+  if (sessionToken === null) return new Response('Sign in first.', { status: 401 })
 
   // Checked before the credential is even looked up: an unreadable body is not a reason to
   // go and fetch somebody's Google token.
@@ -124,11 +127,10 @@ export default async function handler(request: Request): Promise<Response> {
 
   // Verified against Supabase rather than decoded here, as `api/google-events.ts` explains.
   const asUser = createClient(supabaseUrl, anonKey, {
-    global: { headers: { authorization } },
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
-  const { data: who, error: refusal } = await asUser.auth.getUser()
+  const { data: who, error: refusal } = await asUser.auth.getUser(sessionToken)
 
   // Kept rather than discarded: Supabase refuses a bad session and a key that does not
   // belong to this project with the same 401, and only one of those is the student's to

@@ -41,3 +41,27 @@ export function callerFrom(
 
   return { accountId: userId ?? null, verifiable: true }
 }
+
+/**
+ * The token out of an `Authorization` header, without the scheme.
+ *
+ * Why this exists rather than the header being passed straight through: supabase-js builds
+ * its auth client with `Authorization: Bearer <anon key>` and then spreads the caller's
+ * global headers over it. `Authorization` and `authorization` are different object keys, so
+ * a lowercase one does not replace the default -- both survive, and the request goes out as
+ *
+ *     Authorization: Bearer <anon key>, Bearer <user JWT>
+ *
+ * which Supabase refuses. That is a 401 for every student on every deployment, indistinguish-
+ * able from being signed out, and it is what made connecting a calendar impossible.
+ *
+ * `auth.getUser(jwt)` takes the token as an argument and writes the header itself, which is
+ * the documented way to check somebody else's session and the only one that cannot drift on
+ * a header-name's capitalisation.
+ */
+export function bearerFrom(header: string | null | undefined): string | null {
+  const match = /^bearer\s+(.+)$/i.exec(header?.trim() ?? '')
+  const token = match?.[1]?.trim() ?? ''
+
+  return token === '' ? null : token
+}

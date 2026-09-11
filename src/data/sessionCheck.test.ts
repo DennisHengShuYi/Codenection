@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { callerFrom } from './sessionCheck'
+import { bearerFrom, callerFrom } from './sessionCheck'
 
 /**
  * Telling apart "nobody is signed in" from "this deployment cannot verify anybody".
@@ -52,5 +52,47 @@ describe('who an endpoint is talking to', () => {
    *  result the library did not stand behind. */
   it('never keeps an account that came back with an error', () => {
     expect(callerFrom('account-1', { message: 'Invalid API key' }).accountId).toBeNull()
+  })
+})
+
+/**
+ * The regression that cost a day. Every endpoint verified a session by handing the student's
+ * token to `createClient` as a global `authorization` header. supabase-js sets its own
+ * `Authorization: Bearer <anon key>` on the auth client and then spreads the caller's headers
+ * over it -- and `Authorization` and `authorization` are different object keys, so both
+ * survived and the wire carried
+ *
+ *     Authorization: Bearer <anon key>, Bearer <user JWT>
+ *
+ * which Supabase refuses. Not a bad session, not a bad deployment: a malformed header, 401
+ * every time, for everybody, on every deployment. `auth.getUser(jwt)` takes the token as an
+ * argument and sets the header itself, which is why the token has to be lifted out of the
+ * header the browser sent.
+ */
+describe('the token inside an Authorization header', () => {
+  it('is the part after the scheme', () => {
+    expect(bearerFrom('Bearer abc.def.ghi')).toBe('abc.def.ghi')
+  })
+
+  it('does not mind how the scheme was cased or spaced', () => {
+    expect(bearerFrom('bearer   abc.def.ghi')).toBe('abc.def.ghi')
+    expect(bearerFrom('BEARER abc.def.ghi')).toBe('abc.def.ghi')
+  })
+
+  it('never keeps the scheme, which is what put two bearers on one header', () => {
+    expect(bearerFrom('Bearer abc')).not.toMatch(/bearer/i)
+  })
+
+  it('is nothing at all when there is no header, or nothing after the scheme', () => {
+    expect(bearerFrom(null)).toBeNull()
+    expect(bearerFrom('')).toBeNull()
+    expect(bearerFrom('Bearer   ')).toBeNull()
+  })
+
+  /** A header this endpoint does not understand is not a session. Guessing at it is how
+   *  something that is not a token ends up being sent to Supabase as one. */
+  it('is nothing when the scheme is not Bearer', () => {
+    expect(bearerFrom('Basic abc')).toBeNull()
+    expect(bearerFrom('abc.def.ghi')).toBeNull()
   })
 })

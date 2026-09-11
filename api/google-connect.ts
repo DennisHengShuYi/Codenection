@@ -4,7 +4,7 @@ import { checkCallback, checkStart, type GoogleConfig } from '../src/google/guar
 import { seal } from '../src/google/secretBox'
 import { readState, signState } from '../src/google/state'
 import { readServiceRoleKey, readSupabasePair, readSupabaseUrl } from '../src/data/serverEnv'
-import { callerFrom, type Caller } from '../src/data/sessionCheck'
+import { bearerFrom, callerFrom, type Caller } from '../src/data/sessionCheck'
 
 /** Declared rather than inferred, matching the other endpoints: the two runtimes take
  *  different handler signatures and the wrong one fails only once deployed. */
@@ -49,16 +49,20 @@ const redirectUriFor = (request: Request): string =>
  * endpoint ends up trusting a token anyone can mint.
  */
 async function accountFrom(request: Request, supabaseUrl: string, anonKey: string): Promise<Caller> {
-  const authorization = request.headers.get('authorization')
-  if (authorization === null) return { accountId: null, verifiable: true }
+  // The token, not the header. Passing the header through as a global `authorization` is
+  // what broke this: supabase-js writes its own `Authorization: Bearer <anon key>` and
+  // spreads the caller's headers over it, and the two capitalisations are different object
+  // keys -- so both went out on one line and Supabase refused every session. See
+  // `bearerFrom`.
+  const sessionToken = bearerFrom(request.headers.get('authorization'))
+  if (sessionToken === null) return { accountId: null, verifiable: true }
 
   try {
     const client = createClient(supabaseUrl, anonKey, {
-      global: { headers: { authorization } },
       auth: { persistSession: false, autoRefreshToken: false },
     })
 
-    const { data, error } = await client.auth.getUser()
+    const { data, error } = await client.auth.getUser(sessionToken)
 
     // Said out loud in the deployment's own log rather than swallowed. This is the only
     // place that knows why a session was refused, and a student must not be shown it --

@@ -1,6 +1,9 @@
-import { floorReserve, overallReserve, type Projection, type Reserves } from '../../engine'
+import type { BlockRecord } from '../../domain/blockLog'
+import { blocksOnDay } from '../../domain/dayBlocks'
+import { floorReserve, overallReserve, type ActivityKind, type Projection, type Reserves } from '../../engine'
 import type { Schedule } from '../../optimizer'
 import { characterStateFor, type CharacterState } from './characterState'
+import { dayLoadFor, WAKING_HOURS } from './dayLoad'
 
 export type { CharacterState } from './characterState'
 
@@ -18,7 +21,24 @@ const DOOR_LIGHTS_BELOW = 25
 /** A deficit this close reads as a storm rather than clouds gathering. */
 const STORM_WITHIN_DAYS = 7
 
-const PLANT_DROOPS_BELOW = 0.4
+/**
+ * §45: the hours of one kind that fill its object completely.
+ *
+ * A cap, for the reason the floor already caps at six boxes: a desk has to be able to look
+ * buried without twenty books drawn on it, and the difference between "a heavy day" and "an
+ * impossible day" is not something furniture can express -- that is what the spill and the
+ * ceiling are for.
+ */
+const HOURS_TO_FILL_AN_OBJECT = 6
+
+/**
+ * The hours of spill that take the room as dark as it goes.
+ *
+ * Four hours past the end of the day: enough that an evening running long is visible and a
+ * genuinely impossible day is unmistakable, without the first half-hour of overrun painting
+ * the room black.
+ */
+const SPILL_AT_DARKEST = 4
 
 export interface ClutterBox {
   readonly id: string
@@ -32,18 +52,35 @@ export interface RoomState {
   /** 0..1. How high the paper has stacked. */
   readonly paperHeight: number
   readonly clutter: readonly ClutterBox[]
-  /** 0..1, where 1 is thriving. */
-  readonly plantHealth: number
+  /** §45: 0..1, exercise still waiting on today -- hard and light together, drawn as a
+   *  dumbbell. The engine's split between them is about what they COST, which the reserve
+   *  models; the room only says a session is on. */
+  readonly exerciseWaiting: number
+  /** §45: 0..1, time with people still waiting on today -- draining and restorative
+   *  together, drawn as figures in the room. Same reasoning as exercise: the room says
+   *  people are on today, and how that lands is the reserve's business. */
+  readonly companyWaiting: number
   /** Hours of sleep owed. */
   readonly sleepDebt: number
   readonly weather: 'clear' | 'clouding' | 'storm'
-  /** 0..1. */
+  /**
+   * §45: 0..1, the overall reserve, for the corner gauge to state as a percentage.
+   *
+   * Carried explicitly now that the light means the day. The gauge used to derive its
+   * number from `lightLevel`, which was the reserve until this ruling rebound it -- and the
+   * first run of the new room showed a nine-hour day reading 100% in the corner. That
+   * number is the door to the whole breakdown (Ruling 59), so it says the reserve itself.
+   */
+  readonly reserve: number
+  /** §45: 0..1, dimmed by the hours today cannot fit. Not the reserve -- the corner gauge
+   *  carries that, and reads it directly rather than from here. */
   readonly lightLevel: number
+  /** §45: 0..1, how dark the window is, from the same spill. Independent of `weather`,
+   *  which stays the forecast. */
+  readonly windowDark: number
   readonly doorLit: boolean
   readonly character: CharacterState
 }
-
-export { PLANT_DROOPS_BELOW }
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value))
 
@@ -58,10 +95,21 @@ export function roomStateFor(
   reserves: Reserves,
   projection: Projection,
   schedule: Schedule,
+  /** §45: which day the furniture draws. */
+  today: number,
+  /** §45: what the student has answered, so a block that is done is put away. */
+  blockLog: readonly BlockRecord[],
 ): RoomState {
-  const overall = overallReserve(reserves)
+  const day = dayLoadFor(schedule, today, blockLog)
 
-  const pendingErrands = schedule.items.filter(
+  /** Hours of one kind, as a 0..1 fullness of the object that carries it. */
+  const fullnessOf = (kind: ActivityKind): number =>
+    clamp01((day.remainingByKind[kind] ?? 0) / HOURS_TO_FILL_AN_OBJECT)
+
+  // §45: today's, like everything else in the room. Reading the whole fortnight here left
+  // the floor speaking about two weeks while the desk spoke about one day -- one picture
+  // answering two questions, which is the fault this ruling exists to fix.
+  const pendingErrands = blocksOnDay(schedule, today).filter(
     (item) => item.type === 'errands' && !item.fixed,
   )
 
@@ -73,8 +121,14 @@ export function roomStateFor(
   const sleepDebt = Math.max(0, SLEEP_DEBT_BASELINE - averageSleep)
 
   return {
-    ceilingPressure: clamp01(1 - overall / 100),
-    paperHeight: clamp01(1 - reserves.mental / 100),
+    // §45: pressure, unchanged in meaning and rebound to its source. It read the
+    // fortnight's overall reserve; it reads how full today is, so it belongs to the day
+    // like the rest of the furniture.
+    ceilingPressure: clamp01(day.totalHours / WAKING_HOURS),
+
+    // §45: the desk stacks with the study still ahead today, rather than with the mental
+    // reserve. Answered blocks are put away -- nothing is counted up (§1.3).
+    paperHeight: fullnessOf('studyBlock'),
 
     clutter: pendingErrands.slice(0, MAX_CLUTTER_BOXES).map((item) => ({
       id: item.id,
@@ -82,9 +136,12 @@ export function roomStateFor(
       dayIndex: item.dayIndex,
     })),
 
-    // Sleep and movement both feed it, which is why §1.3 binds the plant to "sleep debt
-    // and inactivity" rather than to either one alone.
-    plantHealth: clamp01((reserves.physical / 100) * (1 - sleepDebt / SLEEP_DEBT_BASELINE)),
+    // §45: both exercise kinds fill one object, and both kinds of company fill another.
+    // `rest` deliberately has no object at all -- it is the one thing on a day that is not
+    // a duty the student owes anyone, and drawing it as another thing waiting to be done
+    // would turn the one restorative item on the day into another obligation.
+    exerciseWaiting: clamp01(fullnessOf('hardExercise') + fullnessOf('lightExercise')),
+    companyWaiting: clamp01(fullnessOf('socialDraining') + fullnessOf('socialRestorative')),
     sleepDebt,
 
     weather:
@@ -94,7 +151,22 @@ export function roomStateFor(
           ? 'storm'
           : 'clouding',
 
-    lightLevel: clamp01(overall / 100),
+    reserve: clamp01(overallReserve(reserves) / 100),
+
+    /**
+     * §45: the light is the day's, not the reserve's.
+     *
+     * A day whose hours do not fit inside its waking hours has to take the difference out
+     * of sleep, and this says so BEFORE the night rather than after it -- the last point at
+     * which the student can still move something. The corner gauge reads the reserve
+     * directly and no longer derives it from here, or its number would mean a mix of two
+     * things (Ruling 59 made that gauge the door to the whole breakdown).
+     */
+    lightLevel: clamp01(1 - day.spillHours / SPILL_AT_DARKEST),
+
+    /** §45: the same spill, as the window's darkness. Independent of `weather`, which is
+     *  the forecast: a dark clear window is an exhausted student with a calm week ahead. */
+    windowDark: clamp01(day.spillHours / SPILL_AT_DARKEST),
 
     // Both, not either. Going outside is the single action that answers physical and
     // social at once, and that is what makes it the highest-value move rather than

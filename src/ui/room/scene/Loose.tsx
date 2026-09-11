@@ -1,5 +1,5 @@
 import { Shadow } from './marks'
-import { PALETTE } from './palette'
+import { FLOOR_Y, PALETTE } from './palette'
 import type { ClutterBox } from '../roomState'
 
 /**
@@ -36,49 +36,6 @@ export function Papers({ height }: { height: number }) {
   )
 }
 
-/** Physical health: sleep debt and inactivity together, never either alone. */
-export function Plant({ health }: { health: number }) {
-  const droop = 1 - health
-  const tipY = 124 + droop * 14
-  const tipX = 27 - droop * 12
-
-  return (
-    <g data-testid="room-plant">
-      <Shadow cx={27} cy={161} rx={11} />
-
-      <path d="M 20 146 L 34 146 L 32 161 L 22 161 Z" fill={PALETTE.pot} />
-      <rect x="19" y="144" width="16" height="4" rx="1" fill={PALETTE.pot} />
-
-      <path
-        d={`M 27 146 Q ${tipX} ${132 + droop * 10} ${tipX} ${tipY}`}
-        stroke={PALETTE.leaf}
-        strokeWidth="2.4"
-        fill="none"
-        strokeLinecap="round"
-      />
-      {/* Two leaves, which droop with the stem. A bare stem reads as a stick. */}
-      <ellipse
-        cx={tipX + 4}
-        cy={tipY + 4}
-        rx="5"
-        ry="2.6"
-        fill={PALETTE.leaf}
-        opacity={0.5 + health * 0.5}
-        transform={`rotate(${-20 + droop * 40} ${tipX + 4} ${tipY + 4})`}
-      />
-      <ellipse
-        cx={tipX - 4}
-        cy={tipY + 7}
-        rx="5"
-        ry="2.6"
-        fill={PALETTE.leaf}
-        opacity={0.5 + health * 0.5}
-        transform={`rotate(${20 - droop * 40} ${tipX - 4} ${tipY + 7})`}
-      />
-    </g>
-  )
-}
-
 /** One box per pending errand, nearest the viewer -- the things most literally in the way. */
 export function Clutter({ boxes }: { boxes: readonly ClutterBox[] }) {
   return (
@@ -109,6 +66,78 @@ export function Clutter({ boxes }: { boxes: readonly ClutterBox[] }) {
               stroke={PALETTE.woodDark}
               strokeWidth="1"
               opacity="0.35"
+            />
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
+/**
+ * §45: exercise still waiting on today, as a dumbbell on the floor.
+ *
+ * One object for both kinds. The engine's split between hard and light exercise is about
+ * what a session COSTS -- which the reserve models and the breakdown states -- and the room
+ * is only saying that a session is on today. Two nearly identical dumbbells would be a
+ * distinction a student has to squint at, for information they already have elsewhere.
+ *
+ * It grows rather than multiplying: a second dumbbell reads as owning two dumbbells, where
+ * a heavier one reads as a heavier session.
+ */
+export function Dumbbell({ waiting }: { waiting: number }) {
+  if (waiting <= 0) return null
+
+  const size = 3 + waiting * 2.2
+  const span = 15 + waiting * 7
+
+  return (
+    <g data-testid="room-dumbbell">
+      {/* In front of the desk, on open floor. It sat at the foot of the paper stack first
+          and was drawn inside it -- the objects today puts in the room have to keep clear of
+          the furniture that is always there, or a heavy day reads as a mess rather than as a
+          list of things to do. */}
+      <Shadow cx={172} cy={FLOOR_Y + 26} rx={span * 0.6} />
+
+      <rect x={172 - span / 2} y={FLOOR_Y + 22 - size / 2} width={span} height={size * 0.5} rx={1} fill={PALETTE.iron} />
+      <rect x={172 - span / 2 - size / 2} y={FLOOR_Y + 22 - size} width={size} height={size * 2} rx={1.2} fill={PALETTE.iron} />
+      <rect x={172 + span / 2 - size / 2} y={FLOOR_Y + 22 - size} width={size} height={size * 2} rx={1.2} fill={PALETTE.iron} />
+    </g>
+  )
+}
+
+/**
+ * §45: people on today, as people in the room.
+ *
+ * Both kinds of company together, for the same reason the dumbbell takes both exercises:
+ * whether an hour with someone drains or restores is what the reserve is for, and the room
+ * is saying who is here. Restorative company drawn as a warmer figure would also be the app
+ * telling a student how their afternoon went before they have had it.
+ *
+ * These multiply rather than growing, because that is what more time with people looks
+ * like -- and they are capped, because a room with nine figures in it is a crowd scene, not
+ * a Tuesday.
+ */
+const MOST_FIGURES = 3
+
+export function Company({ waiting }: { waiting: number }) {
+  const figures = Math.min(MOST_FIGURES, Math.ceil(waiting * MOST_FIGURES))
+  if (figures <= 0) return null
+
+  return (
+    <g data-testid="room-company">
+      {Array.from({ length: figures }, (_, index) => {
+        const x = 96 + index * 21
+
+        return (
+          <g key={index}>
+            <Shadow cx={x} cy={FLOOR_Y + 8} rx={7} />
+            {/* Head and body only: at this size a figure with limbs reads as scribble, and
+                the character beside them is the one the eye is meant to go to. */}
+            <circle cx={x} cy={FLOOR_Y - 22} r={5} fill={PALETTE.visitor} />
+            <path
+              d={`M ${x - 6} ${FLOOR_Y + 6} L ${x - 4} ${FLOOR_Y - 16} L ${x + 4} ${FLOOR_Y - 16} L ${x + 6} ${FLOOR_Y + 6} Z`}
+              fill={PALETTE.visitor}
             />
           </g>
         )

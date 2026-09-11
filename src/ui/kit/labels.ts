@@ -56,9 +56,17 @@ export const hourLabel = (hour: number): string => `${String(hour).padStart(2, '
  * Ruling 22: no primary variant among them, and they are ordered from least to most done. A
  * highlighted answer is a nudge toward one, and the value of this record is that it is what
  * happened rather than what reads well.
+ *
+ * Three, not four. "Didn't happen" was removed from the block sheet first, where it sat a
+ * row above Remove doing the same job, and then from here: the question this asks is how
+ * long something took, which is the one thing Reality Check reads.
+ *
+ * `didnt` remains a `BlockAnswer` and is still written by the bot, because `softDeadlines`
+ * reads it by name -- a rest answered `didnt` must not satisfy the rest rhythm. A block
+ * nobody answers does not satisfy it either, so removing the button costs the distinction
+ * between "I skipped it" and "I never said", not the rhythm itself.
  */
 export const BLOCK_ANSWERS: readonly { answer: BlockAnswer; label: string }[] = [
-  { answer: 'didnt', label: "Didn't happen" },
   { answer: 'less', label: 'Took less' },
   { answer: 'right', label: 'About right' },
   { answer: 'longer', label: 'Took longer' },

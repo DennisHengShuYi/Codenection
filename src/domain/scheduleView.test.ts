@@ -174,3 +174,56 @@ describe('scheduleView', () => {
     )
   })
 })
+
+/**
+ * Where each day leaves you, on the day itself.
+ *
+ * The grid said how heavy a day is and warned when it crosses, and the reserves behind both
+ * were computed for every day and shown for none. A chart under the grid tried to carry that
+ * and asked the reader to map a line back onto a date; the number belongs in the cell the
+ * date is already in.
+ *
+ * The mean of the four, which is the same figure the dial's headline quotes. Worth knowing
+ * what that means beside a warning: the deficit mark is computed from the *floor*, so a day
+ * can read 67 and still be marked -- one reserve empty while the others are fine is exactly
+ * the case the floor exists to catch and the mean exists to hide.
+ */
+describe('the reserve on each cell', () => {
+  it('carries a figure for every day of the horizon', () => {
+    const cells = scheduleView({ schedule: week([]), today: 0 })
+
+    for (const cell of cells) {
+      expect(cell.reserve).toBeGreaterThanOrEqual(0)
+      expect(cell.reserve).toBeLessThanOrEqual(100)
+    }
+  })
+
+  it('falls across a fortnight that spends more than it gets back', () => {
+    const heavy = Array.from({ length: HORIZON_DAYS }, (_, dayIndex) =>
+      item(`study-${dayIndex}`, dayIndex, 9),
+    )
+
+    const cells = scheduleView({
+      schedule: { ...week(heavy), sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 6) },
+      today: 0,
+    })
+
+    expect(cells.at(-1)?.reserve).toBeLessThan(cells[0]?.reserve ?? 0)
+  })
+
+  /** The same projection the deficit mark is read from, so the two cannot disagree about
+   *  which fortnight they are describing. */
+  it('reads the day it is on, not the day the fortnight started', () => {
+    const heavy = Array.from({ length: HORIZON_DAYS }, (_, dayIndex) =>
+      item(`study-${dayIndex}`, dayIndex, 9),
+    )
+
+    const cells = scheduleView({
+      schedule: { ...week(heavy), sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 6) },
+      today: 0,
+    })
+
+    const figures = new Set(cells.map((cell) => Math.round(cell.reserve)))
+    expect(figures.size).toBeGreaterThan(1)
+  })
+})

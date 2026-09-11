@@ -9,6 +9,27 @@ export const EFFICIENCY_SPAN = 0.55
 /** §6.1: `recovery[d] = max(0, sleep − 5) × k_sleep + rest_blocks × k_rest`. */
 export const SLEEP_BASELINE_HOURS = 5
 
+/**
+ * The night the app assumes when the student has not said.
+ *
+ * Deliberately NOT the same question as either of the other two sleep figures in this
+ * codebase, and the three must not converge: `SLEEP_BASELINE_HOURS` above is where sleep
+ * begins paying anything at all, and `roomState.RESTED_NIGHT_HOURS` is where a student counts
+ * as *short*. Using this one for that last job would wilt the bed for every student who had
+ * never stated a target.
+ *
+ * A constant because it was four bare `7`s in four files -- the blank week, a real student's
+ * first week, the bot's blank week, and the solver's missing-entry fallback. `freshWeek`'s own
+ * docstring already recorded the invariant those last two share ("an unedited week and an
+ * unedited day agree rather than each guessing separately"), held by hand, with a comment
+ * where the import should have been.
+ *
+ * Not the `?? 7` in `fixtures/demoAccount.ts`: that index is `day % 7` into a seven-entry
+ * table, so its fallback is unreachable index-access appeasement rather than an assumed
+ * night. Naming it here would assert a meaning it does not have.
+ */
+export const DEFAULT_SLEEP_HOURS = 8
+
 /** §6.6: at 70% reserve two hours of study costs two hours; at 25% it costs closer to
  *  three. The slope is what carries the second anchor: 1 + 1.111 × 0.45 ≈ 1.5. */
 export const STATE_COST_PIVOT = 70

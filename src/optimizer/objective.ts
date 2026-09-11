@@ -1,4 +1,4 @@
-import { summarise, type DayInput, type EngineParams } from '../engine'
+import { DEFAULT_SLEEP_HOURS, summarise, type DayInput, type EngineParams } from '../engine'
 import { modeOf, type Mode } from './mode'
 import type { Schedule, ScheduledItem } from './types'
 
@@ -264,7 +264,7 @@ function dayInputsFrom(
         intensity: item.intensity,
         startHour: item.startHour,
       })),
-      sleepHours: schedule.sleepByDay[dayIndex] ?? 7,
+      sleepHours: schedule.sleepByDay[dayIndex] ?? DEFAULT_SLEEP_HOURS,
       // Each distinct working block is treated as a venue; back-to-back commitments in
       // one place are the exception rather than the rule for a student crossing campus.
       venueChanges: Math.max(0, workingBlocks - 1),

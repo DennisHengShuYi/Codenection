@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { COUPLING, CROSS_EFFECT, DEFAULT_PARAMS } from './params'
+import {
+  COUPLING,
+  CROSS_EFFECT,
+  DEFAULT_PARAMS,
+  DEFAULT_SLEEP_HOURS,
+  SLEEP_BASELINE_HOURS,
+} from './params'
 import { LOAD_TYPES } from './types'
+
+describe('the assumed night', () => {
+  /**
+   * Three numbers, three questions, and the failure mode is somebody collapsing two of them:
+   * this is the night the app assumes when nobody has said, `SLEEP_BASELINE_HOURS` is where
+   * sleep starts paying anything at all (§6.1), and `roomState.RESTED_NIGHT_HOURS` is where a
+   * student counts as short. Pinned together so an edit cannot quietly make one the other.
+   */
+  it('assumes a full night, above the floor where sleep starts paying', () => {
+    expect(DEFAULT_SLEEP_HOURS).toBe(8)
+    expect(DEFAULT_SLEEP_HOURS).toBeGreaterThan(SLEEP_BASELINE_HOURS)
+  })
+})
 
 describe('population priors', () => {
   it('defines a type intensity, sleep coefficient and estimate bias for every load type', () => {

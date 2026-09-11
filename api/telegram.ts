@@ -6,7 +6,7 @@ import { readRequest } from '../src/ai/readRequest'
 import { draftReplies } from '../src/ai/drafts'
 import type { BlockRecord } from '../src/domain/blockLog'
 import type { EnergyPrediction } from '../src/domain/predictions'
-import { HORIZON_DAYS } from '../src/engine'
+import { DEFAULT_SLEEP_HOURS, HORIZON_DAYS } from '../src/engine'
 import type { Schedule } from '../src/optimizer'
 import type { PendingDump } from '../src/telegram/brainDump'
 import { checkRequest } from '../src/telegram/guard'
@@ -39,7 +39,7 @@ const emptyWeek = (): Schedule => ({
   items: [],
   start: { mental: 70, physical: 70, social: 70, errands: 70 },
   horizonDays: HORIZON_DAYS,
-  sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+  sleepByDay: Array.from({ length: HORIZON_DAYS }, () => DEFAULT_SLEEP_HOURS),
 })
 
 /**

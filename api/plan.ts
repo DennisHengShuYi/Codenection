@@ -1,5 +1,6 @@
 import { askGroq } from '../src/ai/groq'
-import { MAX_INPUT_LENGTH, type Calendar } from '../src/ai/types'
+import { readCalendar } from '../src/ai/calendarAnchor'
+import { MAX_INPUT_LENGTH } from '../src/ai/types'
 
 /**
  * The server side of the planner, and one of the two places `GROQ_API_KEY` is read — the
@@ -25,31 +26,6 @@ import { MAX_INPUT_LENGTH, type Calendar } from '../src/ai/types'
  * is picked up on its own. A line in the file it describes is the smaller blast radius.
  */
 export const config = { runtime: 'edge' }
-
-/**
- * §44: the client says which real day day 0 is, so a stated weekday means something.
- *
- * Validated rather than trusted, like every other value arriving over this boundary:
- * anything can POST here, and this string goes into a prompt. A label longer than a date
- * or a weekday outside 0-6 is not a calendar, it is someone using the prompt as a channel.
- */
-const readCalendar = (raw: unknown): Calendar | undefined => {
-  if (typeof raw !== 'object' || raw === null) return undefined
-
-  const { today, startWeekday, todayLabel } = raw as Record<string, unknown>
-  if (typeof today !== 'number' || !Number.isInteger(today) || today < 0 || today > 365) {
-    return undefined
-  }
-  if (typeof startWeekday !== 'number' || !Number.isInteger(startWeekday)) return undefined
-  if (startWeekday < 0 || startWeekday > 6) return undefined
-
-  const label =
-    typeof todayLabel === 'string' && todayLabel.length > 0 && todayLabel.length <= 40
-      ? todayLabel
-      : undefined
-
-  return { today, startWeekday, ...(label === undefined ? {} : { todayLabel: label }) }
-}
 
 export default async function handler(request: Request): Promise<Response> {
   if (request.method !== 'POST') {

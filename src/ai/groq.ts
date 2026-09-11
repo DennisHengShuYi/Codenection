@@ -1,7 +1,21 @@
 import { BLOCK_KINDS, HORIZON_DAYS } from '../engine'
 import { GROQ_TEXT_MODEL, GROQ_TRANSCRIBE_MODEL } from './models'
 import { parseModelReply } from './schema'
+import { anchorLines } from './calendarAnchor'
 import { MAX_ITEMS, type Calendar, type ParsedItem } from './types'
+
+/**
+ * §44: the prompt, with today's real date when the caller knows it.
+ *
+ * `deadlineDay` is described as "a day index from 0 (today)", and the model was never told
+ * what today WAS -- so a stated "thursday" could only be guessed at. The lines themselves
+ * are shared with the photo reader, which has the same prompt and had the same gap.
+ */
+const systemPromptFor = (calendar?: Calendar): string => {
+  const anchor = anchorLines(calendar)
+
+  return anchor === '' ? SYSTEM_PROMPT : `${SYSTEM_PROMPT} ${anchor}`
+}
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
@@ -34,33 +48,6 @@ const SYSTEM_PROMPT = [
   'those days (0 is Sunday), and null for a one-off. Use it for classes, labs and shifts.',
   `Return at most ${MAX_ITEMS} items. Do not invent tasks the notes do not mention.`,
 ].join(' ')
-
-/**
- * §44: the prompt, with today's real date when the caller knows it.
- *
- * `deadlineDay` is described as "a day index from 0 (today)", and the model was never told
- * what today WAS -- so a stated "thursday" could only be guessed at, and a guess of Monday
- * turns Thursday into day 3. The line is added rather than the index redefined, because
- * every reader downstream already speaks in day indices.
- */
-const systemPromptFor = (calendar?: Calendar): string => {
-  if (calendar?.todayLabel === undefined) return SYSTEM_PROMPT
-
-  const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-  const startWeekday = weekdays[(calendar.startWeekday + calendar.today) % 7]
-
-  return [
-    SYSTEM_PROMPT,
-    `Day 0 is ${calendar.todayLabel}, a ${startWeekday}.`,
-    // Worded as an instruction to COMPUTE rather than a prohibition. "Never backwards into
-    // the past" was the first attempt, and the live model answered it by dropping the day
-    // altogether -- `deadlineDay: null` for "gym thursday 7pm", which is worse than the
-    // wrong day it replaced. Verified against the real endpoint, because a prompt line
-    // cannot be checked by reading it.
-    'A named weekday means its next occurrence on or after day 0: work out that date and',
-    'give its day index. Never answer null for a weekday the student actually named.',
-  ].join(' ')
-}
 
 /**
  * The only place the Groq key is used, and it is only ever reached from `api/`.

@@ -133,6 +133,7 @@ export function AddSheet({
     return (
       <PhotoImportScreen
         dayLabels={dayLabels}
+        calendar={calendar}
         suggestRepeat={(item) => suggestRepeat(item, schedule)}
         onAccept={(items) => {
           onAcceptItems(items)

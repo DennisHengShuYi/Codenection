@@ -1,11 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLocalRepository } from '../data'
-import { REVIEW_DAYS } from '../domain/commitments'
-import { HORIZON_DAYS } from '../engine'
-import type { Schedule } from '../optimizer'
-import { RoomShell } from './room/RoomShell'
+import { createLocalRepository } from '../../data'
+import { REVIEW_DAYS } from '../../domain/commitments'
+import { HORIZON_DAYS } from '../../engine'
+import type { Schedule } from '../../optimizer'
+import { RoomShell } from './RoomShell'
 
 /**
  * The request box, split across two owners now. Pricing and drafting a reply moved into

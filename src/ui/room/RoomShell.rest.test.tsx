@@ -1,10 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { createLocalRepository } from '../data'
-import { HORIZON_DAYS } from '../engine'
-import type { Schedule, ScheduledItem } from '../optimizer'
-import { RoomShell } from './room/RoomShell'
+import { createLocalRepository } from '../../data'
+import { HORIZON_DAYS } from '../../engine'
+import type { Schedule, ScheduledItem } from '../../optimizer'
+import { RoomShell } from './RoomShell'
 
 /**
  * §5's Rest button, wired into the room.

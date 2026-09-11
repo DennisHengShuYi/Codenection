@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { createLocalRepository } from '../data'
-import { HORIZON_DAYS } from '../engine'
-import type { Schedule } from '../optimizer'
-import { RoomShell } from './room/RoomShell'
+import { createLocalRepository } from '../../data'
+import { HORIZON_DAYS } from '../../engine'
+import type { Schedule } from '../../optimizer'
+import { RoomShell } from './RoomShell'
 
 /** A real repository rather than a stand-in: several of these cases are *about* the
  *  interaction with storage, and a stand-in would only verify the test's own
@@ -85,7 +85,7 @@ describe('RoomShell', () => {
     it('closing a block returns to the week, not the room', async () => {
       const repository = createLocalRepository('roomshell-block-back')
       await repository.clear()
-      const { HORIZON_DAYS } = await import('../engine')
+      const { HORIZON_DAYS } = await import('../../engine')
       await repository.saveWeek({
         items: [
           {
@@ -134,7 +134,7 @@ describe('RoomShell', () => {
     it('closing a block goes to the room, past the week it was opened from', async () => {
       const repository = createLocalRepository('roomshell-block-close')
       await repository.clear()
-      const { HORIZON_DAYS } = await import('../engine')
+      const { HORIZON_DAYS } = await import('../../engine')
       await repository.saveWeek({
         items: [
           {

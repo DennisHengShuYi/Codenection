@@ -1,10 +1,10 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLocalRepository } from '../data'
-import { HORIZON_DAYS } from '../engine'
-import type { Schedule } from '../optimizer'
-import { RoomShell } from './room/RoomShell'
+import { createLocalRepository } from '../../data'
+import { HORIZON_DAYS } from '../../engine'
+import type { Schedule } from '../../optimizer'
+import { RoomShell } from './RoomShell'
 
 /**
  * Where the student is, said in the address bar.

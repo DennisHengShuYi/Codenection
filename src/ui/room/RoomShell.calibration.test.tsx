@@ -1,11 +1,11 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLocalRepository } from '../data'
-import type { BlockRecord } from '../domain/blockLog'
-import { HORIZON_DAYS } from '../engine'
-import type { Schedule, ScheduledItem } from '../optimizer'
-import { RoomShell } from './room/RoomShell'
+import { createLocalRepository } from '../../data'
+import type { BlockRecord } from '../../domain/blockLog'
+import { HORIZON_DAYS } from '../../engine'
+import type { Schedule, ScheduledItem } from '../../optimizer'
+import { RoomShell } from './RoomShell'
 
 /**
  * This file used to cover the `mirror` and `papers` objects: the calibration screen behind

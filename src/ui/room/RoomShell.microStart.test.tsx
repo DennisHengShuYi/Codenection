@@ -1,10 +1,10 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { createLocalRepository } from '../data'
-import { HORIZON_DAYS } from '../engine'
-import type { Schedule, ScheduledItem } from '../optimizer'
-import { RoomShell } from './room/RoomShell'
+import { createLocalRepository } from '../../data'
+import { HORIZON_DAYS } from '../../engine'
+import type { Schedule, ScheduledItem } from '../../optimizer'
+import { RoomShell } from './RoomShell'
 
 /**
  * §4.1's automatic trigger, and §8.1's accuracy note.

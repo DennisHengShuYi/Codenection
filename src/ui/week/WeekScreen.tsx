@@ -389,7 +389,13 @@ export function WeekScreen(props: {
           )}
           <div
             data-testid="day-grid"
-            className="relative mx-auto w-full max-w-2xl rounded-xl border border-line bg-surface"
+            /* Square-bottomed and open-edged when a night follows, so the two read as one
+               day rather than as a grid and a panel beneath it. The night is still outside
+               the hour axis -- that is what keeps it from being split across midnight -- but
+               it belongs to this day and should look like it. */
+            className={`relative mx-auto w-full max-w-2xl border border-line bg-surface ${
+              night === null ? 'rounded-xl' : 'rounded-t-xl border-b-0'
+            }`}
             style={{ minHeight: `${(grid.hours.length - 1) * 48}px` }}
           >
             {grid.hours.slice(0, -1).map((hour) => (

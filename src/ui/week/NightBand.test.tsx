@@ -38,10 +38,19 @@ describe('NightBand', () => {
 
   /** Checked by absence rather than empty text: an element rendered with nothing in it still
    *  takes up space and is still announced. */
+  /** Neither the sentence nor the bar. An empty track under an untouched night is
+   *  decoration that says nothing. */
   it('marks nothing when the day fits', () => {
     render(<NightBand night={nightWindow(7, 8)} lostHours={0} />)
 
     expect(screen.queryByTestId('night-lost')).toBeNull()
+    expect(screen.queryByTestId('night-bar')).toBeNull()
+  })
+
+  it('draws the bar only where there is a bite to draw', () => {
+    render(<NightBand night={nightWindow(7, 8)} lostHours={2} />)
+
+    expect(screen.getByTestId('night-bar')).toBeInTheDocument()
   })
 
   /**
@@ -64,6 +73,23 @@ describe('NightBand', () => {
     for (const word of ['should', 'need to', 'must', 'try to', 'only', 'fail']) {
       expect(said).not.toContain(word)
     }
+  })
+
+  /**
+   * It belongs to the day and does nothing, and both halves are the point.
+   *
+   * The day's blocks are coloured buttons a student presses to open one. This opens nothing:
+   * sleep is not a block (`engine/types.ts` records the double count that would cause) and
+   * there is nothing to edit. `RestPreview` states the rule -- "a primary button that cannot
+   * do anything is worse than no button: it invites a press and then does nothing, which
+   * reads as the app being broken rather than as an honest no" -- so this shares the day's
+   * box and none of its affordances.
+   */
+  it('offers nothing to press, because there is nothing it could do', () => {
+    const { container } = render(<NightBand night={nightWindow(7, 8)} lostHours={2} />)
+
+    expect(container.querySelectorAll('button, a, input, select')).toHaveLength(0)
+    expect(container.querySelector('[tabindex]')).toBeNull()
   })
 
   it('says so when there is no night at all', () => {

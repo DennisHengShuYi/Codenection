@@ -38,7 +38,21 @@ export function NightBand({
   return (
     <div
       data-testid="night-band"
-      className="mx-auto flex w-full max-w-2xl flex-col gap-1 rounded-xl border border-line bg-surface p-2"
+      /*
+       * The foot of the day, joined to the grid above it -- square on top, rounded below, one
+       * border between them. The negative top margin cancels the `gap-3` its parent puts
+       * between children: without it the grid's open bottom edge sits above a gap, which
+       * reads as a broken box rather than as one day.
+       *
+       * Deliberately NOT dressed as one of the day's blocks. Those are coloured `<button>`s a
+       * student presses to open a block, and this opens nothing: sleep is not a block
+       * (`engine/types.ts` records the double count that would cause) and there is nothing to
+       * edit. `RestPreview` states the rule this follows -- "a primary button that cannot do
+       * anything is worse than no button: it invites a press and then does nothing, which
+       * reads as the app being broken rather than as an honest no". So it shares the day's
+       * box and none of its affordances: no hue, no hover, no cursor, not focusable.
+       */
+      className="-mt-3 mx-auto flex w-full max-w-2xl flex-col gap-1 rounded-b-xl border border-line bg-ground p-2"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-sm font-medium text-ink">Night</span>
@@ -49,11 +63,18 @@ export function NightBand({
         </span>
       </div>
 
-      {/* The night as one bar, with the part the day is likely to take marked at its start.
+      {/* Only when something is being taken. An empty track under an untouched night is
+          decoration that says nothing -- the bar exists to show the bite, so with no bite
+          there is nothing for it to show.
+
           Hidden from assistive tech: the sentence below says the same thing in words, and a
           shape described as a shape is noise. */}
-      {night.hours > 0 && (
-        <div aria-hidden="true" className="flex h-2 overflow-hidden rounded bg-line">
+      {lost > 0 && (
+        <div
+          aria-hidden="true"
+          data-testid="night-bar"
+          className="flex h-2 overflow-hidden rounded bg-line"
+        >
           <div className="h-full bg-attention" style={{ width: `${lostPercent}%` }} />
         </div>
       )}

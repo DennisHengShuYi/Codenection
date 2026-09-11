@@ -43,6 +43,35 @@ export { SLEEP_HOURS, withSleep, type SleepBucket } from '../../domain/sleepPlan
  * figure. It is threaded in from the same site as `today`, mirroring the rule in
  * `RoomShell.tsx` that the clock enters at the UI edge and nowhere deeper.
  */
+/**
+ * Everything that has happened and still has no answer, oldest first.
+ *
+ * The same filter `blockToAsk` applies, in a different order and without the cut to one.
+ * That pairing is deliberate: the card asks about the load type the model knows least about,
+ * because one question a day should teach it the most it can -- while a student reading a
+ * list of what they owe reads it the way the days happened. Sharing the filter is the part
+ * that matters; asking about something that has not happened is the failure `hasHappened`
+ * exists to stop, and two copies of that rule is how the bot came to do it.
+ */
+export function pendingCheckIns({
+  schedule,
+  today,
+  nowHour,
+  blockLog = [],
+}: {
+  readonly schedule: Schedule
+  readonly today: number
+  readonly nowHour: number
+  readonly blockLog?: readonly BlockRecord[]
+}): readonly ScheduledItem[] {
+  const answered = answeredIds(blockLog)
+
+  return schedule.items
+    .filter((item) => hasHappened(item, today, nowHour) && !answered.includes(item.id))
+    .slice()
+    .sort((left, right) => left.dayIndex - right.dayIndex || left.startHour - right.startHour)
+}
+
 export function blockToAsk({
   schedule,
   today,

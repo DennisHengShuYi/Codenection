@@ -4,6 +4,7 @@ import type { BlockRecord } from '../domain/blockLog'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
 import { createLocalRepository } from './localRepository'
+import { DEFAULT_SETTINGS } from './types'
 import { describeRepositoryContract } from './repositoryContract'
 
 vi.mock('idb-keyval', async (importOriginal) => {
@@ -70,5 +71,50 @@ describe('localRepository write queue', () => {
 
     const log = await repo.loadBlockLog()
     expect(log.map((entry) => entry.blockId)).toEqual(['b'])
+  })
+})
+
+/**
+ * §8's sleep target and the nights behind it, on the settings blob.
+ *
+ * There for the reason `calibration` and `ladders` are, which `types.ts` states over both:
+ * every adapter already persists settings as one blob, so this needs no migration and no
+ * adapter change. These cases are what prove that claim rather than assuming it.
+ */
+describe('a sleep target and the nights behind it', () => {
+  it('round-trips through the settings blob with no adapter change', async () => {
+    const repo = createLocalRepository(`local-sleep-${Date.now()}`)
+
+    await repo.saveSettings({
+      ...DEFAULT_SETTINGS,
+      sleepTargetHours: 9,
+      sleepNights: [{ isoDate: '2026-09-12', hours: 6, answeredAt: 1_757_000_000_000 }],
+    })
+
+    const saved = await repo.loadSettings()
+
+    expect(saved.sleepTargetHours).toBe(9)
+    expect(saved.sleepNights).toEqual([
+      { isoDate: '2026-09-12', hours: 6, answeredAt: 1_757_000_000_000 },
+    ])
+  })
+
+  /**
+   * Absent must mean "never set", not "set to the default".
+   *
+   * `sleepReality` treats a stated target differently from an unstated one, and `roomState`
+   * keeps the population norm until one exists -- so this pins the *absence*, not merely that
+   * an old blob loads. A default written into `DEFAULT_SETTINGS` would make every student look
+   * as though they had stated a target, which is why neither field has one.
+   */
+  it('loads a blob saved before sleep existed, with both fields still absent', async () => {
+    const repo = createLocalRepository(`local-sleep-legacy-${Date.now()}`)
+
+    await repo.saveSettings({ lowEnergyOverride: 'auto' })
+
+    const saved = await repo.loadSettings()
+
+    expect(saved.sleepTargetHours).toBeUndefined()
+    expect(saved.sleepNights).toBeUndefined()
   })
 })

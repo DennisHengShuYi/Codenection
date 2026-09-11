@@ -2,6 +2,7 @@ import type { BlockRecord } from '../domain/blockLog'
 import type { CalibrationProfile } from '../domain/calibration'
 import { DEFAULT_PROFILE } from '../domain/calibration'
 import type { Ladder } from '../domain/ladder'
+import type { SleepNight } from '../domain/sleepLog'
 import type { Schedule } from '../optimizer'
 
 /** §1.5's low-energy mode is a product decision as much as an accessibility one, so the
@@ -29,6 +30,32 @@ export interface StoredSettings {
    * the thing it describes.
    */
   readonly ladders?: readonly Ladder[]
+  /**
+   * The night the student says they are aiming for.
+   *
+   * A durable preference rather than a per-fortnight value: it has to survive the fortnight
+   * rolling over, which `Schedule.sleepByDay` does not. Here rather than behind new
+   * `Repository` methods for the reason `calibration` and `ladders` are -- one blob, no
+   * migration, no adapter change.
+   *
+   * A *guess*, not a promise. `optimizer/gaps.DAY_END_HOUR` is untouched, so the solver may
+   * still place work past midnight; what this changes is what the app assumes and what it
+   * warns about, never what it is allowed to schedule. A hard wall would have made a crunch
+   * fortnight genuinely unsolvable.
+   *
+   * Optional, and with no entry in `DEFAULT_SETTINGS` on purpose: absent means "never
+   * stated", which `domain/sleepReality` and `ui/room/roomState` both read differently from a
+   * stated figure. A default here would make every student look as though they had set one.
+   */
+  readonly sleepTargetHours?: number
+  /**
+   * §8's answered nights, durable at last -- see `domain/sleepLog`.
+   *
+   * Before this, whether a night had been answered lived only in `RoomShell`'s React state,
+   * so the app re-asked after every reload and nothing could tell a reported figure from the
+   * default sitting in its place.
+   */
+  readonly sleepNights?: readonly SleepNight[]
 }
 
 export const DEFAULT_SETTINGS: StoredSettings = {

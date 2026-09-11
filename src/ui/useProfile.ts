@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { SAVE_FAILED } from './useSchedule'
 import { DEFAULT_SETTINGS, type Repository, type Session } from '../data'
 import { DEFAULT_PROFILE, type CalibrationProfile } from '../domain/calibration'
 import { umBlockLog } from '../fixtures/umBlockLog'
@@ -37,8 +38,23 @@ export function useProfile(
 ): {
   profile: CalibrationProfile
   setProfile: (next: CalibrationProfile) => void
+  /**
+   * Null while every write has landed. A sentence a student can act on otherwise.
+   *
+   * The convention `useSchedule` and `useBlockLog` already use, per the project rule that
+   * errors are never silently swallowed. This dropped its failures -- and what it saves is
+   * the calibration every projection in the app is then computed from, so a student answers
+   * §7's questions, watches the model change, and finds it back at the population defaults
+   * next time with nothing having said so.
+   *
+   * Only `setProfile`'s write is reported. The two seeding writes in the effect above stay
+   * silent deliberately: they are the app giving a new account something to look at, not the
+   * student's own change, and a warning about a seed they never asked for would be noise.
+   */
+  problem: string | null
 } {
   const [profile, setLocal] = useState<CalibrationProfile>(DEFAULT_PROFILE)
+  const [problem, setProblem] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -104,8 +120,9 @@ export function useProfile(
       .loadSettings()
       .catch(() => DEFAULT_SETTINGS)
       .then((saved) => repo.saveSettings({ ...saved, calibration: next }))
-      .catch(() => undefined)
+      .then(() => setProblem(null))
+      .catch(() => setProblem(SAVE_FAILED))
   }
 
-  return { profile, setProfile }
+  return { profile, setProfile, problem }
 }

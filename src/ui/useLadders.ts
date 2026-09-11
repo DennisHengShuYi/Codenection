@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { SAVE_FAILED } from './useSchedule'
 import { DEFAULT_SETTINGS, type Repository } from '../data'
 import type { Ladder } from '../domain/ladder'
 
@@ -25,9 +26,19 @@ export function useLadders(repo: Repository): {
   loaded: boolean
   saveLadder: (ladder: Ladder) => void
   dropLadder: (blockId: string) => void
+  /**
+   * Null while every write has landed. A sentence a student can act on otherwise.
+   *
+   * Shaped like `useSchedule`'s and `useBlockLog`'s, per the project rule that errors are
+   * never silently swallowed. This hook dropped its failures -- which for a ladder means a
+   * student works through four rungs of a chain, and the progress that persisting it exists
+   * to protect is gone next time, with nothing having said so.
+   */
+  problem: string | null
 } {
   const [ladders, setLadders] = useState<readonly Ladder[]>([])
   const [loaded, setLoaded] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -70,7 +81,8 @@ export function useLadders(repo: Repository): {
         .loadSettings()
         .catch(() => DEFAULT_SETTINGS)
         .then((saved) => repo.saveSettings({ ...saved, ladders: next }))
-        .catch(() => undefined)
+        .then(() => setProblem(null))
+        .catch(() => setProblem(SAVE_FAILED))
 
       return next
     })
@@ -79,6 +91,7 @@ export function useLadders(repo: Repository): {
   return {
     ladders,
     loaded,
+    problem,
     // Upsert on `blockId`. Advancing a rung saves the same ladder again, and appending a
     // second copy would leave two records disagreeing about where the student got to.
     saveLadder: (ladder: Ladder) =>

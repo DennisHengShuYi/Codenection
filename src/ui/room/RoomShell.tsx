@@ -107,8 +107,9 @@ export function RoomShell({
   onAnswerBlock: (record: BlockRecord) => void
 }) {
   const { schedule, setSchedule, problem: saveProblem } = useSchedule(repository)
-  const { profile, setProfile } = useProfile(repository, session)
-  const { ladders, loaded: laddersLoaded, saveLadder, dropLadder } = useLadders(repository)
+  const { profile, setProfile, problem: profileProblem } = useProfile(repository, session)
+  const { ladders, loaded: laddersLoaded, saveLadder, dropLadder, problem: ladderProblem } =
+    useLadders(repository)
   /**
    * Ruling 57: where the student is now lives in the address bar as well as in React.
    * `useUrlView` returns exactly what `useState<View>` returned before it, so everything
@@ -222,7 +223,12 @@ export function RoomShell({
   // 17 deleted the view. Both directions matter -- a depleted student turning the collapsed
   // interface off, and a rested student turning it on -- and both are asserted end to end in
   // `RoomShell.lowEnergy.test.tsx` rather than only at the hook.
-  const { activeFor: lowEnergyFor, override: lowEnergyOverride, setOverride } = useLowEnergy(repository)
+  const {
+    activeFor: lowEnergyFor,
+    override: lowEnergyOverride,
+    setOverride,
+    problem: lowEnergyProblem,
+  } = useLowEnergy(repository)
 
   /**
    * §8.1's two prerequisites: anchor the fortnight to a real day, and claim something about a
@@ -319,6 +325,16 @@ export function RoomShell({
    * which `roomStateFor` draws from the same value, cannot disagree.
    */
   const lowEnergy = lowEnergyFor(floorReserve(model.reserves))
+
+  /**
+   * The first failed write, whichever store refused it.
+   *
+   * Five hooks persist something a student changed, and three of them used to drop the
+   * failure -- the calibration every projection is computed from, the ladder progress a
+   * student worked through, and §1.5's mode. One sentence covers all five, because what
+   * needs saying is that a change may not survive, not which table declined it.
+   */
+  const failedWrite = saveProblem ?? profileProblem ?? ladderProblem ?? lowEnergyProblem
 
   // §1.2's breakdown: the five domain bars each against its own ceiling, and the
   // low-social-flagged-as-warning logic that is the app's own differentiator over a tracker
@@ -1081,7 +1097,12 @@ export function RoomShell({
             Above the preview banner rather than below it: when a signed-out student hits a
             failed write, both are on screen, and the one about work already lost is the more
             urgent of the two. */}
-        {saveProblem !== null && (
+        {/* One banner for every failed write, not four. The wording is identical -- what a
+            student needs to know is that a change may not be there tomorrow, not which of
+            the app's stores refused it -- and the first one that failed is the one shown.
+            `useProfile`, `useLadders` and `useLowEnergy` all used to drop these silently,
+            while `useSchedule` and `useBlockLog` reported theirs. */}
+        {failedWrite !== null && (
           <p
             data-testid="save-problem"
             role="status"
@@ -1089,7 +1110,7 @@ export function RoomShell({
               session === null ? 'bottom-28' : 'bottom-2'
             }`}
           >
-            {saveProblem}
+            {failedWrite}
           </p>
         )}
 

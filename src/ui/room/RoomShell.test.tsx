@@ -318,6 +318,38 @@ describe('RoomShell', () => {
       expect(await screen.findByTestId('save-problem')).toHaveTextContent(/could not save/i)
     }, 30_000)
 
+    /**
+     * A settings write that fails has to say so too.
+     *
+     * `useProfile`, `useLadders` and `useLowEnergy` all persist through `saveSettings` and
+     * all three used to `.catch(() => undefined)` -- so a student could change §1.5's mode,
+     * watch it apply, and find it reverted next time with nothing having said a word, while
+     * a failed week write was reported. The project rule is that errors are never silently
+     * swallowed; the exception was three of the five hooks that write.
+     *
+     * Driven through the low-energy control because it is the one of the three a student can
+     * reach in two taps, and asserted on the same banner a failed week write uses -- one
+     * sentence for every store, since what matters is that the change may not survive.
+     */
+    it('says so when a settings change could not be saved', async () => {
+      const settingsReadOnly = {
+        loadWeek: () => Promise.resolve(null),
+        saveWeek: () => Promise.resolve(),
+        loadSettings: () => Promise.resolve({ lowEnergyOverride: 'auto' as const }),
+        saveSettings: () => Promise.reject(new Error('network down')),
+        loadBlockLog: () => Promise.resolve([]),
+        recordBlockAnswer: () => Promise.resolve(),
+        clear: () => Promise.resolve(),
+      }
+
+      render(<RoomShell repository={settingsReadOnly} blockLog={[]} onAnswerBlock={vi.fn()} />)
+      await waitFor(() => expect(screen.getByTestId('open-settings')).toBeVisible())
+      await userEvent.click(screen.getByTestId('open-settings'))
+      await userEvent.click(await screen.findByTestId('low-energy-option-on'))
+
+      expect(await screen.findByTestId('save-problem')).toHaveTextContent(/could not save/i)
+    }, 30_000)
+
     it('does not fall over when saving fails', async () => {
       const readOnly = {
         loadWeek: () => Promise.resolve(null),

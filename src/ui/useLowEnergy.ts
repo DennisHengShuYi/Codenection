@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { DEFAULT_SETTINGS, type Repository, type StoredSettings } from '../data'
 import { shouldUseLowEnergy } from './lowEnergy'
+import { SAVE_FAILED } from './useSchedule'
 
 /** Reads the student's stored preference and writes it back when they change it, so
  *  §1.5's manual override survives a reload rather than resetting to inferred. */
@@ -29,8 +30,20 @@ export function useLowEnergy(repo: Repository): {
    */
   override: StoredSettings['lowEnergyOverride']
   setOverride: (override: StoredSettings['lowEnergyOverride']) => void
+  /**
+   * Null while every write has landed. A sentence a student can act on otherwise.
+   *
+   * The same convention `useSchedule` and `useBlockLog` already use, and for the reason
+   * `useBlockLog` gives: the project's own rule is that errors are never silently
+   * swallowed. This hook dropped every save failure on the floor -- so a student could set
+   * the mode that decides whether they are handed a dashboard at all, see it apply, and
+   * find it reverted next time with nothing having said so. Applying it on screen
+   * regardless is right; saying nothing when it did not persist is not.
+   */
+  problem: string | null
 } {
   const [settings, setSettings] = useState<StoredSettings>(DEFAULT_SETTINGS)
+  const [problem, setProblem] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -54,8 +67,12 @@ export function useLowEnergy(repo: Repository): {
     const next = { ...settings, lowEnergyOverride: override }
     setSettings(next)
     // Applied on screen whether or not it persists: a student switching the mode off
-    // should see it turn off, even if the preference cannot be saved for next time.
-    repo.saveSettings(next).catch(() => undefined)
+    // should see it turn off, even if the preference cannot be saved for next time. What
+    // changed is that the failure is now reported rather than dropped.
+    repo
+      .saveSettings(next)
+      .then(() => setProblem(null))
+      .catch(() => setProblem(SAVE_FAILED))
   }
 
   return {
@@ -63,5 +80,6 @@ export function useLowEnergy(repo: Repository): {
       shouldUseLowEnergy(floorReserve, settings.lowEnergyOverride),
     override: settings.lowEnergyOverride,
     setOverride,
+    problem,
   }
 }

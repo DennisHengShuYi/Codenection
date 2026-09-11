@@ -25,9 +25,12 @@ export function describeDial(
   const parts: string[] = [`You are at ${Math.round(capacity)}% capacity this week.`]
 
   for (const bar of bars) {
-    parts.push(
-      `${bar.label}: ${Math.round(bar.value)} out of ${bar.ceiling}, ${TREND_WORDS[bar.trend]}.`,
-    )
+    // A bar with no measured direction says its value and stops. Reading "steady" for
+    // something nothing measured is worse here than anywhere else: this text IS the dial
+    // for a screen reader, so an invented word is indistinguishable from a real reading.
+    const trend = bar.trend === null ? '' : `, ${TREND_WORDS[bar.trend]}`
+
+    parts.push(`${bar.label}: ${Math.round(bar.value)} out of ${bar.ceiling}${trend}.`)
   }
 
   for (const bar of bars) {

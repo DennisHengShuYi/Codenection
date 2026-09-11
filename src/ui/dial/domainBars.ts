@@ -17,7 +17,10 @@ export interface DomainBar {
   readonly value: number
   readonly ceiling: number
   readonly status: BarStatus
-  readonly trend: Trend
+  /** Null where nothing measures a direction. The four reserve bars read theirs off the
+   *  projection; the density bar has no such reading, and §1.5 makes an unmeasured claim a
+   *  lie told to a screen reader rather than a harmless default. */
+  readonly trend: Trend | null
   /** Plain-language reason this bar is not healthy, or null. Paired with the status so
    *  severity is never carried by colour alone (§1.5). */
   readonly warning: string | null
@@ -122,7 +125,9 @@ export function domainBars(
           : density > DENSITY_STRETCHED_ABOVE
             ? 'stretched'
             : 'healthy',
-      trend: 'flat',
+      // Nothing projects how packed a future day will be, so there is no direction to
+      // report. It read 'flat' before, which drew a "steady" glyph and announced "steady".
+      trend: null,
       warning:
         density > DENSITY_CRITICAL_ABOVE ? 'Your days are almost completely booked.' : null,
     },

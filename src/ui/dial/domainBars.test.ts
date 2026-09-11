@@ -76,8 +76,26 @@ describe('domainBars', () => {
     }
   })
 
-  it('gives every bar a direction of travel, so severity is never colour alone', () => {
+  /**
+   * Rewritten deliberately, and the §1.5 claim it carries is stronger than before.
+   *
+   * It used to require a direction on every bar, which the density bar satisfied by
+   * hard-coding `'flat'` -- so the assertion passed on an invented reading and the bar
+   * announced "steady" to a screen reader. Severity was never carried by the arrow anyway:
+   * it is carried by `status` and, where it matters, by a sentence. That is what is checked
+   * now, and a trend is required only where one was actually measured.
+   */
+  it('carries severity in words and status, never in colour alone', () => {
     for (const bar of barsFor(healthy)) {
+      expect(['healthy', 'stretched', 'critical']).toContain(bar.status)
+      expect(bar.trend === null || ['rising', 'flat', 'falling'].includes(bar.trend)).toBe(true)
+    }
+  })
+
+  /** The four measured bars must keep their direction -- dropping it would be the same
+   *  failure in the other direction. */
+  it('keeps a measured direction on every bar that has a reading behind it', () => {
+    for (const bar of barsFor(healthy).filter((entry) => entry.key !== 'schedule')) {
       expect(['rising', 'flat', 'falling']).toContain(bar.trend)
     }
   })
@@ -109,6 +127,29 @@ describe('domainBars', () => {
     for (const bar of barsFor(healthy)) {
       expect(bar.label.length).toBeGreaterThan(0)
       expect(bar.label).not.toBe(bar.key)
+    }
+  })
+})
+
+/**
+ * §1.5: a trend is a measurement, and a bar that has none must not claim one.
+ *
+ * The four reserve bars read their arrow off the last three days of the projection. The
+ * density bar has no such reading -- nothing projects how packed a future day will be -- and
+ * it used to carry `trend: 'flat'` anyway, which rendered a "steady" glyph and, worse, told
+ * a screen reader `aria-label="steady"`. That is a claim nobody made, in the one view §1.5
+ * calls a primary surface rather than a fallback.
+ */
+describe('a bar with nothing measuring its direction', () => {
+  it('says it has no trend rather than claiming it is steady', () => {
+    const density = barsFor(healthy).find((bar) => bar.key === 'schedule')
+
+    expect(density?.trend).toBeNull()
+  })
+
+  it('leaves the measured bars measuring', () => {
+    for (const bar of barsFor(healthy).filter((entry) => entry.key !== 'schedule')) {
+      expect(bar.trend).not.toBeNull()
     }
   })
 })

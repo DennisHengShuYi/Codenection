@@ -206,3 +206,54 @@ describe('changing the block rather than answering about it', () => {
     expect(screen.queryByTestId('confirm-remove')).toBeNull()
   })
 })
+
+/**
+ * The line under the title, which says three things about the block and got two of them
+ * wrong on a rest block.
+ *
+ * `1 hours` was unconditional plural. And the load-type word is `IN_THEIR_WORDS[item.type]`,
+ * while every rest block the app creates carries `type: 'mental'` as a placeholder --
+ * `drain.ts` excludes rest from draining, so nothing ever spends it. Nothing else read that
+ * placeholder; this line did, so a rest block introduced itself as study.
+ */
+describe('what the line under the title says', () => {
+  it('counts one hour as an hour', () => {
+    setup({ item: { ...model().item, hours: 1 } })
+
+    expect(screen.getByText(/1 hour\b/)).toBeVisible()
+    expect(screen.queryByText(/1 hours/)).toBeNull()
+  })
+
+  it('still pluralises the rest', () => {
+    setup({ item: { ...model().item, hours: 3 } })
+
+    expect(screen.getByText(/3 hours/)).toBeVisible()
+  })
+
+  it('names the load type on a block that spends one', () => {
+    setup({ item: { ...model().item, type: 'mental' } })
+
+    expect(screen.getByText(/study and writing/i)).toBeVisible()
+  })
+
+  /** A rest block's kind is its description, and the title already says "Rest". Naming a
+   *  load type it never spends tells the student something untrue about the block. */
+  it('says nothing about a load type on a rest block', () => {
+    setup({
+      item: { ...model().item, title: 'Rest', kind: 'rest', protectedRest: true },
+      actions: ['didRest', 'edit'],
+    })
+
+    expect(screen.queryByText(/study and writing/i)).toBeNull()
+  })
+
+  it('still says when a rest block is and how long it runs', () => {
+    setup({
+      item: { ...model().item, title: 'Rest', kind: 'rest', protectedRest: true, hours: 1 },
+      actions: ['didRest', 'edit'],
+    })
+
+    expect(screen.getByText(/20:00–21:00/)).toBeVisible()
+    expect(screen.getByText(/1 hour\b/)).toBeVisible()
+  })
+})

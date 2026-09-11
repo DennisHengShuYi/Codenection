@@ -33,8 +33,22 @@ type SimpleAction = keyof typeof SIMPLE_LABELS
 const isSimpleAction = (action: BlockAction): action is SimpleAction =>
   action === 'done' || action === 'later'
 
-const whenText = (item: BlockSheetModel['item']): string =>
-  `${hourLabel(item.startHour)}–${hourLabel(item.startHour + item.hours)} · ${IN_THEIR_WORDS[item.type]} · ${item.hours} hours`
+/**
+ * The line under the title: when the block runs, what it spends, and how long for.
+ *
+ * The load type is dropped on a rest block. Every rest block the app creates carries
+ * `type: 'mental'` as a placeholder -- `drain.ts` excludes rest from draining, so nothing
+ * ever spends it -- and this was the only line that read the placeholder, which made a rest
+ * block introduce itself as "study and writing". Its kind is its description, and the title
+ * above already says Rest.
+ */
+const whenText = (item: BlockSheetModel['item']): string => {
+  const when = `${hourLabel(item.startHour)}–${hourLabel(item.startHour + item.hours)}`
+  const spends = item.protectedRest ? null : IN_THEIR_WORDS[item.type]
+  const long = `${item.hours} ${item.hours === 1 ? 'hour' : 'hours'}`
+
+  return [when, spends, long].filter((part) => part !== null).join(' · ')
+}
 
 export function BlockSheet({
   model,

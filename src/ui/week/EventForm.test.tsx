@@ -379,3 +379,82 @@ describe('names offered while typing', () => {
     expect(field.tagName).toBe('INPUT')
   })
 })
+
+/**
+ * What the app will quietly do to this estimate, said before it is added.
+ *
+ * §2.4 pads a student's hours silently and is explicit that they need not know the parameter
+ * exists -- the alternative is asking them to be more realistic, which does not work. But
+ * "need not know" is not "must not be told", and the moment a figure is being typed is the
+ * one moment the correction is about something in front of them.
+ *
+ * It quotes the rung that actually applies to this block, not the area average: the app
+ * charges `paddingForItem`, and a line quoting anything else would describe a correction it
+ * is not making.
+ */
+describe('what it will do with the hours you typed', () => {
+  const answered = (title: string, actualHours: number) => ({
+    blockId: `${title}-${actualHours}-${Math.random()}`,
+    type: 'mental' as const,
+    kind: 'studyBlock' as const,
+    title,
+    plannedHours: 2,
+    dayIndex: 0,
+    answer: actualHours > 2 ? ('longer' as const) : ('right' as const),
+    answeredAt: 1,
+  })
+
+  const overran = (title: string, count: number) =>
+    Array.from({ length: count }, () => answered(title, 4))
+
+  it('says what it will allow for, once it has measured this work', async () => {
+    setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+
+    expect(await screen.findByTestId('bias-line')).toHaveTextContent(/WIA3001 essay/i)
+  })
+
+  it('says nothing before anything has been typed', () => {
+    setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    expect(screen.queryByTestId('bias-line')).toBeNull()
+  })
+
+  /**
+   * Not a silence -- the ladder working. A title it has never seen still belongs to a kind
+   * it has, and what it knows about studying is the honest thing to say about a study block
+   * with a new name on it.
+   */
+  it('falls back to what it knows about the kind when the name is new', async () => {
+    setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    // No word in common with "WIA3001 essay", so containment finds no family and the task
+    // rung has nothing -- which is the fall-through this is about.
+    await userEvent.type(screen.getByLabelText('What'), 'Revision')
+
+    expect(await screen.findByTestId('bias-line')).toHaveTextContent(/studying/i)
+  })
+
+  /** Silence takes all three rungs failing, which is the ladder's whole point: an unmeasured
+   *  task falls to its kind, an unmeasured kind to its area, and only work with nothing
+   *  behind it at any level gets no line. */
+  it('says nothing about work it has never measured at any level', async () => {
+    setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    await userEvent.type(screen.getByLabelText('What'), 'Climbing')
+    // Kind sets the area of life, Detail sets the activity -- the two middle rungs.
+    await userEvent.selectOptions(screen.getByLabelText('Kind'), 'physical')
+    await userEvent.selectOptions(screen.getByLabelText('Detail'), 'hardExercise')
+
+    expect(screen.queryByTestId('bias-line')).toBeNull()
+  })
+
+  it('says nothing at all without history', async () => {
+    setup()
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+
+    expect(screen.queryByTestId('bias-line')).toBeNull()
+  })
+})

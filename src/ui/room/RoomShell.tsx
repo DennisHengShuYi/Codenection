@@ -39,7 +39,6 @@ import { CalendarConnection } from '../settings/CalendarConnection'
 import { LinkTelegram } from '../settings/LinkTelegram'
 import { LowEnergyControl } from '../settings/LowEnergyControl'
 import { ReservesSheet } from '../reserves/ReservesSheet'
-import { biasLine } from '../../domain/realityCheck'
 import { blockToAsk, pendingCheckIns } from '../today/checkIn'
 import { useLowEnergy } from '../useLowEnergy'
 import { useSleepPlan } from '../useSleepPlan'
@@ -841,14 +840,11 @@ export function RoomShell({
                           ))}
                         </div>
 
-                        {/* §7.6, under the answers rather than above them: it reads as the
-                            app explaining itself afterwards, not as an argument for one of
-                            them. */}
-                        {biasLine(outcomes, one.type) !== null && (
-                          <p data-testid="bias-line" className="text-xs text-ink-soft">
-                            {biasLine(outcomes, one.type)}
-                          </p>
-                        )}
+                        {/* §7.6's line is not here. It belongs where an estimate is being
+                            made, not where one is being reported on: by the time a student
+                            is answering, the padding it describes has already been applied
+                            to a block they cannot change. `EventForm` says it as the hours
+                            are typed. */}
 
                         <button
                           type="button"

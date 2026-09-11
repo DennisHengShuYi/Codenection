@@ -247,10 +247,15 @@ describe('RoomShell with a block to confirm', () => {
     }))
 
     render(<RoomShell repository={repository} blockLog={overran} onAnswerBlock={vi.fn()} />)
-    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one starts
-    // with the press a student would make.
-    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
-    await userEvent.click(screen.getByTestId('open-notices'))
+
+    // Through the add form, because that is where the line lives now: it belongs where an
+    // estimate is being made rather than where one is being reported on. The wiring under
+    // test is unchanged -- that the durable log reaches the sentence at all.
+    await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(await screen.findByTestId('day-3'))
+    await userEvent.click(await screen.findByTestId('add-block'))
+    await userEvent.type(await screen.findByLabelText('What'), 'Essay')
 
     await waitFor(() =>
       expect(screen.getByTestId('bias-line')).toHaveTextContent(

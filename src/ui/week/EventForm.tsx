@@ -1,5 +1,6 @@
 import { useState, type JSX } from 'react'
-import type { BlockRecord } from '../../domain/blockLog'
+import { outcomesFrom, type BlockRecord } from '../../domain/blockLog'
+import { biasLineForBlock } from '../../domain/realityCheck'
 import { titleVocabulary } from '../../domain/titleVocabulary'
 import { editWarnings } from '../../domain/editWarnings'
 import type { ItemFields } from '../../domain/scheduleEdits'
@@ -92,9 +93,15 @@ export function EventForm({
   // is what `eventDraft.ts` is for.
   const vocabulary = titleVocabulary({ schedule, blockLog })
 
+  const outcomes = outcomesFrom(blockLog)
+
   const [draft, setDraft] = useState(() =>
     item === null ? blankDraft(schedule, dayIndex) : draftFrom(item),
   )
+
+  // Nothing to say about a block with no name yet: the narrow rungs are keyed on what it is
+  // called, and a blank title matches nothing.
+  const bias = draft.title.trim() === '' ? null : biasLineForBlock(outcomes, draft)
 
   const errors = validate(draft)
   const warnings = editWarnings({ schedule, item: candidate(draft, item), params })
@@ -245,6 +252,24 @@ export function EventForm({
             onChange={(deadlineDay) => setDraft({ ...draft, deadlineDay })}
           />
         </div>
+
+        {/*
+          §7.6, at the moment the estimate is being typed.
+
+          §2.4 pads silently and says a student need not know the parameter exists -- the
+          alternative is asking them to be more realistic, which does not work. "Need not
+          know" is not "must not be told", though, and this is the one moment the correction
+          is about a figure in front of them.
+
+          It quotes the rung that applies to *this* block, because that is what the engine
+          charges. A line quoting the area average would be describing a correction the app
+          is not making.
+        */}
+        {bias !== null && (
+          <p data-testid="bias-line" className="text-xs text-ink-soft">
+            {bias}
+          </p>
+        )}
 
         {/* §5.1's boundary, drawn where the student can see it -- the same checkbox
             `ItemChip` offers when something is first read in, offered again here because a

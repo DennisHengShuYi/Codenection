@@ -123,6 +123,31 @@ function ratioOf(history: readonly BlockOutcome[], atLeast: number): number | nu
  * other. See `taskKey.sameFamily`.
  */
 export function paddingForItem(outcomes: readonly BlockOutcome[], block: TaskLike): number {
+  return paddingDetail(outcomes, block).padding
+}
+
+/** Which rung of the ladder answered, or none. The words depend on it: "your essays" and
+ *  "study and writing" are different claims about different evidence. */
+export type PaddingRung = 'task' | 'kind' | 'type' | 'none'
+
+export interface PaddingDetail {
+  readonly padding: number
+  readonly rung: PaddingRung
+}
+
+/**
+ * The padding for a block, and where it came from.
+ *
+ * Split out from `paddingForItem` because the sentence a student reads has to name what the
+ * figure is about, and the number alone cannot say. The engine takes `.padding` and ignores
+ * the rest, so the charge and the claim are one calculation rather than two that can drift
+ * -- which is exactly what happened when the line quoted the area figure while the engine
+ * charged the task one.
+ */
+export function paddingDetail(
+  outcomes: readonly BlockOutcome[],
+  block: TaskLike,
+): PaddingDetail {
   const usable = outcomes.filter((outcome) => outcome.plannedHours > 0)
   const key = taskKeyOf(block.title)
 
@@ -132,10 +157,49 @@ export function paddingForItem(outcomes: readonly BlockOutcome[], block: TaskLik
     (outcome) => outcome.title !== undefined && sameFamily(taskKeyOf(outcome.title), key),
   )
 
-  return (
-    ratioOf(family, MIN_SAMPLES_FOR_TASK) ??
-    ratioOf(sameKind, MIN_SAMPLES_FOR_KIND) ??
-    ratioOf(relevant(usable, block.type), MIN_SAMPLES) ??
-    1
-  )
+  const task = ratioOf(family, MIN_SAMPLES_FOR_TASK)
+  if (task !== null) return { padding: task, rung: 'task' }
+
+  const kind = ratioOf(sameKind, MIN_SAMPLES_FOR_KIND)
+  if (kind !== null) return { padding: kind, rung: 'kind' }
+
+  const area = ratioOf(relevant(usable, block.type), MIN_SAMPLES)
+  if (area !== null) return { padding: area, rung: 'type' }
+
+  return { padding: 1, rung: 'none' }
+}
+
+/** The kinds in a student's words, for the rung between a task and an area of life. */
+const KIND_WORDS: Record<string, string> = {
+  studyBlock: 'studying',
+  hardExercise: 'hard exercise',
+  lightExercise: 'moving about',
+  socialDraining: 'social obligations',
+  socialRestorative: 'time with people',
+  errands: 'life admin',
+}
+
+const sayBias = (label: string, padding: number): string =>
+  `You underestimate ${label} by about ${Math.round(padding * 10) / 10}×. We pad it automatically.`
+
+/**
+ * §7.6's line for one block, quoting the figure that is actually charged to it.
+ *
+ * It used to quote the area of life while the engine charged the ladder, so the app could
+ * say "study and writing, about 1.4x" about a block it was charging 1.9x -- and could
+ * announce a padding on work whose own bucket sits at 1.0, because the student's *other*
+ * study runs long. This is the only place any of it is visible, so it says what is in use
+ * and names the evidence it came from.
+ */
+export function biasLineForBlock(
+  outcomes: readonly BlockOutcome[],
+  block: TaskLike,
+): string | null {
+  const { padding, rung } = paddingDetail(outcomes, block)
+  if (padding < WORTH_SAYING) return null
+
+  if (rung === 'task') return sayBias(block.title, padding)
+  if (rung === 'kind') return sayBias(KIND_WORDS[block.kind] ?? IN_THEIR_WORDS[block.type], padding)
+
+  return sayBias(IN_THEIR_WORDS[block.type], padding)
 }

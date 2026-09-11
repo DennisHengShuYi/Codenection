@@ -88,3 +88,69 @@ describe('dayGrid', () => {
     expect(Number.isFinite(grid.blocks[0]?.heightPercent)).toBe(true)
   })
 })
+
+/**
+ * A block that runs past midnight.
+ *
+ * The window is derived from the blocks and clamped at 24:00, so a lecture at 23:00 for two
+ * hours produced a 22:00-24:00 window with a block starting halfway down and two hours tall
+ * -- half of it hanging outside the grid, over the button underneath. The night is not a
+ * place the day can draw.
+ *
+ * It belongs on both days: the part before midnight on the day it starts, the rest at the
+ * top of the day it ends. That is where a student would look for it, and it is what every
+ * calendar they have ever used does.
+ */
+describe('a block that crosses midnight', () => {
+  /** The fixture's `item` takes (id, startHour, hours) and sits on day 0, so a block on a
+   *  later day is spread in here. */
+  const onDay = (dayIndex: number, startHour: number, hours: number): ScheduledItem => ({
+    ...item('lecture', startHour, hours),
+    dayIndex,
+  })
+
+  const lateNight = (): Schedule => week([onDay(3, 23, 2)])
+
+  it('draws only the part that happens before midnight', () => {
+    const grid = dayGrid(lateNight(), 3)
+    const drawn = grid.blocks[0]
+
+    expect((drawn?.topPercent ?? 0) + (drawn?.heightPercent ?? 0)).toBeLessThanOrEqual(100)
+  })
+
+  it('says the block carries on past the end of the day', () => {
+    expect(dayGrid(lateNight(), 3).blocks[0]?.continuesPast).toBe(true)
+  })
+
+  it('shows the rest of it at the top of the next day', () => {
+    const grid = dayGrid(lateNight(), 4)
+
+    expect(grid.blocks).toHaveLength(1)
+    expect(grid.blocks[0]?.item.id).toBe('lecture')
+    expect(grid.blocks[0]?.continuedFrom).toBe(true)
+  })
+
+  it('starts the next day at midnight, so the tail has somewhere to sit', () => {
+    const grid = dayGrid(lateNight(), 4)
+
+    expect(grid.firstHour).toBe(0)
+    expect(grid.blocks[0]?.topPercent).toBe(0)
+  })
+
+  it('leaves an ordinary block saying it carries on nowhere', () => {
+    const grid = dayGrid(week([onDay(3, 9, 2)]), 3)
+
+    expect(grid.blocks[0]?.continuesPast).toBe(false)
+    expect(grid.blocks[0]?.continuedFrom).toBe(false)
+  })
+
+  it('does not carry anything into a day after one that ended on time', () => {
+    expect(dayGrid(week([onDay(3, 9, 2)]), 4).blocks).toHaveLength(0)
+  })
+
+  /** Day zero has no day before it to be carried from, and reaching for one would read the
+   *  block list at index -1. */
+  it('carries nothing into the first day of the fortnight', () => {
+    expect(dayGrid(week([onDay(0, 23, 2)]), 0).blocks).toHaveLength(1)
+  })
+})

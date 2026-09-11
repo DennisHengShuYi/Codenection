@@ -410,13 +410,20 @@ export function WeekScreen(props: {
               </div>
             ))}
 
-            {grid.blocks.map(({ item, topPercent, heightPercent }) => (
+            {grid.blocks.map(({ item, topPercent, heightPercent, continuesPast, continuedFrom }) => (
               <button
-                key={item.id}
+                // A block that crosses midnight is drawn on both days, so the id alone is
+                // not unique within one render of the pair.
+                key={`${item.id}-${continuedFrom ? 'tail' : 'head'}`}
                 type="button"
                 data-testid={`block-${item.id}`}
                 onClick={() => onSelectBlock(item.id)}
-                className={`absolute left-14 right-2 min-h-11 break-words rounded-lg p-1 text-left text-xs text-on-color ${TYPE_HUE[item.type]}`}
+                className={`absolute left-14 right-2 min-h-11 break-words rounded-lg p-1 text-left text-xs text-on-color ${TYPE_HUE[item.type]} ${
+                  // Square off the edge the block runs through, so the split reads as one
+                  // thing continuing rather than as two separate blocks that happen to
+                  // share a name.
+                  continuesPast ? 'rounded-b-none' : ''
+                } ${continuedFrom ? 'rounded-t-none' : ''}`}
                 style={{ top: `${topPercent}%`, height: `${heightPercent}%` }}
               >
                 {/* `break-words` on both lines: a pasted URL or a spaceless course code must
@@ -426,6 +433,11 @@ export function WeekScreen(props: {
                 <div className="break-words">{item.title}</div>
                 <div className="break-words">
                   {TYPE_LABEL[item.type]} — {item.startHour}:00–{item.startHour + item.hours}:00
+                  {/* Said in words, not only by a squared corner: the hours above already
+                      read past midnight -- "23:00-25:00" -- and a student needs to know
+                      which half of it they are looking at. */}
+                  {continuesPast && ' → carries into the next day'}
+                  {continuedFrom && ' ← carried from the day before'}
                   {item.fixed && ' 🔒 fixed'}
                   {item.protectedRest && ' 🛡 protected'}
                 </div>

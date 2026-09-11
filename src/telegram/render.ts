@@ -115,7 +115,8 @@ export const helpReply = (): Reply => ({
     '/schedule — the whole fortnight at a glance',
     '/checkin — how today went, in one tap',
     '',
-    'Anything else you send, I read as things to add to your week.',
+    'Anything else you send, I read as things to add to your week — including a photo of a',
+    'timetable, or a voice note if it is easier than typing.',
   ].join('\n'),
 })
 
@@ -536,11 +537,45 @@ export function weekReply(summary: WeekSummary): Reply {
  * one with nothing that helps, so the fallback only ever adds to that report -- it never
  * contradicts it.
  */
-export function rebalanceReply(report: string, fallback: string | null): Reply {
-  if (fallback === null) return { text: report }
+/**
+ * What a rebalance WOULD do, with the two buttons that decide it (Ruling 62).
+ *
+ * The app was changed to propose and wait (`c81da05`); this door went on saving the result
+ * the moment the command arrived, so the same word rearranged a student's week behind them
+ * in chat and asked first on screen. §16's rule -- never silently reshuffle -- is a property
+ * of the product, not of the screen.
+ */
+export function rebalanceReply(
+  report: string,
+  fallback: string | null,
+  fingerprint: string,
+): Reply {
+  const lines = [report]
+  if (fallback !== null) lines.push('', `It would still cut into the deficit to ${fallback}.`)
+  lines.push('', 'Nothing has changed yet.')
 
-  return { text: [report, '', `It would still cut into the deficit to ${fallback}.`].join('\n') }
+  return {
+    text: lines.join('\n'),
+    buttons: [
+      [
+        { label: 'Do it', data: `rebalance:apply:${fingerprint}` },
+        { label: 'Leave it', data: 'rebalance:decline' },
+      ],
+    ],
+  }
 }
+
+/** What the student sees when they approve a plan made for a week that has since moved on.
+ *  Refused rather than applied: the moves were worked out against blocks that may no longer
+ *  be where they were, and applying them anyway is the silent reshuffle §16 forbids. */
+export const rebalanceStaleReply = (): Reply => ({
+  text: 'Your week changed since I worked that out, so I have not touched it. Send /rebalance again for a fresh plan.',
+})
+
+/** The healthy default, said out loud so declining is an answer rather than silence. */
+export const rebalanceDeclinedReply = (): Reply => ({
+  text: 'Left as it is.',
+})
 
 /** Refused rather than clamped: a student who typed 40 and was shown day 20 would be
  *  reading a day they did not ask for, with no way to tell. */

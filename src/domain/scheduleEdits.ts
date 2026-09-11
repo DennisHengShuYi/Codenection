@@ -1,6 +1,7 @@
 import { HORIZON_DAYS, type ActivityKind, type LoadType } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
 import { dropCommitmentFor } from './commitments'
+import { effectiveDeadline } from './softDeadlines'
 
 const DEFAULT_DEFER_DAYS = 2
 
@@ -64,7 +65,12 @@ export function deferItem(
     items: schedule.items.map((item) => {
       if (item.id !== id) return item
 
-      const latest = item.deadlineDay ?? HORIZON_DAYS - 1
+      // Ruling 62/§45: whichever deadline actually applies, real or synthetic. This read
+      // `item.deadlineDay` alone, so undated work -- a walk, a rest, seeing someone -- could
+      // be pushed to the end of the fortnight for free. `softDeadlines`' own docstring names
+      // this line as one of the three reasons that module exists, and it was not changed
+      // when the module landed.
+      const latest = effectiveDeadline(item) ?? HORIZON_DAYS - 1
 
       return { ...item, dayIndex: Math.min(item.dayIndex + byDays, latest, HORIZON_DAYS - 1) }
     }),

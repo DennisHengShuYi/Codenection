@@ -1,3 +1,4 @@
+import { COMMANDS } from './commands'
 import { describe, expect, it } from 'vitest'
 import type { ParsedItem } from '../ai'
 import {
@@ -499,7 +500,7 @@ describe('weekReply', () => {
 
 describe('rebalanceReply', () => {
   it('reports what the solver did in its own words', () => {
-    expect(rebalanceReply('Moved two blocks; your worst day goes from 31 to 44.', null).text).toContain(
+    expect(rebalanceReply('Moved two blocks; your worst day goes from 31 to 44.', null, 'abc123').text).toContain(
       'worst day goes from 31 to 44',
     )
   })
@@ -507,13 +508,13 @@ describe('rebalanceReply', () => {
   /** §2.5: "nothing to move, but here is the one thing that would help" is the likelier
    *  headline for a real final-year student, not a consolation prize. */
   it('offers the single best remaining move when the solver found none', () => {
-    const reply = rebalanceReply('Nothing I tried improved the week.', 'move the laundry to Saturday')
+    const reply = rebalanceReply('Nothing I tried improved the week.', 'move the laundry to Saturday', 'abc123')
 
     expect(reply.text).toContain('move the laundry to Saturday')
   })
 
   it('says nothing extra when the solver already helped', () => {
-    expect(rebalanceReply('Moved two blocks.', null).text).not.toMatch(/would still/i)
+    expect(rebalanceReply('Moved two blocks.', null, 'abc123').text).not.toMatch(/would still/i)
   })
 })
 
@@ -675,5 +676,28 @@ describe('blocksReply as a day opened from the fortnight', () => {
   it('stays an ordinary message for a plain /today', () => {
     expect(blocksReply('today', blocks).replaceMessage).toBeUndefined()
     expect(blocksReply('today', blocks).buttons?.flat().some((b) => b.data === 'back:schedule')).toBe(false)
+  })
+})
+
+/**
+ * Ruling 62: `/help` is the whole surface a student can see at once, so anything the door
+ * accepts and this does not mention is a feature nobody will discover. Photos and voice
+ * notes were both wired in `api/telegram.ts` and named nowhere.
+ */
+describe('the help text against what the door actually accepts', () => {
+  it('names every command the parser knows', () => {
+    const text = helpReply().text
+
+    for (const name of COMMANDS.filter((command) => command !== 'help')) {
+      expect(text, `/${name} is handled and unmentioned`).toContain(`/${name}`)
+    }
+  })
+
+  it('says a photo works, because it does', () => {
+    expect(helpReply().text).toMatch(/photo/i)
+  })
+
+  it('says a voice note works, because it does', () => {
+    expect(helpReply().text).toMatch(/voice/i)
   })
 })

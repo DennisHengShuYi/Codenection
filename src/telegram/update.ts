@@ -29,6 +29,15 @@ export type Intent =
       answer: BlockAnswer
     }
   | { kind: 'restAnswer'; chatId: number; startHour: number | null; accepted: boolean }
+  /**
+   * Ruling 62: a rebalance the student has approved, or declined.
+   *
+   * `fingerprint` is the week the proposal was made against. The proposal itself is far too
+   * big for 64 bytes of callback data, so accepting re-runs the same deterministic solve --
+   * and this is what proves it would re-run against the same week. A week that has moved on
+   * since is refused rather than silently rearranged by a plan made for a different one.
+   */
+  | { kind: 'rebalanceAnswer'; chatId: number; fingerprint: string | null; accepted: boolean }
   | { kind: 'takeOn'; chatId: number; askId: string }
   | { kind: 'openDay'; chatId: number; dayIndex: number }
   | { kind: 'backToSchedule'; chatId: number }
@@ -230,6 +239,15 @@ export function readUpdate(update: unknown): Intent {
     const sleep = /^sleep:(under5|six|seven|eightPlus)$/.exec(data)
     if (sleep !== null) {
       return { kind: 'sleepAnswer', chatId, bucket: sleep[1] as SleepBucket }
+    }
+
+    if (data === 'rebalance:decline') {
+      return { kind: 'rebalanceAnswer', chatId, fingerprint: null, accepted: false }
+    }
+
+    const rebalance = /^rebalance:apply:([a-z0-9]{1,32})$/.exec(data)
+    if (rebalance?.[1] !== undefined) {
+      return { kind: 'rebalanceAnswer', chatId, fingerprint: rebalance[1], accepted: true }
     }
 
     if (data === 'rest:decline') {

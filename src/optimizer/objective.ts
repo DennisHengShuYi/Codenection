@@ -155,6 +155,8 @@ function neglectPressure(schedule: Schedule, params: EngineParams): number {
   let total = 0
 
   for (const item of schedule.items) {
+    // Items carrying a real deadline are already charged by `deadlinePressure` above, so
+    // they are skipped rather than charged twice. What remains is the synthetic one.
     if (item.deadlineDay !== null) continue
     if (item.softDeadlineDay === undefined) continue
 

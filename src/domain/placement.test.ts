@@ -393,6 +393,14 @@ describe('describeDeferral', () => {
   })
 
   /** The old reason, and still a real one. */
+  /** Past the little table of words, the digit is clearer than the word -- and a run of
+   *  full days that long is exactly when a student wants the number. */
+  it('counts in digits once the run is longer than the words go', () => {
+    expect(describeDeferral(deferral({ to: 9, skippedFull: 8 }), 'done')).toContain(
+      'The 8 days before it had no room.',
+    )
+  })
+
   it('says the days in between had no room', () => {
     expect(describeDeferral(deferral({ to: 4, skippedFull: 2 }), 'done')).toBe(
       'Essay moved to Fri 11 Sept. The two days before it had no room.',

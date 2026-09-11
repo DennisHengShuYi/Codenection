@@ -23,7 +23,7 @@ const model = (over: Partial<BlockSheetModel> = {}): BlockSheetModel => ({
   ...over,
 })
 
-const setup = (over: Partial<BlockSheetModel> = {}) => {
+const setup = (over: Partial<BlockSheetModel> = {}, preview = 'This would move to Thursday.') => {
   const handlers = {
     onClose: vi.fn(),
     onBack: vi.fn(),
@@ -33,7 +33,7 @@ const setup = (over: Partial<BlockSheetModel> = {}) => {
     onEdit: vi.fn(),
     onRemove: vi.fn(),
     onMicroStart: vi.fn(),
-  previewLater: () => 'This would move to Thursday.',
+    previewLater: () => preview,
   }
   render(<BlockSheet model={model(over)} {...handlers} />)
   return handlers
@@ -272,5 +272,52 @@ describe('what the line under the title says', () => {
 
     expect(screen.getByText(/20:00–21:00/)).toBeVisible()
     expect(screen.getByText(/1 hour\b/)).toBeVisible()
+  })
+
+  /**
+   * Later proposes; the student decides. These are the two ways out of that proposal, and
+   * the shape it takes when there is nothing to propose.
+   */
+  describe('the Later proposal', () => {
+    it('offers the move alongside a way to decline it', async () => {
+      const handlers = setup()
+
+      await userEvent.click(screen.getByRole('button', { name: /^later$/i }))
+
+      expect(screen.getByTestId('confirm-later')).toHaveTextContent(/would move to/i)
+      expect(screen.getByRole('button', { name: /keep it here/i })).toBeVisible()
+      expect(handlers.onLater).not.toHaveBeenCalled()
+    })
+
+    /**
+     * With nowhere to go there is nothing to approve, so the sheet offers only a way out. A
+     * disabled "Move it" would be a button that exists to be refused.
+     */
+    it('offers no move when there is nowhere for the block to go', async () => {
+      setup({}, 'There is no room for Essay on any day it could move to.')
+
+      await userEvent.click(screen.getByRole('button', { name: /^later$/i }))
+
+      expect(screen.getByTestId('confirm-later')).toHaveTextContent(/no room/i)
+      expect(screen.queryByTestId('confirm-later-yes')).toBeNull()
+      // Two buttons answer to "Close" here -- the sheet's own dismiss carries the same
+      // accessible name -- so this asks for the one whose visible text says it, which is the
+      // one the wording changed from "Keep it here".
+      expect(screen.getAllByRole('button', { name: 'Close' }).map((b) => b.textContent)).toContain(
+        'Close',
+      )
+    })
+
+    /** Back returns to the block, not out of the sheet: the proposal replaced the body, so
+     *  leaving it has to put the body back. */
+    it('goes back to the block from the proposal', async () => {
+      setup()
+
+      await userEvent.click(screen.getByRole('button', { name: /^later$/i }))
+      await userEvent.click(screen.getByRole('button', { name: /back/i }))
+
+      expect(screen.queryByTestId('confirm-later')).toBeNull()
+      expect(screen.getByRole('button', { name: /^later$/i })).toBeVisible()
+    })
   })
 })

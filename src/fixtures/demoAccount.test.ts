@@ -4,6 +4,7 @@ import { checkedInDays } from '../domain/blockLog'
 import { todayIndex } from '../domain/calendar'
 import { energyHistory } from '../domain/energyHistory'
 import { BLOCK_KINDS, floorReserve, HORIZON_DAYS, project } from '../engine'
+import type { ScheduledItem } from '../optimizer'
 import { outcomesFrom } from '../domain/blockLog'
 import { paramsFor } from '../domain/engineParams'
 import { toDayInputs } from '../optimizer'
@@ -42,6 +43,23 @@ describe('demoAccount', () => {
     const checkedIn = checkedInDays(blockLog, DAYS_BEHIND, week.horizonDays)
 
     expect(checkedIn.every(Boolean)).toBe(true)
+  })
+
+  /**
+   * The reported-energy table is finite, and `daysBehind` is a parameter.
+   *
+   * Ask for more history than the table holds and every extra day still needs a number --
+   * a gap would be a prediction with no report, which `energyHistory` drops, so the
+   * sparkline would silently come up short of the days it claims to cover.
+   */
+  it('still reports a figure for a history longer than its own table', () => {
+    const longer = demoAccount(TODAY, 10)
+
+    expect(longer.profile.predictions).toHaveLength(10)
+    for (const prediction of longer.profile.predictions) {
+      expect(prediction.reported).toBeGreaterThan(0)
+      expect(prediction.predicted).toBeGreaterThan(0)
+    }
   })
 
   /** Enough resolved reports for §8b's sparkline to draw rather than withhold. */
@@ -162,5 +180,44 @@ describe('scatter', () => {
 
   it('mints no protected rest', () => {
     expect(scatter(base.week, 1, DAYS_BEHIND).items.some((item) => item.protectedRest)).toBe(false)
+  })
+
+  /**
+   * Gives up rather than forcing a placement.
+   *
+   * Every attempt is a random day and hour, and each is rejected if it would sit on top of
+   * something fixed. With the whole future walled off, none can succeed -- and the block
+   * stays exactly where it was. Dropping it, or stacking it on a lecture, would be a seed
+   * that produces a week the app itself calls invalid.
+   */
+  it('leaves a block where it is when nothing legal is found', () => {
+    const wall = (dayIndex: number): ScheduledItem => ({
+      id: `wall-${dayIndex}`,
+      title: 'Solid',
+      type: 'mental',
+      kind: 'studyBlock',
+      hours: 14,
+      intensity: 1,
+      dayIndex,
+      startHour: 8,
+      fixed: true,
+      deadlineDay: null,
+      protectedRest: false,
+    })
+
+    const walled = {
+      ...base.week,
+      items: [
+        ...base.week.items.filter((item) => item.dayIndex < DAYS_BEHIND),
+        ...Array.from({ length: HORIZON_DAYS - DAYS_BEHIND }, (_, offset) =>
+          wall(offset + DAYS_BEHIND),
+        ),
+        { ...base.week.items[0]!, id: 'homeless', dayIndex: DAYS_BEHIND, fixed: false, hours: 3 },
+      ],
+    }
+
+    const moved = scatter(walled, 2, DAYS_BEHIND)
+
+    expect(moved.items.find((item) => item.id === 'homeless')?.dayIndex).toBe(DAYS_BEHIND)
   })
 })

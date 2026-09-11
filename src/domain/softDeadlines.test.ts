@@ -262,6 +262,31 @@ describe('missedSoftDeadlines', () => {
     expect(social?.daysLate).toBe(9 - (SOFT_DEADLINE_INTERVALS.socialRestorative - 1))
   })
 
+  /**
+   * The clock runs from the *last* time it happened, not the first.
+   *
+   * `lastConfirmedByKind` keeps the greatest confirmed day per kind, and this is the case
+   * that tells the two apart: rested on day 1 and again on day 3, a student is three days
+   * in, not one. Taking the earlier one would report them overdue while they were keeping up.
+   */
+  it('dates an absent rhythm from the latest confirmed one, not the earliest', () => {
+    const rest = (id: string, dayIndex: number): ScheduledItem => ({
+      ...item({ id, kind: 'rest', dayIndex }),
+    })
+    const schedule = stampSoftDeadlines(
+      week({ items: [rest('early', 1), rest('late', 3)] }),
+      0,
+    )
+    const answered = (blockId: string, dayIndex: number): BlockRecord =>
+      record({ blockId, dayIndex, answer: 'right' })
+
+    const missed = missedSoftDeadlines(schedule, 9, [answered('early', 1), answered('late', 3)])
+    const gap = missed.find((miss) => miss.kind === 'rest')
+
+    expect(gap?.itemId).toBeNull()
+    expect(gap?.daysLate).toBe(9 - (3 + SOFT_DEADLINE_INTERVALS.rest))
+  })
+
   it('puts the most neglected first', () => {
     const missed = missedSoftDeadlines(stampSoftDeadlines(week(), 0), 9, [])
 

@@ -521,7 +521,9 @@ export function RoomShell({
   })
 
   const blockModel =
-    view.kind === 'block' ? blockSheet({ schedule: week, itemId: view.itemId, today, blockLog }) : null
+    view.kind === 'block'
+      ? blockSheet({ schedule: week, itemId: view.itemId, today, nowHour, blockLog })
+      : null
 
   const paragraph = lowEnergy ? firstSentence(describeRoom(model.state)) : describeRoom(model.state)
 

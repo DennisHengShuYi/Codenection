@@ -26,8 +26,14 @@ const week = (items: ScheduledItem[]): Schedule => ({
   sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
 })
 
-const sheet = (one: ScheduledItem, today = 5, blockLog: readonly BlockRecord[] = []) =>
-  blockSheet({ schedule: week([one]), itemId: one.id, today, blockLog })
+/** `nowHour` defaults to the end of the day, so every test written before the clock reached
+ *  this model keeps meaning what it meant: a block on a past day, asked about. */
+const sheet = (
+  one: ScheduledItem,
+  today = 5,
+  blockLog: readonly BlockRecord[] = [],
+  nowHour = 23,
+) => blockSheet({ schedule: week([one]), itemId: one.id, today, nowHour, blockLog })
 
 const record = (over: Partial<BlockRecord> = {}): BlockRecord => ({
   blockId: 'essay',
@@ -45,17 +51,23 @@ describe('blockSheet', () => {
     // once with no picker behind it, indistinguishable from "Later", and was dropped at
     // the combined 12+13 review rather than left as a silent stub. `done` left the same way
     // and for the same reason: it deleted the block, which is what `remove` is called.
-    expect(sheet(item())?.actions).toEqual(['later', 'microStart', 'edit', 'remove'])
+    // 20:00 on the day itself, asked at nine in the morning: not yet lived, so there is
+    // nothing to report and Later is still the offer.
+    expect(sheet(item(), 5, [], 9)?.actions).toEqual(['later', 'microStart', 'edit', 'remove'])
   })
 
   it('offers no Later on a fixed block, because the optimizer cannot move it either', () => {
-    expect(sheet(item({ fixed: true }))?.actions).toEqual(['microStart', 'edit', 'remove'])
+    expect(sheet(item({ fixed: true }), 5, [], 9)?.actions).toEqual([
+      'microStart',
+      'edit',
+      'remove',
+    ])
   })
 
   /** A nap three days out has not happened, so there is no true answer to "did you rest" --
    *  and an answer given now would be read by `softDeadlines` as a rhythm satisfied. */
   it('asks a future protected-rest block nothing about whether it happened', () => {
-    expect(sheet(item({ protectedRest: true, fixed: true }))?.actions).toEqual([
+    expect(sheet(item({ protectedRest: true, fixed: true }), 5, [], 9)?.actions).toEqual([
       'microStart',
       'edit',
       'remove',
@@ -95,7 +107,7 @@ describe('blockSheet', () => {
   })
 
   it('returns null for an id that no longer exists', () => {
-    expect(blockSheet({ schedule: week([]), itemId: 'gone', today: 0 })).toBeNull()
+    expect(blockSheet({ schedule: week([]), itemId: 'gone', today: 0, nowHour: 12 })).toBeNull()
   })
 
   describe('recordedAnswer', () => {
@@ -173,5 +185,49 @@ describe('editing and removing, which every block allows', () => {
       expect(model).not.toHaveProperty('microStart')
       expect(model?.actions).not.toContain('cantStart')
     })
+  })
+})
+
+/**
+ * By the clock, not by the calendar.
+ *
+ * This gated on `dayIndex < today`, so a block that finished at eleven could not be answered
+ * until midnight -- while the today card, sitting on the same screen, had already asked
+ * about it. §8b② says the two must not ask different questions, and "how did it go" arriving
+ * a day late is the version of that a student actually meets: they answer on the card, then
+ * open the block and are offered Later on something they have just finished.
+ *
+ * `hasHappened` is the same rule the card and the bot use.
+ */
+describe('a block that has finished today', () => {
+  const finished = item({ dayIndex: 0, startHour: 9, hours: 2 })
+
+  it('is asked how it went, rather than offered Later', () => {
+    expect(sheet(finished, 0, [], 14)?.actions).toEqual(['confirm', 'microStart', 'edit', 'remove'])
+  })
+
+  it('is still not asked while it is running', () => {
+    expect(sheet(finished, 0, [], 10)?.actions).toEqual(['later', 'microStart', 'edit', 'remove'])
+  })
+
+  it('is still not asked before it starts', () => {
+    expect(sheet(finished, 0, [], 8)?.actions).toEqual(['later', 'microStart', 'edit', 'remove'])
+  })
+
+  /** Rest finished this afternoon is exactly the case the rest question exists for -- and
+   *  the one a day-based gate made a student wait until tomorrow to answer. */
+  it('asks rest that has finished today whether it happened', () => {
+    const nap = item({ dayIndex: 0, startHour: 15, hours: 1, protectedRest: true, fixed: true })
+
+    expect(sheet(nap, 0, [], 17)?.actions).toEqual(['didRest', 'microStart', 'edit', 'remove'])
+  })
+
+  it('leaves a day already behind us askable whatever the hour', () => {
+    expect(sheet(item({ dayIndex: 0, startHour: 22, hours: 1 }), 1, [], 0)?.actions).toEqual([
+      'confirm',
+      'microStart',
+      'edit',
+      'remove',
+    ])
   })
 })

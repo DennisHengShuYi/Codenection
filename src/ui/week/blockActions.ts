@@ -1,4 +1,5 @@
 import { answeredIds, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
+import { hasHappened } from '../../domain/dayBlocks'
 import type { Schedule, ScheduledItem } from '../../optimizer'
 
 /**
@@ -68,8 +69,13 @@ const actionsFor = (
   item: ScheduledItem,
   blockLog: readonly BlockRecord[],
   today: number,
+  nowHour: number,
 ): readonly BlockAction[] => {
-  if (item.dayIndex < today) {
+  // By the clock, not the calendar. This read `dayIndex < today`, so a block that finished
+  // at eleven could not be answered until midnight -- while the today card on the same
+  // screen had already asked about it, because `hasHappened` is what that card has always
+  // used. §8b② is explicit that the two must not ask different questions.
+  if (hasHappened(item, today, nowHour)) {
     // §8b/Task 17: the durable log is the only record of what has already been answered.
     // Mirrors roomModel.ts and scheduleView.ts.
     const alreadyAsked = answeredIds(blockLog).includes(item.id)
@@ -103,11 +109,16 @@ export function blockSheet({
   schedule,
   itemId,
   today,
+  nowHour,
   blockLog = [],
 }: {
   readonly schedule: Schedule
   readonly itemId: string
   readonly today: number
+  /** Required, not defaulted. `checkIn.ts` wrote down why when it took the same argument:
+   *  "an optional clock is one a caller forgets to pass", and forgetting it here would put
+   *  the sheet back to asking about blocks that have not happened. */
+  readonly nowHour: number
   readonly blockLog?: readonly BlockRecord[]
 }): BlockSheetModel | null {
   const item = schedule.items.find((candidate) => candidate.id === itemId)
@@ -115,7 +126,7 @@ export function blockSheet({
   // and the id in the open view no longer exists.
   if (item === undefined) return null
 
-  const actions = actionsFor(item, blockLog, today)
+  const actions = actionsFor(item, blockLog, today, nowHour)
 
   return {
     item,

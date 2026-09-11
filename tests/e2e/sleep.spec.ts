@@ -83,3 +83,100 @@ test('closes back to the room', async ({ page }) => {
   await expect(page.getByTestId('room-scene')).toBeVisible()
   await expect(page.getByTestId('sleep-target')).toHaveCount(0)
 })
+
+/**
+ * Seeds the app's own database before it loads, so the two things that need *history* can be
+ * seen on screen rather than only proved in a unit test.
+ *
+ * Writes through `idb-keyval`'s layout -- database `codenection`, store `state`, the keys
+ * `localRepository` uses -- because the app reads its own storage and there is no other way
+ * to hand it a past. Nothing here touches a credential: this build is made with blanked
+ * Supabase values on purpose, so the only store that exists is the one in this browser.
+ */
+async function seed(page: Page, state: { week: unknown; settings: unknown }) {
+  await page.goto('/')
+  await page.evaluate(
+    ({ week, settings }) =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('codenection', 1)
+        request.onupgradeneeded = () => request.result.createObjectStore('state')
+        request.onerror = () => reject(new Error('could not open'))
+        request.onsuccess = () => {
+          const tx = request.result.transaction('state', 'readwrite')
+          const store = tx.objectStore('state')
+          store.put(week, 'week')
+          store.put(settings, 'settings')
+          tx.oncomplete = () => resolve()
+          tx.onerror = () => reject(new Error('could not write'))
+        }
+      }),
+    state,
+  )
+  await page.reload()
+  await page.getByRole('button', { name: /look around/i }).click()
+}
+
+const isoDaysAgo = (days: number): string => {
+  const then = new Date()
+  then.setDate(then.getDate() - days)
+  return `${then.getFullYear()}-${String(then.getMonth() + 1).padStart(2, '0')}-${String(then.getDate()).padStart(2, '0')}`
+}
+
+/** A fortnight anchored three days ago, so "today" is day 3 and there are days behind it. */
+const anchoredWeek = (items: unknown[] = []) => ({
+  items,
+  start: { mental: 60, physical: 60, social: 60, errands: 60 },
+  horizonDays: 21,
+  sleepByDay: Array.from({ length: 21 }, () => 8),
+  startedOn: isoDaysAgo(3),
+})
+
+test('says the gap between what the student aims for and what they get', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await seed(page, {
+    week: anchoredWeek(),
+    settings: {
+      lowEnergyOverride: 'off',
+      sleepTargetHours: 8,
+      // Three nights, which is the floor below which the app says nothing at all.
+      sleepNights: [
+        { isoDate: isoDaysAgo(3), hours: 6, answeredAt: 1 },
+        { isoDate: isoDaysAgo(2), hours: 6, answeredAt: 2 },
+        { isoDate: isoDaysAgo(1), hours: 6, answeredAt: 3 },
+      ],
+    },
+  })
+
+  await page.getByTestId('open-sleep').click()
+
+  await expect(page.getByTestId('sleep-reality')).toHaveText(
+    'You plan 8 hours and average about 6.',
+  )
+})
+
+test('warns that an over-committed day will cost tonight', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const crammed = Array.from({ length: 4 }, (_, index) => ({
+    id: `cram-${index}`,
+    title: 'Ethics essay',
+    type: 'mental',
+    kind: 'studyBlock',
+    hours: 5,
+    intensity: 1,
+    dayIndex: 3,
+    startHour: 8 + index,
+    fixed: false,
+    // A real deadline, today. Soft deadlines deliberately never reach this sentence.
+    deadlineDay: 3,
+    protectedRest: false,
+  }))
+
+  await seed(page, {
+    week: anchoredWeek(crammed),
+    settings: { lowEnergyOverride: 'off' },
+  })
+
+  await page.getByTestId('open-sleep').click()
+
+  await expect(page.getByTestId('sleep-forecast-3')).toContainText('will cost you about 4 hours')
+})

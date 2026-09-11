@@ -5,12 +5,19 @@ import { isDistressed } from '../../domain/distress'
 import { energyHistory } from '../../domain/energyHistory'
 import { describeDeferral, describePlacement, fixThatMakesRoom, placeItems } from '../../domain/placement'
 import { checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
-import { anchorTo, dateFor, dayLabel, isAnchored, todayIndex } from '../../domain/calendar'
+import {
+  anchorTo,
+  dateFor,
+  dayLabel,
+  isAnchored,
+  shortDayLabel,
+  todayIndex,
+} from '../../domain/calendar'
 import { accept, lapsed } from '../../domain/commitments'
 import { paramsFor } from '../../domain/engineParams'
 import { firstAction, isStuck } from '../../domain/microStart'
 import { predictionsAfter, resolvePrediction } from '../../domain/predictions'
-import { addBlock, completeItem, deferItem, editItem, removeItem } from '../../domain/scheduleEdits'
+import { addBlock, completeItem, deferralOf, editItem, removeItem } from '../../domain/scheduleEdits'
 import { stampSoftDeadlines } from '../../domain/softDeadlines'
 import { applyRest, planRest, type RestPlan } from '../../domain/restNow'
 import { RestPreview } from '../rest/RestPreview'
@@ -625,13 +632,17 @@ export function RoomShell({
     { length: Math.min(3, Math.max(0, week.horizonDays - today)) },
     (_, offset) => {
       const dayIndex = today + offset
-      const label = dayLabel(week, dayIndex, today)
 
       return {
         dayIndex,
-        label,
+        // The full label above the row, the short one inside the sentence. "Today, Sat 12
+        // Sept's deadline will cost you..." is what the full label produces in prose.
+        label: dayLabel(week, dayIndex, today),
         hours: week.sleepByDay[dayIndex] ?? sleepTarget,
-        forecast: sleepForecastLine(squeezeOn(week, dayIndex), label),
+        forecast: sleepForecastLine(
+          squeezeOn(week, dayIndex),
+          shortDayLabel(week, dayIndex, today),
+        ),
       }
     },
   )
@@ -791,13 +802,28 @@ export function RoomShell({
             // when nothing between here and the deadline has room -- deliberately, so a
             // caller can tell nothing happened -- and this closed the sheet either way, so
             // the two outcomes were indistinguishable from the student's side.
-            const next = deferItem(week, itemId)
-            setSchedule(next)
+            const outcome = deferralOf(week, itemId, params)
+            if (outcome === null) return
+
+            setSchedule(outcome.schedule)
 
             // Said on the week screen rather than the room's `placement-note`, which lives
             // behind the `Waiting` button -- and that button's count knows nothing about it,
             // so this would have waited behind one reading "Nothing waiting".
-            setWeekNote(describeDeferral(itemId, week, next))
+            //
+            // `outcome.schedule` as the week the days are named against: the move is already
+            // in it, and the anchor -- the only thing `dayName` reads -- is the same either
+            // way, so this is the newer of two equal answers rather than a meaningful choice.
+            setWeekNote(
+              describeDeferral({
+                schedule: outcome.schedule,
+                title: week.items.find((entry) => entry.id === itemId)?.title ?? 'It',
+                from: outcome.from,
+                to: outcome.to,
+                skippedFull: outcome.skippedFull,
+                skippedWithRoom: outcome.skippedWithRoom,
+              }),
+            )
             // Back to the week, not the room: it is the screen the student pressed Later
             // from, the screen the sentence is about, and the one where they can see the
             // block in its new day.

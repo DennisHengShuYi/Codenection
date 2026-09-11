@@ -159,6 +159,25 @@ export function dayIndexFor(schedule: Schedule, date: string): number | null {
  * been dated -- so it degrades to a one-based day number. One-based, because "Day 1" is the
  * first day to everyone except the array holding it.
  */
+/**
+ * The same day, named for prose rather than for a heading.
+ *
+ * `dayLabel` below composes both halves -- "Today, Sat 12 Sept" -- which is right above a row
+ * and unusable inside a sentence. The sleep page's forecast read "Today, Sat 12 Sept's
+ * deadline will cost you about 4 hours of sleep", which no test could have caught and looking
+ * at the screen caught immediately.
+ *
+ * Here rather than in the caller, because this module is the only place a day index becomes a
+ * name (§9 puts this app at UTC+8, where a second answer to that question is wrong for the
+ * first eight hours of every day). A second rendering is fine; a second derivation is not.
+ */
+export function shortDayLabel(schedule: Schedule, dayIndex: number, today: number): string {
+  if (dayIndex === today) return 'Today'
+  if (dayIndex === today + 1) return 'Tomorrow'
+
+  return dayLabel(schedule, dayIndex, today)
+}
+
 export function dayLabel(schedule: Schedule, dayIndex: number, today: number): string {
   const relative = dayIndex === today ? 'Today' : dayIndex === today + 1 ? 'Tomorrow' : null
 

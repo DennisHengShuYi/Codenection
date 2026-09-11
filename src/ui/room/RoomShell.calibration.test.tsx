@@ -113,27 +113,16 @@ describe('RoomShell with a block to confirm', () => {
   })
 
   /**
-   * §7.9: "no" is a neutral answer that feeds the model, not a failure. It must be
-   * recorded rather than discarded.
+   * The "Didn't happen" answer is no longer offered anywhere in the app, so the test that
+   * pressed it is gone with it.
+   *
+   * What it was protecting still holds where it can: `didnt` remains a `BlockAnswer`, the
+   * bot still writes it, and `softDeadlines` still reads it by name so a rest answered that
+   * way does not satisfy the rest rhythm. What the app can no longer tell apart is "I
+   * skipped it" from "I never said" -- and neither satisfies the rhythm, so the distinction
+   * cost evidence rather than correctness.
    */
-  it('records a no as data rather than throwing it away', async () => {
-    const onAnswerBlock = vi.fn()
-    counter += 1
-    const repository = createLocalRepository(`calibration-no-${counter}`)
-    await repository.clear()
-    await repository.saveWeek(week({ items: [item({ dayIndex: 0 })] }))
 
-    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={onAnswerBlock} />)
-    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one starts
-    // with the press a student would make.
-    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
-    await userEvent.click(screen.getByTestId('open-notices'))
-    await waitFor(() => expect(screen.getByTestId('answer-didnt')).toBeVisible())
-
-    await userEvent.click(screen.getByTestId('answer-didnt'))
-
-    expect(onAnswerBlock).toHaveBeenCalledWith(expect.objectContaining({ answer: 'didnt' }))
-  })
 
   it('a block already answered in the log is not asked about again', async () => {
     const answered = [

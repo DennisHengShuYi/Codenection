@@ -62,28 +62,50 @@ describe('firstAction', () => {
   })
 })
 
+/**
+ * §4.1's automatic trigger, rewritten: the card fires when a block's own slot is the hour
+ * you are in.
+ *
+ * It used to fire three days after a block first appeared. That put "stuck on this one?"
+ * in front of a student at any hour of any day, about something they had not been near
+ * since Tuesday -- and a block three days old sits on a past day, so the one moment its
+ * prompt is actually actionable had already gone.
+ *
+ * The moment paralysis is worth interrupting is the moment you are supposed to be doing the
+ * thing. That is the only condition now, alongside the one that never changed: rest is not
+ * a task somebody is failing to start.
+ */
 describe('isStuck', () => {
-  /**
-   * §4.1's automatic trigger, honestly stated: three days past first appearance. The other
-   * half of §4.1's trigger -- two scheduled slots missed -- needs a miss counter nothing in
-   * the codebase builds, so `misses` was hardcoded `0` at all three call sites and half the
-   * trigger could never fire. Deleted rather than wired with a fake counter (§11 records the
-   * gap); this only tests the half that is real.
-   */
-  it('reads a task three days past its first appearance as stuck', () => {
-    expect(isStuck(item(), 3)).toBe(true)
+  const inSlot = { today: 2, nowHour: 10 }
+
+  it('fires while the block is running', () => {
+    expect(isStuck(item({ dayIndex: 2, startHour: 9, hours: 2 }), inSlot)).toBe(true)
   })
 
-  it('leaves a fresh task alone', () => {
-    expect(isStuck(item(), 0)).toBe(false)
+  it('does not fire before it starts', () => {
+    expect(isStuck(item({ dayIndex: 2, startHour: 14, hours: 2 }), inSlot)).toBe(false)
   })
 
-  // Protected rest is not a task somebody is failing to start.
-  it('never calls protected rest stuck', () => {
-    expect(isStuck(item({ protectedRest: true }), 10)).toBe(false)
+  it('does not fire once it is over', () => {
+    expect(isStuck(item({ dayIndex: 2, startHour: 7, hours: 2 }), inSlot)).toBe(false)
   })
 
-  it('never calls a rest block stuck', () => {
-    expect(isStuck(item({ kind: 'rest' }), 10)).toBe(false)
+  it('does not fire on another day at the same hour', () => {
+    expect(isStuck(item({ dayIndex: 5, startHour: 9, hours: 2 }), inSlot)).toBe(false)
+  })
+
+  /** Unchanged, and the reason is unchanged: offering a micro-start for rest turns recovery
+   *  into another thing to be behind on. */
+  it('never fires on protected rest, however exactly the hour matches', () => {
+    expect(
+      isStuck(item({ protectedRest: true, dayIndex: 2, startHour: 9, hours: 2 }), inSlot),
+    ).toBe(false)
+  })
+
+  it('never fires on rest or sleep', () => {
+    expect(isStuck(item({ kind: 'rest', dayIndex: 2, startHour: 9, hours: 2 }), inSlot)).toBe(false)
+    expect(isStuck(item({ kind: 'sleep', dayIndex: 2, startHour: 9, hours: 2 }), inSlot)).toBe(
+      false,
+    )
   })
 })

@@ -264,7 +264,20 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
     counter += 1
     const repository = createLocalRepository(`${label}-${counter}`)
     await repository.clear()
-    const startedOn = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    // Four days in, with the stuck block on today: §4.1's trigger is the block's own slot
+    // now, not its age, so a task last touched on Tuesday no longer prompts. Running the
+    // whole waking day is the only way a fixture can be inside its slot whatever hour the
+    // suite happens to run at.
+    // Local, not `toISOString`: `todayIndex` reads the device's own zone, and east of
+    // Greenwich the UTC date is yesterday's for the first eight hours of every day -- which
+    // would put the block on day 4 while the app thought today was day 5, and the trigger
+    // would miss by exactly one day depending on when the suite ran.
+    const fourDaysAgo = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)
+    const startedOn = [
+      fourDaysAgo.getFullYear(),
+      String(fourDaysAgo.getMonth() + 1).padStart(2, '0'),
+      String(fourDaysAgo.getDate()).padStart(2, '0'),
+    ].join('-')
     await repository.saveWeek({
       items: [
         {
@@ -272,10 +285,10 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
           title: 'Laundry',
           type: 'errands',
           kind: 'errands',
-          hours: 1,
+          hours: 24,
           intensity: 1,
-          dayIndex: 0,
-          startHour: 17,
+          dayIndex: 4,
+          startHour: 0,
           fixed: false,
           deadlineDay: null,
           protectedRest: false,

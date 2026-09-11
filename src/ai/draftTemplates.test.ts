@@ -62,11 +62,23 @@ describe('templateDrafts', () => {
     expect(drafts.some((draft) => draft.text.includes('covering Saturday'))).toBe(true)
   })
 
-  // The whole point of deferring rather than refusing.
-  it('proposes an actual date in the defer draft', () => {
+  /**
+   * The whole point of deferring rather than refusing: it names a later time.
+   *
+   * It used to accept `day \d+`, which is what the template printed -- a horizon index, in a
+   * message sent to somebody who has never seen this app. "Could it wait until around day
+   * 12?" is unanswerable for the recipient. A real date would read better, but `briefFor`
+   * is explicit that a drafting call is sent the request and nothing else, "not the week,
+   * not the schedule", so there is no date here to offer.
+   *
+   * So the index is asserted absent as well as a time being named -- the defect is the
+   * index reaching a third party, not the vagueness.
+   */
+  it('proposes a later time in the defer draft, without naming a model day', () => {
     const defer = templateDrafts(item(), cost()).find((draft) => draft.tone === 'defer')
 
-    expect(defer?.text).toMatch(/day \d+|next week/i)
+    expect(defer?.text).toMatch(/next week|week after next/i)
+    expect(defer?.text).not.toMatch(/day \d/i)
   })
 
   /**

@@ -1,13 +1,17 @@
 import type { LoadType } from '../engine'
 import type { BlockOutcome } from './calibration'
+import { MIN_SAMPLES_TO_SPEAK } from './evidence'
 
 /**
  * Enough blocks to call something a bias rather than a bad week.
  *
  * One block that overran is noise. §7.4 puts estimate bias at day 7 onward for the same
  * reason -- it needs history, and claiming it earlier would be a measurement of nothing.
+ *
+ * Re-exported rather than declared, so this and `recoveryLearning` cannot drift. Kept under
+ * this name because the tests and `fixtures/umBlockLog.test.ts` read it from here.
  */
-export const MIN_SAMPLES = 3
+export const MIN_SAMPLES = MIN_SAMPLES_TO_SPEAK
 
 /**
  * A ceiling on the correction.

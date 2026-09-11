@@ -1,3 +1,4 @@
+import { FULL_RESERVE } from '../../engine'
 import { describe, expect, it } from 'vitest'
 import { angleForPercent, arcPath, DIAL_MAX_PERCENT, pointOnArc } from './dialGeometry'
 
@@ -14,10 +15,23 @@ describe('angleForPercent', () => {
     expect(angleForPercent(DIAL_MAX_PERCENT / 2)).toBeCloseTo(0)
   })
 
-  // §1.2: "with the needle past the maximum when overloaded". Clamping at 100 would
-  // erase exactly the state the dial exists to show.
-  it('keeps climbing past a hundred percent', () => {
-    expect(angleForPercent(110)).toBeGreaterThan(angleForPercent(100))
+  /**
+   * §1.2 describes "0 to 120%, with the needle past the maximum when overloaded", and that
+   * describes a gauge of *load*. This one shows reserve, which `tick` clamps to
+   * `FULL_RESERVE` -- so the needle could never reach the old 120 maximum, the top sixth of
+   * the arc was unreachable, and the `capacity > 100` branch drawn in the critical colour
+   * was dead code shaped like a warning state.
+   *
+   * The contract asserted instead: a full reserve is the top of the arc, and the whole arc
+   * is reachable. §1.2 and §12's "dial in the corner at 106%" are amended to match.
+   */
+  it('puts a full reserve at the top of the arc', () => {
+    expect(DIAL_MAX_PERCENT).toBe(FULL_RESERVE)
+    expect(angleForPercent(FULL_RESERVE)).toBeCloseTo(90)
+  })
+
+  it('climbs all the way there rather than topping out early', () => {
+    expect(angleForPercent(FULL_RESERVE)).toBeGreaterThan(angleForPercent(FULL_RESERVE - 10))
   })
 
   it('clamps beyond the dial maximum rather than spinning off the arc', () => {

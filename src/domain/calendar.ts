@@ -11,6 +11,29 @@ import type { Schedule } from '../optimizer'
  * here, and the real `Date` is supplied once, at the UI edge.
  */
 
+/**
+ * The days of the week, in `Date.getUTCDay()`'s order.
+ *
+ * Sunday first because that is the order the platform counts in, and `expandRecurring`
+ * matches a repeat against exactly that index -- so a prettier Monday-first list here would
+ * silently shift every recurring item by a day.
+ *
+ * One list. There were four, all correct and all separately maintained: `ai/calendarAnchor`
+ * built a prompt from one, `domain/placement` named a day from another, `ui/planner/ItemChip`
+ * offered a third to the student, and `ai/fallbackParser` matched text against a lowercase
+ * fourth. Kept here because this module is where the `getUTCDay` reading the order belongs to
+ * already lives.
+ */
+export const WEEKDAY_NAMES = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+] as const
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
@@ -25,11 +48,41 @@ const utcMidnight = (iso: string): number | null => {
   return Number.isNaN(time) ? null : time
 }
 
-const isoDateOf = (moment: Date): string => (moment.toISOString().split('T')[0] ?? '')
+/**
+ * Which calendar date a moment falls on, for the student reading a clock on their wall.
+ *
+ * Not `toISOString()`, which renders the UTC instant. §9 puts this app in Malaysia, and at
+ * UTC+8 every local time from 00:00 to 07:59 belongs to the previous UTC date -- so a
+ * "today" taken from the UTC string named yesterday for the first eight hours of every
+ * single day, and `anchorTo` stamped a week begun after midnight with the day before it
+ * started. Nothing caught it because every test in `calendar.test.ts` sampled 09:00Z,
+ * which is five in the afternoon in Kuala Lumpur, where the two dates agree.
+ *
+ * `timeZone` is a parameter for the same reason the clock is: this module stays pure and
+ * the behaviour stays pinnable on a machine in any zone. Left undefined, `Intl` uses the
+ * device's own zone, which is the right default for a PWA a student opens on their phone --
+ * a hardcoded `Asia/Kuala_Lumpur` would be wrong for the same student on exchange.
+ *
+ * Assembled from parts rather than formatted, so the result is `YYYY-MM-DD` regardless of
+ * what order a locale would have chosen to print.
+ */
+const isoDateOf = (moment: Date, timeZone?: string): string => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(moment)
+
+  const value = (type: 'year' | 'month' | 'day'): string =>
+    parts.find((part) => part.type === type)?.value ?? ''
+
+  return `${value('year')}-${value('month')}-${value('day')}`
+}
 
 /** Records the real date day 0 falls on. Re-anchoring moves the week rather than stacking. */
-export function anchorTo(schedule: Schedule, now: Date): Schedule {
-  return { ...schedule, startedOn: isoDateOf(now) }
+export function anchorTo(schedule: Schedule, now: Date, timeZone?: string): Schedule {
+  return { ...schedule, startedOn: isoDateOf(now, timeZone) }
 }
 
 export function isAnchored(schedule: Schedule): boolean {
@@ -43,12 +96,17 @@ export function isAnchored(schedule: Schedule): boolean {
  * before anchoring existed has no anchor at all, and somebody reopening the app a month later
  * is not on day 40 of a three-week fortnight. Assuming today in either case would put the app
  * confidently on the wrong day, which is worse than saying it does not know.
+ *
+ * `timeZone` reaches `isoDateOf`, which is where the local-versus-UTC question is decided
+ * and answered. The arithmetic below stays on UTC midnight deliberately: once both ends are
+ * calendar dates, counting whole days between them is exactly what must not drift across a
+ * daylight-saving boundary.
  */
-export function todayIndex(schedule: Schedule, now: Date): number | null {
+export function todayIndex(schedule: Schedule, now: Date, timeZone?: string): number | null {
   const start = schedule.startedOn === undefined ? null : utcMidnight(schedule.startedOn)
   if (start === null) return null
 
-  const today = utcMidnight(isoDateOf(now))
+  const today = utcMidnight(isoDateOf(now, timeZone))
   if (today === null) return null
 
   const index = Math.round((today - start) / MS_PER_DAY)
@@ -77,13 +135,52 @@ export function dayIndexFor(schedule: Schedule, date: string): number | null {
 }
 
 /**
- * §44: which real day the horizon's day 0 is, for the readers that need it.
+ * A day index as a student would say it.
+ *
+ * The model counts days from zero and the student does not. Five surfaces printed the index
+ * straight out -- the dial's spoken summary, the request box, two Telegram replies and a
+ * decline draft -- so the app said "you cross into deficit on day 1" about the second day of
+ * the fortnight. `ui/planner/dayLabels.ts` existed to prevent exactly that, and said so:
+ * offering "Day 0" through "Day 20" would be "asking the student to think in the model's
+ * terms about their own week". It was only wired into the one picker it was written for.
+ *
+ * Named where a name is the better answer, dated where it is not. "Today" and "Tomorrow"
+ * because that is how someone refers to the two days they are most likely to be asked about,
+ * and neither is recoverable from a date alone.
+ *
+ * An undated week is an ordinary state rather than an error -- the seeded fortnight has never
+ * been dated -- so it degrades to a one-based day number. One-based, because "Day 1" is the
+ * first day to everyone except the array holding it.
+ */
+export function dayLabel(schedule: Schedule, dayIndex: number, today: number): string {
+  const relative = dayIndex === today ? 'Today' : dayIndex === today + 1 ? 'Tomorrow' : null
+
+  const date = dateFor(schedule, dayIndex)
+  if (date === null) {
+    const numbered = `Day ${dayIndex + 1}`
+    return relative === null ? numbered : `${relative}, ${numbered}`
+  }
+
+  // UTC throughout, matching `dateFor`: the string is already a calendar date with no time
+  // in it, so reading it back in a zone behind Greenwich would name the day before.
+  const named = new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  })
+
+  return relative === null ? named : `${relative}, ${named}`
+}
+
+/**
+ * Ruling 44: which real day the horizon's day 0 is, for the readers that need it.
  *
  * Both readers needed this and neither had it. The rules parser worked out a named weekday
  * from `today % 7`, which is only right if day 0 is a Sunday; the model was told
  * "deadlineDay is a day index from 0 (today)" and never told what today was, so a stated
  * "thursday" could only be guessed at. Either way "gym thursday 7pm" landed on a day chosen
- * by arithmetic rather than by the student, and §43's Day select is what finally showed it.
+ * by arithmetic rather than by the student, and Ruling 43's Day select is what finally showed it.
  *
  * `todayLabel` is absent for a week that has never been dated. There is nothing true to
  * say there, and a made-up date would send the model a confident wrong answer -- the rules
@@ -93,8 +190,12 @@ export function calendarFor(schedule: Schedule, today: number): Calendar {
   const startDate = dateFor(schedule, 0)
   const todayDate = dateFor(schedule, today)
 
-  // UTC throughout, matching `dateFor`: read in a local timezone west of Greenwich, an ISO
-  // day names the day before, and a weekday off by one is the whole bug this fixes.
+  // UTC throughout, matching `dateFor`, and deliberately the opposite of what `isoDateOf`
+  // does -- the two directions want opposite answers. Going from an *instant* to a calendar
+  // date needs the student's own zone, or a phone at 02:00 reports yesterday. Reading an
+  // ISO date *string* back needs UTC, because the string is already a calendar date with no
+  // time in it: parse it locally and a zone behind Greenwich names the day before, so the
+  // weekday comes out off by one.
   const startWeekday =
     startDate === null ? 0 : new Date(`${startDate}T00:00:00Z`).getUTCDay()
 

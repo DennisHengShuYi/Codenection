@@ -57,7 +57,16 @@ export function resolveConfirmation(
   pending: PendingDump | null,
   accepted: boolean,
   week: Schedule,
-  _now: number,
+  /**
+   * Which day of the fortnight the student is on, for `addItems` to place from.
+   *
+   * This slot held an unused `_now` timestamp. `addItems` hardcoded day zero, so a dump
+   * confirmed on day ten landed on day two -- work scheduled into days already lived, which
+   * is the one thing a chat channel must not be able to do that the app cannot (§13.4). A
+   * timestamp was the wrong shape for the question: the caller has `todayFor` and the answer
+   * is a day index.
+   */
+  today: number,
 ): Resolution {
   // A button from a dump we have no record of. Refused rather than applied to whatever is
   // current: a stale button must not reach into a week it was never shown.
@@ -71,7 +80,7 @@ export function resolveConfirmation(
   // a week the app could not have produced itself.
   return {
     kind: 'applied',
-    week: addItems(week, pending.items),
+    week: addItems(week, pending.items, today),
     reply: appliedReply(pending.items.length),
   }
 }

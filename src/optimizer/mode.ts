@@ -19,7 +19,7 @@ const ENOUGH_TO_BE_A_FRAME = 4
 const SHIFT_HOURS = 6
 
 /**
- * §21, without asking anybody anything.
+ * Ruling 21, without asking anybody anything.
  *
  * The mode picker was cut for the right reason: nothing read it, so it was a question put to
  * every student for no effect. This is the same idea taken from the other end -- the shape
@@ -35,7 +35,7 @@ const SHIFT_HOURS = 6
  * empty-timetable notice: rest the optimizer pinned is fixed load the app put there itself,
  * and counting it would let the app infer a timetable from its own suggestions.
  *
- * Read by `objective.score`, which uses it to choose between §21's two halves -- flattening
+ * Read by `objective.score`, which uses it to choose between Ruling 21's two halves -- flattening
  * peaks or defending a floor. It lives in `optimizer` rather than `domain` for the reason
  * `gaps.ts` does: it needs nothing but a `Schedule`, and `domain` depends on `optimizer`
  * and never the reverse.

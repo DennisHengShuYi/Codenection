@@ -1,10 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { createLocalRepository } from '../data'
-import { CHARACTER_BOTTOM } from './room/scene/palette'
-import { HORIZON_DAYS } from '../engine'
-import { RoomShell } from './room/RoomShell'
+import { createLocalRepository } from '../../data'
+import { CHARACTER_BOTTOM } from './scene/palette'
+import { HORIZON_DAYS } from '../../engine'
+import { RoomShell } from './RoomShell'
 
 /**
  * §1.5's low-energy mode, absorbed into the room screen rather than a separate view

@@ -66,10 +66,19 @@ describe('CapacityDial', () => {
     expect(svg).not.toHaveAttribute('width')
   })
 
+  /**
+   * The number is reserve remaining, and now says so. It read "90% capacity", which inverts
+   * the sense: `overallReserve` is what the student has *left*, and `tick` clamps it to 100 --
+   * so a perfectly rested student was told they were at 100% capacity. `RequestBoxScreen` had
+   * already recorded that load-against-capacity is "a metric this app does not have".
+   */
   it('states everything it draws in words as well', () => {
     renderDial(90)
 
-    expect(screen.getByTestId('reserve-text-equivalent')).toHaveTextContent(/90% capacity/i)
+    const spoken = screen.getByTestId('reserve-text-equivalent')
+
+    expect(spoken).toHaveTextContent(/90% of your reserve left/i)
+    expect(spoken).not.toHaveTextContent(/% capacity/i)
   })
 
   /**

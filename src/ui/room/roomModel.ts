@@ -1,7 +1,7 @@
 import { checkedInDays, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
 import { paramsFor } from '../../domain/engineParams'
 import type { EnergyPrediction } from '../../domain/predictions'
-import { project } from '../../engine'
+import { project, type Reserves } from '../../engine'
 import { toDayInputs, type Schedule } from '../../optimizer'
 import { roomStateFor, type RoomState } from './roomState'
 
@@ -34,6 +34,17 @@ export interface RoomModelInput {
 
 export interface RoomModel {
   readonly state: RoomState
+  /**
+   * The reserve the student has *entering today*, which is what every "where am I now"
+   * reading on the room screen must agree about.
+   *
+   * Returned rather than left for the shell to work out again. `RoomShell` needs the same
+   * figure three times -- the corner gauge, the Reserves sheet's headline, and the floor
+   * that decides §1.5's low-energy mode -- and each was deriving it from `schedule.start`
+   * on its own. Three derivations of one number is three chances for the screen to
+   * disagree with itself; this makes it one.
+   */
+  readonly reserves: Reserves
 }
 
 /**
@@ -73,5 +84,25 @@ export function roomModel({ schedule, today, blockLog, predictions }: RoomModelI
   const checkedIn = checkedInDays(blockLog, today, schedule.horizonDays)
   const projection = project(schedule.start, toDayInputs(schedule, checkedIn), params)
 
-  return { state: roomStateFor(schedule.start, projection, schedule, today, blockLog) }
+  /**
+   * Where the student is now, rather than where the fortnight began.
+   *
+   * This was `schedule.start`, which is day zero and never moves -- so on day ten of a
+   * heavy week the gauge, the character and the door all still reported the number the week
+   * opened with, while the week grid beside them read each day off this same projection.
+   * `restNow.ts` had already refused a `.start`-derived headline for the reason: it "would
+   * read the same before and after, which is worse than no headline".
+   *
+   * Entering today, not leaving it. `project` pushes each day after its tick, so
+   * `central[today - 1]` is what the student has when today starts and has not yet lived
+   * it -- which is the honest reading for a gauge somebody checks in the morning. Day zero
+   * has no prior day, and `schedule.start` is its entering value by definition.
+   */
+  const entering =
+    today <= 0 ? schedule.start : (projection.central[today - 1] ?? schedule.start)
+
+  return {
+    state: roomStateFor(entering, projection, schedule, today, blockLog),
+    reserves: entering,
+  }
 }

@@ -1,3 +1,4 @@
+import { LOAD_TYPE_LABELS } from '../kit/labels'
 import {
   LOAD_TYPES,
   type DayInput,
@@ -17,7 +18,10 @@ export interface DomainBar {
   readonly value: number
   readonly ceiling: number
   readonly status: BarStatus
-  readonly trend: Trend
+  /** Null where nothing measures a direction. The four reserve bars read theirs off the
+   *  projection; the density bar has no such reading, and §1.5 makes an unmeasured claim a
+   *  lie told to a screen reader rather than a harmless default. */
+  readonly trend: Trend | null
   /** Plain-language reason this bar is not healthy, or null. Paired with the status so
    *  severity is never carried by colour alone (§1.5). */
   readonly warning: string | null
@@ -37,12 +41,10 @@ const DENSITY_STRETCHED_ABOVE = 60
  *  getting between places are not free time. */
 const FULL_DAY_HOURS = 12
 
-const LABELS: Record<LoadType, string> = {
-  mental: 'Study & thinking',
-  physical: 'Body & movement',
-  social: 'People',
-  errands: 'Life admin',
-}
+/** The shared four words. This held a byte-identical second copy of them, which is exactly
+ *  what `kit/labels.ts`'s own docstring forbids: "two copies of one vocabulary is how the
+ *  planner and the week come to call the same thing different things". */
+const LABELS = LOAD_TYPE_LABELS
 
 /**
  * §0: schedule density is a derived view, not a fifth reserve.
@@ -122,7 +124,9 @@ export function domainBars(
           : density > DENSITY_STRETCHED_ABOVE
             ? 'stretched'
             : 'healthy',
-      trend: 'flat',
+      // Nothing projects how packed a future day will be, so there is no direction to
+      // report. It read 'flat' before, which drew a "steady" glyph and announced "steady".
+      trend: null,
       warning:
         density > DENSITY_CRITICAL_ABOVE ? 'Your days are almost completely booked.' : null,
     },

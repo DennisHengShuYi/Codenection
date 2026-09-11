@@ -34,7 +34,7 @@ const noHours = (): Record<ActivityKind, number> =>
   Object.fromEntries(ACTIVITY_KINDS.map((kind) => [kind, 0])) as Record<ActivityKind, number>
 
 /**
- * §45: what today consists of, with no notion of drawing.
+ * Ruling 45: what today consists of, with no notion of drawing.
  *
  * The room used to read the fortnight's reserves for all nine of its bindings, which is a
  * coherent picture of a fortnight and a vague one about today. This is the answer the

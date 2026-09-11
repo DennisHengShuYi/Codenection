@@ -1,7 +1,15 @@
-/** §1.2: "Semicircular gauge, 0 to 120%, with the needle past the maximum when
- *  overloaded." The headroom above 100 is the point -- clamping there would erase the
- *  state the dial exists to show. */
-export const DIAL_MAX_PERCENT = 120
+import { FULL_RESERVE } from '../../engine'
+/**
+ * The top of the gauge, which is a full reserve.
+ *
+ * §1.2 describes "0 to 120%, with the needle past the maximum when overloaded", and that
+ * describes a gauge of *load*. This one shows reserve, which `tick` clamps to
+ * `FULL_RESERVE` -- so the needle could never enter the top sixth of the arc, the
+ * `Math.min` guarding it was a no-op, and the `capacity > 100` branch beside it was
+ * unreachable code styled to look like a warning state. §1.2 and §12's "dial in the corner
+ * at 106%" are amended to match what the app actually measures.
+ */
+export const DIAL_MAX_PERCENT = FULL_RESERVE
 
 const START_DEGREES = -90
 const END_DEGREES = 90

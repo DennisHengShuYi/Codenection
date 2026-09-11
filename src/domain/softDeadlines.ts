@@ -14,12 +14,24 @@ import type { BlockRecord } from './blockLog'
  *
  * This module gives every event a deadline. Real where one exists, synthetic where none
  * does, so the two compete on the same terms.
+ *
+ * "The same terms" means *scheduling priority*, and only that: `deadlinePressure` and
+ * `neglectPressure` in `optimizer/objective` rank undated work against dated work, and
+ * `deferItem` bounds it. It deliberately does NOT mean §6.4's anticipatory-stress drain,
+ * which reads `item.deadlineDay` alone and must keep doing so -- a synthetic deadline lands
+ * on rest and recovery as readily as on errands, so feeding these into that term would have
+ * the model charge a student mental load for an approaching walk. `optimizer/neglect.test.ts`
+ * pins that in a test named for it: "does not let a soft deadline create anticipatory
+ * stress", because it "would model a student dreading having to relax".
+ *
+ * Written down here because the sentence above reads, on its own, like the drain is simply
+ * missing a case. It is not; the omission is the decision.
  */
 
 /**
  * How long each kind may go before it is overdue, in days.
  *
- * The app's numbers, not the student's. §20 is explicit that nobody should be made to rank
+ * The app's numbers, not the student's. Ruling 20 is explicit that nobody should be made to rank
  * their own work, "because everybody marks everything high and the ranking carries no
  * information once they have". §5.1's user-set floor is a real and separate feature that
  * layers on top of this rather than replacing it.

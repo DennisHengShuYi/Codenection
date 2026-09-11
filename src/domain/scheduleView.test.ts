@@ -104,6 +104,16 @@ describe('scheduleView', () => {
    * what the overview marks. Draining all four reserves every day makes the fourteen-day
    * silence's compounding penalty large enough to cross `DEFICIT_THRESHOLD`, rather than
    * only nudging a number that was never close to the line either way.
+   *
+   * `start` is a calibrated constant, not arbitrary test data, and it was re-derived when
+   * §6.2/§6.6 went per-type and this view moved onto the floor instead of the mean. Both
+   * changes bite here: each reserve now recovers at its own depleted efficiency instead of
+   * being subsidised by the other three, and twelve hours a day spread across all four
+   * types depletes all four. At 46 -- the figure tuned against the mean -- both branches
+   * now sit at 0 and the test would pass for the wrong reason in one direction and fail in
+   * the other. At 85 the confirmed fortnight bottoms out at 39.2 and the silent one at
+   * 18.1, so the crossing is bracketed with room on both sides rather than balanced on it.
+   * Re-derive the same way if the model changes again; do not relax the assertions.
    */
   it('marks a day in deficit when the fortnight has gone unanswered, but not when it was confirmed', () => {
     const drainDay = (dayIndex: number): ScheduledItem[] =>
@@ -131,7 +141,7 @@ describe('scheduleView', () => {
     const days = 14
     const items = Array.from({ length: days }, (_, day) => drainDay(day)).flat()
     const schedule = week(items, {
-      start: { mental: 46, physical: 46, social: 46, errands: 46 },
+      start: { mental: 85, physical: 85, social: 85, errands: 85 },
     })
     const today = days
 

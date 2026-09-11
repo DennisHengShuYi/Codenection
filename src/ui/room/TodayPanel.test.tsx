@@ -5,7 +5,7 @@ import type { PanelRow } from './todayRows'
 import { TodayPanel } from './TodayPanel'
 
 /**
- * §46: the panel is the control surface, and the drawing stays a picture.
+ * Ruling 46: the panel is the control surface, and the drawing stays a picture.
  *
  * §3 removed tap-to-open from the room, and the e2e guard that protects it names this exact
  * change in its own docstring. There is a structural reason too: the drawing carries
@@ -118,7 +118,7 @@ describe('the panel as today', () => {
     expect(screen.queryByTestId('panel-blocks-bed')).toBeNull()
   })
 
-  /** §45 left rest without an object on purpose. The row says so, or a student reads its
+  /** Ruling 45 left rest without an object on purpose. The row says so, or a student reads its
    *  absence from the room as the app having lost it. */
   it('says when a row is not drawn in the room at all', () => {
     render(<TodayPanel rows={[row({ id: 'rest', label: 'Rest', drawn: false })]} />)
@@ -128,7 +128,7 @@ describe('the panel as today', () => {
 })
 
 /**
- * §46: the sentence that makes the rows below it mean something.
+ * Ruling 46: the sentence that makes the rows below it mean something.
  *
  * Without it the panel is a list of nouns and numbers: a student reads "Books 4 hours" and
  * still has to work out that the books on the desk ARE the four hours. The rule is one
@@ -159,7 +159,7 @@ describe('the sentence above the rows', () => {
 
   /** Said once, not per row: six copies of one rule is noise, and the rows already carry
    *  their own meaning underneath their names. */
-  /** §47 moved the day's total from the ceiling to a clock. The legend explains every
+  /** Ruling 47 moved the day's total from the ceiling to a clock. The legend explains every
    *  object the room draws, so it has to explain that one too -- a reading nobody can
    *  decode is decoration. */
   it('explains the clock, which carries the day as a whole', () => {

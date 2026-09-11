@@ -19,7 +19,7 @@ const SYSTEM_PROMPT = [
   "You read a photograph of a student's work and turn it into a task list.",
   'It may be an assignment brief, a handwritten planner page, a whiteboard, a lecture',
   'slide, a shift roster or a sticky note. Read whatever is actually there.',
-  'Reply with JSON only, shaped {"items":[{"title","type","kind","hours","deadlineDay","hard","confident"}]}.',
+  'Reply with JSON only, shaped {"items":[{"title","type","kind","hours","deadlineDay","startHour","hard","confident"}]}.',
   'type is one of: mental, physical, social, errands.',
   // Derived from `BLOCK_KINDS` rather than typed out, so the prompt cannot go on asking
   // for a kind `ai/schema.ts` rejects. It used to offer `sleep`, which the boundary now
@@ -32,6 +32,14 @@ const SYSTEM_PROMPT = [
   'where the page gives them.',
   `deadlineDay is a day index from 0 (today) to ${HORIZON_DAYS - 1}, or null if the page`,
   'does not state one. hard is true only where a fixed date is actually printed.',
+  // Ruling 43, ported from the text planner, which asked for this and this did not -- so every
+  // photographed timetable lost the one thing a timetable is mostly made of. A printed
+  // clock time is stronger evidence than a typed one, and this is the reader Ruling 44's comment
+  // calls "the reader that needed the anchor most": a roster gives the weekday AND the hour.
+  'startHour is the hour of day printed on the page, 0-23, or null where none is printed.',
+  'Read it only from a real clock time ("9am", "14:00", "0900-1100" gives 9). Never from an',
+  'effort estimate ("3 hours") or a number that is part of the task itself ("chapter 3").',
+  'For a range, give the hour it starts.',
   'repeat is {"weekdays":[1,3],"untilDay":null} for a row that recurs weekly on those days',
   '(0 is Sunday), and null otherwise. A timetable grid is the usual case: read the column',
   'the row sits under. untilDay is a day index the series stops on, or null.',
@@ -55,7 +63,7 @@ const SYSTEM_PROMPT = [
  * brain dump does.
  */
 /**
- * §44: the prompt, with today's real date when the caller knows it.
+ * Ruling 44: the prompt, with today's real date when the caller knows it.
  *
  * The same gap the planner had, in the reader that needed it most: a photographed
  * timetable says "Tuesday" far more often than anything a student types, and this prompt
@@ -72,7 +80,7 @@ const systemPromptFor = (calendar?: Calendar): string => {
 export async function askVision(
   dataUrl: string,
   apiKey: string,
-  /** §44: which real day day 0 is, so a weekday printed on a timetable lands on it. */
+  /** Ruling 44: which real day day 0 is, so a weekday printed on a timetable lands on it. */
   calendar?: Calendar,
 ): Promise<ParsedItem[] | null> {
   const controller = new AbortController()

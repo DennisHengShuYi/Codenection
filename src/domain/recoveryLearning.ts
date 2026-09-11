@@ -1,13 +1,16 @@
+import { MIN_SAMPLES_TO_SPEAK } from './evidence'
 import type { EnergyPrediction, PredictionBasis } from './predictions'
 
 /**
  * Enough attributable samples to call something this student's parameter rather than a run
- * of luck. Deliberately the same figure and the same reasoning as `realityCheck.MIN_SAMPLES`.
+ * of luck. The shared rule, not a second copy of it -- the comment here used to say
+ * "deliberately the same figure and the same reasoning as `realityCheck.MIN_SAMPLES`",
+ * which is a comment standing where an import belonged.
  *
  * Counted over *attributable* samples, not over resolved predictions: a fortnight of weeks
  * the learner had to discard has told it nothing, however many of them there were.
  */
-export const MIN_SAMPLES = 3
+export const MIN_SAMPLES = MIN_SAMPLES_TO_SPEAK
 
 /** How much of the gap between the current scale and what one sample implies is taken.
  *  Low, because this is meant to be a nudge that accumulates, not a lurch on one bad week. */

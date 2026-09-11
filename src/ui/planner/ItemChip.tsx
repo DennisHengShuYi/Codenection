@@ -1,3 +1,4 @@
+import { WEEKDAY_NAMES } from '../../domain/calendar'
 import type { ParsedItem } from '../../ai'
 import { BLOCK_KINDS, LOAD_TYPES, type ActivityKind, type LoadType } from '../../engine'
 import { Button } from '../kit/Button'
@@ -22,17 +23,9 @@ const SELECTABLE_KINDS = BLOCK_KINDS
  *  "half nine" is a parsing problem the student would have to solve twice. */
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
 
-/** §40's whole vocabulary needs names a student reads, and `Date.getUTCDay`'s ordering is
+/** Ruling 40's whole vocabulary needs names a student reads, and `Date.getUTCDay`'s ordering is
  *  what `expandRecurring` matches against -- so this is that order, not a prettier one. */
-const WEEKDAY_NAMES = [
-  'Sunday',
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-]
+
 
 export function ItemChip({
   item,
@@ -44,7 +37,7 @@ export function ItemChip({
   onChange: (next: ParsedItem) => void
   onRemove: (id: string) => void
   /**
-   * §43: the horizon's days, named the way a student recognises them.
+   * Ruling 43: the horizon's days, named the way a student recognises them.
    *
    * Passed in rather than derived, because the names depend on when the week started and
    * this component holds no week. Index is the day index the item carries, so the select's
@@ -111,7 +104,7 @@ export function ItemChip({
           />
         </Field>
 
-        {/* §43: the one thing a calendar entry is for, and the one thing this chip did not
+        {/* Ruling 43: the one thing a calendar entry is for, and the one thing this chip did not
             say. The day and the hour used to be decided AFTER the accept, by `placement.ts`
             -- so a student confirmed an entry without being told when it would land, and
             met it later in the week. */}
@@ -152,7 +145,7 @@ export function ItemChip({
           >
             {/* "Any time" is a real answer, not a missing one: an essay due Friday has a day
                 and no hour, and pinning one would take away the freedom the rebalancer needs
-                to place it. Stating an hour is what pins a block (§43). */}
+                to place it. Stating an hour is what pins a block (Ruling 43). */}
             <option value="">Any time</option>
             {HOURS.map((hour) => (
               <option key={hour} value={String(hour)}>
@@ -183,7 +176,7 @@ export function ItemChip({
         Fixed time — a class, lab or shift the week has to work around
       </label>
 
-      {/* §41: recurrence is a property confirmed on the thing they were already adding, not
+      {/* Ruling 41: recurrence is a property confirmed on the thing they were already adding, not
           a screen of its own -- a form with weekday checkboxes and an until-date picker is
           the setup burden this design cuts everywhere else. Shown only when the parse
           actually read a repeat, and undoable in one tap, because a repeat invented from a
@@ -202,7 +195,7 @@ export function ItemChip({
         </div>
       )}
 
-      {/* §43's ask. Extraction that found no day is a question, not a failure to be
+      {/* Ruling 43's ask. Extraction that found no day is a question, not a failure to be
           hidden: the alternative is a default nobody chose, landing an entry on a day the
           student never said. `PlannerScreen` holds the accept shut until this is answered. */}
       {!saysWhen(item) && (

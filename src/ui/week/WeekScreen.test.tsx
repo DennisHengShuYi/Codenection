@@ -2,15 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { BlockRecord } from '../../domain/blockLog'
-import {
-  DEFAULT_PARAMS,
-  HORIZON_DAYS,
-  LOAD_TYPES,
-  project,
-  type DayInput,
-  type LoadType,
-} from '../../engine'
-import { domainBars } from '../dial/domainBars'
+import { HORIZON_DAYS, LOAD_TYPES, type LoadType } from '../../engine'
 import type { Fix, Schedule, ScheduledItem } from '../../optimizer'
 import { BUSY_ABOVE_HOURS } from '../../domain/scheduleView'
 import { WeekScreen } from './WeekScreen'
@@ -51,26 +43,20 @@ const week = (items: ScheduledItem[] = [], over: Partial<Schedule> = {}): Schedu
   ...over,
 })
 
-/**
- * Ruling 59 moved §1.2's five-domain breakdown OFF this screen and behind the room's
- * corner gauge, so nothing here needs a reserve, its bars or the projection any more.
- * `days` survives because the schedule helpers below still build from it.
+/*
+ * Ruling 59 moved §1.2's five-domain breakdown OFF this screen and behind the room's corner
+ * gauge, so nothing here needs a reserve, its bars or the projection.
+ *
+ * A `days` helper survived that move, with a comment saying it was kept "because the
+ * schedule helpers below still build from it" -- they did not, and its one remaining
+ * consumer was an unused `projection` local. Both are gone, found by `noUnusedLocals`
+ * rather than by reading.
  */
-const days = (schedule: Schedule): DayInput[] =>
-  Array.from({ length: schedule.horizonDays }, (_, dayIndex) => ({
-    dayIndex,
-    activities: [],
-    sleepHours: schedule.sleepByDay[dayIndex] ?? 7,
-    venueChanges: 0,
-    daysToNearestDeadline: null,
-    checkedIn: true,
-  }))
 
 const setup = (schedule = week(), over: Partial<Parameters<typeof WeekScreen>[0]> = {}) => {
   const onRebalance = vi.fn()
   const onSelectBlock = vi.fn()
   const onAddBlock = vi.fn()
-  const projection = project(schedule.start, days(schedule), DEFAULT_PARAMS)
 
   render(
     <WeekScreen

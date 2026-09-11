@@ -36,7 +36,7 @@ const sleepSentence = (state: RoomState): string | null => {
 }
 
 /**
- * §45: what today puts in the room, in place of the plant that read a reserve.
+ * Ruling 45: what today puts in the room, in place of the plant that read a reserve.
  *
  * One sentence covering both objects, because a paragraph that lists furniture one item per
  * sentence reads as an inventory. Said only when there is something to say.
@@ -53,7 +53,7 @@ const todaySentence = (state: RoomState): string | null => {
   return `There are ${here.slice(0, -1).join(', ')} and ${here[here.length - 1]}.`
 }
 
-/** §45: the day that does not fit, said in words. The drawing dims; a screen reader needs
+/** Ruling 45: the day that does not fit, said in words. The drawing dims; a screen reader needs
  *  the same fact stated, or the two audiences are told different things. */
 const SPILLING_ABOVE = 0
 
@@ -107,7 +107,7 @@ export function describeRoomFully(state: RoomState): string {
  * has something to say (clear or not), so it is what fills the slot when nothing more
  * urgent does.
  *
- * §45 put the spill first. It is the only sentence here about something the student can
+ * Ruling 45 put the spill first. It is the only sentence here about something the student can
  * still act on before it costs them the night -- the door is a suggestion, the floor is a
  * fact, and sleep debt is already spent.
  */

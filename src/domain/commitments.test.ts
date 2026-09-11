@@ -69,6 +69,30 @@ describe('accept', () => {
     expect(after.commitments?.[0]?.reviewDay).toBe(REVIEW_DAYS)
   })
 
+  /**
+   * The day it is, not day zero.
+   *
+   * `accept` has always taken `today` and used it for the review date, then handed the item
+   * to `addItems`, which placed everything from day zero regardless. So a student saying yes
+   * on day ten got the work scheduled into days they had already lived -- and the review
+   * date said day twenty-four while the block sat in the past.
+   *
+   * Asserted on undated work, which is where it shows. `placeItems` runs the two cases in
+   * opposite directions: a deadlined item searches *backwards* from its deadline, so on an
+   * empty week it lands on the deadline whatever `today` is and the bug hides. Undated work
+   * looks forward from `today + DEFAULT_DAY_OFFSET`, so day zero sends it to day two --
+   * eight days into the past for a student on day ten.
+   *
+   * `requestCost.ts` records the same bug being found and fixed once for the *pricing* half;
+   * the fix never reached placement.
+   */
+  it('never schedules undated accepted work into a day already lived', () => {
+    const after = accept(week(), item({ deadlineDay: null }), 10)
+    const added = after.items[after.items.length - 1]
+
+    expect(added?.dayIndex).toBeGreaterThanOrEqual(10)
+  })
+
   it('names what was accepted, so a lapse can be explained rather than announced', () => {
     expect(accept(week(), item(), 0).commitments?.[0]?.title).toBe('FYP presentation help')
   })

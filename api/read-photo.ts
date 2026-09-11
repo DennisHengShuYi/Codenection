@@ -54,7 +54,7 @@ export default async function handler(request: Request): Promise<Response> {
     return new Response('Image too large', { status: 413 })
   }
 
-  // §44: validated at the boundary rather than trusted, like the image above it -- anyone
+  // Ruling 44: validated at the boundary rather than trusted, like the image above it -- anyone
   // can POST here and this goes into a prompt. The same validator `api/plan.ts` uses, so
   // the two endpoints cannot come to disagree about what a calendar is.
   const items = await askVision(image, apiKey, readCalendar(calendar))

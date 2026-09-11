@@ -5,7 +5,7 @@ import { anchorLines } from './calendarAnchor'
 import { MAX_ITEMS, type Calendar, type ParsedItem } from './types'
 
 /**
- * §44: the prompt, with today's real date when the caller knows it.
+ * Ruling 44: the prompt, with today's real date when the caller knows it.
  *
  * `deadlineDay` is described as "a day index from 0 (today)", and the model was never told
  * what today WAS -- so a stated "thursday" could only be guessed at. The lines themselves
@@ -58,7 +58,7 @@ const SYSTEM_PROMPT = [
 export async function askGroq(
   text: string,
   apiKey: string,
-  /** §44: which real day day 0 is. Without it the model is told "day index from 0 (today)"
+  /** Ruling 44: which real day day 0 is. Without it the model is told "day index from 0 (today)"
    *  and never told what today is, so a stated weekday can only be guessed at. */
   calendar?: Calendar,
 ): Promise<ParsedItem[] | null> {

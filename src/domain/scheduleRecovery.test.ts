@@ -58,11 +58,52 @@ describe('scheduleRecovery', () => {
     expect(JSON.stringify(before)).toBe(snapshot)
   })
 
+  /**
+   * Two genuinely different bookings, because the same one twice is now a no-op.
+   *
+   * This booked `recovery` twice and compared `items[0]` with `items[1]`. Once booking the
+   * same day and hour twice became idempotent, `items[1]` was `undefined` and the assertion
+   * compared a string against nothing -- so it passed while testing nothing at all.
+   */
   it('gives every inserted item its own id', () => {
     const first = scheduleRecovery(week(), recovery)
-    const second = scheduleRecovery(first, recovery)
+    const second = scheduleRecovery(first, { ...recovery, startHour: 19 })
 
+    expect(second.items).toHaveLength(2)
     expect(second.items[0]?.id).not.toBe(second.items[1]?.id)
+  })
+
+  /**
+   * Telegram delivers a callback at least once, and the chat's Rest button had no guard
+   * where its three sibling callbacks each have one -- so a retried tap booked a second
+   * identical rest block. Protected rest already at that day and hour means the tap has
+   * been honoured.
+   */
+  it('books nothing a second time when protected rest already sits at that day and hour', () => {
+    const once = scheduleRecovery(week(), recovery)
+    const twice = scheduleRecovery(once, recovery)
+
+    expect(once.items).toHaveLength(1)
+    expect(twice.items).toHaveLength(1)
+    expect(twice).toBe(once)
+  })
+
+  /** Rest at a different hour of the same day is a different booking, not a retry. */
+  it('still books rest elsewhere on a day that already has some', () => {
+    const once = scheduleRecovery(week(), recovery)
+
+    expect(scheduleRecovery(once, { ...recovery, startHour: 20 }).items).toHaveLength(2)
+  })
+
+  /**
+   * The stamp is what lets `telegram/handle` -- a pure function that takes its clock as an
+   * argument -- use this at all. It read `Date.now()`, so the chat hand-built its own copy
+   * of this item instead and `restNow.ts`'s "only door to protected rest" was untrue.
+   */
+  it('takes the stamp for its id rather than reading a clock', () => {
+    const item = scheduleRecovery(week(), recovery, 1700000000000).items[0]
+
+    expect(item?.id).toContain('1700000000000')
   })
 
   it('carries the title, type, kind, hours, day and start hour through unchanged', () => {

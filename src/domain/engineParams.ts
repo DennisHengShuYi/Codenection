@@ -60,7 +60,7 @@ export function paramsFor(
     estimateBias,
     kSleep: scaledReserves(DEFAULT_PARAMS.kSleep, sleep),
     kRest: scaledReserves(DEFAULT_PARAMS.kRest, rest),
-    // §18's other two learnable coefficients. Both are plain scalars rather than per-type
+    // Ruling 18's other two learnable coefficients. Both are plain scalars rather than per-type
     // maps, so there is no load-bearing zero to preserve here -- but see `scaledReserves`
     // for why that mattered so much on the two above.
     kSocialContact: DEFAULT_PARAMS.kSocialContact * socialContact,

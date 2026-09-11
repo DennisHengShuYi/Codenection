@@ -1,5 +1,5 @@
 import { MAX_IMAGE_BYTES, MAX_INPUT_LENGTH, parseBrainDump, type Calendar, type ParsedItem } from '../ai'
-import { calendarFor, dateFor, todayIndex } from '../domain/calendar'
+import { calendarFor, dateFor, dayLabel, todayIndex } from '../domain/calendar'
 import { blocksOnDay } from '../domain/dayBlocks'
 import { answeredIds, checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../domain/blockLog'
 import type { BlockOutcome } from '../domain/calibration'
@@ -14,6 +14,7 @@ import { stampSoftDeadlines } from '../domain/softDeadlines'
 import { withSleep } from '../ui/today/checkIn'
 import { firstAction } from '../domain/microStart'
 import { prescribe } from '../domain/prescribe'
+import { scheduleRecovery } from '../domain/scheduleRecovery'
 import { overallReserve, project, type LoadType } from '../engine'
 import { toDayInputs, type Schedule } from '../optimizer'
 import { tooLongToTranscribe } from './audio'
@@ -82,9 +83,21 @@ export interface ChatServices {
    * Null means the request could not be read, which is said plainly rather than priced as
    * something invented.
    */
-  /** Fetches the image from Telegram and runs the app's own reader over it. Null when it
-   *  could not be read at all. */
-  readonly readPhotoFile?: (fileId: string) => Promise<readonly ParsedItem[] | null>
+  /**
+   * Fetches the image from Telegram and runs the app's own reader over it. Null when it
+   * could not be read at all.
+   *
+   * `calendar` is Ruling 44's anchor, and this had no parameter to carry it -- so the bot called
+   * `readPhoto` with one argument while the app's own screen passed a calendar. `readPhoto`
+   * itself says why that matters most here: "a photographed timetable is mostly weekdays,
+   * which makes this the reader that needed the anchor most and got it last". Without it
+   * every "Tuesday" on a photographed roster was resolved against a guess, so the same
+   * timetable sent through chat landed on different days than through the app.
+   */
+  readonly readPhotoFile?: (
+    fileId: string,
+    calendar?: Calendar,
+  ) => Promise<readonly ParsedItem[] | null>
   /** Fetches the audio from Telegram and transcribes it. Null when transcription failed. */
   readonly transcribe?: (fileId: string) => Promise<string | null>
   /**
@@ -243,7 +256,7 @@ async function offerParse(
  * network. Null means there is nothing to answer — no chat to answer to.
  */
 /**
- * Ruling 62/§44: which real day day 0 is, for the reader this door calls.
+ * Ruling 62/Ruling 44: which real day day 0 is, for the reader this door calls.
  *
  * The app hands `parseBrainDump` a calendar so a stated weekday lands on that weekday; this
  * door handed it nothing, so the model was left to guess -- and chat is where a student is
@@ -357,7 +370,7 @@ export async function handleIntent(
       }
 
       /**
-       * §22: the state of the fortnight, which chat could not see at all.
+       * Ruling 22: the state of the fortnight, which chat could not see at all.
        *
        * Every figure is computed by the same functions the room and the dial read -- the
        * projection, `accuracyLine`, `biasLine` -- so the two doors cannot quote a student
@@ -381,14 +394,17 @@ export async function handleIntent(
 
         return weekReply({
           reserve: Math.round(overallReserve(week.start)),
-          firstDeficitDay: projection.firstDeficitDay,
+          firstDeficitDayLabel:
+            projection.firstDeficitDay === null
+              ? null
+              : dayLabel(week, projection.firstDeficitDay, today),
           accuracy: accuracyLine(predictions),
           bias: bestMeasuredBias(outcomes),
         })
       }
 
       /**
-       * §22: the fortnight at a glance, which chat could not see at all.
+       * Ruling 22: the fortnight at a glance, which chat could not see at all.
        *
        * The same `scheduleView` the week grid renders, so the two doors cannot disagree
        * about which days are heavy or where the deficit starts.
@@ -409,7 +425,7 @@ export async function handleIntent(
       case 'checkin':
         return checkInReply(intent.argument.trim() === 'sleep' ? 'sleep' : 'energy')
 
-      /** §22: any day of the fortnight, not only today and yesterday. */
+      /** Ruling 22: any day of the fortnight, not only today and yesterday. */
       case 'day': {
         const asked = Number.parseInt(intent.argument, 10)
         const week = await store.loadWeek(accountId)
@@ -424,7 +440,7 @@ export async function handleIntent(
       }
 
       /**
-       * §22: the same rebalance the week screen runs, through `runRebalance` -- which now
+       * Ruling 22: the same rebalance the week screen runs, through `runRebalance` -- which now
        * lives in `src/domain` for exactly this reason. Two rearranging algorithms with
        * different logic would disagree, and the one that ran last would win.
        */
@@ -474,7 +490,7 @@ export async function handleIntent(
         // "nothing has been kept up" and prescribe against a fiction.
         if (blockLog === null) return restUnavailableReply()
 
-        // Ruling 62/§45: stamped first. `missedSoftDeadlines` skips any item with no
+        // Ruling 62/Ruling 45: stamped first. `missedSoftDeadlines` skips any item with no
         // stamp, and only `RoomShell` was stamping -- so this door reported nothing
         // neglected where the screen would have shown a prescription.
         const today = todayFor(week, now)
@@ -515,8 +531,11 @@ export async function handleIntent(
         const blockLog = await store.loadBlockLog(accountId).catch(() => null)
         if (blockLog === null) return askUnavailableReply()
 
+        // One reading of the day, shared by the price and the sentence about it -- two
+        // `todayFor` calls would be two chances for them to describe different days.
+        const askDay = todayFor(week, now)
         const priced = await services
-          .priceAsk(intent.argument, week, todayFor(week, now), blockLog)
+          .priceAsk(intent.argument, week, askDay, blockLog)
           .catch(() => null)
 
         if (priced === null) return askUnreadableReply()
@@ -530,7 +549,14 @@ export async function handleIntent(
         const askId = newDumpId()
         await store.savePending(accountId, { id: askId, items: [priced.item], answeredAt: null })
 
-        return askReply(priced.cost, priced.drafts, askId)
+        return askReply(
+          priced.cost,
+          priced.drafts,
+          priced.cost.firstDeficitDayAfter === null
+            ? null
+            : dayLabel(week, priced.cost.firstDeficitDayAfter, askDay),
+          askId,
+        )
       }
     }
   }
@@ -591,27 +617,30 @@ export async function handleIntent(
     const prescription = prescribe(stampSoftDeadlines(week, today, blockLog), today, blockLog)
     if (prescription === null) return noGapReply()
 
-    await store.saveWeek(accountId, {
-      ...week,
-      items: [
-        ...week.items,
+    // Through the app's own door, not a hand-built copy of what it makes. `restNow.ts` calls
+    // `scheduleRecovery` "the only door to protected rest" and this was the exception that
+    // made that untrue -- every field agreeing by luck, with §5.1's guarantee resting on the
+    // two staying in step by hand. It took a `stamp` parameter to become usable from here,
+    // because it read the clock and this function takes its clock as an argument.
+    //
+    // It is also what makes a retried tap safe: Telegram delivers a callback at least once,
+    // this branch had no guard where its three siblings each have one, and `scheduleRecovery`
+    // now returns the week unchanged when protected rest already sits at that day and hour.
+    await store.saveWeek(
+      accountId,
+      scheduleRecovery(
+        week,
         {
-          id: `${prescription.id}-${now}`,
           title: prescription.title,
           type: prescription.type,
           kind: prescription.kind,
           hours: prescription.hours,
-          intensity: 1,
           dayIndex: prescription.dayIndex,
           startHour: prescription.startHour,
-          // §5.1: fixed and protected. Rest the optimizer can move to fit work in is not
-          // protected at all, and this is the app's most important design decision.
-          fixed: true,
-          deadlineDay: null,
-          protectedRest: true,
         },
-      ],
-    })
+        now,
+      ),
+    )
 
     return restBookedReply()
   }
@@ -625,7 +654,10 @@ export async function handleIntent(
     // that reads a timetable. §1.4 says so plainly rather than pretending otherwise.
     if (!services.readPhotoFile) return photoUnavailableReply()
 
-    const items = await services.readPhotoFile(intent.fileId).catch(() => null)
+    // The anchor, derived exactly as the voice and text branches derive theirs.
+    const items = await services
+      .readPhotoFile(intent.fileId, await calendarOf(store, accountId, now))
+      .catch(() => null)
     if (items === null) return photoUnreadableReply()
 
     return offerParse(store, accountId, items)
@@ -668,7 +700,7 @@ export async function handleIntent(
    * the other person themselves, in their own words, from one of the drafts.
    */
   /**
-   * §24: the fortnight and a day, in one message that changes rather than a chat filling
+   * Ruling 24: the fortnight and a day, in one message that changes rather than a chat filling
    * with dead menus. Nothing is remembered between presses -- the day travels in the
    * callback, which is what makes this navigation without a session table.
    */
@@ -741,7 +773,16 @@ export async function handleIntent(
   }
 
   const pending = await store.findPending(accountId, intent.dumpId)
-  const resolution = resolveConfirmation(pending, intent.accepted, await store.loadWeek(accountId), now)
+  // Read into a variable so the day index can be derived from the same week the items are
+  // placed into. `resolveConfirmation` used to take an unused timestamp here and place from
+  // day zero, which put anything confirmed after day two into days already lived.
+  const weekForDump = await store.loadWeek(accountId)
+  const resolution = resolveConfirmation(
+    pending,
+    intent.accepted,
+    weekForDump,
+    todayFor(weekForDump, now),
+  )
 
   if (resolution.kind === 'applied') {
     // Marked answered before the week is written. If the write then fails the student is

@@ -157,7 +157,7 @@ describe('askVision', () => {
 })
 
 /**
- * §44, extended to the photo reader.
+ * Ruling 44, extended to the photo reader.
  *
  * The planner and the request box were told what today is so that a stated weekday means
  * something; this prompt has the same `deadlineDay is a day index from 0 (today)` line and

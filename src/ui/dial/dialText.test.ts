@@ -60,3 +60,40 @@ describe('describeDial', () => {
     expect(text).not.toContain('undefined')
   })
 })
+
+/**
+ * §1.5 again, and this is the surface where it matters most: for a screen reader user this
+ * text IS the dial. A trend word invented for a bar nothing measured is indistinguishable
+ * from a real reading.
+ */
+describe('a bar with no measured direction, in words', () => {
+  const withDensity = (trend: 'flat' | null): string =>
+    describeDial(
+      75,
+      [
+        {
+          key: 'schedule',
+          label: 'How packed the days are',
+          value: 72,
+          ceiling: 100,
+          status: 'stretched',
+          trend,
+          warning: null,
+        },
+      ],
+      project(healthy, days(), DEFAULT_PARAMS),
+    )
+
+  it('states the value without claiming a direction', () => {
+    const text = withDensity(null)
+
+    expect(text).toContain('How packed the days are: 72 out of 100.')
+    expect(text).not.toMatch(/steady/i)
+  })
+
+  /** The mutation guard: the old wording is what this replaces, so it has to be reachable
+   *  when a trend really is present. */
+  it('still says the direction when there is one', () => {
+    expect(withDensity('flat')).toMatch(/steady/i)
+  })
+})

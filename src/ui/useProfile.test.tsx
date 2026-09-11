@@ -96,7 +96,7 @@ describe('useProfile', () => {
    * CRITICAL: seeding was gated only on "the log is empty", not on whether this is a real
    * session. A real student signing up got ~20 invented `BlockRecord`s and a fabricated
    * profile written into their live account, printed back as though it were measured
-   * history. Seeding is a demo-only convenience (§14 step 0 for a session-less preview) and
+   * history. Seeding is a demo-only convenience (Ruling 14 step 0 for a session-less preview) and
    * must never fire for a signed-in account.
    */
   it('does not seed a fabricated profile or block log for a real signed-in first run', async () => {

@@ -31,7 +31,12 @@ const week = (over: Partial<Schedule> = {}): Schedule => ({
     deadlineDay: null,
     protectedRest: false,
   })),
-  start: { mental: 60, physical: 60, social: 60, errands: 60 },
+  // Calibrated, and re-derived when §6.2/§6.6 went per-type: mental now drains at its own
+  // depleted efficiency instead of one propped up by the other three, so ten days of eight
+  // hours from 60 bottoms the reserve out entirely. Every assertion below compares two
+  // `floorBefore` values for inequality, and two saturated projections are both zero -- the
+  // tests would have gone quiet rather than gone red. At 80 nothing saturates.
+  start: { mental: 80, physical: 80, social: 80, errands: 80 },
   horizonDays: HORIZON_DAYS,
   sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
   ...over,

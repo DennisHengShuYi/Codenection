@@ -2,9 +2,9 @@ import type { ParsedItem } from '../ai'
 import { HORIZON_DAYS } from '../engine'
 import type { EngineParams } from '../engine'
 import { smallestFixes, type Fix, type Schedule, type ScheduledItem } from '../optimizer'
-import { dateFor } from './calendar'
+import { dateFor, WEEKDAY_NAMES } from './calendar'
 import { expandRecurring } from './recurrence'
-import { gapsOn, slotOn, type SlotNeed } from './slotFinder'
+import { slotOn, type SlotNeed } from './slotFinder'
 
 /**
  * Where an undated item goes when nothing says otherwise, counted from today.
@@ -37,13 +37,13 @@ const clampDay = (day: number): number => Math.min(Math.max(day, 0), HORIZON_DAY
  *
  * Three questions in order, and only the first two are ever acted on: does it fit the day
  * it wants, does it fit a later day before its deadline, and -- when neither -- it is
- * placed anyway and said so. The third question §15 poses, "could it fit if something
+ * placed anyway and said so. The third question Ruling 15 poses, "could it fit if something
  * moved", is deliberately not answered here. `rebalance` already does displacement, better,
  * with chained moves and full 21-day scoring, and two systems making scheduling decisions
  * with different logic will disagree. The caller offers `smallestFixes` as one optional
  * move instead.
  *
- * Nothing already in the week is ever touched. §16: silent displacement breaks a student's
+ * Nothing already in the week is ever touched. Ruling 16: silent displacement breaks a student's
  * mental model of their own week, and it contradicts the principle underneath provisional
  * yes -- inaction produces the healthy outcome and the student stays in charge.
  */
@@ -55,7 +55,7 @@ export function placeItems(
   const stamp = Date.now()
   const notes: PlacementNote[] = []
 
-  // §38: recurrence is expanded here and nowhere later, so a weekly class becomes the three
+  // Ruling 38: recurrence is expanded here and nowhere later, so a weekly class becomes the three
   // real blocks it actually is before anything downstream sees it. Nothing past this point
   // knows recurrence exists -- the engine takes a flat list by design.
   const expanded = items.flatMap((item) => expandRecurring(item, schedule, today))
@@ -106,24 +106,24 @@ export function placeItems(
       intensity: 1,
       dayIndex: slot === null ? start : dayIndex,
       /**
-       * §43: the student's own hour wins over the search.
+       * Ruling 43: the student's own hour wins over the search.
        *
        * Placement chose every hour while `ParsedItem` carried no time -- the first free
        * slot, or `FALLBACK_START_HOUR` on a full day. Now that "lecture Tuesday 9am" can be
        * read, choosing 10am instead would be the app overruling a student about their own
        * timetable. A stated hour is taken as given even where the day is already busy: two
        * things at once is a real week, and the placement note says so rather than moving
-       * the lecture somewhere emptier behind their back (§16).
+       * the lecture somewhere emptier behind their back (Ruling 16).
        */
       startHour: item.startHour ?? slot?.startHour ?? FALLBACK_START_HOUR,
       // §5.1 unchanged: what the student ticked may pin a time, and nothing here may ever
-      // create protected rest. §43 adds the other half of a stated hour: honouring it once
+      // create protected rest. Ruling 43 adds the other half of a stated hour: honouring it once
       // and letting the next rebalance move it would be worse than never honouring it --
       // the student would have watched it land correctly and then drift.
       fixed: item.fixed || item.startHour !== null,
       deadlineDay: item.deadlineDay,
       protectedRest: false,
-      // §39: carried through when the item came from a series, absent when it did not.
+      // Ruling 39: carried through when the item came from a series, absent when it did not.
       ...(item.seriesId === undefined ? {} : { seriesId: item.seriesId }),
       // Carried for the push, which must not send a block back to the calendar it was
       // read from.
@@ -144,7 +144,7 @@ export function placeItems(
   return { schedule: placed, notes }
 }
 
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const WEEKDAYS = WEEKDAY_NAMES
 
 /**
  * What to call a day, in the student's terms where possible.
@@ -163,7 +163,7 @@ function dayName(schedule: Schedule | null, dayIndex: number): string {
 /**
  * One sentence about what happened to one item.
  *
- * §16: say what you did. A student who put something on Tuesday and finds it on Thursday
+ * Ruling 16: say what you did. A student who put something on Tuesday and finds it on Thursday
  * with no explanation has lost their grip on their own week, which costs more trust than
  * the tidier schedule was ever worth.
  */
@@ -184,8 +184,8 @@ const FIXES_TO_CONSIDER = 8
 /**
  * The one move worth offering when something could not go where it wanted.
  *
- * §15's second question -- "could it fit if something moved?" -- answered without building
- * the second scheduler §16 forbids. `rebalance` and `smallestFixes` already do displacement,
+ * Ruling 15's second question -- "could it fit if something moved?" -- answered without building
+ * the second scheduler Ruling 16 forbids. `rebalance` and `smallestFixes` already do displacement,
  * with chained moves and full 21-day scoring; this adds no search of its own. It filters
  * what `smallestFixes` already returned down to a move that actually opens room on the day
  * in question.

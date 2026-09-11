@@ -1,5 +1,4 @@
 import { carryoverAt } from './carryover'
-import { overallReserve } from './efficiency'
 import { stateMultiplier } from './stateCost'
 import type { Activity, DayInput, EngineParams, LoadType, Reserves } from './types'
 
@@ -57,6 +56,13 @@ function deadlineDrain(daysToNearestDeadline: number | null, weight: number): nu
  * this a model rather than a sum of hours: the same two hours cost more when the student
  * reaches them already spent, and cost differently depending on what they just did.
  *
+ * "For the reserve it spends" is now literally true. It read the mean of all four, which
+ * left every other factor in the expression indexed by `activity.type` and this one not --
+ * so an empty social reserve quietly taxed every study hour, and a student with nothing
+ * left mentally paid for a study block as though they were evenly two-thirds full. §6.6
+ * names one reserve percentage against one study block, and the reserve a study block
+ * spends is mental.
+ *
  * On top of the per-activity cost sit four day-level terms: context switching and
  * deadline proximity on mental, travel on errands, and isolation on social.
  */
@@ -65,8 +71,6 @@ export function drainForDay(
   reserves: Reserves,
   params: EngineParams,
 ): Reserves {
-  const overall = overallReserve(reserves)
-
   const totals: Record<LoadType, number> = {
     mental: 0,
     physical: 0,
@@ -84,7 +88,7 @@ export function drainForDay(
       activity.intensity *
       params.typeIntensity[activity.type] *
       params.estimateBias[activity.type] *
-      stateMultiplier(overall, residue)
+      stateMultiplier(reserves[activity.type], residue)
   }
 
   totals.mental +=

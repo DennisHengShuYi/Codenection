@@ -8,7 +8,7 @@ import type { LoadType } from '../engine'
  * These are pure: values in, a payload out, nothing sent. That is what lets every reply be
  * tested without a network, and it is why the endpoint has almost no wording of its own.
  *
- * §25's render layer, and the file was already it -- the rename is what stops the name
+ * Ruling 25's render layer, and the file was already it -- the rename is what stops the name
  * arguing with the contents. `send.ts` sent nothing; the network call has always lived in
  * `api/telegram.ts`.
  *
@@ -30,7 +30,7 @@ export interface Reply {
    */
   readonly parseMode?: undefined
   /**
-   * §24: replace the message the button was pressed on, rather than sending a new one.
+   * Ruling 24: replace the message the button was pressed on, rather than sending a new one.
    *
    * Set only by replies that are *navigation* -- a day opened from the fortnight, a step
    * back out of it. Everything else stays an ordinary new message, because a reply that
@@ -69,8 +69,20 @@ export const nothingUnderstoodReply = (): Reply => ({
   text: 'I could not pick anything out of that. Try naming the things themselves, like "essay due friday, gym twice, mum\'s birthday sunday".',
 })
 
+/**
+ * §1.4: flagged rather than silently guessed. A student cannot correct what they were never
+ * shown -- and this dropped `entry.confident` entirely, so a row the model guessed at looked
+ * identical to a plainly-stated one, immediately above a one-tap "Add them".
+ *
+ * The app's own chip has said so since §1.4 was built ("Not sure about this one -- check it
+ * before adding"). The bot is meant to be the same app through another door, so it says the
+ * same thing in the shape a text message has: a suffix rather than a second line, because
+ * there are no chips to colour here.
+ */
 export function confirmationReply(dumpId: string, items: readonly ParsedItem[]): Reply {
-  const lines = items.map((entry) => `• ${shorten(entry.title)}`).join('\n')
+  const lines = items
+    .map((entry) => `• ${shorten(entry.title)}${entry.confident ? '' : ' — not sure, check this'}`)
+    .join('\n')
 
   return {
     text: `Here is what I understood:\n\n${lines}\n\nAdd these to your week?`,
@@ -178,7 +190,7 @@ export function blocksReply(
   day: 'today' | 'yesterday',
   blocks: readonly BlockLine[],
   answered: readonly string[] = [],
-  /** §24: set when this day was opened from the fortnight, so it replaces that message and
+  /** Ruling 24: set when this day was opened from the fortnight, so it replaces that message and
    *  offers a way back instead of stranding the student in a dead end. */
   nav: { readonly replacing: true } | undefined = undefined,
 ): Reply {
@@ -278,6 +290,9 @@ export function askReply(
     eveningsEquivalent: number
   },
   drafts: readonly { tone: 'decline' | 'defer' | 'accept'; text: string }[],
+  /** The moved crossing as a student would say it, from `dayLabel` at the call site -- the
+   *  raw index this used to print is the model's counting, not theirs. */
+  deficitDayLabel: string | null,
   /** §2.3's provisional yes, when there is a stored ask for the button to accept. */
   askId?: string,
 ): Reply {
@@ -293,7 +308,7 @@ export function askReply(
   const moved =
     cost.firstDeficitDayAfter !== null &&
     cost.firstDeficitDayAfter !== cost.firstDeficitDayBefore
-      ? ['', `It moves your first bad day to day ${cost.firstDeficitDayAfter}.`]
+      ? ['', `It moves your first bad day to ${deficitDayLabel ?? 'earlier in the fortnight'}.`]
       : []
 
   const byTone = (tone: 'decline' | 'defer' | 'accept'): string =>
@@ -362,7 +377,7 @@ export function scheduleReply(
     deficit: boolean
     unconfirmed: boolean
   }[],
-  /** §24: set when this is a step *back* from a day, so it replaces that message rather
+  /** Ruling 24: set when this is a step *back* from a day, so it replaces that message rather
    *  than leaving the day view behind as a dead menu. */
   nav: { readonly replacing: true } | undefined = undefined,
 ): Reply {
@@ -490,7 +505,7 @@ export const photoUnavailableReply = (): Reply => ({
 })
 
 /**
- * §22's parity renderers, and the rule they exist under.
+ * Ruling 22's parity renderers, and the rule they exist under.
  *
  * The bot never decides anything. Every figure below arrives already computed by
  * `src/domain` or `src/optimizer` -- the same functions the app's own screens read -- so
@@ -503,8 +518,15 @@ export const photoUnavailableReply = (): Reply => ({
 export interface WeekSummary {
   /** Overall reserve now, already rounded. */
   readonly reserve: number
-  /** The deficit crossing, or null when the fortnight holds. */
-  readonly firstDeficitDay: number | null
+  /**
+   * The deficit crossing as a student would say it, or null when the fortnight holds.
+   *
+   * A finished phrase rather than a day index. This said "It stops holding on day 11", which
+   * is the model's own counting -- and one short of what a student calls that day besides.
+   * Naming a day needs the week's anchor, which a rendered reply has no access to, so the
+   * caller supplies it through `dayLabel`.
+   */
+  readonly firstDeficitDayLabel: string | null
   /** §8.1's published accuracy sentence. */
   readonly accuracy: string
   /** §7.6's Reality Check line, or null when nothing measured is worth saying. */
@@ -513,9 +535,9 @@ export interface WeekSummary {
 
 export function weekReply(summary: WeekSummary): Reply {
   const crossing =
-    summary.firstDeficitDay === null
+    summary.firstDeficitDayLabel === null
       ? 'Your fortnight holds all the way through.'
-      : `It stops holding on day ${summary.firstDeficitDay}.`
+      : `It stops holding on ${summary.firstDeficitDayLabel}.`
 
   return {
     text: [
@@ -542,7 +564,7 @@ export function weekReply(summary: WeekSummary): Reply {
  *
  * The app was changed to propose and wait (`c81da05`); this door went on saving the result
  * the moment the command arrived, so the same word rearranged a student's week behind them
- * in chat and asked first on screen. §16's rule -- never silently reshuffle -- is a property
+ * in chat and asked first on screen. Ruling 16's rule -- never silently reshuffle -- is a property
  * of the product, not of the screen.
  */
 export function rebalanceReply(
@@ -567,7 +589,7 @@ export function rebalanceReply(
 
 /** What the student sees when they approve a plan made for a week that has since moved on.
  *  Refused rather than applied: the moves were worked out against blocks that may no longer
- *  be where they were, and applying them anyway is the silent reshuffle §16 forbids. */
+ *  be where they were, and applying them anyway is the silent reshuffle Ruling 16 forbids. */
 export const rebalanceStaleReply = (): Reply => ({
   text: 'Your week changed since I worked that out, so I have not touched it. Send /rebalance again for a fresh plan.',
 })

@@ -172,10 +172,17 @@ describe('priceRequest', () => {
    * dial already show. A student who has gone quiet is judged against a more pessimistic
    * "before" and "after" than one who has been answering -- so the price this shows is the
    * price of the fortnight they are actually living, not an optimistic stand-in for it.
+   *
+   * `start` is calibrated, and was re-derived when §6.2/§6.6 went per-type: mental now
+   * drains at its own depleted efficiency rather than one subsidised by the other three, so
+   * at 60 the silent fortnight bottoms out at zero and the six-hour request takes the
+   * answered one there too -- leaving the comparison `0 < 0` and the assertion unable to
+   * say anything. At 80 neither branch saturates (46.6 silent against 81.5 answered before
+   * the request lands), so the gap this test exists to measure is actually measurable.
    */
   it('prices against the same silence-aware projection the room shows, not an optimistic one', () => {
     const busy = week({
-      start: { mental: 60, physical: 60, social: 60, errands: 60 },
+      start: { mental: 80, physical: 80, social: 80, errands: 80 },
       items: dailyMentalLoad(10, 8),
     })
     const today = 10

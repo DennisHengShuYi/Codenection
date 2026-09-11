@@ -21,7 +21,7 @@ export const FRAGMENTATION_WEIGHT = 0.1
 export const DEFICIT_AREA_WEIGHT = 0.001
 
 /**
- * §20's weight, and a tiebreaker rather than a fourth objective -- for the same reason
+ * Ruling 20's weight, and a tiebreaker rather than a fourth objective -- for the same reason
  * `DEFICIT_AREA_WEIGHT` is tiny.
  *
  * Sized so that leaving a substantial piece of work to its deadline costs well under a
@@ -34,7 +34,7 @@ export const DEADLINE_PRESSURE_WEIGHT = 0.008
 /**
  * How much it would cost to leave this piece of work until the last moment.
  *
- * Derived, never asked for. §20 is explicit that no student should be made to rank their
+ * Derived, never asked for. Ruling 20 is explicit that no student should be made to rank their
  * own work, because everybody marks everything high and the ranking carries no information
  * once they have. This reads the two things the app already knows: what kind of load it is,
  * and how big it is. Four hours of final-year project and four hours of laundry stop being
@@ -49,7 +49,7 @@ const consequenceOf = (item: ScheduledItem, params: EngineParams): number =>
   params.typeIntensity[item.type] * item.hours
 
 /**
- * §20's missing term: what it costs to defer work toward its own deadline.
+ * Ruling 20's missing term: what it costs to defer work toward its own deadline.
  *
  * The solver could always defer an item to protect the floor, and nothing scored that as a
  * bad trade -- two blocks differing only in `typeIntensity` were interchangeable load, and
@@ -124,7 +124,7 @@ export const NEGLECT_PRESSURE_WEIGHT = 0.005
  *
  * Set at 14 first, and the budget test caught it: a fortnight of undated work took the
  * search to **4,769 evaluations** against a 3,000 bound -- squarely the 4,326 that comment
- * records for §20's own first attempt, and for exactly the same reason. Saturating slowly
+ * records for Ruling 20's own first attempt, and for exactly the same reason. Saturating slowly
  * leaves a gradient on every late item, so the climber can always find one more fractional
  * improvement and grinds on chasing it.
  *
@@ -141,7 +141,7 @@ export const NEGLECT_PRESSURE_WEIGHT = 0.005
 export const MAX_NEGLECT = 3
 
 /**
- * §20's argument, pointed at the things it left out.
+ * Ruling 20's argument, pointed at the things it left out.
  *
  * Deliberately sparse in exactly the way `deadlinePressure` is, and the comment there is
  * the measurement that justifies it: a smooth falloff gives the hill climber a fractional
@@ -303,7 +303,7 @@ function fragmentationOf(byDay: readonly ScheduledItem[][]): number {
  * failure §6.3 exists to prevent.
  */
 /**
- * §21: how much each penalty counts, given the shape of the fortnight.
+ * Ruling 21: how much each penalty counts, given the shape of the fortnight.
  *
  * The list's own phrasing is that a low-structure week should invert "from flattening peaks
  * to defending a floor", and these are those two halves as the objective already expresses
@@ -328,7 +328,7 @@ const MODE_WEIGHTS: Record<Mode, { fragmentation: number; deficitArea: number }>
    *
    * The strong reading of "invert" is to zero the tidying term. Three existing invariants
    * pushed back on that, and they were right to: a student who has not imported a timetable
-   * yet *is* a low-structure week by this measure -- §42 exists because that is common -- so
+   * yet *is* a low-structure week by this measure -- Ruling 42 exists because that is common -- so
    * zeroing it would quietly stop spreading anyone's work until they entered their classes.
    * The direction is the point, not the extremity. Tidying yields to depth here; it does not
    * stop speaking.
@@ -348,7 +348,7 @@ export function score(schedule: Schedule, params: EngineParams): number {
   // being explored, and it is not the search's place to invent any. `ALL_PRESENT` says so.
   const projection = summarise(schedule.start, dayInputsFrom(schedule, byDay, ALL_PRESENT), params)
 
-  // §21: read off the fixed load, which the student already stated by entering their
+  // Ruling 21: read off the fixed load, which the student already stated by entering their
   // timetable -- nobody is asked which kind of week they are having.
   const weights = MODE_WEIGHTS[modeOf(schedule)]
 

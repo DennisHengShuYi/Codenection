@@ -29,6 +29,21 @@ describe('checkStart', () => {
     expect(result).toEqual({ ok: false, status: 401, body: expect.any(String) })
   })
 
+  /** The failure this distinction exists for: a deployment whose Supabase pair cannot
+   *  validate anything answered every signed-in student with "sign in first", which is both
+   *  untrue and unactionable. 503 says whose problem it is. */
+  it('answers 503 when the deployment could not verify anybody', () => {
+    const result = checkStart({ method: 'GET', accountId: null, verifiable: false }, configured)
+
+    expect(result).toEqual({ ok: false, status: 503, body: expect.any(String) })
+  })
+
+  it('still refuses a genuinely absent session with 401', () => {
+    const result = checkStart({ method: 'GET', accountId: null, verifiable: true }, configured)
+
+    expect(result).toEqual({ ok: false, status: 401, body: expect.any(String) })
+  })
+
   it('refuses a method it does not serve', () => {
     expect(checkStart({ method: 'DELETE', accountId: 'account-1' }, configured).ok).toBe(false)
   })

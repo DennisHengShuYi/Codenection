@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { transcribeAudio } from '../src/ai/groq'
 import { readPhoto } from '../src/ai/readPhoto'
+import type { Calendar } from '../src/ai/types'
 import { readRequest } from '../src/ai/readRequest'
 import { draftReplies } from '../src/ai/drafts'
 import type { BlockRecord } from '../src/domain/blockLog'
@@ -14,6 +15,7 @@ import { hasExpired } from '../src/telegram/linkCode'
 import { priceAskWith } from '../src/telegram/priceAsk'
 import type { Reply } from '../src/telegram/render'
 import { callbackIdOf, messageIdOf, readUpdate } from '../src/telegram/update'
+import { readServiceRoleKey, readSupabaseUrl } from '../src/data/serverEnv'
 
 /**
  * The chat channel's front door (§13.6), and the only file that reads
@@ -257,7 +259,7 @@ async function fetchTelegramFile(botToken: string, fileId: string): Promise<Blob
 }
 
 /**
- * §24: replaces a message in place when the reply asks for it and there is one to replace.
+ * Ruling 24: replaces a message in place when the reply asks for it and there is one to replace.
  *
  * Falls back to sending, always. An edit can fail for reasons that are nobody's fault -- the
  * message is too old, or its content is unchanged, which Telegram treats as an error -- and
@@ -334,8 +336,10 @@ export default async function handler(request: Request): Promise<Response> {
   const config: Parameters<typeof checkRequest>[1] = {
     botToken: process.env.TELEGRAM_BOT_TOKEN,
     webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
-    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    supabaseUrl: process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL,
+    // The same project the browser's endpoints verify sessions against, and trimmed
+    // the same way -- a webhook on a different project writes where nothing reads.
+    serviceRoleKey: readServiceRoleKey(process.env as Record<string, string | undefined>) ?? undefined,
+    supabaseUrl: readSupabaseUrl(process.env as Record<string, string | undefined>) ?? undefined,
   }
 
   const guard = checkRequest(
@@ -372,12 +376,13 @@ export default async function handler(request: Request): Promise<Response> {
      */
     const services: ChatServices = groqKey
       ? {
-          readPhotoFile: async (fileId: string) => {
+          readPhotoFile: async (fileId: string, calendar?: Calendar) => {
             const blob = await fetchTelegramFile(botToken, fileId)
             if (blob === null) return null
 
             const outcome = await readPhoto(
               new File([blob], 'photo.jpg', { type: blob.type || 'image/jpeg' }),
+              calendar,
             )
 
             // Only the items cross into the flow. Whether the read succeeded is answered by

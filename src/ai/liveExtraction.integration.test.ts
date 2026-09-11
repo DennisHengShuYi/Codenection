@@ -17,7 +17,7 @@ import { askWriter } from './writer'
  * That cannot be answered by the ordinary suite, which stubs `fetch` on purpose so it can
  * never spend money. It also cannot be answered by asserting the prompt contains the word
  * "startHour": a prompt that asks for something the model then ignores looks identical in
- * source and is exactly the failure §43 was written about, where a stated 9am was dropped
+ * source and is exactly the failure Ruling 43 was written about, where a stated 9am was dropped
  * on the floor and the app chose an hour of its own.
  *
  * ## Running it
@@ -61,7 +61,7 @@ describeIfKeyed('the typed path, against the real model', () => {
   })
 
   /**
-   * The other half of §43, and the one a prompt can get wrong in the opposite direction:
+   * The other half of Ruling 43, and the one a prompt can get wrong in the opposite direction:
    * an essay "due friday" states a deadline and no time of day. A model that invents an
    * hour there would pin a maximally movable item, taking away the freedom the rebalancer
    * needs.
@@ -162,7 +162,7 @@ describeIfKeyed('the request path, against the real model', () => {
 })
 
 /**
- * §44, against the real model: does telling it what today is actually move the answer?
+ * Ruling 44, against the real model: does telling it what today is actually move the answer?
  *
  * The prompt said "deadlineDay is a day index from 0 (today)" and never said what today
  * was, so a stated weekday could only be guessed at -- and the guess showed up in the app
@@ -197,7 +197,7 @@ describeIfKeyed('a stated weekday, with the calendar told to the model', () => {
 })
 
 /**
- * §44's last reader, against the real vision model.
+ * Ruling 44's last reader, against the real vision model.
  *
  * The prompt line is easy to add and impossible to verify by reading -- which the planner
  * proved expensively: the first wording made the live model answer `null` for a stated

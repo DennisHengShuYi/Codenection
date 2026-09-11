@@ -82,6 +82,20 @@ describe('beginConnect', () => {
     expect(assign).not.toHaveBeenCalled()
   })
 
+  /** A deployment that cannot connect a calendar at all must not read as a bad moment, and
+   *  must never read as the student's fault: the 503 our endpoints answer for an unset
+   *  secret or an unverifiable session says so in words nobody will retry against. */
+  it('says so plainly when this deployment has no calendar to connect to', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }))
+
+    const outcome = await beginConnect()
+
+    expect(outcome.ok).toBe(false)
+    expect(outcome.ok === false && outcome.reason).toMatch(/not set up/i)
+    expect(outcome.ok === false && outcome.reason).not.toMatch(/sign in/i)
+    expect(assign).not.toHaveBeenCalled()
+  })
+
   /** Ruling 63 turned the throw into an answer: it still goes nowhere, and now it also
    *  says why instead of surfacing in a console the student will never open. */
   it('goes nowhere when the endpoint cannot start the flow', async () => {

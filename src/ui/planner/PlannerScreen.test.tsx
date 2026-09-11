@@ -29,7 +29,7 @@ const dump = async (text: string) => {
 }
 
 /**
- * §43: every chip has to say which day it lands on before the accept opens. A student does
+ * Ruling 43: every chip has to say which day it lands on before the accept opens. A student does
  * this by answering the chip's own question; a test does it the same way, rather than
  * reaching around the gate.
  */
@@ -135,7 +135,7 @@ describe('PlannerScreen', () => {
 })
 
 /**
- * §43: nothing reaches the week until it says when it happens.
+ * Ruling 43: nothing reaches the week until it says when it happens.
  *
  * `parseBrainDump` returns `deadlineDay: null` whenever the text implied no day -- which is
  * most of what a student types. The old flow accepted those anyway and let `placement.ts`

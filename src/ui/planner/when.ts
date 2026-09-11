@@ -1,7 +1,7 @@
 import type { ParsedItem } from '../../ai'
 
 /**
- * §43: has this item said when it happens?
+ * Ruling 43: has this item said when it happens?
  *
  * A day is one answer; a weekly repeat is the other, and `expandRecurring` derives a day
  * for every instance from those weekdays. The first cut of this gate asked only about

@@ -1,7 +1,7 @@
 /**
  * Whether the fortnight's answer has changed enough to interrupt somebody for.
  *
- * §26: this is the one capability the PWA does not have. Web push on iOS is unreliable and
+ * Ruling 26: this is the one capability the PWA does not have. Web push on iOS is unreliable and
  * needs the app installed; Telegram always delivers. But a bot that messages daily is one a
  * student mutes within a week, and a muted bot is worse than no bot -- so the bar is not
  * "something changed", it is "the answer to the question they care about changed".

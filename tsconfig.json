@@ -7,6 +7,21 @@
     "jsx": "react-jsx",
     "strict": true,
     "noUncheckedIndexedAccess": true,
+    // What a linter was wanted for, from the compiler that is already here.
+    //
+    // `.claude/CLAUDE.md`'s workflow assumed a lint step and there has never been one, so
+    // three `eslint-disable react-hooks/exhaustive-deps` directives sat in the two most
+    // stateful components suppressing a rule nothing ran -- and a dead `CapacityDial` import
+    // survived in `WeekScreen` precisely because `tsc` cannot see an unused import without
+    // this flag.
+    //
+    // ESLint proper is not installable today: `typescript-eslint@8` peers on TypeScript
+    // `>=4.8.4 <6.1.0` and this project is on 7.0.2, so there is no supported combination,
+    // and `--legacy-peer-deps` would mean linting through a parser that does not claim to
+    // understand the language version. This catches the class of defect that actually
+    // occurred, needs no dependency, and runs in the typecheck CI already has.
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noEmit": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -22,6 +37,10 @@
     "scripts",
     "vite.config.ts",
     "vitest.config.ts",
+    // The integration config was the only one left out, and it is the one that
+    // deliberately handles credentials -- `loadEnv` against a real .env -- so it was
+    // the worst candidate for going unchecked.
+    "vitest.integration.config.ts",
     "playwright.config.ts"
   ]
 }

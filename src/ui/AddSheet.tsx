@@ -120,14 +120,14 @@ export function AddSheet({
   const close = () => onClose()
 
   /**
-   * §43: computed once here rather than in each of the three screens.
+   * Ruling 43: computed once here rather than in each of the three screens.
    *
    * This is the only component in the add flow holding both the week and today, which is
    * what the labels need -- the screens below it take the finished list and hand it to the
    * chip.
    */
   const dayLabels = dayLabelsFor(schedule, today)
-  /** §44: and the same week, said in the terms the two readers need. */
+  /** Ruling 44: and the same week, said in the terms the two readers need. */
   const calendar = calendarFor(schedule, today)
 
   if (way === 'photo') {

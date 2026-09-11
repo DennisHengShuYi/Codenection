@@ -11,8 +11,26 @@ export type { CharacterState } from './characterState'
  *  readable, and the room's whole job is being readable without being read. */
 const MAX_CLUTTER_BOXES = 6
 
-/** Hours below which sleep debt accrues. */
-const SLEEP_DEBT_BASELINE = 7
+/**
+ * What a rested night is, for the bed to draw a shortfall against.
+ *
+ * Deliberately NOT the engine's `sleepBaselineHours`, and worth saying so, because the two
+ * numbers sit one import apart and look like they should match. They answer different
+ * questions. The engine's five is where sleep starts *paying reserve back*: §6.1's
+ * `max(0, sleep - 5) x k_sleep`, a flow. This seven is where a student is *short*, which is
+ * a stock -- and the two coexist without contradiction, since six hours can both leave you
+ * a night down and still give something back.
+ *
+ * Reading the engine's figure here would be the wrong fix rather than the tidy one: at five,
+ * a student sleeping five and a half hours would have no visible sleep debt at all, and the
+ * bed would stop saying the one thing it is on the wall to say.
+ *
+ * What is genuinely unfinished: the engine's baseline is a per-student parameter (§7.3's
+ * painter was to measure it, and §11 records that nothing does), while this is a population
+ * norm and fixed. For a student who needs nine hours the bed under-reports. That wants the
+ * same calibration the engine's side is waiting on, not a constant swapped here.
+ */
+const RESTED_NIGHT_HOURS = 7
 
 /** Below this on physical *and* social, getting outside is the highest-value move: it is
  *  the one action that answers both at once (§5.3). */
@@ -22,7 +40,7 @@ const DOOR_LIGHTS_BELOW = 25
 const STORM_WITHIN_DAYS = 7
 
 /**
- * §45: the hours of one kind that fill its object completely.
+ * Ruling 45: the hours of one kind that fill its object completely.
  *
  * A cap, for the reason the floor already caps at six boxes: a desk has to be able to look
  * buried without twenty books drawn on it, and the difference between "a heavy day" and "an
@@ -48,7 +66,7 @@ export interface ClutterBox {
 
 export interface RoomState {
   /**
-   * §47: 0..1, how much of today is already spoken for -- drawn as a clock face filling.
+   * Ruling 47: 0..1, how much of today is already spoken for -- drawn as a clock face filling.
    *
    * This was the ceiling's job, and the ceiling was the wrong home for it. Its depth is
    * drawn in viewBox units, so it scales with the stage: 13 real pixels on a phone and four
@@ -63,11 +81,11 @@ export interface RoomState {
   /** 0..1. How high the paper has stacked. */
   readonly paperHeight: number
   readonly clutter: readonly ClutterBox[]
-  /** §45: 0..1, exercise still waiting on today -- hard and light together, drawn as a
+  /** Ruling 45: 0..1, exercise still waiting on today -- hard and light together, drawn as a
    *  dumbbell. The engine's split between them is about what they COST, which the reserve
    *  models; the room only says a session is on. */
   readonly exerciseWaiting: number
-  /** §45: 0..1, time with people still waiting on today -- draining and restorative
+  /** Ruling 45: 0..1, time with people still waiting on today -- draining and restorative
    *  together, drawn as figures in the room. Same reasoning as exercise: the room says
    *  people are on today, and how that lands is the reserve's business. */
   readonly companyWaiting: number
@@ -75,7 +93,7 @@ export interface RoomState {
   readonly sleepDebt: number
   readonly weather: 'clear' | 'clouding' | 'storm'
   /**
-   * §45: 0..1, the overall reserve, for the corner gauge to state as a percentage.
+   * Ruling 45: 0..1, the overall reserve, for the corner gauge to state as a percentage.
    *
    * Carried explicitly now that the light means the day. The gauge used to derive its
    * number from `lightLevel`, which was the reserve until this ruling rebound it -- and the
@@ -83,10 +101,10 @@ export interface RoomState {
    * number is the door to the whole breakdown (Ruling 59), so it says the reserve itself.
    */
   readonly reserve: number
-  /** §45: 0..1, dimmed by the hours today cannot fit. Not the reserve -- the corner gauge
+  /** Ruling 45: 0..1, dimmed by the hours today cannot fit. Not the reserve -- the corner gauge
    *  carries that, and reads it directly rather than from here. */
   readonly lightLevel: number
-  /** §45: 0..1, how dark the window is, from the same spill. Independent of `weather`,
+  /** Ruling 45: 0..1, how dark the window is, from the same spill. Independent of `weather`,
    *  which stays the forecast. */
   readonly windowDark: number
   readonly doorLit: boolean
@@ -106,9 +124,9 @@ export function roomStateFor(
   reserves: Reserves,
   projection: Projection,
   schedule: Schedule,
-  /** §45: which day the furniture draws. */
+  /** Ruling 45: which day the furniture draws. */
   today: number,
-  /** §45: what the student has answered, so a block that is done is put away. */
+  /** Ruling 45: what the student has answered, so a block that is done is put away. */
   blockLog: readonly BlockRecord[],
 ): RoomState {
   const day = dayLoadFor(schedule, today, blockLog)
@@ -117,7 +135,7 @@ export function roomStateFor(
   const fullnessOf = (kind: ActivityKind): number =>
     clamp01((day.remainingByKind[kind] ?? 0) / HOURS_TO_FILL_AN_OBJECT)
 
-  // §45: today's, like everything else in the room. Reading the whole fortnight here left
+  // Ruling 45: today's, like everything else in the room. Reading the whole fortnight here left
   // the floor speaking about two weeks while the desk spoke about one day -- one picture
   // answering two questions, which is the fault this ruling exists to fix.
   const pendingErrands = blocksOnDay(schedule, today).filter(
@@ -126,16 +144,16 @@ export function roomStateFor(
 
   const averageSleep =
     schedule.sleepByDay.length === 0
-      ? SLEEP_DEBT_BASELINE
+      ? RESTED_NIGHT_HOURS
       : schedule.sleepByDay.reduce((sum, hours) => sum + hours, 0) / schedule.sleepByDay.length
 
-  const sleepDebt = Math.max(0, SLEEP_DEBT_BASELINE - averageSleep)
+  const sleepDebt = Math.max(0, RESTED_NIGHT_HOURS - averageSleep)
 
   return {
-    // §47: the same reading, in the object that can actually carry it.
+    // Ruling 47: the same reading, in the object that can actually carry it.
     dayFull: clamp01(day.totalHours / WAKING_HOURS),
 
-    // §45: the desk stacks with the study still ahead today, rather than with the mental
+    // Ruling 45: the desk stacks with the study still ahead today, rather than with the mental
     // reserve. Answered blocks are put away -- nothing is counted up (§1.3).
     paperHeight: fullnessOf('studyBlock'),
 
@@ -145,7 +163,7 @@ export function roomStateFor(
       dayIndex: item.dayIndex,
     })),
 
-    // §45: both exercise kinds fill one object, and both kinds of company fill another.
+    // Ruling 45: both exercise kinds fill one object, and both kinds of company fill another.
     // `rest` deliberately has no object at all -- it is the one thing on a day that is not
     // a duty the student owes anyone, and drawing it as another thing waiting to be done
     // would turn the one restorative item on the day into another obligation.
@@ -163,7 +181,7 @@ export function roomStateFor(
     reserve: clamp01(overallReserve(reserves) / 100),
 
     /**
-     * §45: the light is the day's, not the reserve's.
+     * Ruling 45: the light is the day's, not the reserve's.
      *
      * A day whose hours do not fit inside its waking hours has to take the difference out
      * of sleep, and this says so BEFORE the night rather than after it -- the last point at
@@ -173,7 +191,7 @@ export function roomStateFor(
      */
     lightLevel: clamp01(1 - day.spillHours / SPILL_AT_DARKEST),
 
-    /** §45: the same spill, as the window's darkness. Independent of `weather`, which is
+    /** Ruling 45: the same spill, as the window's darkness. Independent of `weather`, which is
      *  the forecast: a dark clear window is an exhausted student with a calm week ahead. */
     windowDark: clamp01(day.spillHours / SPILL_AT_DARKEST),
 

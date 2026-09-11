@@ -1,3 +1,4 @@
+import { DAY_END_HOUR } from './gaps'
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS } from '../engine'
 import { isValid, violations } from './constraints'
@@ -50,6 +51,33 @@ describe('neighbours', () => {
     )
 
     expect(moves.some((m) => m.kind === 'batchErrands')).toBe(true)
+  })
+
+  /**
+   * A move that ends after the day does not end anywhere.
+   *
+   * `batchErrands` and `reorderWithinDay` both place a block immediately after another one,
+   * which is the point of them -- so neither can go through `hourNear`, which finds whichever
+   * gap fits. What they were missing is the day's own edge: `startHour + hours` was unbounded,
+   * and `constraints.violations` checks deadlines, overlaps and the daily cap but never that.
+   * So a batch onto a late target produced a valid-looking candidate starting at 25, which
+   * `drain` and `carryover` then charged to today.
+   */
+  it('does not offer a move that would start after the day has ended', () => {
+    // Two movable errands on DIFFERENT days, which is what `batchErrands` needs, with the
+    // target late enough that batching onto it would land past midnight. `errandItem`'s
+    // third argument is the start hour and each is an hour long, so 23:00 + 1h leaves the
+    // next one starting at 24:00.
+    const week = makeSchedule([errandItem('late', 2, 23), errandItem('other', 5, 9)])
+    const moves = neighbours(week, DEFAULT_PARAMS)
+
+    expect(moves.length).toBeGreaterThan(0)
+
+    for (const move of moves) {
+      for (const item of move.apply(week).items) {
+        expect(item.startHour + item.hours).toBeLessThanOrEqual(DAY_END_HOUR)
+      }
+    }
   })
 
   it('offers to insert a rest block', () => {
@@ -170,7 +198,7 @@ describe('neighbours', () => {
 })
 
 /**
- * §13/§14: the solver's two remaining hardcoded hours.
+ * §13/Ruling 14: the solver's two remaining hardcoded hours.
  *
  * `REST_START_HOUR` and `SOCIAL_START_HOUR` placed every inserted block at 20:00 and 18:00
  * whatever was already there. For rest that was merely wasteful -- inserted rest is
@@ -233,7 +261,7 @@ describe('neighbours placing what it inserts', () => {
     )
   })
 
-  /** §17: one candidate per insertion. A finder that returned a list here would multiply the
+  /** Ruling 17: one candidate per insertion. A finder that returned a list here would multiply the
    *  neighbourhood, and the search is already at four thousand evaluations on the crunch
    *  fixture. */
   it('still offers exactly one rest insertion per day', () => {

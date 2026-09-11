@@ -32,12 +32,12 @@ export const PALETTE = {
   screen: '#3f4a56',
   bedDebt: '#b3a3d6',
   bedRested: '#d5cbef',
-  /** §45: night behind the window, laid over the weather rather than replacing it. Blue
+  /** Ruling 45: night behind the window, laid over the weather rather than replacing it. Blue
    *  rather than black -- a black pane reads as a hole in the wall, not as a night. */
   night: '#1e2a3a',
-  /** §45: the dumbbell on the floor, for exercise still on today. */
+  /** Ruling 45: the dumbbell on the floor, for exercise still on today. */
   iron: '#6b7280',
-  /** §45: the figures who are in the room when company is on today. Not the character's
+  /** Ruling 45: the figures who are in the room when company is on today. Not the character's
    *  own colours -- a visitor drawn in the student's palette reads as a second student. */
   visitor: '#8d7a9c',
   clutter: '#f0a02a',

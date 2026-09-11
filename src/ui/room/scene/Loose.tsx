@@ -75,7 +75,7 @@ export function Clutter({ boxes }: { boxes: readonly ClutterBox[] }) {
 }
 
 /**
- * §45: exercise still waiting on today, as a dumbbell on the floor.
+ * Ruling 45: exercise still waiting on today, as a dumbbell on the floor.
  *
  * One object for both kinds. The engine's split between hard and light exercise is about
  * what a session COSTS -- which the reserve models and the breakdown states -- and the room
@@ -107,7 +107,7 @@ export function Dumbbell({ waiting }: { waiting: number }) {
 }
 
 /**
- * §45: people on today, as people in the room.
+ * Ruling 45: people on today, as people in the room.
  *
  * Both kinds of company together, for the same reason the dumbbell takes both exercises:
  * whether an hour with someone drains or restores is what the reserve is for, and the room

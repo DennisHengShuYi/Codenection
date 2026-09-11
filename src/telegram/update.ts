@@ -158,7 +158,7 @@ export function callbackIdOf(update: unknown): string | null {
 /**
  * The message a button press came from, so the reply can replace it in place.
  *
- * §24: Telegram allows a message's text and keyboard to be swapped, which turns `/schedule`
+ * Ruling 24: Telegram allows a message's text and keyboard to be swapped, which turns `/schedule`
  * into navigation -- tap day 3, the same message becomes the day view, tap back and it
  * returns -- without a session table anywhere, and without filling the chat log with dead
  * menus nobody can act on any more.
@@ -212,7 +212,7 @@ export function readUpdate(update: unknown): Intent {
       }
     }
 
-    // §24's navigation. The day index travels in the callback, so moving between the
+    // Ruling 24's navigation. The day index travels in the callback, so moving between the
     // fortnight and a day needs nothing remembered between one message and the next.
     const open = /^open:(\d{1,2})$/.exec(data)
     if (open !== null) {

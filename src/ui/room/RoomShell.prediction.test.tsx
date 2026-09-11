@@ -1,10 +1,10 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { createLocalRepository } from '../data'
-import { HORIZON_DAYS } from '../engine'
-import type { Schedule } from '../optimizer'
-import { RoomShell } from './room/RoomShell'
+import { createLocalRepository } from '../../data'
+import { HORIZON_DAYS } from '../../engine'
+import type { Schedule } from '../../optimizer'
+import { RoomShell } from './RoomShell'
 
 const week = (over: Partial<Schedule> = {}): Schedule => ({
   items: [],

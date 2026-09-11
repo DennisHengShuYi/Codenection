@@ -183,7 +183,7 @@ describe('recoveryScales', () => {
 })
 
 /**
- * §18: `estimateBias` was the only parameter that learned, and this pass added `kSleep` and
+ * Ruling 18: `estimateBias` was the only parameter that learned, and this pass added `kSleep` and
  * `kRest`. The list names four more. Two of them can be learned honestly from a scalar
  * prediction and two cannot, and saying which is which is the point.
  *

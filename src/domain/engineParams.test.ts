@@ -105,7 +105,7 @@ describe('paramsFor and what the prediction loop has learned', () => {
   })
 
   /**
-   * §18 draws a line, and this is it. `typeIntensity` is four numbers a single scalar
+   * Ruling 18 draws a line, and this is it. `typeIntensity` is four numbers a single scalar
    * residual cannot separate, and `socialFloorHoursPerDay` is a threshold whose derivative
    * is zero everywhere but a cliff. Both stay population constants on purpose -- learning
    * them from this evidence would be inventing precision.

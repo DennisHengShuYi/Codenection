@@ -21,7 +21,7 @@ export const REVIEW_DAYS = 7
  * becomes the default, and staying in becomes the act.
  */
 export function accept(schedule: Schedule, item: ParsedItem, today: number): Schedule {
-  const withItem = addItems(schedule, [item])
+  const withItem = addItems(schedule, [item], today)
   const added = withItem.items[withItem.items.length - 1]
 
   const commitment: Commitment = {

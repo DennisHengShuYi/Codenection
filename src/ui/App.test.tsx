@@ -47,7 +47,7 @@ describe('App', () => {
     )
   })
 
-  it('says plainly that a preview week is not being kept', async () => {
+  it('says plainly what a preview week is limited to', async () => {
     render(<App />)
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /look around/i })).toBeVisible(),
@@ -59,7 +59,7 @@ describe('App', () => {
     // live region, and two of those on one page is correct ARIA rather than a bug. A query
     // that assumed it was the only one broke the moment a second legitimately appeared.
     await waitFor(() =>
-      expect(screen.getByTestId('preview-banner')).toHaveTextContent(/not being saved/i),
+      expect(screen.getByTestId('preview-banner')).toHaveTextContent(/this device only/i),
     )
   })
 })

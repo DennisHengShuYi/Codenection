@@ -30,6 +30,7 @@ const calls = {
   from: [] as string[],
   select: [] as string[],
   eq: [] as Array<[string, unknown]>,
+  order: [] as Array<[string, boolean]>,
   upsert: [] as unknown[],
   deleted: 0,
   /** How many Supabase clients were constructed. One per browser is the whole point: a
@@ -63,6 +64,13 @@ vi.mock('@supabase/supabase-js', () => ({
         },
         eq(column: string, value: unknown) {
           calls.eq.push([column, value])
+          return builder
+        },
+        /** `loadBlockLog` orders its read, because `Repository` now promises oldest-first
+         *  and PostgREST guarantees nothing without it. Recorded so the test can assert the
+         *  clause is actually sent rather than merely that the chain survived it. */
+        order(column: string, options?: { ascending?: boolean }) {
+          calls.order.push([column, options?.ascending ?? true])
           return builder
         },
         maybeSingle: () => Promise.resolve(maybeSingleResult),
@@ -134,6 +142,7 @@ const blockRecord = (over: Partial<BlockRecord> = {}): BlockRecord => ({
 beforeEach(() => {
   calls.from = []
   calls.select = []
+  calls.order = []
   calls.eq = []
   calls.upsert = []
   calls.deleted = 0
@@ -255,6 +264,12 @@ describe('createSupabaseRepository', () => {
     expect(calls.from).toContain('block_answers')
     expect(calls.eq).toContainEqual(['account_id', 'user-abc'])
     expect(log).toEqual([blockRecord()])
+    // `Repository.loadBlockLog` promises oldest-first, and the adapter has to keep that
+    // rather than inherit it. There was no `order` clause: PostgREST guarantees nothing
+    // without one, while the local adapter returns insertion order -- so one method answered
+    // two ways depending on whether the student was signed in. Every consumer is
+    // order-independent today, which is why it would have gone unnoticed until one was not.
+    expect(calls.order).toContainEqual(['answered_at', true])
   })
 
   it('returns an empty log when nothing has been recorded', async () => {

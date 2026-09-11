@@ -85,7 +85,7 @@ describe('readEvents', () => {
   })
 
   /**
-   * §21's horizon. `dayIndexFor` returns null both for "before the week" and "past the
+   * Ruling 21's horizon. `dayIndexFor` returns null both for "before the week" and "past the
    * horizon", and null means *undated* downstream -- `placeItems` would drop a lecture from
    * next month onto today + 2. Dropping it is the honest answer, and the screen says how
    * many were left out.
@@ -113,7 +113,7 @@ describe('readEvents', () => {
 
     expect(allDay[0]?.confident).toBe(false)
     expect(allDay[0]?.fixed).toBe(false)
-    // Null rather than absent: §43 made a stated hour a required answer, and "no time of
+    // Null rather than absent: Ruling 43 made a stated hour a required answer, and "no time of
     // day" is a real answer to it rather than a missing one.
     expect(allDay[0]?.startHour).toBeNull()
   })
@@ -128,7 +128,7 @@ describe('readEvents', () => {
    * The events endpoint asks for `singleEvents=true`, so a weekly class arrives as the
    * instances it really has -- the cancelled one already gone, the moved one already moved.
    * Reproducing that from an RRULE is work we would get wrong on the first cancelled
-   * lecture, so each instance becomes its own row and §37's `suggestRepeat` is what offers
+   * lecture, so each instance becomes its own row and Ruling 37's `suggestRepeat` is what offers
    * to turn a visible pattern into a series.
    */
   it('leaves recurrence to the instances Google already expanded', () => {

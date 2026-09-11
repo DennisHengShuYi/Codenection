@@ -1,14 +1,7 @@
+import { WEEKDAY_NAMES } from '../domain/calendar'
 import type { Calendar } from './types'
 
-const WEEKDAYS = [
-  'Sunday',
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-] as const
+const WEEKDAYS = WEEKDAY_NAMES
 
 /**
  * The longest a `todayLabel` may be.
@@ -20,7 +13,7 @@ const WEEKDAYS = [
 const LONGEST_LABEL = 40
 
 /**
- * §44's anchor, read off the wire and validated rather than trusted.
+ * Ruling 44's anchor, read off the wire and validated rather than trusted.
  *
  * Anyone can POST to the endpoints that call this, and what comes back out of it goes into
  * a prompt. A weekday outside 0-6, a fractional day index or an essay in place of a date is
@@ -52,7 +45,7 @@ export const readCalendar = (raw: unknown): Calendar | undefined => {
 }
 
 /**
- * §44's anchor, said to a model. Empty for a week that has never been dated, because there
+ * Ruling 44's anchor, said to a model. Empty for a week that has never been dated, because there
  * is nothing true to say and a made-up date is a confident wrong answer.
  *
  * The wording was earned by a live call rather than reasoned out, which is the strongest

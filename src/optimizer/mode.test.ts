@@ -38,7 +38,7 @@ const shifts = (): ScheduledItem[] =>
   )
 
 /**
- * §21: derive the mode rather than asking for it.
+ * Ruling 21: derive the mode rather than asking for it.
  *
  * The mode picker was cut for the right reason -- nothing read it, so it was a question
  * asked of every student for no effect. This brings the idea back without asking anybody

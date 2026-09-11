@@ -5,7 +5,7 @@ import { isDistressed } from '../../domain/distress'
 import { energyHistory } from '../../domain/energyHistory'
 import { describePlacement, fixThatMakesRoom, placeItems } from '../../domain/placement'
 import { checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
-import { anchorTo, dateFor, isAnchored, todayIndex } from '../../domain/calendar'
+import { anchorTo, dateFor, dayLabel, isAnchored, todayIndex } from '../../domain/calendar'
 import { accept, lapsed } from '../../domain/commitments'
 import { paramsFor } from '../../domain/engineParams'
 import { firstAction, isStuck } from '../../domain/microStart'
@@ -14,7 +14,7 @@ import { addBlock, completeItem, deferItem, editItem, removeItem } from '../../d
 import { stampSoftDeadlines } from '../../domain/softDeadlines'
 import { applyRest, planRest, type RestPlan } from '../../domain/restNow'
 import { RestPreview } from '../rest/RestPreview'
-import { overallReserve, project } from '../../engine'
+import { floorReserve, overallReserve, project } from '../../engine'
 import type { Fix } from '../../optimizer'
 import { toDayInputs } from '../../optimizer'
 import { AddSheet } from '../AddSheet'
@@ -107,8 +107,9 @@ export function RoomShell({
   onAnswerBlock: (record: BlockRecord) => void
 }) {
   const { schedule, setSchedule, problem: saveProblem } = useSchedule(repository)
-  const { profile, setProfile } = useProfile(repository, session)
-  const { ladders, loaded: laddersLoaded, saveLadder, dropLadder } = useLadders(repository)
+  const { profile, setProfile, problem: profileProblem } = useProfile(repository, session)
+  const { ladders, loaded: laddersLoaded, saveLadder, dropLadder, problem: ladderProblem } =
+    useLadders(repository)
   /**
    * Ruling 57: where the student is now lives in the address bar as well as in React.
    * `useUrlView` returns exactly what `useState<View>` returned before it, so everything
@@ -189,7 +190,13 @@ export function RoomShell({
     if (proposalIsStale || editTargetIsGone || startTargetIsGone) setView(toWeek())
     // `setView` is rebuilt on every render, so listing it here would re-run this effect on
     // every render. Whether it should fire is decided entirely by the four flags above.
-  }, [proposalIsStale, restPlanIsStale, editTargetIsGone, startTargetIsGone]) // eslint-disable-line react-hooks/exhaustive-deps
+    // Deliberately not exhaustive: `setView` is rebuilt every render, so listing it would
+    // re-run this on every render. The four flags above decide whether it should fire.
+    //
+    // A comment rather than an `eslint-disable`: there is no ESLint here to disable, since
+    // `typescript-eslint` does not support this project's TypeScript version, and a
+    // directive naming a rule nothing runs claims a review that never happened.
+  }, [proposalIsStale, restPlanIsStale, editTargetIsGone, startTargetIsGone])
 
   // Session-scoped dismissals for the live cards, none of which has a domain-level
   // "not today" of its own. §7 retired the last permanent one -- the failed-recovery log --
@@ -216,16 +223,18 @@ export function RoomShell({
   // would be two chances for the number shown to drift from the number applied.
   const outcomes = useMemo(() => outcomesFrom(blockLog), [blockLog])
   const params = useMemo(() => paramsFor(outcomes, profile.predictions), [outcomes, profile.predictions])
-  const floor = schedule
-    ? Math.min(schedule.start.mental, schedule.start.physical, schedule.start.social, schedule.start.errands)
-    : 100
   // §1.5's mode, read AND written. `setOverride` reaches `LowEnergyControl` in the settings
   // sheet below, which is the whole of Ruling 45: the preference was honoured here while
   // nothing in the app could set it, because the control lived on `LowEnergyView` and Task
   // 17 deleted the view. Both directions matter -- a depleted student turning the collapsed
   // interface off, and a rested student turning it on -- and both are asserted end to end in
   // `RoomShell.lowEnergy.test.tsx` rather than only at the hook.
-  const { active: lowEnergy, override: lowEnergyOverride, setOverride } = useLowEnergy(repository, floor)
+  const {
+    activeFor: lowEnergyFor,
+    override: lowEnergyOverride,
+    setOverride,
+    problem: lowEnergyProblem,
+  } = useLowEnergy(repository)
 
   /**
    * §8.1's two prerequisites: anchor the fortnight to a real day, and claim something about a
@@ -250,7 +259,11 @@ export function RoomShell({
       blockLog,
     )
     if (next.length !== profile.predictions.length) setProfile({ ...profile, predictions: next })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deliberately not exhaustive: `today` and `params` are recomputed every render, and
+    // depending on them would re-anchor and re-resolve on every one. What decides whether
+    // this should run is the five values listed.
+    //
+    // A comment rather than an `eslint-disable`, for the reason given on the effect above.
   }, [schedule, profile, blockLog, setSchedule, setProfile])
 
   if (!schedule) {
@@ -308,6 +321,30 @@ export function RoomShell({
   const nowHour = now.getHours()
   const todayDate = dateFor(week, today)
   const model = roomModel({ schedule: week, today, blockLog, predictions: profile.predictions })
+
+  /**
+   * One reading of "where the student is now", shared by everything that shows it.
+   *
+   * `model.reserves` is the reserve entering today. The corner gauge, the Reserves sheet's
+   * headline and §1.5's low-energy gate all used to derive this separately from
+   * `schedule.start` -- day zero, which never moves -- so on day ten of a heavy week all
+   * three reported the number the fortnight opened with while the week grid beside them
+   * read each day off the projection.
+   *
+   * Taken from the model rather than recomputed so the gauge and the room's own character,
+   * which `roomStateFor` draws from the same value, cannot disagree.
+   */
+  const lowEnergy = lowEnergyFor(floorReserve(model.reserves))
+
+  /**
+   * The first failed write, whichever store refused it.
+   *
+   * Five hooks persist something a student changed, and three of them used to drop the
+   * failure -- the calibration every projection is computed from, the ladder progress a
+   * student worked through, and §1.5's mode. One sentence covers all five, because what
+   * needs saying is that a change may not survive, not which table declined it.
+   */
+  const failedWrite = saveProblem ?? profileProblem ?? ladderProblem ?? lowEnergyProblem
 
   // §1.2's breakdown: the five domain bars each against its own ceiling, and the
   // low-social-flagged-as-warning logic that is the app's own differentiator over a tracker
@@ -500,7 +537,7 @@ export function RoomShell({
    * behind the button at all: it sits on the room, under the controls.
    */
   /**
-   * §46: what each object means and what is behind it today. Derived from the same week the
+   * Ruling 46: what each object means and what is behind it today. Derived from the same week the
    * furniture is bound from, so the legend cannot teach a vocabulary the room does not
    * speak.
    */
@@ -535,7 +572,7 @@ export function RoomShell({
           {paragraph}
         </p>
 
-        {/* §16: never silently reshuffle. What was added, where it went, and -- only when
+        {/* Ruling 16: never silently reshuffle. What was added, where it went, and -- only when
             something had to give -- the single move that would help, offered rather than
             taken. "Leave it" is the healthy default: doing nothing keeps the week the
             student decided on. */}
@@ -692,6 +729,7 @@ export function RoomShell({
             onSelectBlock={(itemId) => setView(toBlock(itemId))}
             onAddBlock={(day) => setView(toNewBlock(day))}
             blockLog={blockLog}
+            predictions={profile.predictions}
           />
         </Sheet>
       )}
@@ -765,7 +803,12 @@ export function RoomShell({
       {view.kind === 'reserves' && !lowEnergy && (
         <ReservesSheet
           key="reserves"
-          capacity={overallReserve(week.start)}
+          capacity={overallReserve(model.reserves)}
+          deficitDayLabel={
+            projection.firstDeficitDay === null
+              ? null
+              : dayLabel(week, projection.firstDeficitDay, today)
+          }
           bars={bars}
           projection={projection}
           history={reportedEnergy}
@@ -993,7 +1036,7 @@ export function RoomShell({
             </Button>
           )}
 
-          {/* §46: only below 768px. Above it the panel is already beside the room, and a
+          {/* Ruling 46: only below 768px. Above it the panel is already beside the room, and a
               button that opens what is visibly open is furniture with nothing to do. */}
           <Button
             variant="secondary"
@@ -1009,7 +1052,7 @@ export function RoomShell({
           </Button>
         </div>
 
-        {/* §46: the panel, floating over the wall from 768px up.
+        {/* Ruling 46: the panel, floating over the wall from 768px up.
           
           A SIBLING of the stage, never a child of the drawing: the `<svg>` carries
           `role="img"`, which hides its whole subtree from the accessibility tree, so a row
@@ -1064,7 +1107,12 @@ export function RoomShell({
             Above the preview banner rather than below it: when a signed-out student hits a
             failed write, both are on screen, and the one about work already lost is the more
             urgent of the two. */}
-        {saveProblem !== null && (
+        {/* One banner for every failed write, not four. The wording is identical -- what a
+            student needs to know is that a change may not be there tomorrow, not which of
+            the app's stores refused it -- and the first one that failed is the one shown.
+            `useProfile`, `useLadders` and `useLowEnergy` all used to drop these silently,
+            while `useSchedule` and `useBlockLog` reported theirs. */}
+        {failedWrite !== null && (
           <p
             data-testid="save-problem"
             role="status"
@@ -1072,7 +1120,7 @@ export function RoomShell({
               session === null ? 'bottom-28' : 'bottom-2'
             }`}
           >
-            {saveProblem}
+            {failedWrite}
           </p>
         )}
 

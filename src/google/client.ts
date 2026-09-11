@@ -37,6 +37,10 @@ const SIGN_IN_FIRST =
   'Connecting a calendar needs an account — sign in from Settings first, then try again.'
 const UNAVAILABLE =
   'I could not reach the calendar service just now. Try again in a moment.'
+/** A deployment whose calendar half is not configured, or whose Supabase pair cannot verify
+ *  anybody. "Try again in a moment" would be a lie: trying again is not what fixes it. */
+const NOT_ON_THIS_DEPLOYMENT =
+  'Calendars are not set up on this version of the app, so there is nothing to connect to yet.'
 
 /**
  * Starts the consent flow, and says what happened when it cannot.
@@ -59,6 +63,10 @@ export async function beginConnect(): Promise<ConnectOutcome> {
 
   if (response === null) return { ok: false, reason: UNAVAILABLE }
   if (response.status === 401) return { ok: false, reason: SIGN_IN_FIRST }
+  // 503 is this app's word for "configured nowhere near here" -- the endpoints answer it for
+  // a missing Google secret and for a Supabase pair that cannot verify a session, and both
+  // are states no student can press their way out of.
+  if (response.status === 503) return { ok: false, reason: NOT_ON_THIS_DEPLOYMENT }
   if (!response.ok) return { ok: false, reason: UNAVAILABLE }
 
   const { url } = (await response.json().catch(() => ({}))) as { url?: unknown }

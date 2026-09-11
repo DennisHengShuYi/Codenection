@@ -167,6 +167,51 @@ describe('tick', () => {
     expect(fromLow).toBeLessThan(fromHigh)
   })
 
+  /**
+   * §6.2's spiral, per reserve rather than per body.
+   *
+   * Both states below have a mean of 65, so an efficiency read off `overallReserve` pays
+   * out identically on each -- which means a student with nothing left mentally gets back
+   * as much from an early night as one who is evenly three-quarters full. §6.1 writes
+   * `efficiency[d] = 0.45 + 0.55 × (reserve[d] / 100)` inside the same block as
+   * `reserve[d+1] = reserve[d] − drain[d] + recovery[d] × efficiency[d]`, where `reserve`
+   * is the four-vector; per-type indexing is what that notation says.
+   *
+   * Neither state couples into mental: the reserves that could drag it are at 80, well
+   * above §6.3's deficit threshold, so what this measures is the efficiency curve alone.
+   */
+  it('pays rest back at the reserve own level, not at the mean of all four', () => {
+    const restful = day({ sleepHours: 9, activities: [rest] })
+    const mentalSpent: Reserves = { mental: 20, physical: 80, social: 80, errands: 80 }
+    const evenlyWorn: Reserves = { mental: 65, physical: 65, social: 65, errands: 65 }
+
+    const toSpent = tick(mentalSpent, restful, DEFAULT_PARAMS).mental - mentalSpent.mental
+    const toEven = tick(evenlyWorn, restful, DEFAULT_PARAMS).mental - evenlyWorn.mental
+
+    expect(toSpent).toBeLessThan(toEven)
+  })
+
+  /**
+   * The consequence worth stating: a rested body no longer pays for a sick reserve.
+   *
+   * Under a mean-based efficiency a collapsed mental reserve dragged every other reserve's
+   * recovery down with it, at an implicit weight far larger than anything in §6.3's
+   * coupling matrix. That was a second, undeclared coupling channel; `applyCoupling` is now
+   * the only path by which one reserve's deficit reaches another.
+   */
+  it('does not let one collapsed reserve slow another reserve own recovery', () => {
+    const restful = day({ sleepHours: 9, activities: [rest] })
+    const mentalGone: Reserves = { mental: 0, physical: 70, social: 70, errands: 70 }
+    const evenlyFine: Reserves = { mental: 70, physical: 70, social: 70, errands: 70 }
+
+    const alongside = tick(mentalGone, restful, DEFAULT_PARAMS).physical - mentalGone.physical
+    const fresh = tick(evenlyFine, restful, DEFAULT_PARAMS).physical - evenlyFine.physical
+
+    // Coupling still reaches physical from an empty mental reserve, so the two are not
+    // equal -- but the efficiency curve must no longer be a second channel on top.
+    expect(alongside).toBeGreaterThan(fresh * 0.9)
+  })
+
   it('clamps to zero at the bottom', () => {
     const brutal = day({
       activities: [{ kind: 'studyBlock', type: 'mental', hours: 40, intensity: 2, startHour: 0 }],

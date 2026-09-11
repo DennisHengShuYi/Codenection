@@ -26,13 +26,17 @@ export function DomainBarList({ bars }: { bars: readonly DomainBar[] }) {
             <span>{bar.label}</span>
             <span className="flex items-center gap-2">
               <span className="tabular-nums">{Math.round(bar.value)}</span>
-              <span
-                data-testid={`trend-${bar.key}`}
-                role="img"
-                aria-label={TREND_WORDS[bar.trend]}
-              >
-                {GLYPHS[bar.trend]}
-              </span>
+              {/* Drawn only where something measured it. An arrow on a bar with no
+                  reading behind it is a claim, and `aria-label` makes it a spoken one. */}
+              {bar.trend !== null && (
+                <span
+                  data-testid={`trend-${bar.key}`}
+                  role="img"
+                  aria-label={TREND_WORDS[bar.trend]}
+                >
+                  {GLYPHS[bar.trend]}
+                </span>
+              )}
             </span>
           </div>
 

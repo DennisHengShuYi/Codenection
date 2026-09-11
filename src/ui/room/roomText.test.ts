@@ -25,7 +25,7 @@ const worstCaseState = (): RoomState =>
     weather: 'storm',
     clutter: [{ id: 'a', title: 'Laundry', dayIndex: 1 }],
     sleepDebt: 3,
-    // §45: the worst case now includes a day that does not fit and rest still waiting on
+    // Ruling 45: the worst case now includes a day that does not fit and rest still waiting on
     // it -- the point of this fixture is that every sentence the room can say is applicable
     // at once, so the two new ones belong in it.
     exerciseWaiting: 0.5, companyWaiting: 0.5,
@@ -54,7 +54,7 @@ describe('describeRoom', () => {
     expect(text).toMatch(/laundry/i)
   })
 
-  /** §45: "clear" now means the floor AND the day -- the slot is only free to say the floor
+  /** Ruling 45: "clear" now means the floor AND the day -- the slot is only free to say the floor
    *  is clear when today put nothing in the room either. */
   it('says the floor is clear when it is, and today put nothing out', () => {
     const empty = state({ paperHeight: 0, exerciseWaiting: 0, companyWaiting: 0 })
@@ -70,7 +70,7 @@ describe('describeRoom', () => {
     expect(describeRoom(state())).not.toMatch(/sleep/i)
   })
 
-  /** §45: the plant is gone; what today actually put in the room took its place. */
+  /** Ruling 45: the plant is gone; what today actually put in the room took its place. */
   it('names what today put in the room', () => {
     expect(describeRoom(state({ exerciseWaiting: 0.5 }))).toMatch(/dumbbell/i)
     expect(describeRoom(state({ companyWaiting: 0.5 }))).toMatch(/people/i)
@@ -78,7 +78,7 @@ describe('describeRoom', () => {
   })
 
   /**
-   * §45's darkness, said in words. The drawing dims and a screen reader has to be told the
+   * Ruling 45's darkness, said in words. The drawing dims and a screen reader has to be told the
    * same fact -- a binding that reaches the picture and not the paragraph tells the two
    * audiences different things, and only one of them can tell.
    */
@@ -126,7 +126,7 @@ describe('describeRoom', () => {
   })
 
   /**
-   * §45 put the spill at the top of the chain. It is the only sentence here about something
+   * Ruling 45 put the spill at the top of the chain. It is the only sentence here about something
    * the student can still act on before it costs them the night: the door is a suggestion,
    * the floor is a fact, and sleep debt is already spent.
    */

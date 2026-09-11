@@ -1,12 +1,11 @@
 import { useState } from 'react'
 import type { BlockRecord } from '../../domain/blockLog'
-import type { Projection } from '../../engine'
 import type { Fix, Schedule } from '../../optimizer'
-import type { EnergyPoint } from '../../domain/energyHistory'
-import { CapacityDial } from '../dial/CapacityDial'
-import type { DomainBar } from '../dial/domainBars'
 import { Button } from '../kit/Button'
 import { dayGrid } from './dayGrid'
+import { dayLabel } from '../../domain/calendar'
+import { LOAD_TYPE_LABELS } from '../kit/labels'
+import type { EnergyPrediction } from '../../domain/predictions'
 import { scheduleView, type LoadBand } from '../../domain/scheduleView'
 import { PushToCalendar } from './PushToCalendar'
 
@@ -52,12 +51,15 @@ const BAND_GLYPH: Record<LoadBand, string> = {
   heavy: '█',
 }
 
-const TYPE_LABEL: Record<string, string> = {
-  mental: 'mental',
-  physical: 'physical',
-  social: 'social',
-  errands: 'errands',
-}
+/**
+ * The student's four words, not the model's.
+ *
+ * This was an identity map: it printed "mental", "physical", "social", "errands" -- the
+ * engine's own type names -- onto a block in the week grid, while the Reserves sheet two
+ * taps away called the same four things "Study & thinking", "Body & movement", "People" and
+ * "Life admin". One reserve, two vocabularies, one screen apart.
+ */
+const TYPE_LABEL: Record<string, string> = LOAD_TYPE_LABELS
 
 const TYPE_HUE: Record<string, string> = {
   mental: 'bg-load-mental',
@@ -66,7 +68,13 @@ const TYPE_HUE: Record<string, string> = {
   errands: 'bg-load-errands',
 }
 
-const dayLabel = (dayIndex: number, date: string | null): string => (date === null ? `Day ${dayIndex}` : date)
+/**
+ * Removed in favour of `domain/calendar.dayLabel`.
+ *
+ * This was a sixth place a raw index reached the student, and the worst-numbered of them:
+ * `Day ${dayIndex}`, zero-based, as each grid cell's accessible name on an undated week --
+ * so a screen reader announced the first day of the fortnight as "Day 0".
+ */
 
 export function WeekScreen(props: {
   readonly schedule: Schedule
@@ -100,6 +108,17 @@ export function WeekScreen(props: {
    * caller built before the log existed keeps compiling and behaving exactly as it did.
    */
   readonly blockLog?: readonly BlockRecord[]
+  /**
+   * §8b's learned coefficients, threaded so the grid scores the fortnight the same way the
+   * room does.
+   *
+   * Without it `scheduleView` fell back to `predictions = []`, the population priors -- so
+   * for any calibrated student the week's deficit marks came from one model while the room's
+   * gauge and the rebalancer came from another. The comment on `blockLog` above already
+   * claimed this screen threaded through "exactly as `roomModel` threads it", and it did for
+   * the log and not for these.
+   */
+  readonly predictions?: readonly EnergyPrediction[]
 }) {
   const {
     schedule,
@@ -111,10 +130,11 @@ export function WeekScreen(props: {
     onSelectBlock,
     onAddBlock,
     blockLog = [],
+    predictions = [],
   } = props
   const [openDay, setOpenDay] = useState<number | null>(null)
 
-  const cells = scheduleView({ schedule, today, blockLog })
+  const cells = scheduleView({ schedule, today, blockLog, predictions })
 
   /**
    * Fixed load is the baseline everything else is measured against, so a week with none is
@@ -149,7 +169,7 @@ export function WeekScreen(props: {
 
       <ul className="grid grid-cols-3 gap-2 md:grid-cols-7">
         {cells.map((cell) => {
-          const parts = [dayLabel(cell.dayIndex, cell.date), BAND_LABEL[cell.band]]
+          const parts = [dayLabel(schedule, cell.dayIndex, today), BAND_LABEL[cell.band]]
           if (cell.deficit) parts.push('deficit')
           if (cell.unconfirmed) parts.push('not confirmed')
 
@@ -166,7 +186,12 @@ export function WeekScreen(props: {
                 onClick={() => setOpenDay(cell.dayIndex)}
                 className={`flex min-h-11 w-full flex-col items-center justify-center gap-1 rounded-lg border border-line p-2 text-xs aspect-square md:aspect-auto ${BAND_SHADE[cell.band]}`}
               >
-                <span>{dayLabel(cell.dayIndex, cell.date)}</span>
+                {/* Terser than the spoken name above deliberately: this is one of
+                    twenty-one squares in a grid that has to hold at 320px, and "Today, Sat
+                    12 Sep" wraps to three lines in it. The full phrase is in the cell's
+                    accessible name, where there is room for it. The fallback is one-based
+                    because "Day 1" is the first day to everyone but the array. */}
+                <span>{cell.date ?? `Day ${cell.dayIndex + 1}`}</span>
                 <span aria-hidden="true">{BAND_GLYPH[cell.band]}</span>
                 {cell.deficit && <span aria-hidden="true">⚠</span>}
                 {/* §4: the confirmation prompt discoverable from the overview, not only from

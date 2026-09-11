@@ -48,7 +48,7 @@ const replySchema = z.object({
          */
         confident: z.boolean().default(false),
         /**
-         * §40's whole recurrence vocabulary: which weekdays, and when it stops.
+         * Ruling 40's whole recurrence vocabulary: which weekdays, and when it stops.
          *
          * Bounded at the boundary like everything else here. A weekday outside 0-6 or an
          * end day outside the horizon is a model inventing structure, and `expandRecurring`

@@ -68,17 +68,37 @@ export interface RequestCost {
    * lie about the model, and one a student would eventually catch.
    */
   readonly eveningsEquivalent: number
-  /** False when taking it on drops the floor into deficit. §2.3's "warn before accepting",
-   *  expressed as something the model can actually answer. */
+  /**
+   * False when taking it on drops **the affected reserve's** floor into deficit. §2.3's
+   * "warn before accepting", expressed as something the model can actually answer.
+   *
+   * Measured on `floorAfter` above, so it is per-type for the same reason that is: scored
+   * against the projection's `worstFloor` this would answer the same for a one-hour ask and
+   * a twenty-hour one, because the overall floor is usually social isolation three weeks
+   * out and a mental request never reaches it. A warning that cannot see the size of what
+   * it is warning about is not a warning.
+   *
+   * So the three fields deliberately differ, and it is worth being plain about which is
+   * which: `firstDeficitDay*` is the *crossing*, on the true floor across all four types,
+   * because that is what "deficit" means to the dial and the room. `floorBefore`/`After`
+   * and this are the *price*, on the one reserve being spent.
+   */
   readonly absorbable: boolean
 }
 
 /**
  * The first day the floor crosses into deficit, or null if it never does.
  *
- * The projection already counts deficit days but has never said when the first one arrives,
- * and the day is the half a student can act on -- §2.3 asks for "day 21 to day 14", not
- * "seven deficit days".
+ * The projection already carries this as a field. It was reimplemented here, and again in
+ * `restNow.ts`, in nine identical lines that hand-listed the four load types instead of
+ * calling `floorReserve` -- so a fifth reserve would have been counted in one place and
+ * silently skipped in the other two, which is exactly what `engine/types.ts` says a fifth
+ * reserve must never be able to do.
+ *
+ * Kept as a named function rather than deleted outright because `ai/drafts.ts` and three
+ * test files read it, and a pass-through is a smaller change than moving all of them. Both
+ * read the same band: `project` computes the field with `summariseBand(start, central)`, the
+ * very band the copies were iterating, so this is the same answer and not merely a close one.
  */
 /**
  * The lowest a single reserve type reaches anywhere on the horizon.
@@ -92,12 +112,7 @@ const lowestOf = (projection: Projection, type: LoadType): number =>
   projection.central.reduce((lowest, day) => Math.min(lowest, day[type]), FULL_RESERVE)
 
 export function firstDeficitDay(projection: Projection): number | null {
-  for (const [day, reserves] of projection.central.entries()) {
-    const floor = Math.min(reserves.mental, reserves.physical, reserves.social, reserves.errands)
-    if (floor < DEFICIT_THRESHOLD) return day
-  }
-
-  return null
+  return projection.firstDeficitDay
 }
 
 /**
@@ -128,7 +143,7 @@ export function priceRequest(
   const before = project(schedule.start, toDayInputs(schedule, checkedIn), params)
 
   // addItems returns a new week, so the caller's is never touched.
-  const withRequest = addItems(schedule, [item])
+  const withRequest = addItems(schedule, [item], today)
   const after = project(
     withRequest.start,
     toDayInputs(withRequest, checkedInDays(blockLog, today, withRequest.horizonDays)),
@@ -146,8 +161,10 @@ export function priceRequest(
   const perEvening = params.kSocialContact * EVENING_HOURS
 
   return {
-    // The crossing stays on the true floor across all four types, because that is what
-    // "deficit" already means to the dial and the room. Only the *price* is per-type.
+    // These two only. The crossing stays on the true floor across all four types, because
+    // that is what "deficit" already means to the dial, the room and the week grid. The
+    // *price* below -- both floors, and `absorbable` with them -- is per-type; see the
+    // field docs for why the two must not be reconciled onto one aggregate.
     firstDeficitDayBefore: firstDeficitDay(before),
     firstDeficitDayAfter: firstDeficitDay(after),
     floorBefore,

@@ -24,7 +24,7 @@ export interface PanelRow {
    *  not half an hour of one. */
   readonly count: number
   readonly blocks: readonly PanelBlock[]
-  /** Whether the room draws it. False for rest, which §45 left deliberately without an
+  /** Whether the room draws it. False for rest, which Ruling 45 left deliberately without an
    *  object: it is the one thing on a day that is not a duty owed to anyone. */
   readonly drawn: boolean
 }
@@ -37,7 +37,7 @@ export interface PanelRow {
  * trusts it.
  *
  * Hard and light exercise share an object, and both kinds of company share another, for
- * §45's reason -- those splits are about what an hour COSTS, which the reserve models and
+ * Ruling 45's reason -- those splits are about what an hour COSTS, which the reserve models and
  * the breakdown states, while the room is only saying a session is on.
  */
 const GROUPS: readonly {
@@ -79,7 +79,7 @@ const REST_GROUP = {
 }
 
 /**
- * §46: what each object means and what is behind it today, in one list.
+ * Ruling 46: what each object means and what is behind it today, in one list.
  *
  * Named `todayRows` rather than `todayPanel` for a reason worth keeping: `TodayPanel.tsx`
  * sits beside it, and on a case-insensitive filesystem two modules differing only by case
@@ -100,7 +100,7 @@ export function panelRowsFor(
   blockLog: readonly BlockRecord[],
 ): readonly PanelRow[] {
   // `blocksOnDay` rather than a filter of its own -- it already orders by start hour, which
-  // is what a list of a day has to do anyway, and §45's `dayLoad` shares the same answer.
+  // is what a list of a day has to do anyway, and Ruling 45's `dayLoad` shares the same answer.
   const onToday = blocksOnDay(schedule, today)
   const answered = new Set(answeredIds(blockLog))
 

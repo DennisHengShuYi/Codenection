@@ -151,32 +151,46 @@ describe('score', () => {
    * The tiebreaker, tested at the one point where it is the only thing that can decide.
    *
    * These two fortnights are identical on every other term -- both bottom out at a floor
-   * of zero, both spend 17 days in deficit, both have one block a day so neither is
+   * of zero, both spend 18 days in deficit, both have one block a day so neither is
    * fragmented. Only the depth differs. Without the area term the objective scores them
    * exactly the same, the search goes blind, and the app tells a student in crisis that
    * their worst day goes "from 0 to 0".
    *
    * The preconditions are asserted rather than assumed, so if the model shifts and these
    * stop being a genuine tie, this fails loudly instead of passing for the wrong reason.
+   * It did exactly that when §6.2/§6.6 went per-type: nine and ten hours had tied at 17
+   * deficit days, and per-type drain separated them to 17 and 18. Re-derived by sweeping
+   * hours and reading `deficitDays` -- eleven and twelve now tie at 18, and they sit in the
+   * middle of the band that does (ten through thirteen), so a further small shift in the
+   * model moves the band's edges before it breaks the tie. The fixture is the thing to
+   * re-derive; the three preconditions are the point and must not be relaxed.
    */
   it('separates two crushed fortnights that tie on every other term', () => {
-    const nine = makeSchedule(
-      Array.from({ length: 21 }, (_, d) => studyItem(`n${d}`, d, 9)),
+    const eleven = makeSchedule(
+      Array.from({ length: 21 }, (_, d) => studyItem(`n${d}`, d, 11)),
       5,
     )
-    const ten = makeSchedule(
-      Array.from({ length: 21 }, (_, d) => studyItem(`t${d}`, d, 10)),
+    const twelve = makeSchedule(
+      Array.from({ length: 21 }, (_, d) => studyItem(`t${d}`, d, 12)),
       5,
     )
 
-    const nineProjection = project(nine.start, toDayInputs(nine, ALL_PRESENT), DEFAULT_PARAMS)
-    const tenProjection = project(ten.start, toDayInputs(ten, ALL_PRESENT), DEFAULT_PARAMS)
+    const elevenProjection = project(
+      eleven.start,
+      toDayInputs(eleven, ALL_PRESENT),
+      DEFAULT_PARAMS,
+    )
+    const twelveProjection = project(
+      twelve.start,
+      toDayInputs(twelve, ALL_PRESENT),
+      DEFAULT_PARAMS,
+    )
 
-    expect(nineProjection.worstFloor).toBe(tenProjection.worstFloor)
-    expect(nineProjection.deficitDays).toBe(tenProjection.deficitDays)
-    expect(nineProjection.deficitArea).toBeLessThan(tenProjection.deficitArea)
+    expect(elevenProjection.worstFloor).toBe(twelveProjection.worstFloor)
+    expect(elevenProjection.deficitDays).toBe(twelveProjection.deficitDays)
+    expect(elevenProjection.deficitArea).toBeLessThan(twelveProjection.deficitArea)
 
-    expect(score(nine, DEFAULT_PARAMS)).toBeGreaterThan(score(ten, DEFAULT_PARAMS))
+    expect(score(eleven, DEFAULT_PARAMS)).toBeGreaterThan(score(twelve, DEFAULT_PARAMS))
   })
 
   // §2.1 states min(reserve) as the objective, and it stays the objective. The area term
@@ -197,13 +211,13 @@ describe('score', () => {
 })
 
 /**
- * §20: four hours of final-year project and four hours of laundry were interchangeable load.
+ * Ruling 20: four hours of final-year project and four hours of laundry were interchangeable load.
  *
  * The solver could defer the FYP chapter to its deadline to protect the floor, and nothing
  * in the score called that a bad trade -- the two differed only by `typeIntensity`, which
  * says how tiring they are, not what it costs to leave one until the last day.
  *
- * The weight is derived, never asked for. §20 is explicit that nobody should be made to
+ * The weight is derived, never asked for. Ruling 20 is explicit that nobody should be made to
  * rank their own work, because everybody marks everything high; it comes from the load type
  * and the size of the block, both of which the app already knows.
  */
@@ -261,7 +275,7 @@ describe('score and what it costs to leave something until the deadline', () => 
 })
 
 /**
- * §21: on a fortnight with almost nothing fixed, the objective inverts from flattening peaks
+ * Ruling 21: on a fortnight with almost nothing fixed, the objective inverts from flattening peaks
  * to defending a floor.
  *
  * The reason is that burnout there has a different cause. A student with a timetable burns
@@ -301,7 +315,7 @@ describe('score and the shape of the week', () => {
   /**
    * With no frame, how the work is grouped is not the thing hurting anybody -- so the term
    * that tidies it yields. It does not fall silent: a student who has not entered a
-   * timetable yet is a low-structure week by this measure, and §42 exists because that is
+   * timetable yet is a low-structure week by this measure, and Ruling 42 exists because that is
    * the common case, so switching tidying off entirely would stop spreading their work for
    * a reason they never chose.
    */

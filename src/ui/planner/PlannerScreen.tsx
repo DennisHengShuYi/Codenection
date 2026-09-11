@@ -31,18 +31,18 @@ export function PlannerScreen({
    *  Wired to `onCancel` before Ruling 60, which meant the sheet's own close control
    *  quietly dropped the student at the chooser instead of closing. */
   onClose: () => void
-  /** §43: the horizon's days in a student's words, for the chip's own "when" question.
+  /** Ruling 43: the horizon's days in a student's words, for the chip's own "when" question.
    *  Threaded from the caller because the names depend on when the week started. */
   dayLabels: readonly string[]
-  /** §44: which real day the horizon's day 0 is, so a stated weekday lands on that weekday
+  /** Ruling 44: which real day the horizon's day 0 is, so a stated weekday lands on that weekday
    *  rather than on whatever `today % 7` produced. */
   calendar: Calendar
   /**
-   * §37: given a freshly parsed item, a weekly series it looks like another instance of.
+   * Ruling 37: given a freshly parsed item, a weekly series it looks like another instance of.
    *
    * Injected rather than imported, because the answer depends on the week and this screen
    * does not hold one. Applied as the chips land so the suggestion arrives *with* the row
-   * the student is already checking -- §41's whole point is that recurrence is confirmed on
+   * the student is already checking -- Ruling 41's whole point is that recurrence is confirmed on
    * something they were adding anyway, and a suggestion made after the accept would be a
    * change made behind them. Defaults to suggesting nothing, so a caller that has no week
    * to compare against behaves exactly as before.
@@ -74,7 +74,7 @@ export function PlannerScreen({
   }
 
   /**
-   * §43: nothing reaches the week until it says when it happens.
+   * Ruling 43: nothing reaches the week until it says when it happens.
    *
    * Most of what a student types implies no day -- "read chapter 3" -- and the old flow
    * accepted those anyway, letting `placement.ts` choose one. The entry then landed on a

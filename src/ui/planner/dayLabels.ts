@@ -1,9 +1,9 @@
-import { dateFor } from '../../domain/calendar'
+import { dayLabel } from '../../domain/calendar'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule } from '../../optimizer'
 
 /**
- * §43: the horizon's days, named the way a student recognises them.
+ * Ruling 43: the horizon's days, named the way a student recognises them.
  *
  * The chip now asks which day an item lands on, and the answer it stores is a day index --
  * the domain's own number. A `<select>` offering "Day 0" through "Day 20" would be asking
@@ -19,25 +19,7 @@ import type { Schedule } from '../../optimizer'
  * select that cannot render, so the question can still be asked.
  */
 export function dayLabelsFor(schedule: Schedule, today: number): readonly string[] {
-  return Array.from({ length: HORIZON_DAYS }, (_, dayIndex) => {
-    const relative =
-      dayIndex === today ? 'Today' : dayIndex === today + 1 ? 'Tomorrow' : null
-
-    const date = dateFor(schedule, dayIndex)
-    if (date === null) {
-      const numbered = `Day ${dayIndex + 1}`
-      return relative === null ? numbered : `${relative}, ${numbered}`
-    }
-
-    // UTC throughout, matching `dateFor`: the date is an ISO day, and reading it back in a
-    // local timezone west of Greenwich would name the day before.
-    const named = new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      timeZone: 'UTC',
-    })
-
-    return relative === null ? named : `${relative}, ${named}`
-  })
+  return Array.from({ length: HORIZON_DAYS }, (_, dayIndex) =>
+    dayLabel(schedule, dayIndex, today),
+  )
 }

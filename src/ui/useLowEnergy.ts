@@ -1,14 +1,25 @@
 import { useEffect, useState } from 'react'
 import { DEFAULT_SETTINGS, type Repository, type StoredSettings } from '../data'
 import { shouldUseLowEnergy } from './lowEnergy'
+import { SAVE_FAILED } from './useSchedule'
 
 /** Reads the student's stored preference and writes it back when they change it, so
  *  §1.5's manual override survives a reload rather than resetting to inferred. */
-export function useLowEnergy(
-  repo: Repository,
-  floorReserve: number,
-): {
-  active: boolean
+export function useLowEnergy(repo: Repository): {
+  /**
+   * §1.5's mode for a given floor, rather than a resolved `active`.
+   *
+   * The floor arrives later in the render than this hook can be called. A hook has to run
+   * before `RoomShell`'s "still loading" early return, and the reserve the student has
+   * entering today is only known after it -- so taking the floor as an argument here forced
+   * the one caller to compute it from `schedule.start`, day zero, frozen. That was fine
+   * while the room's character read day zero too, and wrong the moment it started reading
+   * today: the interface would have stayed expanded for a student the room was already
+   * drawing as flattened.
+   *
+   * `shouldUseLowEnergy` is still called in exactly one place. Only the moment moved.
+   */
+  activeFor: (floorReserve: number) => boolean
   /**
    * The stored preference itself, not only what it resolved to.
    *
@@ -19,8 +30,20 @@ export function useLowEnergy(
    */
   override: StoredSettings['lowEnergyOverride']
   setOverride: (override: StoredSettings['lowEnergyOverride']) => void
+  /**
+   * Null while every write has landed. A sentence a student can act on otherwise.
+   *
+   * The same convention `useSchedule` and `useBlockLog` already use, and for the reason
+   * `useBlockLog` gives: the project's own rule is that errors are never silently
+   * swallowed. This hook dropped every save failure on the floor -- so a student could set
+   * the mode that decides whether they are handed a dashboard at all, see it apply, and
+   * find it reverted next time with nothing having said so. Applying it on screen
+   * regardless is right; saying nothing when it did not persist is not.
+   */
+  problem: string | null
 } {
   const [settings, setSettings] = useState<StoredSettings>(DEFAULT_SETTINGS)
+  const [problem, setProblem] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -44,13 +67,19 @@ export function useLowEnergy(
     const next = { ...settings, lowEnergyOverride: override }
     setSettings(next)
     // Applied on screen whether or not it persists: a student switching the mode off
-    // should see it turn off, even if the preference cannot be saved for next time.
-    repo.saveSettings(next).catch(() => undefined)
+    // should see it turn off, even if the preference cannot be saved for next time. What
+    // changed is that the failure is now reported rather than dropped.
+    repo
+      .saveSettings(next)
+      .then(() => setProblem(null))
+      .catch(() => setProblem(SAVE_FAILED))
   }
 
   return {
-    active: shouldUseLowEnergy(floorReserve, settings.lowEnergyOverride),
+    activeFor: (floorReserve: number) =>
+      shouldUseLowEnergy(floorReserve, settings.lowEnergyOverride),
     override: settings.lowEnergyOverride,
     setOverride,
+    problem,
   }
 }

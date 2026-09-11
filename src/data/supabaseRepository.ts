@@ -83,6 +83,13 @@ export function createSupabaseRepository(
         .from(BLOCK_LOG_TABLE)
         .select('block_id, load_type, planned_hours, day_index, answer, answered_at')
         .eq('account_id', userId)
+        // Ordered, because the contract has to mean one thing on both adapters. PostgREST
+        // makes no ordering promise without this, while the local adapter returns insertion
+        // order -- so `loadBlockLog` answered the same question two ways depending on
+        // whether a student was signed in. Nothing reads it in order today (`outcomesFrom`
+        // and `checkedInDays` are both order-independent), which is exactly why it would
+        // have gone unnoticed until something did.
+        .order('answered_at', { ascending: true })
 
       if (error) throw new Error(`Could not read block log: ${error.message}`)
 

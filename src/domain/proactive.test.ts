@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { crossingNotice } from './proactive'
 
 /**
- * §26: the one capability the PWA does not have.
+ * Ruling 26: the one capability the PWA does not have.
  *
  * Web push on iOS is unreliable and needs the app installed; Telegram always delivers. But a
  * bot that messages every day is one a student mutes in a week, and a muted bot is worse

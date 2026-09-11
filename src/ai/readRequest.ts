@@ -14,7 +14,7 @@ import { MAX_REQUEST_LENGTH, type Calendar, type ParsedItem } from './types'
  */
 export async function readRequest(
   text: string,
-  /** §44: which real day day 0 is, so "next thursday" in a request means that thursday. */
+  /** Ruling 44: which real day day 0 is, so "next thursday" in a request means that thursday. */
   calendar?: Calendar,
 ): Promise<ParsedItem | null> {
   const trimmed = text.trim()

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { anchorLines, readCalendar } from './calendarAnchor'
 
 /**
- * §44's anchor, shared by both readers rather than written out beside each one.
+ * Ruling 44's anchor, shared by both readers rather than written out beside each one.
  *
  * The planner got it first: the model is told "deadlineDay is a day index from 0 (today)"
  * and was never told what today WAS, so a stated weekday could only be guessed at -- "gym

@@ -48,9 +48,9 @@ export function Floor() {
  * gets thicker, which reads as architecture. Blocks read as something put there.
  */
 /**
- * §47: the ceiling is furniture now.
+ * Ruling 47: the ceiling is furniture now.
  *
- * It carried pressure -- the fortnight's reserve until §45, then today's hours -- and it was
+ * It carried pressure -- the fortnight's reserve until Ruling 45, then today's hours -- and it was
  * the wrong shape for either. Its depth is drawn in viewBox units, so it scales with the
  * stage: on a 390px phone the range was 13 to 57 real pixels, thinner than the controls that
  * sit in it, while the same numbers are four times larger on a laptop. A quantity whose

@@ -57,8 +57,8 @@ Together: the room gives the instinct, the dial gives the number, no tap require
 
 ### 1.2 The capacity dial
 
-- Semicircular gauge, 0 to 120%, with the needle past the maximum when overloaded.
-- Headline percentage in the centre. This is the brief's own example ("you're at 90% capacity this week") delivered literally.
+- Semicircular gauge, 0 to 100% of the **reserve remaining**. *(Amended: this said "0 to 120%, with the needle past the maximum when overloaded", which describes a gauge of load. What the engine produces is `overallReserve`, and `tick` clamps it to 100 — so the top sixth of the arc was unreachable and the overload state was unreachable code. A load-over-capacity figure is, in `requestCost.ts`'s words, "a metric this app does not have".)*
+- Headline percentage in the centre, said as what it is: "you have about 43% of your reserve left this week". *(Amended: the brief's example is "you're at 90% capacity this week", and delivering that literally over a reserve number inverts its sense — it told a perfectly rested student they were at 100% capacity.)*
 - Five domain bars beneath or beside, each against **its own ceiling**, not a shared scale.
 - Trend glyph per domain (▲ ▬ ▼), so severity is never carried by colour alone.
 - **Low social is flagged as a warning, not as "good."** Most trackers would count low social load as healthy. Flagging it proves the model understands burnout rather than summing hours.
@@ -387,6 +387,12 @@ One screen, four taps. Sets every prior.
 
 ### 7.2 Three-day painter
 
+> **Not built.** Deleted in Task 17 and never replaced, so nothing measures a personal sleep
+> baseline: `EngineParams.sleepBaselineHours` falls back to the population figure in
+> `DEFAULT_PARAMS`, and §8's sleep row is what makes that defensible. §7.4's day-0
+> calibration layer depended on this and is therefore partial too. The parameter's own
+> docstring in `engine/types.ts` says so at the point a reader would assume otherwise.
+
 Prefilled hour grid, three days, tap only what is wrong. Roughly 20 seconds.
 
 Yesterday, the day before, one weekend day. Recall collapses past 48 hours, and fiction calibrated into the model is worse than no data. Three days gives enough contrast between a loaded day and a light one.
@@ -428,6 +434,10 @@ The payoff that makes calibration feel like a benefit rather than a chore:
 Nobody has told a student any of this before. It is also the sharpest answer to "how is this different from a to-do list."
 
 ### 7.7 No cold start
+
+> **Partial.** The seeded fortnight and `DEFAULT_PARAMS` mean the app is useful on first
+> open, which is the substance of this section. The *calibration meter* described below is
+> not built — nothing shows a student how much the model has learned about them.
 
 Population defaults produce a working app on first open. A **calibration meter** shows tuning progress so setup reads as progress, never as a gate.
 
@@ -476,6 +486,13 @@ Free data, no extra build, and the honest path to validating the long claim late
 ---
 
 ## 9. Malaysia-specific
+
+> **Not built**, with one exception. No holiday table, no festival periods, no curated
+> get-outside list by area, no prayer-time blocks. What does ship from §5.3 is the door
+> signal — `roomState.doorLit`, lit when physical and social are both low — and a generic
+> "get outside and walk" prescription. The section's one implemented consequence is the
+> timezone: `domain/calendar` derives a student's day from their own clock rather than UTC,
+> which at UTC+8 is the difference between naming today and naming yesterday.
 
 - **Public holidays reduce commitments but not deadlines.** An assignment due Monday still needs doing over a long weekend. A holiday shifts load rather than removing it, and the model shows that honestly instead of drawing a fake dip.
 - **Festival periods default to demanding, not restful.** Raya, CNY and Deepavali mean travel, family obligation and social demand. For many students that is a heavier week. Users can mark any holiday restful or demanding.
@@ -616,6 +633,16 @@ Rehearse the demo from hour six onward.
 **Focus 5:** protected rest blocks · category-matched prescriptions · recovery quality ceiling · get-out-of-the-house mode
 **Engine:** four coupled reserves · efficiency curve · reserve-dependent capacity multiplier · carryover matrix with hardcoded priors · missing-data pessimism
 **Calibration:** mode picker · three-day painter · parameter extraction · post-block confirmation with two-tap difficulty rating · "how you work" screen
+
+> **Status of this row, since it is the one that did not land.** The mode picker was cut
+> deliberately — `optimizer/mode.ts` infers a mode instead, and records that asking every
+> student a question nothing read was the wrong trade. The painter and its parameter
+> extraction are absent (§7.2). The calibration meter is absent (§7.7). Post-block
+> confirmation ships, but as a single four-way question about *duration* rather than the
+> two-axis completion-and-difficulty rating described here — `domain/blockLog.ts` explains
+> why, and the consequence is that nothing feeds a learned cross-effect matrix, which §11
+> already lists as roadmap-only. The "how you work" screen exists as lines in place rather
+> than as a screen.
 **Validation:** 48-hour prediction scoring
 **Cross-cutting:** responsive verification at 320 / 390 / 768 / 1280px on every screen · PWA install · deployed to Vercel from day one, public URL live for the whole build
 
@@ -633,7 +660,7 @@ Learned per-user cross-effect matrix (needs weeks of ratings; seed the demo acco
 
 Structured on the five promises. Five sections, one demo beat each.
 
-1. **See it.** Open on the room with the dial in the corner at 106%. Say nothing for two seconds. Then: "This is everything they're carrying, in one screen."
+1. **See it.** Open on the room with the dial in the corner at 43% reserve — the crunch fixture's opening figure. *(Amended from "at 106%": see §1.2. The dial shows reserve remaining and cannot exceed 100, so the original beat was unreachable.)* Say nothing for two seconds. Then: "This is everything they're carrying, in one screen."
 2. **Balance it.** Paste an incoming request. The app returns the cost and a drafted reply. Hit rebalance and let the room tidy itself.
 3. **Plan it.** Type a messy brain dump. Watch it come back structured.
 4. **Start it.** Tap "can't start this" on the essay. One small action, eight minutes.

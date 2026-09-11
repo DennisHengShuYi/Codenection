@@ -36,6 +36,40 @@ describe('drainForDay', () => {
     expect(four).toBeGreaterThan(two)
   })
 
+  /**
+   * §6.6 priced on the reserve the block actually spends, not on the body average.
+   *
+   * Both states below have a mean of 65, so a multiplier read off `overallReserve` charges
+   * them identically -- and a student with nothing left mentally would pay the same for a
+   * study block as one who is evenly three-quarters full. The spec names a single reserve
+   * percentage against a study block ("at 70% reserve, two hours of study costs two
+   * hours"), and the reserve a study block spends is mental.
+   *
+   * This is the drain half of the same decision `tick` makes about recovery: each reserve's
+   * own level governs its own cost, and the mean is the dial's headline (§1.2) rather than
+   * an input to any mechanism.
+   */
+  it('prices a block on its own reserve, not on the mean of all four', () => {
+    const mentalSpent: Reserves = { mental: 20, physical: 80, social: 80, errands: 80 }
+    const evenlyWorn: Reserves = { mental: 65, physical: 65, social: 65, errands: 65 }
+
+    const spent = drainForDay(day({ activities: [study(9)] }), mentalSpent, DEFAULT_PARAMS).mental
+    const even = drainForDay(day({ activities: [study(9)] }), evenlyWorn, DEFAULT_PARAMS).mental
+
+    expect(spent).toBeGreaterThan(even)
+  })
+
+  /** The other side of it: a collapsed reserve must not make an unrelated block dearer.
+   *  Under a mean-based multiplier an empty social reserve quietly taxed every study hour. */
+  it('leaves a block priced on its own healthy reserve alone when another has collapsed', () => {
+    const socialGone: Reserves = { mental: 80, physical: 80, social: 0, errands: 80 }
+
+    const alongside = drainForDay(day({ activities: [study(9)] }), socialGone, DEFAULT_PARAMS).mental
+    const fresh = drainForDay(day({ activities: [study(9)] }), healthy, DEFAULT_PARAMS).mental
+
+    expect(alongside).toBeCloseTo(fresh)
+  })
+
   // §6.6 reaching into §6.4: the same hours cost more when you are already spent.
   it('drains more for the same hours when the student is depleted', () => {
     const fresh = drainForDay(day({ activities: [study(9)] }), healthy, DEFAULT_PARAMS).mental

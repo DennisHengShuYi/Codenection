@@ -69,3 +69,37 @@ describe('DomainBarList', () => {
     expect(screen.queryByTestId('warning-mental')).toBeNull()
   })
 })
+
+/**
+ * §1.5: the arrow is a reading, so a bar without one draws nothing.
+ *
+ * `role="img"` with an `aria-label` is announced, so a hard-coded direction is not a
+ * harmless default -- it is a spoken claim about a number nobody measured. The density bar
+ * is the one in this position: nothing projects how packed a future day will be.
+ */
+describe('a bar with no measured direction', () => {
+  it('draws no arrow at all', () => {
+    render(<DomainBarList bars={[bar({ key: 'schedule', trend: null })]} />)
+
+    expect(screen.queryByTestId('trend-schedule')).toBeNull()
+  })
+
+  it('says nothing about a direction to a screen reader either', () => {
+    render(<DomainBarList bars={[bar({ key: 'schedule', trend: null })]} />)
+
+    expect(screen.queryByLabelText(/steady|rising|falling/i)).toBeNull()
+  })
+
+  it('still draws the bar, its value and its meter', () => {
+    render(<DomainBarList bars={[bar({ key: 'schedule', value: 72, trend: null })]} />)
+
+    expect(screen.getByRole('meter')).toBeInTheDocument()
+    expect(screen.getByText('72')).toBeVisible()
+  })
+
+  it('leaves the arrow on a bar that has one', () => {
+    render(<DomainBarList bars={[bar({ key: 'mental', trend: 'falling' })]} />)
+
+    expect(screen.getByTestId('trend-mental')).toHaveAttribute('aria-label', 'falling')
+  })
+})

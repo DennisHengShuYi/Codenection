@@ -48,7 +48,12 @@ test('states the numbers in words for a screen reader', async ({ page }) => {
   await openReserves(page)
 
   const summary = page.getByTestId('reserve-text-equivalent')
-  await expect(summary).toHaveText(/capacity/i)
+  // "reserve left", not "capacity". The number is `overallReserve` -- what the student has
+  // LEFT -- and `tick` clamps it to 100, so "at 100% capacity" was what this said to a
+  // perfectly rested student. `RequestBoxScreen` had already recorded that
+  // load-against-capacity is "a metric this app does not have".
+  await expect(summary).toHaveText(/reserve left/i)
+  await expect(summary).not.toHaveText(/% capacity/i)
   await expect(summary).toHaveText(/\d/)
 })
 

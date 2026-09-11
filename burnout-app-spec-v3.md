@@ -57,8 +57,8 @@ Together: the room gives the instinct, the dial gives the number, no tap require
 
 ### 1.2 The capacity dial
 
-- Semicircular gauge, 0 to 120%, with the needle past the maximum when overloaded.
-- Headline percentage in the centre. This is the brief's own example ("you're at 90% capacity this week") delivered literally.
+- Semicircular gauge, 0 to 100% of the **reserve remaining**. *(Amended: this said "0 to 120%, with the needle past the maximum when overloaded", which describes a gauge of load. What the engine produces is `overallReserve`, and `tick` clamps it to 100 — so the top sixth of the arc was unreachable and the overload state was unreachable code. A load-over-capacity figure is, in `requestCost.ts`'s words, "a metric this app does not have".)*
+- Headline percentage in the centre, said as what it is: "you have about 43% of your reserve left this week". *(Amended: the brief's example is "you're at 90% capacity this week", and delivering that literally over a reserve number inverts its sense — it told a perfectly rested student they were at 100% capacity.)*
 - Five domain bars beneath or beside, each against **its own ceiling**, not a shared scale.
 - Trend glyph per domain (▲ ▬ ▼), so severity is never carried by colour alone.
 - **Low social is flagged as a warning, not as "good."** Most trackers would count low social load as healthy. Flagging it proves the model understands burnout rather than summing hours.
@@ -633,7 +633,7 @@ Learned per-user cross-effect matrix (needs weeks of ratings; seed the demo acco
 
 Structured on the five promises. Five sections, one demo beat each.
 
-1. **See it.** Open on the room with the dial in the corner at 106%. Say nothing for two seconds. Then: "This is everything they're carrying, in one screen."
+1. **See it.** Open on the room with the dial in the corner at 43% reserve — the crunch fixture's opening figure. *(Amended from "at 106%": see §1.2. The dial shows reserve remaining and cannot exceed 100, so the original beat was unreachable.)* Say nothing for two seconds. Then: "This is everything they're carrying, in one screen."
 2. **Balance it.** Paste an incoming request. The app returns the cost and a drafted reply. Hit rebalance and let the room tidy itself.
 3. **Plan it.** Type a messy brain dump. Watch it come back structured.
 4. **Start it.** Tap "can't start this" on the essay. One small action, eight minutes.

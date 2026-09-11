@@ -24,17 +24,27 @@ export function ReservesSheet({
   bars,
   projection,
   history,
+  deficitDayLabel = null,
   onClose,
 }: {
   readonly capacity: number
   readonly bars: readonly DomainBar[]
   readonly projection: Projection
   readonly history: readonly EnergyPoint[]
+  /** Passed straight through to the dial's text equivalent, which is the one place a day
+   *  index would otherwise reach the student unnamed. */
+  readonly deficitDayLabel?: string | null
   readonly onClose: () => void
 }) {
   return (
     <Sheet title="Where your reserves stand" onClose={onClose}>
-      <CapacityDial capacity={capacity} bars={bars} projection={projection} history={history} />
+      <CapacityDial
+        capacity={capacity}
+        bars={bars}
+        projection={projection}
+        history={history}
+        deficitDayLabel={deficitDayLabel}
+      />
     </Sheet>
   )
 }

@@ -30,9 +30,19 @@ export function templateDrafts(item: ParsedItem, cost: RequestCost): Draft[] {
       ? ` It will cost me about ${evenings === 1 ? 'an evening' : `${evenings} evenings`} of downtime, so I want to be upfront that I will be tight that week.`
       : ' I want to be upfront that the next couple of weeks are already full for me.'
 
-  // "Next week" rather than a fabricated date when the fortnight never crosses: proposing a
-  // day the model did not actually pick would be a number with nothing behind it.
-  const when = cost.firstDeficitDayAfter === null ? 'next week' : `day ${cost.firstDeficitDayAfter}`
+  /**
+   * Deliberately vague, and deliberately not a day index.
+   *
+   * This text is sent to another person. "Could it wait until around day 12?" means nothing
+   * to a recipient who has never seen this app's fortnight, and day 12 was the model's own
+   * counting besides. A real date would read better -- and `briefFor` above is explicit that
+   * a drafting call is sent the request and nothing else, "not the week, not the schedule",
+   * so there is no date here to offer and that is the right trade.
+   *
+   * So it says what it can stand behind: that the student is full now and will have room
+   * later, without naming a day the other person cannot check and the app should not share.
+   */
+  const when = cost.firstDeficitDayAfter === null ? 'next week' : 'the week after next'
 
   return [
     {

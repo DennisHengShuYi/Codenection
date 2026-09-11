@@ -5,7 +5,7 @@ import { isDistressed } from '../../domain/distress'
 import { energyHistory } from '../../domain/energyHistory'
 import { describePlacement, fixThatMakesRoom, placeItems } from '../../domain/placement'
 import { checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
-import { anchorTo, dateFor, isAnchored, todayIndex } from '../../domain/calendar'
+import { anchorTo, dateFor, dayLabel, isAnchored, todayIndex } from '../../domain/calendar'
 import { accept, lapsed } from '../../domain/commitments'
 import { paramsFor } from '../../domain/engineParams'
 import { firstAction, isStuck } from '../../domain/microStart'
@@ -778,6 +778,11 @@ export function RoomShell({
         <ReservesSheet
           key="reserves"
           capacity={overallReserve(model.reserves)}
+          deficitDayLabel={
+            projection.firstDeficitDay === null
+              ? null
+              : dayLabel(week, projection.firstDeficitDay, today)
+          }
           bars={bars}
           projection={projection}
           history={reportedEnergy}

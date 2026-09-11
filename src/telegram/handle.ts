@@ -1,5 +1,5 @@
 import { MAX_IMAGE_BYTES, MAX_INPUT_LENGTH, parseBrainDump, type Calendar, type ParsedItem } from '../ai'
-import { calendarFor, dateFor, todayIndex } from '../domain/calendar'
+import { calendarFor, dateFor, dayLabel, todayIndex } from '../domain/calendar'
 import { blocksOnDay } from '../domain/dayBlocks'
 import { answeredIds, checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../domain/blockLog'
 import type { BlockOutcome } from '../domain/calibration'
@@ -381,7 +381,10 @@ export async function handleIntent(
 
         return weekReply({
           reserve: Math.round(overallReserve(week.start)),
-          firstDeficitDay: projection.firstDeficitDay,
+          firstDeficitDayLabel:
+            projection.firstDeficitDay === null
+              ? null
+              : dayLabel(week, projection.firstDeficitDay, today),
           accuracy: accuracyLine(predictions),
           bias: bestMeasuredBias(outcomes),
         })
@@ -515,8 +518,11 @@ export async function handleIntent(
         const blockLog = await store.loadBlockLog(accountId).catch(() => null)
         if (blockLog === null) return askUnavailableReply()
 
+        // One reading of the day, shared by the price and the sentence about it -- two
+        // `todayFor` calls would be two chances for them to describe different days.
+        const askDay = todayFor(week, now)
         const priced = await services
-          .priceAsk(intent.argument, week, todayFor(week, now), blockLog)
+          .priceAsk(intent.argument, week, askDay, blockLog)
           .catch(() => null)
 
         if (priced === null) return askUnreadableReply()
@@ -530,7 +536,14 @@ export async function handleIntent(
         const askId = newDumpId()
         await store.savePending(accountId, { id: askId, items: [priced.item], answeredAt: null })
 
-        return askReply(priced.cost, priced.drafts, askId)
+        return askReply(
+          priced.cost,
+          priced.drafts,
+          priced.cost.firstDeficitDayAfter === null
+            ? null
+            : dayLabel(week, priced.cost.firstDeficitDayAfter, askDay),
+          askId,
+        )
       }
     }
   }

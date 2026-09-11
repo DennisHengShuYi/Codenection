@@ -360,24 +360,29 @@ describe('askReply', () => {
 
   // §2.3: never "this takes 6 hours". Always what it costs in what gets given up.
   it('prices it in what gets given up, not in hours', () => {
-    const text = askReply(cost, drafts).text
+    const text = askReply(cost, drafts, null).text
 
     expect(text).toMatch(/evening/i)
     expect(text).not.toMatch(/\d+(\.\d+)?\s*hours?/i)
   })
 
+  /** By name, from `dayLabel` at the call site. The raw index it used to print is the
+   *  model's counting and a day short of the student's. */
   it('names the deficit crossing moving, and where it moves to', () => {
-    expect(askReply(cost, drafts).text).toContain('14')
+    const text = askReply(cost, drafts, 'Wed 24 Sep').text
+
+    expect(text).toContain('Wed 24 Sep')
+    expect(text).not.toMatch(/day \d/i)
   })
 
   it('does not invent a crossing that did not move', () => {
     const unchanged = { ...cost, firstDeficitDayBefore: null, firstDeficitDayAfter: null }
 
-    expect(askReply(unchanged, drafts).text).not.toMatch(/first bad day/i)
+    expect(askReply(unchanged, drafts, null).text).not.toMatch(/first bad day/i)
   })
 
   it('offers all three tones', () => {
-    const text = askReply(cost, drafts).text
+    const text = askReply(cost, drafts, null).text
 
     expect(text).toContain('cannot take this on')
     expect(text).toContain('until the 20th')
@@ -393,7 +398,7 @@ describe('askReply', () => {
 " printed between every line.
    */
   it('separates the drafts with actual line breaks', () => {
-    const text = askReply(cost, drafts).text
+    const text = askReply(cost, drafts, null).text
 
     expect(text.split(String.fromCharCode(10)).length).toBeGreaterThan(3)
     expect(text).not.toContain(String.fromCharCode(92) + 'n')
@@ -405,7 +410,7 @@ describe('askReply', () => {
    * sends anything to anybody.
    */
   it('offers nothing that could send the reply', () => {
-    const reply = askReply(cost, drafts)
+    const reply = askReply(cost, drafts, null)
 
     expect(reply.buttons).toBeUndefined()
     expect(reply.text).not.toMatch(/tap to send|send it|forward this/i)
@@ -430,6 +435,7 @@ describe('the wording at its edges', () => {
     const text = askReply(
       { firstDeficitDayBefore: null, firstDeficitDayAfter: null, eveningsEquivalent: 0 },
       [{ tone: 'decline', text: 'No.' }],
+      null,
     ).text
 
     expect(text).not.toMatch(/about 0/)
@@ -439,6 +445,7 @@ describe('the wording at its edges', () => {
     const text = askReply(
       { firstDeficitDayBefore: null, firstDeficitDayAfter: null, eveningsEquivalent: 1 },
       [{ tone: 'decline', text: 'No.' }],
+      null,
     ).text
 
     expect(text).toMatch(/one evening/i)
@@ -449,6 +456,7 @@ describe('the wording at its edges', () => {
     const text = askReply(
       { firstDeficitDayBefore: null, firstDeficitDayAfter: null, eveningsEquivalent: 2 },
       [{ tone: 'decline', text: 'No.' }],
+      null,
     ).text
 
     expect(text).not.toMatch(/undefined/)
@@ -466,7 +474,7 @@ describe('the wording at its edges', () => {
 describe('weekReply', () => {
   const summary = {
     reserve: 62,
-    firstDeficitDay: 6,
+    firstDeficitDayLabel: 'Sat 12 Sep',
     accuracy: 'Measured over 5 days: off by about 7 points.',
     bias: 'You underestimate study and writing by about 1.4×. We pad it automatically.',
   }
@@ -475,13 +483,19 @@ describe('weekReply', () => {
     expect(weekReply(summary).text).toContain('62')
   })
 
+  /**
+   * By name, not by index. This asserted `/day 6/`, which is what the bot used to print --
+   * the model's own counting, and one short of what a student calls that day. The label is
+   * built by `dayLabel` at the call site, where the week's anchor is in hand.
+   */
   it('names the day the fortnight stops holding', () => {
-    expect(weekReply(summary).text).toMatch(/day 6/i)
+    expect(weekReply(summary).text).toContain('Sat 12 Sep')
+    expect(weekReply(summary).text).not.toMatch(/day \d/i)
   })
 
   /** §8.2: the 21-day projection is a decision aid and is never described as validated. */
   it('says plainly when the fortnight holds', () => {
-    expect(weekReply({ ...summary, firstDeficitDay: null }).text).toMatch(/holds|clear|nothing/i)
+    expect(weekReply({ ...summary, firstDeficitDayLabel: null }).text).toMatch(/holds|clear|nothing/i)
   })
 
   /** The two honesty lines the app shows and chat could not: what the app measured about
@@ -604,19 +618,19 @@ describe('askReply offering a provisional yes', () => {
    * it lapses on its own unless the reserve can still hold it.
    */
   it('offers to take it on provisionally', () => {
-    const data = askReply(cost, drafts, 'ask-1').buttons?.flat().map((b) => b.data) ?? []
+    const data = askReply(cost, drafts, null, 'ask-1').buttons?.flat().map((b) => b.data) ?? []
 
     expect(data).toContain('takeon:ask-1')
   })
 
   it('still sends nothing to anybody', () => {
-    const labels = askReply(cost, drafts, 'ask-1').buttons?.flat().map((b) => b.label) ?? []
+    const labels = askReply(cost, drafts, null, 'ask-1').buttons?.flat().map((b) => b.label) ?? []
 
     expect(labels.join(' ')).not.toMatch(/send|reply to them|message them/i)
   })
 
   it('offers nothing when there is no pending ask to accept', () => {
-    expect(askReply(cost, drafts).buttons).toBeUndefined()
+    expect(askReply(cost, drafts, null).buttons).toBeUndefined()
   })
 })
 

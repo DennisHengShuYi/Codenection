@@ -135,6 +135,45 @@ export function dayIndexFor(schedule: Schedule, date: string): number | null {
 }
 
 /**
+ * A day index as a student would say it.
+ *
+ * The model counts days from zero and the student does not. Five surfaces printed the index
+ * straight out -- the dial's spoken summary, the request box, two Telegram replies and a
+ * decline draft -- so the app said "you cross into deficit on day 1" about the second day of
+ * the fortnight. `ui/planner/dayLabels.ts` existed to prevent exactly that, and said so:
+ * offering "Day 0" through "Day 20" would be "asking the student to think in the model's
+ * terms about their own week". It was only wired into the one picker it was written for.
+ *
+ * Named where a name is the better answer, dated where it is not. "Today" and "Tomorrow"
+ * because that is how someone refers to the two days they are most likely to be asked about,
+ * and neither is recoverable from a date alone.
+ *
+ * An undated week is an ordinary state rather than an error -- the seeded fortnight has never
+ * been dated -- so it degrades to a one-based day number. One-based, because "Day 1" is the
+ * first day to everyone except the array holding it.
+ */
+export function dayLabel(schedule: Schedule, dayIndex: number, today: number): string {
+  const relative = dayIndex === today ? 'Today' : dayIndex === today + 1 ? 'Tomorrow' : null
+
+  const date = dateFor(schedule, dayIndex)
+  if (date === null) {
+    const numbered = `Day ${dayIndex + 1}`
+    return relative === null ? numbered : `${relative}, ${numbered}`
+  }
+
+  // UTC throughout, matching `dateFor`: the string is already a calendar date with no time
+  // in it, so reading it back in a zone behind Greenwich would name the day before.
+  const named = new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  })
+
+  return relative === null ? named : `${relative}, ${named}`
+}
+
+/**
  * §44: which real day the horizon's day 0 is, for the readers that need it.
  *
  * Both readers needed this and neither had it. The rules parser worked out a named weekday

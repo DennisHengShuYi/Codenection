@@ -1,3 +1,4 @@
+import { dayLabel } from '../../domain/calendar'
 import { useState } from 'react'
 import type { Calendar, Draft, ParsedItem } from '../../ai'
 import { addItems } from '../../domain/addItems'
@@ -211,7 +212,7 @@ export function RequestBoxScreen({
               .
               {cost.firstDeficitDayAfter !== null &&
                 cost.firstDeficitDayAfter !== cost.firstDeficitDayBefore &&
-                ` It brings your deficit forward to day ${cost.firstDeficitDayAfter}.`}
+                ` It brings your deficit forward to ${dayLabel(schedule, cost.firstDeficitDayAfter, today)}.`}
               {!cost.absorbable && ' Your fortnight cannot really take this.'}
             </p>
 

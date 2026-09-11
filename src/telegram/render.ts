@@ -278,6 +278,9 @@ export function askReply(
     eveningsEquivalent: number
   },
   drafts: readonly { tone: 'decline' | 'defer' | 'accept'; text: string }[],
+  /** The moved crossing as a student would say it, from `dayLabel` at the call site -- the
+   *  raw index this used to print is the model's counting, not theirs. */
+  deficitDayLabel: string | null,
   /** §2.3's provisional yes, when there is a stored ask for the button to accept. */
   askId?: string,
 ): Reply {
@@ -293,7 +296,7 @@ export function askReply(
   const moved =
     cost.firstDeficitDayAfter !== null &&
     cost.firstDeficitDayAfter !== cost.firstDeficitDayBefore
-      ? ['', `It moves your first bad day to day ${cost.firstDeficitDayAfter}.`]
+      ? ['', `It moves your first bad day to ${deficitDayLabel ?? 'earlier in the fortnight'}.`]
       : []
 
   const byTone = (tone: 'decline' | 'defer' | 'accept'): string =>
@@ -503,8 +506,15 @@ export const photoUnavailableReply = (): Reply => ({
 export interface WeekSummary {
   /** Overall reserve now, already rounded. */
   readonly reserve: number
-  /** The deficit crossing, or null when the fortnight holds. */
-  readonly firstDeficitDay: number | null
+  /**
+   * The deficit crossing as a student would say it, or null when the fortnight holds.
+   *
+   * A finished phrase rather than a day index. This said "It stops holding on day 11", which
+   * is the model's own counting -- and one short of what a student calls that day besides.
+   * Naming a day needs the week's anchor, which a rendered reply has no access to, so the
+   * caller supplies it through `dayLabel`.
+   */
+  readonly firstDeficitDayLabel: string | null
   /** §8.1's published accuracy sentence. */
   readonly accuracy: string
   /** §7.6's Reality Check line, or null when nothing measured is worth saying. */
@@ -513,9 +523,9 @@ export interface WeekSummary {
 
 export function weekReply(summary: WeekSummary): Reply {
   const crossing =
-    summary.firstDeficitDay === null
+    summary.firstDeficitDayLabel === null
       ? 'Your fortnight holds all the way through.'
-      : `It stops holding on day ${summary.firstDeficitDay}.`
+      : `It stops holding on ${summary.firstDeficitDayLabel}.`
 
   return {
     text: [

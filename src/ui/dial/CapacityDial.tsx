@@ -2,7 +2,7 @@ import type { EnergyPoint } from '../../domain/energyHistory'
 import type { Projection } from '../../engine'
 import { DomainBarList } from './DomainBarList'
 import { Sparkline } from './Sparkline'
-import { angleForPercent, arcPath, DIAL_MAX_PERCENT, pointOnArc } from './dialGeometry'
+import { angleForPercent, arcPath, pointOnArc } from './dialGeometry'
 import { describeDial } from './dialText'
 import type { DomainBar } from './domainBars'
 
@@ -24,6 +24,7 @@ export function CapacityDial({
   projection,
   history = [],
   compact = false,
+  deficitDayLabel = null,
 }: {
   capacity: number
   bars: readonly DomainBar[]
@@ -38,9 +39,12 @@ export function CapacityDial({
    */
   history?: readonly EnergyPoint[]
   compact?: boolean
+  /** The deficit crossing as a student would say it, for the §1.5 text equivalent. Naming a
+   *  day needs the week's anchor and `today`; neither reaches the dial, so the shell that has
+   *  both supplies the finished phrase. */
+  deficitDayLabel?: string | null
 }) {
   const needle = pointOnArc(CX, CY, R - NEEDLE_INSET, angleForPercent(capacity))
-  const overloaded = capacity > 100
 
   return (
     <section className="flex flex-col gap-4">
@@ -69,12 +73,12 @@ export function CapacityDial({
           strokeLinecap="round"
         />
         <path
-          d={arcPath(CX, CY, R, -90, angleForPercent(Math.min(capacity, DIAL_MAX_PERCENT)))}
+          d={arcPath(CX, CY, R, -90, angleForPercent(capacity))}
           fill="none"
           stroke="currentColor"
           strokeWidth="12"
           strokeLinecap="round"
-          className={overloaded ? 'text-critical' : 'text-ink-soft'}
+          className="text-ink-soft"
         />
         <line
           x1={CX}
@@ -112,7 +116,7 @@ export function CapacityDial({
           the document for everyone. */}
       {!compact && (
         <p data-testid="reserve-text-equivalent" className="text-sm opacity-80">
-          {describeDial(capacity, bars, projection)}
+          {describeDial(capacity, bars, projection, deficitDayLabel)}
         </p>
       )}
     </section>

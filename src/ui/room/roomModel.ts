@@ -30,6 +30,23 @@ export interface RoomModelInput {
    * predictions says `[]` in its own words.
    */
   readonly predictions: readonly EnergyPrediction[]
+  /**
+   * The night the student says they are aiming for, when they have said.
+   *
+   * Optional, and this is the one threaded value on this input where Ruling 51's argument
+   * does NOT bite. That ruling made `blockLog` and `predictions` required because a caller
+   * who forgets them compiles and then quietly prices the week as though the student had
+   * answered nothing -- a wrong reading dressed as a real one. Absent here is not a wrong
+   * reading: it is the true state of a student who has never stated a target, and
+   * `roomState` falls back to the population norm, which is exactly what that student should
+   * see.
+   *
+   * What it does cost: `ui/request/RequestBoxScreen` draws a room preview and does not pass
+   * this, so a student who HAS stated a target sees the bed measured against it on the room
+   * screen and against the norm in that preview. Recorded here rather than left to be found,
+   * and it wants the target threaded there rather than this made required.
+   */
+  readonly sleepTargetHours?: number
 }
 
 export interface RoomModel {
@@ -69,7 +86,13 @@ export interface RoomModel {
  * a prediction still to score" flag -- which is why `RequestBoxScreen` was passing
  * `DEFAULT_PROFILE` to a model that never looked at it.
  */
-export function roomModel({ schedule, today, blockLog, predictions }: RoomModelInput): RoomModel {
+export function roomModel({
+  schedule,
+  today,
+  blockLog,
+  predictions,
+  sleepTargetHours,
+}: RoomModelInput): RoomModel {
   // §8b/Task 17: the durable log is the only source now. It used to be unioned with the
   // profile's own `confirmations` because nothing wrote a `BlockRecord` in the running app
   // yet -- `TodayCard` and the Telegram bot both do now, so the profile side is gone.
@@ -102,7 +125,7 @@ export function roomModel({ schedule, today, blockLog, predictions }: RoomModelI
     today <= 0 ? schedule.start : (projection.central[today - 1] ?? schedule.start)
 
   return {
-    state: roomStateFor(entering, projection, schedule, today, blockLog),
+    state: roomStateFor(entering, projection, schedule, today, blockLog, sleepTargetHours),
     reserves: entering,
   }
 }

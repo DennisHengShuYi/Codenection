@@ -3,7 +3,7 @@ import type { Repository, Session } from '../../data'
 import type { ParsedItem } from '../../ai'
 import { isDistressed } from '../../domain/distress'
 import { energyHistory } from '../../domain/energyHistory'
-import { describePlacement, fixThatMakesRoom, placeItems } from '../../domain/placement'
+import { describeDeferral, describePlacement, fixThatMakesRoom, placeItems } from '../../domain/placement'
 import { checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
 import { anchorTo, dateFor, dayLabel, isAnchored, todayIndex } from '../../domain/calendar'
 import { accept, lapsed } from '../../domain/commitments'
@@ -24,13 +24,15 @@ import { PreviewBanner } from '../auth/PreviewBanner'
 import { domainBars } from '../dial/domainBars'
 import { Button } from '../kit/Button'
 import { Card } from '../kit/Card'
+import { hourLabel } from '../kit/labels'
 import { Sheet } from '../kit/Sheet'
 import { CalendarConnection } from '../settings/CalendarConnection'
 import { LinkTelegram } from '../settings/LinkTelegram'
 import { LowEnergyControl } from '../settings/LowEnergyControl'
 import { ReservesSheet } from '../reserves/ReservesSheet'
-import { blockToAsk, withSleep } from '../today/checkIn'
+import { blockToAsk, pendingCheckIns } from '../today/checkIn'
 import { useLowEnergy } from '../useLowEnergy'
+import { useSleepPlan } from '../useSleepPlan'
 import { useProfile } from '../useProfile'
 import { useReducedMotion } from '../useReducedMotion'
 import { useLadders } from '../useLadders'
@@ -39,6 +41,11 @@ import { AccuracyNote } from '../validation/AccuracyNote'
 import { BlockSheet } from '../week/BlockSheet'
 import { blockSheet } from '../week/blockActions'
 import { runRebalance, type RebalanceOutcome } from '../../domain/rebalanceOutcome'
+import { reportedNights, reportedOn } from '../../domain/sleepLog'
+import { retargetSleep, withSleep, withSleepHours } from '../../domain/sleepPlan'
+import { sleepRealityLine } from '../../domain/sleepReality'
+import { sleepForecastLine, squeezeOn } from '../../domain/sleepForecast'
+import { SleepSheet, type PlannedNight } from '../sleep/SleepSheet'
 import { EventForm } from '../week/EventForm'
 import { RebalancePreview } from '../week/RebalancePreview'
 import { WeekScreen } from '../week/WeekScreen'
@@ -60,6 +67,7 @@ import {
   toNotices,
   toRebalance,
   toReserves,
+  toSleep,
   toRest,
   toSettings,
   toToday,
@@ -118,6 +126,10 @@ export function RoomShell({
    */
   const [view, setView, goBack] = useUrlView()
   const [report, setReport] = useState<string | null>(null)
+  /** What the last edit made from the week screen did -- today, only Later. Held beside
+   *  `report` rather than inside it: that one belongs to Rebalance, and one slot holding two
+   *  unrelated sentences is how the week comes to say a stale thing about the wrong act. */
+  const [weekNote, setWeekNote] = useState<string | null>(null)
   const [fallback, setFallback] = useState<Fix | null>(null)
   const [working, setWorking] = useState(false)
   /**
@@ -236,6 +248,17 @@ export function RoomShell({
     problem: lowEnergyProblem,
   } = useLowEnergy(repository)
 
+  /** The two durable facts behind the plan: the night the student says they are aiming for,
+   *  and the nights they have actually reported. The week itself stays with `useSchedule`. */
+  const {
+    targetHours: sleepTarget,
+    hasTarget: hasSleepTarget,
+    nights: sleepNights,
+    setTarget: setSleepTarget,
+    reportNight,
+    problem: sleepProblem,
+  } = useSleepPlan(repository)
+
   /**
    * §8.1's two prerequisites: anchor the fortnight to a real day, and claim something about a
    * real day two days out. The clock enters here and nowhere deeper.
@@ -320,7 +343,15 @@ export function RoomShell({
   // parameter rather than reading one itself.
   const nowHour = now.getHours()
   const todayDate = dateFor(week, today)
-  const model = roomModel({ schedule: week, today, blockLog, predictions: profile.predictions })
+  const model = roomModel({
+    schedule: week,
+    today,
+    blockLog,
+    predictions: profile.predictions,
+    // Only when actually stated. Absent means the bed keeps its population norm, which is
+    // the right reading for a student who has never opened the sleep page.
+    sleepTargetHours: hasSleepTarget ? sleepTarget : undefined,
+  })
 
   /**
    * One reading of "where the student is now", shared by everything that shows it.
@@ -344,7 +375,7 @@ export function RoomShell({
    * student worked through, and §1.5's mode. One sentence covers all five, because what
    * needs saying is that a change may not survive, not which table declined it.
    */
-  const failedWrite = saveProblem ?? profileProblem ?? ladderProblem ?? lowEnergyProblem
+  const failedWrite = saveProblem ?? profileProblem ?? ladderProblem ?? lowEnergyProblem ?? sleepProblem
 
   // §1.2's breakdown: the five domain bars each against its own ceiling, and the
   // low-social-flagged-as-warning logic that is the app's own differentiator over a tracker
@@ -364,6 +395,10 @@ export function RoomShell({
     if (working) return
 
     setWorking(true)
+    // The last edit's sentence belongs to the last edit. Rebalance writes its own report
+    // directly below where this renders, and the two stacked would have the week screen
+    // saying something stale beside something current.
+    setWeekNote(null)
     // Setting state does not paint on its own and the solver holds the main thread, so
     // without handing control back first React never renders the working state.
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -502,10 +537,21 @@ export function RoomShell({
     (item) => item.id !== stuckDismissedId && isStuck(item, Math.max(0, today - item.dayIndex)),
   )
   const blockForToday = blockToAsk({ schedule: week, today, nowHour, blockLog })
+
+
   const askEnergy = profile.predictions.some(
     (prediction) => prediction.forDate === todayDate && prediction.reported === null,
   )
-  const askSleep = !sleepAnsweredToday
+  /**
+   * Asked once per night, at last.
+   *
+   * `sleepAnsweredToday` is session state, so before the durable log existed the app re-asked
+   * after every reload -- §8 wants one card a day, not one per page load. The log is what can
+   * answer "was this night answered?"; the session flag stays for the case where there is no
+   * anchored date to key a record to.
+   */
+  const askSleep =
+    !sleepAnsweredToday && (todayDate === null || reportedOn(sleepNights, todayDate) === null)
   const showTodayCard = !todayDismissed && (askEnergy || askSleep || blockForToday !== null)
 
   // §8's floor case. Read off what the student reported rather than the modelled reserves: a
@@ -519,6 +565,24 @@ export function RoomShell({
     today: showTodayCard,
     lowEnergy,
   })
+
+  /**
+   * Everything still owed an answer, not just the one the card asks about.
+   *
+   * The card is one question a day by design (§8), which is right for the card and leaves a
+   * student who went quiet for a week unable to see or clear what built up behind it. The
+   * list is the other half: same filter, ordered the way the days happened.
+   *
+   * Withheld at low energy with everything else dashboard-shaped -- §1.5's "a student at 12%
+   * reserve should not be handed a dashboard", and a backlog is the most dashboard-like
+   * thing here.
+   */
+  const pending = (lowEnergy ? [] : pendingCheckIns({ schedule: week, today, nowHour, blockLog }))
+    // Minus the one the check-in card is already asking about, where that card is on screen.
+    // Everything owed appears exactly once: the card is the question, this is the rest of
+    // the queue. Gated on the card actually rendering, because the two-card cap can push it
+    // out -- and a block hidden from both places would be owed and invisible.
+    .filter((one) => !(cards.includes('today') && one.id === blockForToday?.id))
 
   const blockModel =
     view.kind === 'block'
@@ -547,7 +611,30 @@ export function RoomShell({
    * furniture is bound from, so the legend cannot teach a vocabulary the room does not
    * speak.
    */
-  const panelRows = panelRowsFor(week, today, blockLog)
+  const panelRows = panelRowsFor(week, today, blockLog, reportedNights(sleepNights))
+
+  /**
+   * Tonight and the two nights after it, each already labelled and already carrying its own
+   * forecast -- so `SleepSheet` derives nothing and cannot disagree with the room about a
+   * date. `dayLabel` is the only place a day index becomes a name (§9).
+   *
+   * Three, matching the window every other trend on the Today panel reads: far enough ahead
+   * to be worth planning, near enough that the schedule behind it still means something.
+   */
+  const sleepNightRows: readonly PlannedNight[] = Array.from(
+    { length: Math.min(3, Math.max(0, week.horizonDays - today)) },
+    (_, offset) => {
+      const dayIndex = today + offset
+      const label = dayLabel(week, dayIndex, today)
+
+      return {
+        dayIndex,
+        label,
+        hours: week.sleepByDay[dayIndex] ?? sleepTarget,
+        forecast: sleepForecastLine(squeezeOn(week, dayIndex), label),
+      }
+    },
+  )
 
   const noticeCount = cards.length
   const noticeLabel =
@@ -622,6 +709,39 @@ export function RoomShell({
           </Card>
         )}
 
+        {/* Ruling 63: what the check-in card asks one at a time, all of it, so a week of
+            silence is something a student can see and work through rather than meet one
+            question at a time for the next seven days. Each row opens the block itself
+            rather than answering in place: the three answers live in one place, and a
+            second copy of them here is a second thing to keep in step. */}
+        {pending.length > 0 && (
+          <Card data-testid="pending-checkins" className="flex flex-col gap-2">
+            <p className="text-sm text-ink-soft">
+              {pending.length === 1
+                ? 'One thing is still waiting to be answered.'
+                : `${pending.length} things are still waiting to be answered.`}
+            </p>
+
+            <ul className="flex flex-col gap-1">
+              {pending.map((one) => (
+                <li key={one.id}>
+                  <button
+                    type="button"
+                    data-testid={`pending-${one.id}`}
+                    onClick={() => setView(toBlock(one.id))}
+                    className="flex min-h-11 w-full items-baseline justify-between gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-ground focus-visible:outline focus-visible:outline-2"
+                  >
+                    <span className="text-sm text-ink">{one.title}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-ink-soft">
+                      {dayLabel(week, one.dayIndex, today)} · {hourLabel(one.startHour)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+
         <AccuracyNote predictions={profile.predictions} />
 
         <LiveCards
@@ -642,6 +762,10 @@ export function RoomShell({
           }}
           onSleep={(bucket) => {
             setSchedule(withSleep(week, today, bucket))
+            // And as an ANSWERED night, which the week cannot carry: `sleepByDay` holds the
+            // figure and says nothing about whether anybody was asked. Only with a real date,
+            // since the log is keyed by one -- the same condition the Telegram side applies.
+            if (todayDate !== null) reportNight(todayDate, bucket)
             setSleepAnsweredToday(true)
           }}
           onBlockAnswer={answerBlock}
@@ -659,8 +783,21 @@ export function RoomShell({
           onClose={closeToRoom}
           onBack={goBack}
           onLater={(itemId) => {
-            setSchedule(deferItem(week, itemId))
-            closeToRoom()
+            // Ruling 16: never silently reshuffle. `deferItem` returns the week *unchanged*
+            // when nothing between here and the deadline has room -- deliberately, so a
+            // caller can tell nothing happened -- and this closed the sheet either way, so
+            // the two outcomes were indistinguishable from the student's side.
+            const next = deferItem(week, itemId)
+            setSchedule(next)
+
+            // Said on the week screen rather than the room's `placement-note`, which lives
+            // behind the `Waiting` button -- and that button's count knows nothing about it,
+            // so this would have waited behind one reading "Nothing waiting".
+            setWeekNote(describeDeferral(itemId, week, next))
+            // Back to the week, not the room: it is the screen the student pressed Later
+            // from, the screen the sentence is about, and the one where they can see the
+            // block in its new day.
+            setView(toWeek())
           }}
           onConfirm={(itemId, answer) => {
             answerBlock(itemId, answer)
@@ -725,9 +862,16 @@ export function RoomShell({
             today={today}
             working={working}
             report={report}
+            note={weekNote}
             fallback={fallback}
             onRebalance={() => void onRebalance()}
-            onSelectBlock={(itemId) => setView(toBlock(itemId))}
+            onSelectBlock={(itemId) => {
+              // Cleared on the way into a block: the sentence is about the act that has just
+              // happened, and a student opening the next block should not be read a line
+              // about the last one.
+              setWeekNote(null)
+              setView(toBlock(itemId))
+            }}
             onAddBlock={(day) => setView(toNewBlock(day))}
             blockLog={blockLog}
             predictions={profile.predictions}
@@ -743,6 +887,25 @@ export function RoomShell({
           onApprove={approveRest}
           onDiscard={discardRest}
           onClose={discardRest}
+        />
+      )}
+
+      {view.kind === 'sleep' && (
+        <SleepSheet
+          key="sleep"
+          targetHours={sleepTarget}
+          nights={sleepNightRows}
+          /* Withheld in low-energy mode. A measured statement about the student's own habits
+             is exactly what §1.5's reduced interface exists to hold back -- the same reason
+             the reserve breakdown is withheld -- while the page itself stays reachable. */
+          realityLine={lowEnergy ? null : sleepRealityLine(sleepNights, sleepTarget)}
+          onSetTarget={(hours) => {
+            // The week moves with the target, keeping every night the student made their own.
+            setSchedule(retargetSleep(week, sleepTarget, hours))
+            setSleepTarget(hours)
+          }}
+          onSetNight={(dayIndex, hours) => setSchedule(withSleepHours(week, dayIndex, hours))}
+          onClose={closeToRoom}
         />
       )}
 
@@ -1009,6 +1172,14 @@ export function RoomShell({
           */}
           <Button data-testid="open-rest" onClick={onRest}>
             Rest
+          </Button>
+          {/* Beside Rest and outside `!lowEnergy`, on that button's own reasoning: saying what
+              you are aiming to sleep is a restorative action rather than a dashboard, and
+              §1.5 strips this interface exactly when a student is flat. The row wraps at
+              320px, so position decides what survives the first line -- this sits with the
+              other thing a flat student might actually reach for. */}
+          <Button variant="secondary" data-testid="open-sleep" onClick={() => setView(toSleep())}>
+            Sleep
           </Button>
           {!lowEnergy && (
             <Button variant="secondary" data-testid="open-week" onClick={() => setView(toWeek())}>

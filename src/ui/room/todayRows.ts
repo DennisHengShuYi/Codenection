@@ -121,10 +121,12 @@ export function panelRowsFor(
    * The nights the student has actually reported, oldest first
    * (`domain/sleepLog.reportedNights`).
    *
-   * Defaulted to empty only until the shell threads it -- an empty log is exactly the state
-   * in which the bed says nothing, so a caller that has not been updated yet behaves as it
-   * always did rather than claiming something. Ruling 51 applies here as it does to
-   * `blockLog`, and this default goes when the room is wired up.
+   * Defaulted, and deliberately kept that way once the shell threaded it. Ruling 51 made
+   * `blockLog` required because a caller who forgets it compiles and then prices the week as
+   * though the student had answered nothing -- a wrong reading dressed as a real one. Absent
+   * here is not a wrong reading: no reported nights is the true state of most students, and
+   * it produces silence rather than a claim. The same reasoning is written out on
+   * `RoomModelInput.sleepTargetHours`.
    */
   reportedNights: readonly number[] = [],
 ): readonly PanelRow[] {

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ParsedItem } from '../ai'
 import { outcomesFrom, type BlockRecord } from '../domain/blockLog'
 import type { EnergyPrediction } from '../domain/predictions'
+import type { SleepNight } from '../domain/sleepLog'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
 import { handleIntent, type BlockAnswerInput, type ChatStore } from './handle'
@@ -37,6 +38,7 @@ interface Harness {
   answered: string[]
   linked: Array<{ chatId: number; accountId: string }>
   savedPredictions: Array<readonly EnergyPrediction[]>
+  sleepNights: SleepNight[]
 }
 
 function harness(over: Partial<ChatStore> = {}): Harness {
@@ -46,6 +48,7 @@ function harness(over: Partial<ChatStore> = {}): Harness {
   const answered: string[] = []
   const linked: Array<{ chatId: number; accountId: string }> = []
   const savedPredictions: Array<readonly EnergyPrediction[]> = []
+  const sleepNights: SleepNight[] = []
 
   const store: ChatStore = {
     accountForChat: async () => 'account-1',
@@ -72,10 +75,13 @@ function harness(over: Partial<ChatStore> = {}): Harness {
     savePredictions: async (_accountId, next) => {
       savedPredictions.push(next)
     },
+    recordSleepNight: async (_accountId, night) => {
+      sleepNights.push(night)
+    },
     ...over,
   }
 
-  return { store, saved, blockAnswers, pendings, answered, linked, savedPredictions }
+  return { store, saved, blockAnswers, pendings, answered, linked, savedPredictions, sleepNights }
 }
 
 const parse = vi.fn()
@@ -1572,5 +1578,46 @@ describe('Ruling 62 when storage will not answer', () => {
 
     expect(h.saved).toHaveLength(0)
     expect(reply?.text.length).toBeGreaterThan(0)
+  })
+})
+
+/**
+ * A night reported on the phone and one reported in the app have to be the same fact.
+ *
+ * `handle.ts` already claimed that property in a comment -- the bot writes through the same
+ * `withSleep` -- but the week alone cannot carry it: `sleepByDay` holds the figure and nothing
+ * recorded that it was *answered*, so a night reported in chat left the app still asking, and
+ * left `sleepReality` unable to count it.
+ */
+describe('a night reported in chat', () => {
+  const anchored = (): Schedule => ({ ...week(), startedOn: '2026-09-12' })
+  const noon = Date.parse('2026-09-12T12:00:00Z')
+  const sleepAnswer = { kind: 'sleepAnswer', chatId: 7, bucket: 'six' } as never
+
+  it('is recorded as an answered night, not only written into the week', async () => {
+    const h = harness({ loadWeek: async () => anchored() })
+
+    await handleIntent(sleepAnswer, h.store, noon)
+
+    expect(h.sleepNights).toEqual([
+      expect.objectContaining({ isoDate: '2026-09-12', hours: 6 }),
+    ])
+    expect(h.saved[0]?.sleepByDay[0]).toBe(6)
+  })
+
+  /**
+   * An unanchored week has no real dates, and the log is keyed by one -- the same constraint
+   * the energy branch already states: recording against a day index "means something
+   * different tomorrow". The week write still happens, because it is index-based and has
+   * always worked; only the dated record is skipped.
+   */
+  it('still writes the week when there is no real date to key the record to', async () => {
+    const h = harness({ loadWeek: async () => week() })
+
+    const reply = await handleIntent(sleepAnswer, h.store, noon)
+
+    expect(h.saved[0]?.sleepByDay[0]).toBe(6)
+    expect(h.sleepNights).toEqual([])
+    expect(reply).not.toBeNull()
   })
 })

@@ -11,7 +11,8 @@ import { biasLine } from '../domain/realityCheck'
 import { runRebalance } from '../domain/rebalanceOutcome'
 import { scheduleView } from '../domain/scheduleView'
 import { stampSoftDeadlines } from '../domain/softDeadlines'
-import { withSleep } from '../ui/today/checkIn'
+import type { SleepNight } from '../domain/sleepLog'
+import { SLEEP_HOURS, withSleep } from '../ui/today/checkIn'
 import { firstAction } from '../domain/microStart'
 import { prescribe } from '../domain/prescribe'
 import { scheduleRecovery } from '../domain/scheduleRecovery'
@@ -195,6 +196,15 @@ export interface ChatStore {
   /** §8b②'s evidence, at last read by something: Reality Check (§2.4) and the carryover
    *  matrix (§6.6) both consume the durable block log this writes into. */
   recordBlockAnswer(accountId: string, answer: BlockAnswerInput, now: number): Promise<void>
+  /**
+   * §8's answered night, recorded as an answer rather than only written into the week.
+   *
+   * Upserts on the night's date. Without this the bot's claim that a night reported here and
+   * one reported in the app are the same fact was only half true: `withSleep` put the figure
+   * in the week, and nothing recorded that anybody had been *asked* -- so the app went on
+   * asking, and `domain/sleepReality` could not count the night as evidence.
+   */
+  recordSleepNight(accountId: string, night: SleepNight): Promise<void>
   /**
    * The same durable log `recordBlockAnswer` writes into, read back.
    *
@@ -783,6 +793,26 @@ export async function handleIntent(
       // same `withSleep`, so a night reported on the phone and one reported in the app
       // reach the model identically.
       await store.saveWeek(accountId, withSleep(week, today, intent.bucket))
+
+      /*
+       * And recorded as an *answered* night, which the week cannot carry: `sleepByDay` holds
+       * the figure and says nothing about whether anybody was asked, so without this the app
+       * went on asking and `sleepReality` could not count it.
+       *
+       * Only when the week has a real date. The log is keyed by one, and the energy branch
+       * below already states the reason: a record against a day index "means something
+       * different tomorrow". The week write above is index-based and has always worked on an
+       * unanchored week, so it is not made conditional on this -- only the dated record is.
+       */
+      const reportedOn = dateFor(week, today)
+      if (reportedOn !== null) {
+        await store.recordSleepNight(accountId, {
+          isoDate: reportedOn,
+          hours: SLEEP_HOURS[intent.bucket],
+          answeredAt: now,
+        })
+      }
+
       return checkedInReply()
     }
 

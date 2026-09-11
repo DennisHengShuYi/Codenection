@@ -14,6 +14,18 @@ import type { BlockRecord } from './blockLog'
  *
  * This module gives every event a deadline. Real where one exists, synthetic where none
  * does, so the two compete on the same terms.
+ *
+ * "The same terms" means *scheduling priority*, and only that: `deadlinePressure` and
+ * `neglectPressure` in `optimizer/objective` rank undated work against dated work, and
+ * `deferItem` bounds it. It deliberately does NOT mean §6.4's anticipatory-stress drain,
+ * which reads `item.deadlineDay` alone and must keep doing so -- a synthetic deadline lands
+ * on rest and recovery as readily as on errands, so feeding these into that term would have
+ * the model charge a student mental load for an approaching walk. `optimizer/neglect.test.ts`
+ * pins that in a test named for it: "does not let a soft deadline create anticipatory
+ * stress", because it "would model a student dreading having to relax".
+ *
+ * Written down here because the sentence above reads, on its own, like the drain is simply
+ * missing a case. It is not; the omission is the decision.
  */
 
 /**

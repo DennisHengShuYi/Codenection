@@ -54,6 +54,16 @@ export interface Repository {
    * Sits behind the repository rather than only in Supabase, because the app works signed
    * out and Reality Check must not silently stop working for anyone without an account.
    */
+  /**
+   * Every answer this account has given, oldest first.
+   *
+   * The order is part of the contract now rather than an accident of the adapter. It was
+   * unstated, and the two implementations disagreed: the local one returns insertion order,
+   * while the Supabase read had no `order` clause and PostgREST promises nothing without
+   * one. Every consumer today is order-independent (`outcomesFrom` and `checkedInDays` both
+   * are), which is why two adapters answering differently would have gone unnoticed until
+   * one was not.
+   */
   loadBlockLog(): Promise<readonly BlockRecord[]>
   /** Upserts on `blockId`: answering the same block twice corrects the first answer
    *  rather than stacking a second one. */

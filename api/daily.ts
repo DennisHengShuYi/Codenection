@@ -129,7 +129,14 @@ export default async function handler(request: Request): Promise<Response> {
   // Migration 0006 is not applied automatically. Answered plainly rather than swallowed:
   // the failure this file must not have is going quietly dead, since nobody would notice
   // for weeks that the messages had stopped.
-  if (error) return new Response(`cannot read links: ${error.message}`, { status: 500 })
+  // Plainly, but without the database's own words. Every other failure in api/ answers with
+  // a fixed sentence; this was the one that put `error.message` in the body, which is how a
+  // schema detail or a policy name reaches whoever is holding CRON_SECRET. The log keeps the
+  // detail; the response keeps the status.
+  if (error) {
+    console.warn('daily digest: cannot read telegram_links', error.message)
+    return new Response('cannot read links', { status: 500 })
+  }
 
   const chats = ((data ?? []) as Record<string, unknown>[]).map(
     (row): LinkedChat => ({
@@ -158,11 +165,19 @@ export default async function handler(request: Request): Promise<Response> {
 
       // Recorded even when nothing is sent, so the first run establishes a baseline and the
       // second can tell that something moved. Without this the bot stays silent for ever.
+      //
+      // `notified_holds` is whether the fortnight held *at the time*, which is what migration
+      // 0006 says it is: "true once anything has been reported and the fortnight held at the
+      // time". It was written `true` unconditionally, so after any chat's first notification
+      // the column no longer meant that -- the read above still worked only because its
+      // `|| notifiedDeficitDay !== null` clause was carrying the whole distinction, and
+      // anyone querying the table on the documented meaning would have counted every chat
+      // ever messaged as currently holding.
       await client
         .from('telegram_links')
         .update({
           notified_deficit_day: current,
-          notified_holds: true,
+          notified_holds: current === null,
           notified_at: new Date().toISOString(),
         })
         .eq('chat_id', chat.chatId)

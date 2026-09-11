@@ -14,6 +14,7 @@ import { stampSoftDeadlines } from '../domain/softDeadlines'
 import { withSleep } from '../ui/today/checkIn'
 import { firstAction } from '../domain/microStart'
 import { prescribe } from '../domain/prescribe'
+import { scheduleRecovery } from '../domain/scheduleRecovery'
 import { overallReserve, project, type LoadType } from '../engine'
 import { toDayInputs, type Schedule } from '../optimizer'
 import { tooLongToTranscribe } from './audio'
@@ -82,9 +83,21 @@ export interface ChatServices {
    * Null means the request could not be read, which is said plainly rather than priced as
    * something invented.
    */
-  /** Fetches the image from Telegram and runs the app's own reader over it. Null when it
-   *  could not be read at all. */
-  readonly readPhotoFile?: (fileId: string) => Promise<readonly ParsedItem[] | null>
+  /**
+   * Fetches the image from Telegram and runs the app's own reader over it. Null when it
+   * could not be read at all.
+   *
+   * `calendar` is §44's anchor, and this had no parameter to carry it -- so the bot called
+   * `readPhoto` with one argument while the app's own screen passed a calendar. `readPhoto`
+   * itself says why that matters most here: "a photographed timetable is mostly weekdays,
+   * which makes this the reader that needed the anchor most and got it last". Without it
+   * every "Tuesday" on a photographed roster was resolved against a guess, so the same
+   * timetable sent through chat landed on different days than through the app.
+   */
+  readonly readPhotoFile?: (
+    fileId: string,
+    calendar?: Calendar,
+  ) => Promise<readonly ParsedItem[] | null>
   /** Fetches the audio from Telegram and transcribes it. Null when transcription failed. */
   readonly transcribe?: (fileId: string) => Promise<string | null>
   /**
@@ -604,27 +617,30 @@ export async function handleIntent(
     const prescription = prescribe(stampSoftDeadlines(week, today, blockLog), today, blockLog)
     if (prescription === null) return noGapReply()
 
-    await store.saveWeek(accountId, {
-      ...week,
-      items: [
-        ...week.items,
+    // Through the app's own door, not a hand-built copy of what it makes. `restNow.ts` calls
+    // `scheduleRecovery` "the only door to protected rest" and this was the exception that
+    // made that untrue -- every field agreeing by luck, with §5.1's guarantee resting on the
+    // two staying in step by hand. It took a `stamp` parameter to become usable from here,
+    // because it read the clock and this function takes its clock as an argument.
+    //
+    // It is also what makes a retried tap safe: Telegram delivers a callback at least once,
+    // this branch had no guard where its three siblings each have one, and `scheduleRecovery`
+    // now returns the week unchanged when protected rest already sits at that day and hour.
+    await store.saveWeek(
+      accountId,
+      scheduleRecovery(
+        week,
         {
-          id: `${prescription.id}-${now}`,
           title: prescription.title,
           type: prescription.type,
           kind: prescription.kind,
           hours: prescription.hours,
-          intensity: 1,
           dayIndex: prescription.dayIndex,
           startHour: prescription.startHour,
-          // §5.1: fixed and protected. Rest the optimizer can move to fit work in is not
-          // protected at all, and this is the app's most important design decision.
-          fixed: true,
-          deadlineDay: null,
-          protectedRest: true,
         },
-      ],
-    })
+        now,
+      ),
+    )
 
     return restBookedReply()
   }
@@ -638,7 +654,10 @@ export async function handleIntent(
     // that reads a timetable. §1.4 says so plainly rather than pretending otherwise.
     if (!services.readPhotoFile) return photoUnavailableReply()
 
-    const items = await services.readPhotoFile(intent.fileId).catch(() => null)
+    // The anchor, derived exactly as the voice and text branches derive theirs.
+    const items = await services
+      .readPhotoFile(intent.fileId, await calendarOf(store, accountId, now))
+      .catch(() => null)
     if (items === null) return photoUnreadableReply()
 
     return offerParse(store, accountId, items)

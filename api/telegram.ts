@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { transcribeAudio } from '../src/ai/groq'
 import { readPhoto } from '../src/ai/readPhoto'
+import type { Calendar } from '../src/ai/types'
 import { readRequest } from '../src/ai/readRequest'
 import { draftReplies } from '../src/ai/drafts'
 import type { BlockRecord } from '../src/domain/blockLog'
@@ -375,12 +376,13 @@ export default async function handler(request: Request): Promise<Response> {
      */
     const services: ChatServices = groqKey
       ? {
-          readPhotoFile: async (fileId: string) => {
+          readPhotoFile: async (fileId: string, calendar?: Calendar) => {
             const blob = await fetchTelegramFile(botToken, fileId)
             if (blob === null) return null
 
             const outcome = await readPhoto(
               new File([blob], 'photo.jpg', { type: blob.type || 'image/jpeg' }),
+              calendar,
             )
 
             // Only the items cross into the flow. Whether the read succeeded is answered by

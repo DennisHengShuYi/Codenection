@@ -34,8 +34,15 @@ const daysWith = (hours: number): DayInput[] =>
     ],
   }))
 
-const barsFor = (reserves: Reserves, days: DayInput[] = emptyDays()) =>
-  domainBars(reserves, project(reserves, days, DEFAULT_PARAMS), days)
+const barsFor = (reserves: Reserves, days: DayInput[] = emptyDays(), today = 0) =>
+  domainBars(reserves, project(reserves, days, DEFAULT_PARAMS), days, today)
+
+const uniform = (value: number): Reserves => ({
+  mental: value,
+  physical: value,
+  social: value,
+  errands: value,
+})
 
 describe('scheduleDensity', () => {
   it('is zero for an empty fortnight', () => {
@@ -176,5 +183,34 @@ describe('the stretch of time a bar covers', () => {
     const density = barsFor(healthy).find((bar) => bar.key === 'schedule')
 
     expect(density?.span).toBe('horizon')
+  })
+})
+
+/**
+ * The arrows describe the days around today, not the end of the fortnight.
+ *
+ * The whole 21-day projection used to be handed to `trendOf`, which keeps the LAST three
+ * entries -- so the arrow described days 18, 19 and 20 while `trendOf`'s own docstring said it
+ * showed "where things are going now". On a projection that mostly decays that reads falling
+ * almost regardless of what is happening this week.
+ *
+ * The series climbs near today and collapses at the far end, deliberately: reading the
+ * horizon's tail gives falling and reading around today gives rising, so the old behaviour and
+ * the new one cannot both pass. A gentler fixture would pass either way and prove nothing.
+ */
+describe('which days the trend arrow is about', () => {
+  it('trends on the days around today rather than the end of the horizon', () => {
+    const days = emptyDays()
+    const climbThenCollapse = Array.from({ length: HORIZON_DAYS }, (_, day) =>
+      uniform(day <= 4 ? 40 + day * 5 : 60 - day * 2),
+    )
+    const projection = {
+      ...project(healthy, days, DEFAULT_PARAMS),
+      central: climbThenCollapse,
+    }
+
+    const mental = domainBars(healthy, projection, days, 4).find((bar) => bar.key === 'mental')
+
+    expect(mental?.trend).toBe('rising')
   })
 })

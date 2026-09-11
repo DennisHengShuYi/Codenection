@@ -37,6 +37,25 @@ describe('the panel as a legend', () => {
     expect(screen.getByText(/study/i)).toBeVisible()
   })
 
+  it('shows a row the words for where its load is heading', () => {
+    render(<TodayPanel rows={[row({ id: 'books', trend: 'more coming' })]} />)
+
+    expect(screen.getByTestId('panel-trend-books')).toHaveTextContent('more coming')
+  })
+
+  /**
+   * A flat row carries nothing, and it is checked by absence rather than by empty text.
+   *
+   * This is the assertion most likely to pass by accident: a test looking only for empty text
+   * would also pass against an element rendered with nothing in it, which would still take up
+   * space in a panel that is already tight at 320px and would still be announced.
+   */
+  it('renders no trend element at all on a flat row', () => {
+    render(<TodayPanel rows={[row({ id: 'books', trend: null })]} />)
+
+    expect(screen.queryByTestId('panel-trend-books')).toBeNull()
+  })
+
   it('says how much of today each object accounts for', () => {
     render(<TodayPanel rows={[row({ hours: 4 })]} />)
 

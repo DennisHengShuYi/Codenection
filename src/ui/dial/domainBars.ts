@@ -101,6 +101,19 @@ export function domainBars(
   reserves: Reserves,
   projection: Projection,
   days: readonly DayInput[],
+  /**
+   * Which day the arrows are about.
+   *
+   * The whole projection used to go to `trendOf`, which keeps the last three entries -- so the
+   * arrow described days 18, 19 and 20 of the fortnight while `trendOf` documented itself as
+   * showing "where things are going now". On a projection that mostly decays that read falling
+   * almost regardless of this week. Slicing to today and the two days before it is what makes
+   * the glyph mean what it has always claimed to.
+   *
+   * The Today panel's own trend, added alongside this, reads three days too -- so the two
+   * readings a student can reach describe the same span rather than opposite ends of it.
+   */
+  today: number,
 ): DomainBar[] {
   const reserveBars: DomainBar[] = LOAD_TYPES.map((type) => {
     const value = reserves[type]
@@ -115,7 +128,9 @@ export function domainBars(
       // The reserve as it stands, not a period: `RoomShell` hands these in from the
       // projection's entering-today reading.
       span: 'now' as const,
-      trend: trendOf(projection.central.map((day) => day[type])),
+      trend: trendOf(
+        projection.central.slice(Math.max(0, today - 2), today + 1).map((day) => day[type]),
+      ),
       warning: warningFor(type, value, status),
     }
   })

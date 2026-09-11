@@ -23,7 +23,7 @@ const days = (): DayInput[] =>
 
 const textFor = (reserves: Reserves, capacity = 75): string => {
   const projection = project(reserves, days(), DEFAULT_PARAMS)
-  return describeDial(capacity, domainBars(reserves, projection, days()), projection)
+  return describeDial(capacity, domainBars(reserves, projection, days(), 0), projection)
 }
 
 describe('describeDial', () => {
@@ -106,7 +106,7 @@ describe('a bar with no measured direction, in words', () => {
  * snapshot from a fortnight, is being given the harder version of the same puzzle.
  */
 describe('the stretch of time, in words', () => {
-  const barsOf = () => domainBars(healthy, project(healthy, days(), DEFAULT_PARAMS), days())
+  const barsOf = () => domainBars(healthy, project(healthy, days(), DEFAULT_PARAMS), days(), 0)
 
   it('says the headline is where today started, not where the week is', () => {
     const text = describeDial(67, barsOf(), project(healthy, days(), DEFAULT_PARAMS))

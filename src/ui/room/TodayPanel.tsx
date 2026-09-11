@@ -61,6 +61,18 @@ export function TodayPanel({ rows }: { rows: readonly PanelRow[] }) {
               <span className="flex flex-col">
                 <span className="text-sm font-medium text-ink">{row.label}</span>
                 <span className="text-xs text-ink-soft">{row.meaning}</span>
+                {/* Only where something measured it. A phrase on a row with no reading behind
+                    it is a claim -- the same rule `DomainBarList` applies to its glyph. Words
+                    rather than an arrow, because up means "more load" here and "more reserve"
+                    two taps away, and those are opposite news. */}
+                {row.trend !== null && (
+                  <span
+                    data-testid={`panel-trend-${row.id}`}
+                    className="text-xs font-medium text-ink"
+                  >
+                    {row.trend}
+                  </span>
+                )}
               </span>
 
               {/* Counted where counting is the honest measure -- a box is one errand, not

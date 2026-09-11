@@ -28,7 +28,7 @@ const renderDial = (capacity: number, reserves: Reserves = healthy, compact = fa
   return render(
     <CapacityDial
       capacity={capacity}
-      bars={domainBars(reserves, projection, days())}
+      bars={domainBars(reserves, projection, days(), 0)}
       projection={projection}
       compact={compact}
     />,

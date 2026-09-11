@@ -358,7 +358,7 @@ export function RoomShell({
   // Day zero has no writer in the running app, so bars read off it never moved: not when a
   // student edited the plan, not after a rebalance, not overnight. They sat under a headline
   // that had been repointed at today, and the two disagreed on screen.
-  const bars = domainBars(model.reserves, projection, days)
+  const bars = domainBars(model.reserves, projection, days, today)
 
   async function onRebalance() {
     if (working) return

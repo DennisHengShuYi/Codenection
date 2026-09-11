@@ -117,6 +117,34 @@ describe('roomModel', () => {
       expect(checkedIn.state.weather).toBe('clear')
     })
 
+    /**
+     * Where the student is *now*, not where the fortnight began.
+     *
+     * The gauge, the character and the door all read one `reserves` argument, and it was
+     * `schedule.start` -- day zero, frozen for the whole fortnight. So on day ten of a
+     * heavy week the corner gauge still reported the number the week opened with, while the
+     * week grid beside it read every day off the projection. Two surfaces, one fortnight,
+     * different answers about the same moment.
+     *
+     * `restNow.ts` already refuses a `.start`-derived headline for exactly this reason: it
+     * "would read the same before and after, which is worse than no headline".
+     *
+     * Entering-today rather than leaving-it: `project` pushes each day *after* its tick, so
+     * `central[today - 1]` is the reserve the student has when today begins and has not
+     * lived it yet. Day zero has no prior day and is `schedule.start` by definition.
+     */
+    it('draws the reserve the student has entering today, not the one the week opened with', () => {
+      const opening = roomModel({ schedule: heavySchedule, today: 0, blockLog: [], predictions: [] })
+      const tenDaysIn = roomModel({
+        schedule: heavySchedule,
+        today: 10,
+        blockLog: [],
+        predictions: [],
+      })
+
+      expect(tenDaysIn.state.reserve).toBeLessThan(opening.state.reserve)
+    })
+
     it('treats every day from today onward as checked in, never inflating the horizon itself', () => {
       // A day still ahead has nothing to check in about (§8b). Confirms `today` is passed
       // through rather than e.g. `today - 1`, which would wrongly mark today missed too.

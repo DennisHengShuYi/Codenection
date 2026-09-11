@@ -22,11 +22,17 @@ const state = (over: Partial<RoomState> = {}): RoomState => ({
 })
 
 /**
- * `RoomModel` is `{ state }` and nothing else since the sidebar's `rows` were deleted, so
- * this is a one-line wrapper -- kept as a helper rather than inlined because every case
- * below reads better as `modelOf(state({ ... }))`.
+ * `RoomModel` is `state` plus the reserve entering today, so this is a two-line wrapper --
+ * kept as a helper rather than inlined because every case below reads better as
+ * `modelOf(state({ ... }))`.
+ *
+ * `Room` draws from `state` alone; `reserves` is there for the shell's gauge and low-energy
+ * gate, so any value satisfies the type here.
  */
-const modelOf = (roomState: RoomState = state()): RoomModel => ({ state: roomState })
+const modelOf = (roomState: RoomState = state()): RoomModel => ({
+  state: roomState,
+  reserves: { mental: 70, physical: 70, social: 70, errands: 70 },
+})
 
 /**
  * CSS 2.1 Appendix E, reduced to the only case the room is: two absolutely positioned

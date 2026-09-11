@@ -26,7 +26,8 @@ function stubRepo(over: Partial<Repository> = {}): Repository {
 
 /** A window onto the hook, since a hook cannot be asserted on directly. */
 function Probe({ repo, floor }: { repo: Repository; floor: number }) {
-  const { active, override, setOverride } = useLowEnergy(repo, floor)
+  const { activeFor, override, setOverride } = useLowEnergy(repo)
+  const active = activeFor(floor)
 
   return (
     <div>

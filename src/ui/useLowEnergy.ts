@@ -4,11 +4,21 @@ import { shouldUseLowEnergy } from './lowEnergy'
 
 /** Reads the student's stored preference and writes it back when they change it, so
  *  §1.5's manual override survives a reload rather than resetting to inferred. */
-export function useLowEnergy(
-  repo: Repository,
-  floorReserve: number,
-): {
-  active: boolean
+export function useLowEnergy(repo: Repository): {
+  /**
+   * §1.5's mode for a given floor, rather than a resolved `active`.
+   *
+   * The floor arrives later in the render than this hook can be called. A hook has to run
+   * before `RoomShell`'s "still loading" early return, and the reserve the student has
+   * entering today is only known after it -- so taking the floor as an argument here forced
+   * the one caller to compute it from `schedule.start`, day zero, frozen. That was fine
+   * while the room's character read day zero too, and wrong the moment it started reading
+   * today: the interface would have stayed expanded for a student the room was already
+   * drawing as flattened.
+   *
+   * `shouldUseLowEnergy` is still called in exactly one place. Only the moment moved.
+   */
+  activeFor: (floorReserve: number) => boolean
   /**
    * The stored preference itself, not only what it resolved to.
    *
@@ -49,7 +59,8 @@ export function useLowEnergy(
   }
 
   return {
-    active: shouldUseLowEnergy(floorReserve, settings.lowEnergyOverride),
+    activeFor: (floorReserve: number) =>
+      shouldUseLowEnergy(floorReserve, settings.lowEnergyOverride),
     override: settings.lowEnergyOverride,
     setOverride,
   }

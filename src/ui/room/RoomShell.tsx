@@ -14,7 +14,7 @@ import { addBlock, completeItem, deferItem, editItem, removeItem } from '../../d
 import { stampSoftDeadlines } from '../../domain/softDeadlines'
 import { applyRest, planRest, type RestPlan } from '../../domain/restNow'
 import { RestPreview } from '../rest/RestPreview'
-import { overallReserve, project } from '../../engine'
+import { floorReserve, overallReserve, project } from '../../engine'
 import type { Fix } from '../../optimizer'
 import { toDayInputs } from '../../optimizer'
 import { AddSheet } from '../AddSheet'
@@ -216,16 +216,13 @@ export function RoomShell({
   // would be two chances for the number shown to drift from the number applied.
   const outcomes = useMemo(() => outcomesFrom(blockLog), [blockLog])
   const params = useMemo(() => paramsFor(outcomes, profile.predictions), [outcomes, profile.predictions])
-  const floor = schedule
-    ? Math.min(schedule.start.mental, schedule.start.physical, schedule.start.social, schedule.start.errands)
-    : 100
   // §1.5's mode, read AND written. `setOverride` reaches `LowEnergyControl` in the settings
   // sheet below, which is the whole of Ruling 45: the preference was honoured here while
   // nothing in the app could set it, because the control lived on `LowEnergyView` and Task
   // 17 deleted the view. Both directions matter -- a depleted student turning the collapsed
   // interface off, and a rested student turning it on -- and both are asserted end to end in
   // `RoomShell.lowEnergy.test.tsx` rather than only at the hook.
-  const { active: lowEnergy, override: lowEnergyOverride, setOverride } = useLowEnergy(repository, floor)
+  const { activeFor: lowEnergyFor, override: lowEnergyOverride, setOverride } = useLowEnergy(repository)
 
   /**
    * §8.1's two prerequisites: anchor the fortnight to a real day, and claim something about a
@@ -308,6 +305,20 @@ export function RoomShell({
   const nowHour = now.getHours()
   const todayDate = dateFor(week, today)
   const model = roomModel({ schedule: week, today, blockLog, predictions: profile.predictions })
+
+  /**
+   * One reading of "where the student is now", shared by everything that shows it.
+   *
+   * `model.reserves` is the reserve entering today. The corner gauge, the Reserves sheet's
+   * headline and §1.5's low-energy gate all used to derive this separately from
+   * `schedule.start` -- day zero, which never moves -- so on day ten of a heavy week all
+   * three reported the number the fortnight opened with while the week grid beside them
+   * read each day off the projection.
+   *
+   * Taken from the model rather than recomputed so the gauge and the room's own character,
+   * which `roomStateFor` draws from the same value, cannot disagree.
+   */
+  const lowEnergy = lowEnergyFor(floorReserve(model.reserves))
 
   // §1.2's breakdown: the five domain bars each against its own ceiling, and the
   // low-social-flagged-as-warning logic that is the app's own differentiator over a tracker
@@ -765,7 +776,7 @@ export function RoomShell({
       {view.kind === 'reserves' && !lowEnergy && (
         <ReservesSheet
           key="reserves"
-          capacity={overallReserve(week.start)}
+          capacity={overallReserve(model.reserves)}
           bars={bars}
           projection={projection}
           history={reportedEnergy}

@@ -189,3 +189,49 @@ describe('CalendarImportScreen', () => {
     expect(props.onAccept).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * Ruling 63: pressing Connect has to do something visible, including when it fails.
+ *
+ * `AddSheet` called `void beginConnect()`, so a refusal became
+ * `Uncaught (in promise) Error: could not begin` in a console no student opens, and a
+ * missing session became nothing happening at all. The screen already has a line for saying
+ * what went wrong -- it simply was never given anything to say.
+ */
+describe('when connecting cannot start', () => {
+  it('says why, where the student is looking', async () => {
+    setup({
+      connected: false,
+      onConnect: vi.fn().mockResolvedValue('Sign in from Settings first.'),
+    })
+
+    await userEvent.click(screen.getByTestId('calendar-connect'))
+
+    expect(await screen.findByTestId('calendar-problem')).toHaveTextContent(/sign in/i)
+  })
+
+  it('says nothing when the flow is starting normally', async () => {
+    setup({ connected: false, onConnect: vi.fn().mockResolvedValue(null) })
+
+    await userEvent.click(screen.getByTestId('calendar-connect'))
+
+    expect(screen.queryByTestId('calendar-problem')).toBeNull()
+  })
+
+  /** A second attempt that works has to clear the first one's message, or the student is
+   *  left reading a complaint about something that has since succeeded. */
+  it('clears an old message when a later attempt gets going', async () => {
+    const onConnect = vi
+      .fn()
+      .mockResolvedValueOnce('Something went wrong.')
+      .mockResolvedValueOnce(null)
+    setup({ connected: false, onConnect })
+
+    await userEvent.click(screen.getByTestId('calendar-connect'))
+    expect(await screen.findByTestId('calendar-problem')).toBeVisible()
+
+    await userEvent.click(screen.getByTestId('calendar-connect'))
+
+    await waitFor(() => expect(screen.queryByTestId('calendar-problem')).toBeNull())
+  })
+})

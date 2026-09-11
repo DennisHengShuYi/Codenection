@@ -32,7 +32,14 @@ export function CalendarImportScreen({
   /** Whether this student has already granted calendar access. */
   readonly connected: boolean
   /** Sends them to Google's consent screen. */
-  readonly onConnect: () => void
+  /**
+   * Starts the consent flow, and returns what to tell the student when it could not start
+   * -- null while it is going ahead (Ruling 63).
+   *
+   * It returned nothing at all before, and `AddSheet` discarded the promise, so a refusal
+   * reached a browser console and a missing session reached nobody.
+   */
+  readonly onConnect: () => Promise<string | null>
   /** Reads the fortnight. Returns the items, plus how many were left out for being outside
    *  it -- said out loud rather than quietly dropped. */
   readonly onRead: () => Promise<{ items: readonly ParsedItem[]; skipped: number }>
@@ -104,7 +111,16 @@ export function CalendarImportScreen({
             <p className="text-sm text-ink-soft">
               I never change anything in your existing calendars.
             </p>
-            <Button data-testid="calendar-connect" onClick={onConnect}>
+            <Button
+              data-testid="calendar-connect"
+              onClick={() => {
+                // Cleared first: a message about a previous attempt, still on screen while
+                // a new one is under way, is a complaint about something that may have
+                // just succeeded.
+                setProblem(null)
+                void onConnect().then((reason) => setProblem(reason))
+              }}
+            >
               Connect Google Calendar
             </Button>
           </>

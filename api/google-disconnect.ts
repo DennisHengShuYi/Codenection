@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { unseal } from '../src/google/secretBox'
+import { readServiceRoleKey, readSupabasePair, readSupabaseUrl } from '../src/data/serverEnv'
+import { callerFrom } from '../src/data/sessionCheck'
 
 /** Declared rather than inferred, matching the other endpoints. */
 export const config = { runtime: 'edge' }
@@ -34,9 +36,14 @@ export default async function handler(request: Request): Promise<Response> {
   // A write, so POST -- a disconnect must not be something a link or a prefetch can trigger.
   if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 })
 
-  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
-  const anonKey = process.env.VITE_SUPABASE_ANON_KEY
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  // Read as a pair, never a URL from one place and a key from another: see
+  // `readSupabasePair` for what that mismatch costs -- a signed-in student told to
+  // sign in, with nothing anywhere saying the deployment is misconfigured.
+  const env = process.env as Record<string, string | undefined>
+  const pair = readSupabasePair(env)
+  const supabaseUrl = readSupabaseUrl(env)
+  const anonKey = pair?.anonKey
+  const serviceRoleKey = readServiceRoleKey(env)
   const tokenKey = process.env.GOOGLE_TOKEN_KEY
 
   if (!supabaseUrl || !anonKey || !serviceRoleKey || !tokenKey) {
@@ -54,9 +61,19 @@ export default async function handler(request: Request): Promise<Response> {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
-  const { data } = await asUser.auth.getUser()
-  const accountId = data.user?.id
-  if (accountId === undefined) return new Response('Sign in first.', { status: 401 })
+  const { data, error: refusal } = await asUser.auth.getUser()
+
+  // Kept rather than discarded: Supabase refuses a bad session and a key that does not
+  // belong to this project with the same 401, and only one of those is the student's to
+  // fix. See `data/sessionCheck.ts`.
+  if (refusal) console.warn('google-disconnect: could not verify a session --', refusal.message)
+
+  const caller = callerFrom(data.user?.id, refusal)
+  if (!caller.verifiable) {
+    return new Response('Calendar is not available on this deployment.', { status: 503 })
+  }
+  const accountId = caller.accountId
+  if (accountId === null) return new Response('Sign in first.', { status: 401 })
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },

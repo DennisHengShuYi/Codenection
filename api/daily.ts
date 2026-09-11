@@ -7,6 +7,7 @@ import type { EnergyPrediction } from '../src/domain/predictions'
 import { crossingNotice } from '../src/domain/proactive'
 import { project } from '../src/engine'
 import { toDayInputs, type Schedule } from '../src/optimizer'
+import { readServiceRoleKey, readSupabaseUrl } from '../src/data/serverEnv'
 
 /**
  * §26's daily proactive check: the one capability the PWA does not have.
@@ -104,8 +105,8 @@ async function say(botToken: string, chatId: number, text: string): Promise<void
 export default async function handler(request: Request): Promise<Response> {
   const cronSecret = process.env.CRON_SECRET
   const botToken = process.env.TELEGRAM_BOT_TOKEN
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
+  const serviceRoleKey = readServiceRoleKey(process.env as Record<string, string | undefined>)
+  const supabaseUrl = readSupabaseUrl(process.env as Record<string, string | undefined>)
 
   if (!cronSecret || !botToken || !serviceRoleKey || !supabaseUrl) {
     return new Response('not configured', { status: 503 })

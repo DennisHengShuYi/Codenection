@@ -42,11 +42,16 @@ const unavailable: GuardResult = {
 const refused = (status: number, body: string): GuardResult => ({ ok: false, status, body })
 
 export function checkStart(
-  request: { method: string; accountId: string | null },
+  request: { method: string; accountId: string | null; verifiable?: boolean },
   config: GoogleConfig,
 ): GuardResult {
   if (request.method !== 'GET') return refused(405, 'Method not allowed')
   if (!configured(config)) return unavailable
+
+  // A deployment that cannot verify anybody is not a student who is signed out, and saying
+  // "sign in first" to somebody already signed in sends them round a loop that cannot end.
+  // See `data/sessionCheck.ts` for how the two are told apart.
+  if (request.verifiable === false) return unavailable
 
   // Nothing about an account happens for a request that has not proved who it is. Without
   // this, anyone could begin a flow that ends with tokens stored against somebody's row.

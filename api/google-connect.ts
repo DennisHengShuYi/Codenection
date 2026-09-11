@@ -3,6 +3,8 @@ import { CALENDAR_SCOPES, consentUrl } from '../src/google/authUrl'
 import { checkCallback, checkStart, type GoogleConfig } from '../src/google/guard'
 import { seal } from '../src/google/secretBox'
 import { readState, signState } from '../src/google/state'
+import { readServiceRoleKey, readSupabasePair, readSupabaseUrl } from '../src/data/serverEnv'
+import { callerFrom, type Caller } from '../src/data/sessionCheck'
 
 /** Declared rather than inferred, matching the other endpoints: the two runtimes take
  *  different handler signatures and the wrong one fails only once deployed. */
@@ -46,18 +48,30 @@ const redirectUriFor = (request: Request): string =>
  * JWT it also has to check the signature of, and getting that subtly wrong is how an
  * endpoint ends up trusting a token anyone can mint.
  */
-async function accountFrom(request: Request, supabaseUrl: string, anonKey: string): Promise<string | null> {
+async function accountFrom(request: Request, supabaseUrl: string, anonKey: string): Promise<Caller> {
   const authorization = request.headers.get('authorization')
-  if (authorization === null) return null
+  if (authorization === null) return { accountId: null, verifiable: true }
 
-  const client = createClient(supabaseUrl, anonKey, {
-    global: { headers: { authorization } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
+  try {
+    const client = createClient(supabaseUrl, anonKey, {
+      global: { headers: { authorization } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
 
-  const { data } = await client.auth.getUser()
+    const { data, error } = await client.auth.getUser()
 
-  return data.user?.id ?? null
+    // Said out loud in the deployment's own log rather than swallowed. This is the only
+    // place that knows why a session was refused, and a student must not be shown it --
+    // which is exactly the shape of thing a server log is for.
+    if (error) console.warn('google-connect: could not verify a session --', error.message)
+
+    return callerFrom(data.user?.id, error)
+  } catch (cause) {
+    // A client that cannot even be built -- a malformed URL, a key a runtime refuses to put
+    // in a header -- is a misconfiguration, and nobody signing in will fix it.
+    console.warn('google-connect: could not reach Supabase --', cause)
+    return { accountId: null, verifiable: false }
+  }
 }
 
 /** A page rather than a bare status, because a student lands on this in their browser after
@@ -71,9 +85,14 @@ const say = (message: string, status: number): Response =>
 
 export default async function handler(request: Request): Promise<Response> {
   const google = settings()
-  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
-  const anonKey = process.env.VITE_SUPABASE_ANON_KEY
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  // Read as a pair, never a URL from one place and a key from another: see
+  // `readSupabasePair` for what that mismatch costs -- a signed-in student told to
+  // sign in, with nothing anywhere saying the deployment is misconfigured.
+  const env = process.env as Record<string, string | undefined>
+  const pair = readSupabasePair(env)
+  const supabaseUrl = readSupabaseUrl(env)
+  const anonKey = pair?.anonKey
+  const serviceRoleKey = readServiceRoleKey(env)
 
   const url = new URL(request.url)
 
@@ -81,11 +100,11 @@ export default async function handler(request: Request): Promise<Response> {
   if (url.searchParams.get('begin') === '1') {
     if (!supabaseUrl || !anonKey) return say('Calendar connection is not available here.', 503)
 
-    const accountId = await accountFrom(request, supabaseUrl, anonKey)
-    const allowed = checkStart({ method: request.method, accountId }, google)
+    const caller = await accountFrom(request, supabaseUrl, anonKey)
+    const allowed = checkStart({ method: request.method, ...caller }, google)
     if (!allowed.ok) return say(allowed.body, allowed.status)
 
-    const state = await signState(accountId as string, google.stateSecret as string)
+    const state = await signState(caller.accountId as string, google.stateSecret as string)
 
     // Answered as JSON rather than a 302, so the caller can reach this with an
     // `Authorization` header. A redirect would mean the browser navigating here directly,

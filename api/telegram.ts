@@ -14,6 +14,7 @@ import { hasExpired } from '../src/telegram/linkCode'
 import { priceAskWith } from '../src/telegram/priceAsk'
 import type { Reply } from '../src/telegram/render'
 import { callbackIdOf, messageIdOf, readUpdate } from '../src/telegram/update'
+import { readServiceRoleKey, readSupabaseUrl } from '../src/data/serverEnv'
 
 /**
  * The chat channel's front door (§13.6), and the only file that reads
@@ -334,8 +335,10 @@ export default async function handler(request: Request): Promise<Response> {
   const config: Parameters<typeof checkRequest>[1] = {
     botToken: process.env.TELEGRAM_BOT_TOKEN,
     webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
-    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    supabaseUrl: process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL,
+    // The same project the browser's endpoints verify sessions against, and trimmed
+    // the same way -- a webhook on a different project writes where nothing reads.
+    serviceRoleKey: readServiceRoleKey(process.env as Record<string, string | undefined>) ?? undefined,
+    supabaseUrl: readSupabaseUrl(process.env as Record<string, string | undefined>) ?? undefined,
   }
 
   const guard = checkRequest(

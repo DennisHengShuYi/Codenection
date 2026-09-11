@@ -773,6 +773,7 @@ export function RoomShell({
           key={`edit-${view.itemId}`}
           schedule={week}
           params={params}
+          today={today}
           item={editing}
           dayIndex={editing.dayIndex}
           onSave={(fields) => {
@@ -789,6 +790,7 @@ export function RoomShell({
           key={`new-${view.dayIndex}`}
           schedule={week}
           params={params}
+          today={today}
           item={null}
           dayIndex={view.dayIndex}
           onSave={(fields) => {

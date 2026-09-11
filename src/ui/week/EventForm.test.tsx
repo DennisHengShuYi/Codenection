@@ -38,6 +38,7 @@ const setup = (over: Partial<Parameters<typeof EventForm>[0]> = {}) => {
       params={DEFAULT_PARAMS}
       item={null}
       dayIndex={3}
+      today={0}
       onSave={onSave}
       onClose={onClose}
       onBack={onBack}
@@ -281,5 +282,43 @@ describe('setting when something is due', () => {
 
     expect(props.onSave).not.toHaveBeenCalled()
     expect(screen.getByText(/due before the day/i)).toBeVisible()
+  })
+})
+
+/**
+ * The days, named the way the rest of the app names them.
+ *
+ * This form printed raw ISO dates -- `2026-09-15` -- in both its day pickers, while the
+ * planner's chip asked the same question with `dayLabel`: "Today", "Tomorrow", "Fri 12 Sep".
+ * Two vocabularies for one question, which `kit/labels.ts` names as the way "the planner and
+ * the week come to call the same thing different things". `calendar.ts` already holds the
+ * one answer; this reads it rather than formatting a second.
+ */
+describe('how the days are named', () => {
+  it('calls today Today', () => {
+    setup({ today: 3 })
+
+    expect(screen.getByTestId('deadline-day')).toHaveTextContent(/Today/)
+  })
+
+  it('calls tomorrow Tomorrow', () => {
+    setup({ today: 3 })
+
+    expect(screen.getByTestId('deadline-day')).toHaveTextContent(/Tomorrow/)
+  })
+
+  it('names the rest by weekday rather than by ISO date', () => {
+    setup({ today: 0, schedule: { ...week(), startedOn: '2026-09-12' } })
+
+    const options = screen.getByTestId('deadline-day')
+
+    expect(options).toHaveTextContent(/Sun 13 Sep/)
+    expect(options).not.toHaveTextContent(/2026-09-13/)
+  })
+
+  it('names the scheduling day the same way', () => {
+    setup({ today: 3 })
+
+    expect(screen.getByTestId('day-of-block')).toHaveTextContent(/Today/)
   })
 })

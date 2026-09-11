@@ -1,5 +1,5 @@
 import { useState, type JSX } from 'react'
-import { dateFor } from '../../domain/calendar'
+import { dayLabel } from '../../domain/calendar'
 import { editWarnings } from '../../domain/editWarnings'
 import type { ItemFields } from '../../domain/scheduleEdits'
 import {
@@ -63,6 +63,7 @@ export function EventForm({
   params,
   item,
   dayIndex,
+  today,
   onSave,
   onClose,
   onBack,
@@ -73,6 +74,9 @@ export function EventForm({
   readonly item: ScheduledItem | null
   /** Which day a NEW block starts on. Ignored when `item` is given, which carries its own. */
   readonly dayIndex: number
+  /** For naming the days. "Today" and "Tomorrow" are not recoverable from a date alone, and
+   *  they are the two a student is most likely to be picking. */
+  readonly today: number
   readonly onSave: (fields: ItemFields) => void
   readonly onClose: () => void
   /** Ruling 60: one level up -- to the block, when there is one; to the week otherwise. */
@@ -155,6 +159,7 @@ export function EventForm({
         <div className="flex flex-wrap gap-3">
           <Field label="Day" error={errors.dayIndex}>
             <select
+              data-testid="day-of-block"
               value={draft.dayIndex}
               onChange={(event) => setDraft({ ...draft, dayIndex: Number(event.target.value) })}
               className={INPUT}
@@ -164,7 +169,7 @@ export function EventForm({
                 // otherwise -- the same fallback the week grid's own labels use, so the two
                 // never name one day two different ways.
                 <option key={day} value={day}>
-                  {dateFor(schedule, day) ?? `Day ${day}`}
+                  {dayLabel(schedule, day, today)}
                 </option>
               ))}
             </select>
@@ -222,7 +227,7 @@ export function EventForm({
               <option value="">Not set</option>
               {days.map((day) => (
                 <option key={day} value={day}>
-                  {dateFor(schedule, day) ?? `Day ${day}`}
+                  {dayLabel(schedule, day, today)}
                 </option>
               ))}
             </select>

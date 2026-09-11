@@ -1,5 +1,7 @@
 import { useState, type JSX } from 'react'
+import type { BlockRecord } from '../../domain/blockLog'
 import { dayLabel } from '../../domain/calendar'
+import { titleVocabulary } from '../../domain/titleVocabulary'
 import { editWarnings } from '../../domain/editWarnings'
 import type { ItemFields } from '../../domain/scheduleEdits'
 import {
@@ -64,6 +66,7 @@ export function EventForm({
   item,
   dayIndex,
   today,
+  blockLog = [],
   onSave,
   onClose,
   onBack,
@@ -77,6 +80,10 @@ export function EventForm({
   /** For naming the days. "Today" and "Tomorrow" are not recoverable from a date alone, and
    *  they are the two a student is most likely to be picking. */
   readonly today: number
+  /** §8b's durable log, for the names offered while typing. Defaulted to empty so a caller
+   *  with none -- and a student on their first day -- gets a plain field rather than an
+   *  error. */
+  readonly blockLog?: readonly BlockRecord[]
   readonly onSave: (fields: ItemFields) => void
   readonly onClose: () => void
   /** Ruling 60: one level up -- to the block, when there is one; to the week otherwise. */
@@ -84,6 +91,8 @@ export function EventForm({
 }): JSX.Element {
   // The one piece of state in the component. Everything else below is derived from it, which
   // is what `eventDraft.ts` is for.
+  const vocabulary = titleVocabulary({ schedule, blockLog })
+
   const [draft, setDraft] = useState(() =>
     item === null ? blankDraft(schedule, dayIndex) : draftFrom(item),
   )
@@ -117,12 +126,33 @@ export function EventForm({
     >
       <div className="flex flex-col gap-3">
         <Field label="What" error={errors.title}>
+          {/*
+            What this student has called things before, offered while they type.
+
+            §2.4's narrow rungs group answers by title, so "gym" and "Gym session" are two
+            buckets neither of which ever fills. `taskKey` collapses what it can from the
+            words; this is the cheaper half of the fix -- the name already in use is one tap
+            away, so the second spelling never gets typed.
+
+            A native `<datalist>` rather than a built dropdown. The browser filters as they
+            type, announces it, and works on a phone keyboard, none of which a hand-rolled
+            list gets for free -- and the field stays a plain text box, so a name that is
+            genuinely new needs no escape hatch.
+          */}
           <input
+            list="what-before"
             value={draft.title}
             onChange={(event) => setDraft({ ...draft, title: event.target.value })}
             className={INPUT}
           />
         </Field>
+
+        {/* Outside the field, because `Field` clones a single child to attach its label. */}
+        <datalist id="what-before">
+          {vocabulary.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
 
         <div className="flex flex-wrap gap-3">
           <Field label="Kind">

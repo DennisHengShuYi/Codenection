@@ -322,3 +322,56 @@ describe('how the days are named', () => {
     expect(screen.getByTestId('day-of-block')).toHaveTextContent(/Today/)
   })
 })
+
+/**
+ * What you have called things before, offered while you type.
+ *
+ * §2.4's narrow rungs group answers by title, so "gym" and "Gym session" are two buckets
+ * neither of which fills. `taskKey` collapses what it can from the words; this is the
+ * cheaper half of the fix -- the name already in use is one tap away, so the second spelling
+ * never gets typed.
+ *
+ * A native `<datalist>` rather than a built dropdown: the browser filters as the student
+ * types, announces it, and works on a phone keyboard, none of which a hand-rolled list gets
+ * for free. It also stays a plain text field, so a name that is genuinely new needs no
+ * escape hatch.
+ */
+describe('names offered while typing', () => {
+  const answeredGym = {
+    blockId: 'gym-1',
+    type: 'physical' as const,
+    kind: 'hardExercise' as const,
+    title: 'Gym',
+    plannedHours: 1,
+    dayIndex: 0,
+    answer: 'right' as const,
+    answeredAt: 1,
+  }
+
+  /** A datalist option carries a value and no text, so the value is what to read. */
+  const offered = (): string[] =>
+    [...document.querySelectorAll('#what-before option')].map((option) =>
+      option.getAttribute('value') ?? '',
+    )
+
+  it('offers what is already in the week', () => {
+    setup({ schedule: week([item('lab', { title: 'WIA3001 lab' })]) })
+
+    expect(offered()).toContain('WIA3001 lab')
+  })
+
+  it('offers what the student has answered for before', () => {
+    setup({ blockLog: [answeredGym] })
+
+    expect(offered()).toContain('Gym')
+  })
+
+  it('leaves the field a plain text box, so a new name needs no escape hatch', () => {
+    setup({ blockLog: [answeredGym] })
+
+    const field = screen.getByLabelText('What')
+
+    expect(field).toHaveAttribute('list')
+    expect(field.tagName).toBe('INPUT')
+  })
+})

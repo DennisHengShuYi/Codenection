@@ -387,6 +387,12 @@ One screen, four taps. Sets every prior.
 
 ### 7.2 Three-day painter
 
+> **Not built.** Deleted in Task 17 and never replaced, so nothing measures a personal sleep
+> baseline: `EngineParams.sleepBaselineHours` falls back to the population figure in
+> `DEFAULT_PARAMS`, and §8's sleep row is what makes that defensible. §7.4's day-0
+> calibration layer depended on this and is therefore partial too. The parameter's own
+> docstring in `engine/types.ts` says so at the point a reader would assume otherwise.
+
 Prefilled hour grid, three days, tap only what is wrong. Roughly 20 seconds.
 
 Yesterday, the day before, one weekend day. Recall collapses past 48 hours, and fiction calibrated into the model is worse than no data. Three days gives enough contrast between a loaded day and a light one.
@@ -428,6 +434,10 @@ The payoff that makes calibration feel like a benefit rather than a chore:
 Nobody has told a student any of this before. It is also the sharpest answer to "how is this different from a to-do list."
 
 ### 7.7 No cold start
+
+> **Partial.** The seeded fortnight and `DEFAULT_PARAMS` mean the app is useful on first
+> open, which is the substance of this section. The *calibration meter* described below is
+> not built — nothing shows a student how much the model has learned about them.
 
 Population defaults produce a working app on first open. A **calibration meter** shows tuning progress so setup reads as progress, never as a gate.
 
@@ -476,6 +486,13 @@ Free data, no extra build, and the honest path to validating the long claim late
 ---
 
 ## 9. Malaysia-specific
+
+> **Not built**, with one exception. No holiday table, no festival periods, no curated
+> get-outside list by area, no prayer-time blocks. What does ship from §5.3 is the door
+> signal — `roomState.doorLit`, lit when physical and social are both low — and a generic
+> "get outside and walk" prescription. The section's one implemented consequence is the
+> timezone: `domain/calendar` derives a student's day from their own clock rather than UTC,
+> which at UTC+8 is the difference between naming today and naming yesterday.
 
 - **Public holidays reduce commitments but not deadlines.** An assignment due Monday still needs doing over a long weekend. A holiday shifts load rather than removing it, and the model shows that honestly instead of drawing a fake dip.
 - **Festival periods default to demanding, not restful.** Raya, CNY and Deepavali mean travel, family obligation and social demand. For many students that is a heavier week. Users can mark any holiday restful or demanding.
@@ -616,6 +633,16 @@ Rehearse the demo from hour six onward.
 **Focus 5:** protected rest blocks · category-matched prescriptions · recovery quality ceiling · get-out-of-the-house mode
 **Engine:** four coupled reserves · efficiency curve · reserve-dependent capacity multiplier · carryover matrix with hardcoded priors · missing-data pessimism
 **Calibration:** mode picker · three-day painter · parameter extraction · post-block confirmation with two-tap difficulty rating · "how you work" screen
+
+> **Status of this row, since it is the one that did not land.** The mode picker was cut
+> deliberately — `optimizer/mode.ts` infers a mode instead, and records that asking every
+> student a question nothing read was the wrong trade. The painter and its parameter
+> extraction are absent (§7.2). The calibration meter is absent (§7.7). Post-block
+> confirmation ships, but as a single four-way question about *duration* rather than the
+> two-axis completion-and-difficulty rating described here — `domain/blockLog.ts` explains
+> why, and the consequence is that nothing feeds a learned cross-effect matrix, which §11
+> already lists as roadmap-only. The "how you work" screen exists as lines in place rather
+> than as a screen.
 **Validation:** 48-hour prediction scoring
 **Cross-cutting:** responsive verification at 320 / 390 / 768 / 1280px on every screen · PWA install · deployed to Vercel from day one, public URL live for the whole build
 

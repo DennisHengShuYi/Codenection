@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { BlockRecord } from '../../domain/blockLog'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule, ScheduledItem } from '../../optimizer'
-import { blockToAsk, SLEEP_HOURS, withSleep } from './checkIn'
+import { blockToAsk } from './checkIn'
 
 const item = (id: string, type: ScheduledItem['type'], dayIndex = 0): ScheduledItem => ({
   id,
@@ -98,21 +98,5 @@ describe('blockToAsk', () => {
     expect(blockToAsk({ schedule, today: 0, nowHour: 23 })).toEqual(
       blockToAsk({ schedule, today: 0, nowHour: 23, blockLog: [] }),
     )
-  })
-})
-
-describe('withSleep', () => {
-  it('writes the reported night into the day it was about', () => {
-    const next = withSleep(week([]), 3, 'under5')
-
-    expect(next.sleepByDay[3]).toBe(SLEEP_HOURS.under5)
-  })
-
-  it('leaves every other night alone, and does not mutate the week it was given', () => {
-    const before = week([])
-    const next = withSleep(before, 3, 'under5')
-
-    expect(next.sleepByDay[4]).toBe(7)
-    expect(before.sleepByDay[3]).toBe(7)
   })
 })

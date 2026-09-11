@@ -1,4 +1,5 @@
 import { answeredIds, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
+import { hasHappened } from '../../domain/dayBlocks'
 import type { Schedule, ScheduledItem } from '../../optimizer'
 
 /**
@@ -12,16 +13,14 @@ import type { Schedule, ScheduledItem } from '../../optimizer'
  * tested by Task 8b -- imported by the caller from there, not redefined here.
  */
 
-export type SleepBucket = 'under5' | 'six' | 'seven' | 'eightPlus'
-
-/** Buckets, not a typed number (§7.5): nobody reports their night to the half hour, and
- *  asking for one collects a figure that means nothing. */
-export const SLEEP_HOURS: Record<SleepBucket, number> = {
-  under5: 4.5,
-  six: 6,
-  seven: 7,
-  eightPlus: 8.5,
-}
+/**
+ * Sleep's vocabulary and its one writer now live in `domain/sleepPlan`, which composes the
+ * whole plan from a stated target, the nights the student edited, and the nights they
+ * reported. Re-exported from here rather than repointed at every call site, because this
+ * module's importers -- `TodayCard` and `telegram/render` -- ask it for the question they put
+ * to the student, and the move is not about them.
+ */
+export { SLEEP_HOURS, withSleep, type SleepBucket } from '../../domain/sleepPlan'
 
 /**
  * The unconfirmed block whose load type the app knows least about.
@@ -57,21 +56,12 @@ export function blockToAsk({
 }): ScheduledItem | null {
   const alreadyAsked = (id: string) => answeredIds(blockLog).includes(id)
 
-  // A past day is askable as it always was. A future day never is. Today is askable only
-  // once the block has actually finished -- otherwise the card can ask about something
-  // that has not happened yet.
-  const hasHappened = (item: ScheduledItem): boolean => {
-    if (item.dayIndex < today) return true
-    if (item.dayIndex > today) return false
-    return item.startHour + item.hours <= nowHour
-  }
-
   const outcomes = outcomesFrom(blockLog)
   const samples = (item: ScheduledItem): number =>
     outcomes.filter((outcome) => outcome.type === item.type).length
 
   const candidates = schedule.items
-    .filter((item) => hasHappened(item) && !alreadyAsked(item.id))
+    .filter((item) => hasHappened(item, today, nowHour) && !alreadyAsked(item.id))
     .slice()
     .sort(
       (left, right) =>
@@ -83,16 +73,3 @@ export function blockToAsk({
   return candidates[0] ?? null
 }
 
-/** Writes the reported night into the week. Nothing has ever written `sleepByDay` after the
- *  week was created, which is why the plant and the bed have been reporting a constant.
- *  Returns a new week rather than writing into the one it was given -- the rule this module
- *  makes load-bearing, since this is the one place that puts something into a week that
- *  every other reader treats as already settled. */
-export function withSleep(schedule: Schedule, dayIndex: number, bucket: SleepBucket): Schedule {
-  return {
-    ...schedule,
-    sleepByDay: schedule.sleepByDay.map((hours, index) =>
-      index === dayIndex ? SLEEP_HOURS[bucket] : hours,
-    ),
-  }
-}

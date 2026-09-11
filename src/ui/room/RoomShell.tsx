@@ -862,7 +862,6 @@ export function RoomShell({
           blockForToday={blockForToday}
           askEnergy={askEnergy}
           askSleep={askSleep}
-          outcomes={outcomes}
           /* Beside the question it is about: answering "how much sleep last night?" is the
              one moment a student is thinking about the gap between what they aim for and
              what they get. Withheld in low-energy mode, as on the sleep page itself. */
@@ -898,7 +897,6 @@ export function RoomShell({
             if (todayDate !== null) reportNight(todayDate, bucket)
             setSleepAnsweredToday(true)
           }}
-          onBlockAnswer={answerBlock}
           onTodayDismiss={() => setTodayDismissed(true)}
         />
     </>

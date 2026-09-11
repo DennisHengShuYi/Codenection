@@ -1,3 +1,4 @@
+import type { BlockAnswer } from '../../domain/blockLog'
 import type { ActivityKind, LoadType } from '../../engine'
 
 /**
@@ -43,3 +44,22 @@ export const BLOCK_KIND_LABELS: Record<ActivityKind, string> = {
  * for a text message, which is a different question from labelling a whole-hour picker.
  */
 export const hourLabel = (hour: number): string => `${String(hour).padStart(2, '0')}:00`
+
+/**
+ * §8b②'s four answers, in one place.
+ *
+ * They were declared inside `TodayCard` and again, as a different shape, inside
+ * `BlockSheet` -- two copies of one vocabulary, which this file's own docstring calls out as
+ * how the planner and the week come to call the same thing different things. Answering is a
+ * list row now, so a third copy was one edit away.
+ *
+ * Ruling 22: no primary variant among them, and they are ordered from least to most done. A
+ * highlighted answer is a nudge toward one, and the value of this record is that it is what
+ * happened rather than what reads well.
+ */
+export const BLOCK_ANSWERS: readonly { answer: BlockAnswer; label: string }[] = [
+  { answer: 'didnt', label: "Didn't happen" },
+  { answer: 'less', label: 'Took less' },
+  { answer: 'right', label: 'About right' },
+  { answer: 'longer', label: 'Took longer' },
+]

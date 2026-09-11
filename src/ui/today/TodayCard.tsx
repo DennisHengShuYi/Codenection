@@ -1,7 +1,4 @@
 import type { JSX } from 'react'
-import type { BlockAnswer } from '../../domain/blockLog'
-import type { BlockOutcome } from '../../domain/calibration'
-import { biasLine } from '../../domain/realityCheck'
 import type { ScheduledItem } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { Card } from '../kit/Card'
@@ -25,13 +22,6 @@ const SLEEP_LABELS: Record<SleepBucket, string> = {
 }
 
 /** Order matters only for display -- all four render with the same variant (Ruling 22). */
-const BLOCK_ANSWERS: readonly { answer: BlockAnswer; label: string }[] = [
-  { answer: 'didnt', label: "Didn't happen" },
-  { answer: 'less', label: 'Took less' },
-  { answer: 'right', label: 'About right' },
-  { answer: 'longer', label: 'Took longer' },
-]
-
 /**
  * §8: the whole daily check-in, three taps.
  *
@@ -59,13 +49,6 @@ export function TodayCard(props: {
   readonly askEnergy: boolean
   readonly askSleep: boolean
   /**
-   * §2.4's history, for the Reality Check line only.
-   *
-   * Defaulted rather than required, because §0 forbids a cold start: a student on day one
-   * has no outcomes, and the card still has to render.
-   */
-  readonly outcomes?: readonly BlockOutcome[]
-  /**
    * §7.6's Reality Check for sleep, or null.
    *
    * Supplied rather than computed here, for the reason every other day figure in this app is:
@@ -85,19 +68,16 @@ export function TodayCard(props: {
   readonly plannedLastNight?: number | null
   readonly onEnergy: (energy: number) => void
   readonly onSleep: (bucket: SleepBucket) => void
-  readonly onBlock: (itemId: string, answer: BlockAnswer) => void
   readonly onDismiss: () => void
 }): JSX.Element | null {
   const {
     block,
     askEnergy,
     askSleep,
-    outcomes = [],
     sleepRealityLine = null,
     plannedLastNight = null,
     onEnergy,
     onSleep,
-    onBlock,
     onDismiss,
   } = props
   const askBlock = block !== null
@@ -105,7 +85,6 @@ export function TodayCard(props: {
   // §7.6, and only for the block actually on the card: a bias quoted about some other load
   // type is one the student cannot connect to anything in front of them. Null when there
   // is nothing measured worth saying, which is most of the first week.
-  const bias = block === null ? null : biasLine(outcomes, block.type)
 
   if (!askEnergy && !askSleep && !askBlock) {
     return null
@@ -170,40 +149,19 @@ export function TodayCard(props: {
         </fieldset>
       )}
 
-      {askSleep && askBlock && <hr className="border-line" />}
+      {/*
+        The block question has left this card.
 
-      {askBlock && (
-        <fieldset className="flex flex-col gap-2">
-          <legend className="text-base font-medium">
-            {block.title} — you planned {block.hours}h
-          </legend>
-          <p className="text-sm text-ink-soft">How much of it happened?</p>
-          <div className="flex flex-wrap gap-2">
-            {BLOCK_ANSWERS.map(({ answer, label }) => (
-              <Button
-                key={answer}
-                size="sm"
-                variant="secondary"
-                data-testid={`answer-${answer}`}
-                onClick={() => onBlock(block.id, answer)}
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
+        It lived here and in the waiting list at the same time: the sheet showed six things
+        to answer and then a card asking about a seventh in a different shape, two surfaces
+        doing one job with nothing on screen to say why that one was singled out. The list
+        answers in place now, and is capped to a single row below §1.5's threshold -- so the
+        one-question interface that made this card the right place at low energy is still
+        there, in the one place the app asks.
 
-          {/* §7.6's Reality Check. Placed under the answers rather than above them so it
-              reads as the app explaining itself after the question, not as a nudge toward
-              a particular answer -- Ruling 22 keeps these four buttons visually equal for
-              exactly that reason, and a line arguing "you always overrun" sitting above
-              them would undo it. */}
-          {bias !== null && (
-            <p data-testid="bias-line" className="text-xs text-ink-soft">
-              {bias}
-            </p>
-          )}
-        </fieldset>
-      )}
+        What stays here is what the list cannot carry: a reading of today's energy and last
+        night's sleep, neither of which is about a block.
+      */}
 
       <Button variant="quiet" size="sm" className="self-start" onClick={onDismiss}>
         Not now

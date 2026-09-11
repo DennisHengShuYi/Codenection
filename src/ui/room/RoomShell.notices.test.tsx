@@ -43,13 +43,13 @@ const weekWithErrand = (): Schedule => ({
 
 let counter = 0
 
-const renderShell = async (over?: Partial<Schedule>) => {
+const renderShell = async (over?: Partial<Schedule>, onAnswerBlock = vi.fn()) => {
   counter += 1
   const repository = createLocalRepository(`notices-${counter}`)
   await repository.clear()
   await repository.saveWeek({ ...weekWithErrand(), ...over })
 
-  render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+  render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={onAnswerBlock} />)
   await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
 }
 
@@ -196,16 +196,14 @@ describe('what is still owed an answer', () => {
    * these, so the list carries the rest -- a block in both places reads as a bug, and a
    * block in neither is owed and invisible.
    */
-  it('lists what the check-in card is not already asking about', async () => {
+  it('lists everything owed, now that no card asks about one of them', async () => {
     await renderShell(lived())
 
     await userEvent.click(screen.getByTestId('open-notices'))
     const sheet = await screen.findByRole('dialog', { name: /waiting/i })
 
     expect(within(sheet).getByTestId('pending-gym')).toHaveTextContent('Gym')
-    expect(within(sheet).queryByTestId('pending-lab')).toBeNull()
-    // ...and the one it left out is the one the card has.
-    expect(within(sheet).getByText(/WIA3001 lab/)).toBeVisible()
+    expect(within(sheet).getByTestId('pending-lab')).toHaveTextContent('WIA3001 lab')
   })
 
   it('says when each one was, so a student knows which day they are answering for', async () => {
@@ -223,7 +221,8 @@ describe('what is still owed an answer', () => {
     await userEvent.click(screen.getByTestId('open-notices'))
     await userEvent.click(await screen.findByTestId('pending-gym'))
 
-    expect(await screen.findByTestId('answer-right')).toBeVisible()
+    const gymRow = (await screen.findByTestId('pending-gym')).closest('li')
+    expect(within(gymRow as HTMLElement).getByTestId('answer-right')).toBeVisible()
   })
 
   it('says nothing at all when nothing is owed', async () => {
@@ -233,5 +232,65 @@ describe('what is still owed an answer', () => {
     const sheet = await screen.findByRole('dialog', { name: /waiting/i })
 
     expect(within(sheet).queryByTestId('pending-checkins')).toBeNull()
+  })
+})
+
+/**
+ * One surface for what is owed, not two.
+ *
+ * The list arrived beside the check-in card rather than instead of it, so the sheet showed
+ * six things to answer and then a card asking about a seventh in a different shape -- two
+ * surfaces doing one job, with nothing on screen to say why that one was singled out.
+ * Excluding the card's block from the list hid the seam without removing it.
+ *
+ * The list answers in place now, and the card's block question is gone. §1.5 still holds at
+ * the other end: below the threshold a list is a dashboard, so the same component is capped
+ * to the single row the card used to be -- one question, which is what that mode is for.
+ */
+describe('answering from the list', () => {
+  it('offers the answers on the row itself', async () => {
+    await renderShell(lived())
+
+    await userEvent.click(screen.getByTestId('open-notices'))
+    const list = await screen.findByTestId('pending-checkins')
+
+    expect(within(list).getByTestId('answer-right')).toBeVisible()
+  })
+
+  it('records what was answered, for the block on that row', async () => {
+    const onAnswerBlock = vi.fn()
+    await renderShell(lived(), onAnswerBlock)
+
+    await userEvent.click(screen.getByTestId('open-notices'))
+    const list = await screen.findByTestId('pending-checkins')
+    await userEvent.click(within(list).getByTestId('answer-longer'))
+
+    expect(onAnswerBlock).toHaveBeenCalledWith(
+      expect.objectContaining({ blockId: 'lab', answer: 'longer' }),
+    )
+  })
+
+  it('opens another row when it is tapped', async () => {
+    await renderShell(lived())
+
+    await userEvent.click(screen.getByTestId('open-notices'))
+    await userEvent.click(await screen.findByTestId('pending-gym'))
+
+    const gymRow = (await screen.findByTestId('pending-gym')).closest('li')
+    expect(within(gymRow as HTMLElement).getByTestId('answer-right')).toBeVisible()
+  })
+
+  /** The duplication this replaces: no separate card asking the same question beside it. */
+  it('asks nowhere else on the sheet', async () => {
+    await renderShell(lived())
+
+    await userEvent.click(screen.getByTestId('open-notices'))
+    const list = await screen.findByTestId('pending-checkins')
+
+    // Asked once, and inside the list -- the card that used to ask the same thing beside it
+    // is gone rather than merely excluded from the rows.
+    const asked = screen.getAllByText(/how much of it happened/i)
+    expect(asked).toHaveLength(1)
+    expect(list).toContainElement(asked[0] as HTMLElement)
   })
 })

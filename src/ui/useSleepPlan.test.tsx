@@ -137,6 +137,39 @@ describe('useSleepPlan', () => {
     await waitFor(() => expect(screen.getByTestId('problem')).not.toHaveTextContent(''))
   })
 
+  /**
+   * A transient read failure must not lose what the student just set.
+   *
+   * Every write re-reads the blob first so a field another writer added is not dropped. If
+   * that read fails the write still has to happen -- abandoning it would mean a student sets
+   * a target, sees it apply, and finds it gone next time, which is the silent-write failure
+   * this project's rules exist to stop. Found by coverage: this branch had no case.
+   */
+  it('still saves the target when the re-read before writing fails', async () => {
+    const saveSettings = vi.fn().mockResolvedValue(undefined)
+    let loads = 0
+    const repo = stubRepo({
+      loadSettings: async () => {
+        loads += 1
+        if (loads > 1) throw new Error('offline')
+        return DEFAULT_SETTINGS
+      },
+      saveSettings,
+    })
+    render(<Probe repo={repo} />)
+    await target(DEFAULT_SLEEP_HOURS)
+
+    await userEvent.click(screen.getByRole('button', { name: 'target 9' }))
+
+    await target(9)
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ sleepTargetHours: 9 }),
+      ),
+    )
+    expect(screen.getByTestId('problem')).toHaveTextContent('')
+  })
+
   it('keeps the defaults when the preference cannot be read', async () => {
     const repo = stubRepo({
       loadSettings: async () => {

@@ -5,7 +5,7 @@ import { Sheet } from '../kit/Sheet'
 /**
  * The night the student is aiming for, and the nights ahead.
  *
- * A page rather than a card, and that is the whole point of it. §8's check-in asks "how much
+ * Ruling 66: a page rather than a card, and that is the whole point of it. §8's check-in asks "how much
  * sleep last night?" once a day and then disappears -- it is CHECKING, about a night that
  * already happened, and the answer teaches the model. This is PLANNING: what the student
  * intends, reachable whenever they want it. The two write to different places for that

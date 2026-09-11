@@ -38,7 +38,7 @@ export interface StoredSettings {
    * `Repository` methods for the reason `calibration` and `ladders` are -- one blob, no
    * migration, no adapter change.
    *
-   * A *guess*, not a promise. `optimizer/gaps.DAY_END_HOUR` is untouched, so the solver may
+   * Ruling 64: a *guess*, not a promise. `optimizer/gaps.DAY_END_HOUR` is untouched, so the solver may
    * still place work past midnight; what this changes is what the app assumes and what it
    * warns about, never what it is allowed to schedule. A hard wall would have made a crunch
    * fortnight genuinely unsolvable.

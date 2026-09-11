@@ -277,3 +277,51 @@ Three older notations survive in comments and are not ruling numbers:
 
 `src/ui/AddSheet.test.tsx:261` — and 5 other file(s)
 
+## Ruling 64
+
+Recorded at the time rather than reconstructed, unlike the entries above.
+
+**A stated sleep target is a guess the app makes, not a promise it keeps.** The projection
+assumes it; the solver may still place work past midnight, and the app warns when a day will
+cost a night. The rejected alternative was a hard wall -- shrinking the placeable day so work
+could never be booked into the hours a student said they would be asleep. That is more
+faithful to the words, and it makes a crunch fortnight genuinely unsolvable: the rebalancer
+loses most of its freedom exactly when it is needed. `optimizer/gaps.DAY_END_HOUR` is
+therefore untouched by the whole sleep feature.
+
+`src/data/types.ts` — the field this governs, with the reasoning in place
+
+## Ruling 65
+
+Recorded at the time.
+
+**The deadline squeeze is a forecast, never a record.** When a day asks for more hours than a
+day has and something is actually due, the app says so *before* the night -- and stores
+nothing. It never writes a reduced figure into `sleepByDay`, because it never observed the
+night. Storing it would be simpler downstream and would have the app assert what a student
+slept on evidence it does not have, which is the same rule that kept the Today panel's bed
+row silent for a night nobody answered.
+
+The accepted cost, stated so it is not rediscovered as a bug: the projection stays optimistic
+on an over-committed day, because it assumes the planned night. The warning sentence and the
+room's own dimming light are what cover it.
+
+`src/domain/sleepForecast.ts` — the module, and the accepted cost in its own words
+
+## Ruling 66
+
+Recorded at the time.
+
+**Planning a night and checking a night are separate acts, with separate surfaces.** §8's
+check-in card asks "how much sleep last night?", once a day, and then disappears: it is about
+a night that already happened, and the answer is evidence. The sleep page is where a student
+says what they intend, and it has an address because an intention has to be changeable.
+
+Two consequences that look like inconsistencies and are not. The page offers whole hours
+(6/7/8/9) while the card keeps its four buckets, because "under 5" is an honest thing to
+report and an absurd thing to aim for. And the two write to different places -- the plan into
+`Schedule.sleepByDay`, the report into `domain/sleepLog` -- which is what finally lets the app
+tell "slept eight hours" from "nobody has asked yet", and so what lets it compare them at all.
+
+`src/ui/sleep/SleepSheet.tsx` — the page; `src/ui/room/view.ts` — why it is an address
+

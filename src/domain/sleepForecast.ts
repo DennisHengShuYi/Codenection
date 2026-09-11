@@ -9,7 +9,7 @@ import { blocksOnDay } from './dayBlocks'
  * they "have to come out of sleep". Nothing ever acted on it. Spill only dimmed the room's
  * light and darkened its window, so the app knew and never said.
  *
- * A FORECAST, and deliberately never a record. Nothing here writes to `sleepByDay`, so the
+ * Ruling 65: a FORECAST, and deliberately never a record. Nothing here writes to `sleepByDay`, so the
  * app never asserts what a student slept on a night it did not observe -- the same rule that
  * keeps the bed row silent about a night nobody answered. The consequence, stated rather than
  * hidden: the projection still assumes the planned night on an over-committed day, so it is

@@ -96,6 +96,34 @@ describe('sleepForecastLine', () => {
   })
 
   /**
+   * The singular branch, which exists only to stop "1 hours" reaching a student. Found by
+   * coverage rather than by thinking about it, and worth a case of its own precisely because
+   * nothing else would ever exercise it: one hour of spill is a narrow band, and the wording
+   * bug it guards against is the kind a reader notices immediately and a test never does.
+   */
+  it('says one hour in the singular', () => {
+    const oneOver = week([
+      item({ hours: 5, deadlineDay: 0 }),
+      item({ hours: 5 }),
+      item({ hours: 5 }),
+      item({ hours: 2 }),
+    ])
+
+    expect(sleepForecastLine(squeezeOn(oneOver, 0), 'Thursday')).toBe(
+      "Thursday's deadline will cost you about 1 hour of sleep.",
+    )
+  })
+
+  /** The threshold in both directions. Half an hour is a day running slightly long rather
+   *  than a night being eaten, and a test on only one side of a boundary pins nothing. */
+  it('speaks at half an hour and stays quiet below it', () => {
+    const spill = (hours: number) => week([item({ hours: 16 + hours })])
+
+    expect(sleepForecastLine(squeezeOn(spill(0.5), 0), 'Thursday')).not.toBeNull()
+    expect(sleepForecastLine(squeezeOn(spill(0.4), 0), 'Thursday')).toBeNull()
+  })
+
+  /**
    * A forecast, never a record. Nothing here writes, and the whole reason is that the app
    * never observed the night -- so a sentence in the past tense would undo that decision in
    * copy while the code still looked right.

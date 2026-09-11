@@ -18,14 +18,29 @@ as `Ruling 41`, and are indexed in **`docs/rulings.md`**.
 ## Repository status
 
 Built and passing: the engine and optimizer, the room and week screens, the say-anything
-planner, photo and calendar import, Micro-Start, the Rest button, the request box, accounts,
-and the Telegram channel. `npx tsc --noEmit` is clean and `npm test` is green.
+planner, photo and calendar import, Micro-Start, the Rest button, the request box, the sleep
+page, accounts, and the Telegram channel. `npx tsc --noEmit` is clean and `npm test` is green.
+
+Sleep is worth a sentence of its own, because it spans four layers and its parts are easy to
+mistake for each other. `Schedule.sleepByDay` is the PLAN — what the app assumes each night
+will be, seeded from a target the student states on the sleep page. `domain/sleepLog` is the
+REPORT — which nights were actually answered, keyed by date, which is what lets the app tell
+"slept eight hours" from "nobody has asked yet". `domain/sleepReality` compares them and stays
+silent below three nights; `domain/sleepForecast` warns that an over-committed day will cost a
+night and deliberately stores nothing. Rulings 64 to 66 record why each is shaped that way.
 
 Known not built, with the spec amended to say so rather than promising it: §7.2's three-day
 painter and its parameter extraction, §7.7's calibration meter, §9's Malaysia-specific holiday
 and get-outside lists, and §6.4's rolling debt. There is also no server-side quota on the
 public AI endpoints — `plan`, `draft`, `read-photo` and `micro-start` spend the Groq budget
 unauthenticated, which `api/micro-start.ts` states in place.
+
+Two known-open items from the sleep work, both recorded in place rather than hidden:
+`ui/request/RequestBoxScreen` draws a room preview without the student's sleep target, so its
+bed measures against the population norm while the room screen measures against the target
+(`RoomModelInput.sleepTargetHours` says so at the site); and `RoomShell.tsx` has grown further
+past the 800-line ceiling, because extracting the settings sheet was dropped from that change
+rather than done in a file being edited concurrently.
 
 Where the source lives:
 

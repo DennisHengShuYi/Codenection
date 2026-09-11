@@ -69,11 +69,49 @@ describe('the sleep page', () => {
     expect(await screen.findByTestId('sleep-target')).toBeVisible()
   })
 
+  /** The reason the fixed choices went: a student who sleeps five and a half hours had no way
+   *  to say so, and no set of buttons narrow enough for this sheet ever would. */
+  it('takes a figure no fixed set of choices would have offered', async () => {
+    const { repository } = await openRoom()
+    await userEvent.click(screen.getByTestId('open-sleep'))
+
+    const target = await screen.findByTestId('sleep-target')
+    await userEvent.clear(target)
+    await userEvent.type(target, '6.5')
+    await userEvent.tab()
+
+    await waitFor(async () => {
+      const saved = await repository.loadWeek()
+      expect(saved?.sleepByDay.every((hours) => hours === 6.5)).toBe(true)
+    })
+  })
+
+  /** Validated at the boundary as well as in the field: `withSleepHours` refuses it too, so
+   *  no writer can put a figure in the week that the recovery equation cannot hold. */
+  it('does not write a night the model could not use', async () => {
+    const { repository } = await openRoom()
+    const before = await repository.loadWeek()
+    await userEvent.click(screen.getByTestId('open-sleep'))
+
+    const target = await screen.findByTestId('sleep-target')
+    await userEvent.clear(target)
+    await userEvent.type(target, '99')
+    await userEvent.tab()
+
+    expect(await screen.findByTestId('sleep-target-error')).toBeInTheDocument()
+    expect(await repository.loadWeek()).toEqual(before)
+  })
+
   it('moves every unedited night when the target changes', async () => {
     const { repository } = await openRoom()
     await userEvent.click(screen.getByTestId('open-sleep'))
 
-    await userEvent.click(await screen.findByTestId('sleep-target-9'))
+    const target = await screen.findByTestId('sleep-target')
+    await userEvent.clear(target)
+    await userEvent.type(target, '9')
+    // Committed on leaving the field: a half-typed number is a whole valid one, so "1" on the
+    // way to "12" must never reach the week.
+    await userEvent.tab()
 
     await waitFor(async () => {
       const saved = await repository.loadWeek()
@@ -89,7 +127,10 @@ describe('the sleep page', () => {
 
     const rows = await screen.findAllByTestId(/^sleep-night-\d+$/)
     const second = rows[1]?.getAttribute('data-testid')?.split('-').pop() ?? '1'
-    await userEvent.click(screen.getByTestId(`sleep-night-${second}-6`))
+    const field = screen.getByTestId(`sleep-night-${second}-hours`)
+    await userEvent.clear(field)
+    await userEvent.type(field, '6')
+    await userEvent.tab()
 
     await waitFor(async () => {
       const saved = await repository.loadWeek()

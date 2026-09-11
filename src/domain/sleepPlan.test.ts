@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
-import { SLEEP_HOURS, retargetSleep, seedSleepPlan, withSleep, withSleepHours } from './sleepPlan'
+import {
+  MAX_SLEEP_HOURS,
+  SLEEP_HOURS,
+  isRealSleepHours,
+  retargetSleep,
+  seedSleepPlan,
+  withSleep,
+  withSleepHours,
+} from './sleepPlan'
 
 const week = (hours: number): Schedule => ({
   items: [],
@@ -134,5 +142,58 @@ describe('retargetSleep', () => {
     retargetSleep(before, 8, 9)
 
     expect(before.sleepByDay[0]).toBe(8)
+  })
+})
+
+/**
+ * What counts as a night, once the student can type one.
+ *
+ * The page used to offer four fixed figures, so nothing could arrive that the model could not
+ * hold. A typed field is untrusted input, and this project's rule is that it is validated at
+ * the boundary and never becomes trusted by passing through a layer -- so the check lives
+ * here, where every writer of `sleepByDay` has to go through it, rather than only in the
+ * input that happens to be on screen today.
+ *
+ * It matters to the model and not just to tidiness: `recovery = max(0, sleep - 5) x k_sleep`,
+ * so a night of 500 would hand a student a fortnight of invented recovery.
+ */
+describe('isRealSleepHours', () => {
+  it('accepts a night somebody could actually have', () => {
+    expect(isRealSleepHours(0)).toBe(true)
+    expect(isRealSleepHours(6.5)).toBe(true)
+    expect(isRealSleepHours(MAX_SLEEP_HOURS)).toBe(true)
+  })
+
+  /** Zero is a real night -- an all-nighter -- and has to be tellable from a blank field. */
+  it('accepts none at all, which is a night a student really has', () => {
+    expect(isRealSleepHours(0)).toBe(true)
+  })
+
+  it('refuses what is not a number at all', () => {
+    expect(isRealSleepHours(Number.NaN)).toBe(false)
+    expect(isRealSleepHours(Number.POSITIVE_INFINITY)).toBe(false)
+  })
+
+  it('refuses a night outside a day', () => {
+    expect(isRealSleepHours(-1)).toBe(false)
+    expect(isRealSleepHours(MAX_SLEEP_HOURS + 0.5)).toBe(false)
+  })
+})
+
+describe('withSleepHours and a figure it cannot hold', () => {
+  it('leaves the week alone rather than writing something the model cannot use', () => {
+    const before = week(8)
+
+    expect(withSleepHours(before, 3, Number.NaN).sleepByDay[3]).toBe(8)
+    expect(withSleepHours(before, 3, -2).sleepByDay[3]).toBe(8)
+    expect(withSleepHours(before, 3, 99).sleepByDay[3]).toBe(8)
+  })
+
+  /** One decimal, the rule `editWarnings` and `blockLog` already apply: this figure is summed
+   *  and averaged repeatedly downstream, and a raw float remainder drifts further with every
+   *  operation on it for a measurement nobody made. */
+  it('rounds to one decimal rather than storing a float remainder', () => {
+    expect(withSleepHours(week(8), 3, 6.25).sleepByDay[3]).toBe(6.3)
+    expect(withSleepHours(week(8), 3, 7.049).sleepByDay[3]).toBe(7)
   })
 })

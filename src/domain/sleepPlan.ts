@@ -27,19 +27,53 @@ export const SLEEP_HOURS: Record<SleepBucket, number> = {
   eightPlus: 8.5,
 }
 
+/** A night is somewhere between none at all and a whole day. Zero is deliberately allowed:
+ *  an all-nighter is a real night, and it has to be tellable from a blank field. */
+export const MAX_SLEEP_HOURS = 24
+
+/**
+ * Whether a figure is a night the model can actually hold.
+ *
+ * Here rather than only in the input that happens to be on screen, because the sleep page now
+ * lets a student type a number and this project's rule is that untrusted input is validated at
+ * the boundary and never becomes trusted by passing through a layer. Every writer of
+ * `sleepByDay` goes through `withSleepHours`, so this is the boundary.
+ *
+ * It guards the model and not just the display: `recovery = max(0, sleep - 5) x k_sleep`
+ * (§6.1), so a night of 500 would hand a student a fortnight of invented recovery, and a
+ * `NaN` would poison every projection that touched it.
+ */
+export function isRealSleepHours(hours: number): boolean {
+  return Number.isFinite(hours) && hours >= 0 && hours <= MAX_SLEEP_HOURS
+}
+
+/** One decimal. The rule `editWarnings` and `blockLog` already apply, for their reason: this
+ *  figure is summed and averaged repeatedly downstream, and a raw binary-float remainder
+ *  drifts further with every operation on it for a measurement nobody made. */
+const round = (hours: number): number => Math.round(hours * 10) / 10
+
 /**
  * One night, in hours.
  *
- * An index outside the fortnight is ignored rather than extending the array: `sleepByDay` has
- * to stay `horizonDays` long, or every reader that zips the two -- the solver's day inputs,
- * the projection, the bed -- silently desynchronises. Declining to write is the honest answer
- * to a caller bug, because it cannot corrupt the week.
+ * Two things are declined rather than written, and for the same reason: a write that cannot
+ * be right is worse than no write, because it corrupts a week every other reader treats as
+ * settled.
+ *
+ * An index outside the fortnight -- `sleepByDay` has to stay `horizonDays` long, or every
+ * reader that zips the two (the solver's day inputs, the projection, the bed) silently
+ * desynchronises.
+ *
+ * A figure the model cannot hold -- see `isRealSleepHours`. The sleep page validates before
+ * calling and tells the student what is wrong; this is the layer that makes the same
+ * guarantee for the Telegram side and for anything written later.
  */
 export function withSleepHours(schedule: Schedule, dayIndex: number, hours: number): Schedule {
+  if (!isRealSleepHours(hours)) return schedule
+
   return {
     ...schedule,
     sleepByDay: schedule.sleepByDay.map((existing, index) =>
-      index === dayIndex ? hours : existing,
+      index === dayIndex ? round(hours) : existing,
     ),
   }
 }

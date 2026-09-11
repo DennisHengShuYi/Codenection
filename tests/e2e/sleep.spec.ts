@@ -48,18 +48,49 @@ test('keeps the address through the way in', async ({ page }) => {
   await expect(page).toHaveURL(/\/sleep$/)
 })
 
-test('changes what it says when a different target is chosen', async ({ page }) => {
+test('takes a typed target, including one no fixed choice would offer', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openApp(page)
   await page.getByTestId('open-sleep').click()
 
   const target = page.getByTestId('sleep-target')
-  const before = await target.textContent()
+  await target.fill('6.5')
+  // Committed on leaving the field, because a half-typed number is a whole valid one.
+  await target.blur()
 
-  // 6 and 9 are both offered, so whichever the target currently is, one of them differs.
-  await page.getByTestId(before?.trim() === '9' ? 'sleep-target-6' : 'sleep-target-9').click()
+  await expect(target).toHaveValue('6.5')
+})
 
-  await expect(target).not.toHaveText(before ?? '')
+/** Each night takes one too, independently of the target. */
+test('takes a typed figure for one night on its own', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openApp(page)
+  await page.getByTestId('open-sleep').click()
+
+  // A figure no night in the demo week already holds -- it puts 5.5 on every weeknight, so
+  // choosing one of its own values would make the second assertion prove nothing.
+  const tonight = page.getByTestId('sleep-night-0-hours')
+  await tonight.fill('3')
+  await tonight.blur()
+
+  await expect(tonight).toHaveValue('3')
+  // The night beside it is untouched: setting one night is not setting the week.
+  await expect(page.getByTestId('sleep-night-1-hours')).not.toHaveValue('3')
+})
+
+/** Refused in the field and refused again by `withSleepHours`, so nothing a student can type
+ *  reaches a model that computes recovery from it. */
+test('says why a figure it cannot use was not taken', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openApp(page)
+  await page.getByTestId('open-sleep').click()
+
+  const target = page.getByTestId('sleep-target')
+  await target.fill('99')
+  await target.blur()
+
+  await expect(page.getByTestId('sleep-target-error')).toHaveCount(1)
+  await expect(page.getByTestId('sleep-night-0-hours')).not.toHaveValue('99')
 })
 
 test('lists the nights ahead, each one settable', async ({ page }) => {

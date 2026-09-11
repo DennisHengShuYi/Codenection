@@ -21,23 +21,120 @@ const props = (over: Partial<Parameters<typeof SleepSheet>[0]> = {}) => ({
   ...over,
 })
 
+/**
+ * Retype a field and leave it, which is what a student does to a number.
+ *
+ * The blur matters: a half-typed number is a whole valid one, so nothing is committed until
+ * the field is left. Typing "30" passes through "3" on the way, and committing per keystroke
+ * would write a three-hour night the student never meant.
+ */
+const retype = async (testId: string, text: string) => {
+  const field = screen.getByTestId(testId)
+  await userEvent.clear(field)
+  if (text !== '') await userEvent.type(field, text)
+  await userEvent.tab()
+}
+
 describe('SleepSheet', () => {
   it('shows the target the student is aiming for', () => {
     render(<SleepSheet {...props({ targetHours: 9 })} />)
 
-    expect(screen.getByTestId('sleep-target')).toHaveTextContent('9')
+    expect(screen.getByTestId('sleep-target')).toHaveValue(9)
   })
 
-  it('reports a new target when one is chosen', async () => {
+  it('reports a typed target', async () => {
     const onSetTarget = vi.fn()
     render(<SleepSheet {...props({ onSetTarget })} />)
 
-    await userEvent.click(screen.getByTestId('sleep-target-6'))
+    await retype('sleep-target', '6')
 
-    expect(onSetTarget).toHaveBeenCalledWith(6)
+    expect(onSetTarget).toHaveBeenLastCalledWith(6)
   })
 
-  it('lists a row per night, with its own label and hours', () => {
+  /** The whole point of typing rather than choosing: a figure the four buttons never offered. */
+  it('reports a figure no fixed choice would have offered', async () => {
+    const onSetTarget = vi.fn()
+    render(<SleepSheet {...props({ onSetTarget })} />)
+
+    await retype('sleep-target', '6.5')
+
+    expect(onSetTarget).toHaveBeenLastCalledWith(6.5)
+  })
+
+  it('reports which night was set, and to what', async () => {
+    const onSetNight = vi.fn()
+    render(
+      <SleepSheet
+        {...props({
+          nights: [night({ dayIndex: 0 }), night({ dayIndex: 3, label: 'Friday' })],
+          onSetNight,
+        })}
+      />,
+    )
+
+    await retype('sleep-night-3-hours', '5.5')
+
+    expect(onSetNight).toHaveBeenLastCalledWith(3, 5.5)
+  })
+
+  describe('a figure it cannot use', () => {
+    /**
+     * Nothing is reported and the student is told why. Committing an empty field would write
+     * a zero-hour night on the way to typing "10", and `Number('')` is 0 rather than NaN --
+     * so emptiness has to be caught deliberately rather than left to the numeric check.
+     */
+    it('says nothing upward when the field is emptied', async () => {
+      const onSetTarget = vi.fn()
+      render(<SleepSheet {...props({ onSetTarget })} />)
+
+      await retype('sleep-target', '')
+
+      expect(onSetTarget).not.toHaveBeenCalled()
+      expect(screen.getByTestId('sleep-target-error')).toBeVisible()
+    })
+
+    it('refuses a night longer than a day', async () => {
+      const onSetTarget = vi.fn()
+      render(<SleepSheet {...props({ onSetTarget })} />)
+
+      await retype('sleep-target', '30')
+
+      expect(onSetTarget).not.toHaveBeenCalled()
+      expect(screen.getByTestId('sleep-target-error')).toBeVisible()
+    })
+
+    it('refuses a negative night', async () => {
+      const onSetTarget = vi.fn()
+      render(<SleepSheet {...props({ onSetTarget })} />)
+
+      await retype('sleep-target', '-3')
+
+      expect(onSetTarget).not.toHaveBeenCalled()
+    })
+
+    /** Zero is a real night -- an all-nighter -- and must not be lumped in with nonsense. */
+    it('accepts none at all, which is a night a student really has', async () => {
+      const onSetTarget = vi.fn()
+      render(<SleepSheet {...props({ onSetTarget })} />)
+
+      await retype('sleep-target', '0')
+
+      expect(onSetTarget).toHaveBeenLastCalledWith(0)
+      expect(screen.queryByTestId('sleep-target-error')).toBeNull()
+    })
+
+    it('reports nothing for a night it cannot use either', async () => {
+      const onSetNight = vi.fn()
+      render(<SleepSheet {...props({ nights: [night({ dayIndex: 2 })], onSetNight })} />)
+
+      await retype('sleep-night-2-hours', '99')
+
+      expect(onSetNight).not.toHaveBeenCalled()
+      expect(screen.getByTestId('sleep-night-2-error')).toBeVisible()
+    })
+  })
+
+  it('lists a row per night, with its own label', () => {
     render(
       <SleepSheet
         {...props({
@@ -51,25 +148,7 @@ describe('SleepSheet', () => {
 
     expect(screen.getByTestId('sleep-night-0')).toHaveTextContent('Today')
     expect(screen.getByTestId('sleep-night-1')).toHaveTextContent('Tomorrow')
-    expect(screen.getByTestId('sleep-night-1')).toHaveTextContent('5.5')
-  })
-
-  /** The day index as well as the figure: a page listing several nights that reported the
-   *  wrong one would look correct in every screenshot. */
-  it('reports which night was set, and to what', async () => {
-    const onSetNight = vi.fn()
-    render(
-      <SleepSheet
-        {...props({
-          nights: [night({ dayIndex: 0 }), night({ dayIndex: 3, label: 'Friday' })],
-          onSetNight,
-        })}
-      />,
-    )
-
-    await userEvent.click(screen.getByTestId('sleep-night-3-6'))
-
-    expect(onSetNight).toHaveBeenCalledWith(3, 6)
+    expect(screen.getByTestId('sleep-night-1-hours')).toHaveValue(5.5)
   })
 
   it('shows the forecast on the night that has one', () => {
@@ -79,7 +158,7 @@ describe('SleepSheet', () => {
           nights: [
             night({
               dayIndex: 2,
-              forecast: "Friday's deadline will cost you about 2 hours of sleep.",
+              forecast: "Today's deadline will cost you about 2 hours of sleep.",
             }),
           ],
         })}
@@ -90,9 +169,9 @@ describe('SleepSheet', () => {
   })
 
   /**
-   * Checked by absence, not by empty text. This is the assertion most likely to pass by
-   * accident: a test looking for an empty string would also pass against an element rendered
-   * with nothing in it, which still takes up space and is still announced by a screen reader.
+   * Checked by absence, not by empty text. The assertion most likely to pass by accident: a
+   * test looking for an empty string would also pass against an element rendered with nothing
+   * in it, which still takes up space and is still announced by a screen reader.
    */
   it('renders no forecast element at all for a night without one', () => {
     render(<SleepSheet {...props({ nights: [night({ dayIndex: 2, forecast: null })] })} />)
@@ -106,7 +185,6 @@ describe('SleepSheet', () => {
     expect(screen.getByTestId('sleep-reality')).toHaveTextContent('average about 6')
   })
 
-  /** Same reasoning as the forecast: nothing measured means no element, not an empty one. */
   it('renders no reality element at all when there is nothing measured to say', () => {
     render(<SleepSheet {...props({ realityLine: null })} />)
 

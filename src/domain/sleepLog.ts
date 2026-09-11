@@ -17,7 +17,20 @@
  * trend at all.
  */
 export interface SleepNight {
-  /** The night this is about, as a local date (`calendar.isoDateOf`). */
+  /**
+   * The morning this night ended, as a local date (`calendar.isoDateOf`).
+   *
+   * The morning rather than the evening it began, for two reasons. It is how a student says
+   * it -- "last night", reported today, is keyed by today -- so "has this night been
+   * answered?" is a question about the date the app already has in hand. And it is always
+   * available: on the fortnight's first day the night before began outside the week
+   * entirely, so the evening has no date the calendar can give while the morning does.
+   *
+   * Note this is NOT the index `Schedule.sleepByDay` uses for the same night. That array is
+   * keyed by the day the night *ends* -- `sleepByDay[today - 1]` -- because §6.1 puts sleep
+   * in `recovery[d]`. Two keys for one night, each right for its own container; the
+   * conversion is `domain/sleepPlan.lastNight`.
+   */
   readonly isoDate: string
   /**
    * Hours, not a bucket name.

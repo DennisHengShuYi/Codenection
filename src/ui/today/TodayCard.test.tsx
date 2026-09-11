@@ -297,3 +297,58 @@ describe('TodayCard and the sleep reality line', () => {
     expect(html.indexOf('sleep-eightPlus')).toBeLessThan(html.indexOf('sleep-reality-line'))
   })
 })
+
+/**
+ * A confirmation, not a bare question.
+ *
+ * It asked "how much sleep last night?" with nothing behind it. Naming what was planned makes
+ * the answer worth more: §7.6's Reality Check compares plan against outcome, and a figure with
+ * no plan beside it is only half of that comparison. It also puts the two numbers in front of
+ * the student at the moment they are thinking about the gap.
+ */
+describe('TodayCard and confirming last night', () => {
+  const card = (over: Record<string, unknown> = {}) =>
+    render(
+      <TodayCard
+        block={null}
+        askEnergy={false}
+        askSleep
+        onEnergy={vi.fn()}
+        onSleep={vi.fn()}
+        onBlock={vi.fn()}
+        onDismiss={vi.fn()}
+        {...over}
+      />,
+    )
+
+  it('names what was planned for the night it is asking about', () => {
+    card({ plannedLastNight: 8 })
+
+    expect(screen.getByTestId('sleep-question')).toHaveTextContent('8')
+    expect(screen.getByTestId('sleep-question')).toHaveTextContent(/last night/i)
+  })
+
+  /**
+   * Falls back to the plain question where there is no plan to name -- the fortnight's first
+   * morning, whose night began before the week the app holds. Asking about it is still worth
+   * doing, because `domain/sleepLog` can record it; claiming a plan for it is not.
+   */
+  it('still asks plainly when there was no plan for that night', () => {
+    card({ plannedLastNight: null })
+
+    expect(screen.getByTestId('sleep-question')).toHaveTextContent(/last night/i)
+    expect(screen.getByTestId('sleep-question')).not.toHaveTextContent(/planned/i)
+  })
+
+  /** §8.2: the copy states and never scolds. This is the line most likely to drift, because
+   *  it sits beside a number the student has probably missed. */
+  it('does not reproach the student for missing it', () => {
+    card({ plannedLastNight: 8 })
+
+    const asked = screen.getByTestId('sleep-question').textContent?.toLowerCase() ?? ''
+
+    for (const word of ['should', 'need to', 'must', 'try to', 'only', 'fail']) {
+      expect(asked).not.toContain(word)
+    }
+  })
+})

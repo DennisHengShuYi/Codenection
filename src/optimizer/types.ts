@@ -83,6 +83,22 @@ export interface Schedule {
   readonly items: readonly ScheduledItem[]
   readonly start: Reserves
   readonly horizonDays: number
+  /**
+   * Hours slept on the night at the END of each day, indexed by day.
+   *
+   * `sleepByDay[d]` is the night between day `d` and day `d + 1`, and that follows from
+   * §6.1's own arithmetic rather than being a convention anyone chose:
+   * `reserve[d+1] = reserve[d] - drain[d] + recovery[d] x efficiency[d]`, and sleep enters
+   * through `recovery[d]`. Sleeping well on Friday night is what you wake up with on
+   * Saturday, so that night is Friday's entry.
+   *
+   * Written down because it was not, and an off-by-one lived here for months as a result:
+   * the check-in card asks "how much sleep last night?" and wrote the answer to
+   * `sleepByDay[today]`, which is TONIGHT. Last night is `sleepByDay[today - 1]` --
+   * `domain/sleepPlan.lastNight` is the one place that subtraction is done. The report never
+   * reached the day it explained, so the app could not say "you are low today because you
+   * slept five hours", and tonight's plan was quietly overwritten by a night already past.
+   */
   readonly sleepByDay: readonly number[]
   /**
    * The real date day 0 falls on, as YYYY-MM-DD, or absent for a week saved before anchoring

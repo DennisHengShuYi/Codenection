@@ -12,6 +12,7 @@ import { runRebalance } from '../domain/rebalanceOutcome'
 import { scheduleView } from '../domain/scheduleView'
 import { stampSoftDeadlines } from '../domain/softDeadlines'
 import type { SleepNight } from '../domain/sleepLog'
+import { lastNight } from '../domain/sleepPlan'
 import { SLEEP_HOURS, withSleep } from '../ui/today/checkIn'
 import { firstAction } from '../domain/microStart'
 import { prescribe } from '../domain/prescribe'
@@ -534,7 +535,7 @@ export async function handleIntent(
         // stamp, and only `RoomShell` was stamping -- so this door reported nothing
         // neglected where the screen would have shown a prescription.
         const today = todayFor(week, now)
-        const prescription = prescribe(stampSoftDeadlines(week, today, blockLog), today, blockLog)
+        const prescription = prescribe(stampSoftDeadlines(week, today), today, blockLog)
 
         // Null covers both "nothing has gone neglected" and "there is no room", which
         // prescribe() deliberately does not distinguish -- either way there is one honest
@@ -663,7 +664,7 @@ export async function handleIntent(
     // given week and what has been confirmed, and a button carrying its own payload could
     // be replayed with a different one.
     const today = todayFor(week, now)
-    const prescription = prescribe(stampSoftDeadlines(week, today, blockLog), today, blockLog)
+    const prescription = prescribe(stampSoftDeadlines(week, today), today, blockLog)
     if (prescription === null) return noGapReply()
 
     // Through the app's own door, not a hand-built copy of what it makes. `restNow.ts` calls
@@ -804,7 +805,13 @@ export async function handleIntent(
       // §8's sleep row, written into the week exactly as the today card writes it -- the
       // same `withSleep`, so a night reported on the phone and one reported in the app
       // reach the model identically.
-      await store.saveWeek(accountId, withSleep(week, today, intent.bucket))
+      // `lastNight(today)`, not `today`: `sleepByDay[d]` is the night at the END of day d,
+      // so the night reported this morning is yesterday's entry. Day 0 has no entry for it
+      // -- the night began outside the fortnight -- and the record below holds it regardless.
+      const night = lastNight(today)
+      if (night !== null) {
+        await store.saveWeek(accountId, withSleep(week, night, intent.bucket))
+      }
 
       /*
        * And recorded as an *answered* night, which the week cannot carry: `sleepByDay` holds

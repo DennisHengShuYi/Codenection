@@ -1,5 +1,6 @@
 import { answeredIds, type BlockRecord } from '../../domain/blockLog'
 import { blocksOnDay } from '../../domain/dayBlocks'
+import { lastNight } from '../../domain/sleepPlan'
 import type { ActivityKind } from '../../engine'
 import type { Schedule } from '../../optimizer'
 import { objectTrend, sleepTrend, trendPhrase, type TrendUnit } from './objectTrend'
@@ -28,6 +29,15 @@ export interface PanelRow {
   /** Whether the room draws it. False for rest, which Ruling 45 left deliberately without an
    *  object: it is the one thing on a day that is not a duty owed to anyone. */
   readonly drawn: boolean
+  /**
+   * The figure in words, where the row knows something the panel cannot derive.
+   *
+   * Absent for every row whose figure is hours or things, which the panel words itself. Set
+   * only by the bed on the fortnight's first morning, where there IS no last night: the
+   * panel would otherwise word zero hours as "nothing today", which reads as "you slept
+   * nothing" -- a claim about the student with nothing behind it.
+   */
+  readonly reading?: string
   /**
    * Where this object is heading, in words, or null when it is flat or nothing measured it.
    *
@@ -158,6 +168,15 @@ export function panelRowsFor(
     }
   }
 
+  /**
+   * Last night, which is `today - 1`.
+   *
+   * `sleepByDay[d]` is the night at the END of day d -- §6.1 puts sleep in `recovery[d]`,
+   * which produces `reserve[d+1]` -- so this row read tonight while calling itself a night
+   * already slept. Null on day 0, where the week holds no entry for the night before it.
+   */
+  const night = lastNight(today)
+
   const bed: PanelRow = {
     id: 'bed',
     label: 'Bed',
@@ -167,8 +186,15 @@ export function panelRowsFor(
      * whether it was answered -- so this row cannot tell "you slept seven hours" from
      * "nobody has asked yet", and must not pretend otherwise.
      */
-    meaning: 'sleep on this day, as the week has it',
-    hours: schedule.sleepByDay[today] ?? 0,
+    meaning: 'last night, as the week has it',
+    hours: night === null ? 0 : (schedule.sleepByDay[night] ?? 0),
+    /*
+     * The row stays even with nothing to report, because Ruling 46 makes this panel the
+     * LEGEND for the room's objects: the bed is still drawn on the first morning, and a
+     * drawn object with no row is an object nothing explains. What changes is that it says
+     * so, rather than showing a zero that reads as an all-nighter.
+     */
+    reading: night === null ? 'nothing recorded before this week' : undefined,
     count: 0,
     blocks: [],
     drawn: true,
@@ -188,5 +214,14 @@ export function panelRowsFor(
     trend: trendPhrase(sleepTrend(reportedNights), 'sleep'),
   }
 
+  /*
+   * The bed is left out on the fortnight's first morning.
+   *
+   * There is no night before day 0 inside the week -- it began before the app's horizon --
+   * so there is no figure to show. Zero would read as "you slept nothing", which is a claim
+   * about the student with nothing behind it, and the row's whole job is to be a night rather
+   * than a plan. `domain/sleepLog` still records that morning's report, so the seven-night
+   * average is not missing it.
+   */
   return [...GROUPS.map(rowFor), bed, rowFor(REST_GROUP)]
 }

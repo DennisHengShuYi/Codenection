@@ -28,6 +28,7 @@ export function LiveCards({
   askSleep,
   outcomes,
   sleepRealityLine,
+  plannedLastNight,
   onEnergy,
   onSleep,
   onBlockAnswer,
@@ -49,6 +50,9 @@ export function LiveCards({
   /** §7.6's Reality Check for sleep, forwarded to `TodayCard`. Optional for the same
    *  no-cold-start reason `outcomes` is. */
   readonly sleepRealityLine?: string | null
+  /** What the week planned for the night the card is asking about, forwarded to
+   *  `TodayCard`. Optional for the same no-cold-start reason `outcomes` is. */
+  readonly plannedLastNight?: number | null
   readonly onEnergy: (energy: number) => void
   readonly onSleep: (bucket: SleepBucket) => void
   readonly onBlockAnswer: (itemId: string, answer: BlockAnswer) => void
@@ -78,6 +82,7 @@ export function LiveCards({
             askSleep={askSleep}
             outcomes={outcomes}
             sleepRealityLine={sleepRealityLine}
+            plannedLastNight={plannedLastNight}
             onEnergy={onEnergy}
             onSleep={onSleep}
             onBlock={onBlockAnswer}

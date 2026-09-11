@@ -18,6 +18,7 @@ import { paramsFor } from '../../domain/engineParams'
 import { firstAction, isStuck } from '../../domain/microStart'
 import { predictionsAfter, resolvePrediction } from '../../domain/predictions'
 import { addBlock, completeItem, deferralOf, editItem, removeItem } from '../../domain/scheduleEdits'
+import { stampEstimateBias } from '../../domain/estimateBias'
 import { stampSoftDeadlines } from '../../domain/softDeadlines'
 import { applyRest, planRest, type RestPlan } from '../../domain/restNow'
 import { RestPreview } from '../rest/RestPreview'
@@ -49,10 +50,10 @@ import { BlockSheet } from '../week/BlockSheet'
 import { blockSheet } from '../week/blockActions'
 import { runRebalance, type RebalanceOutcome } from '../../domain/rebalanceOutcome'
 import { reportedNights, reportedOn } from '../../domain/sleepLog'
-import { retargetSleep, withSleep, withSleepHours } from '../../domain/sleepPlan'
+import { lastNight, retargetSleep, withSleep, withSleepHours } from '../../domain/sleepPlan'
 import { sleepRealityLine } from '../../domain/sleepReality'
 import { sleepForecastLine, squeezeOn } from '../../domain/sleepForecast'
-import { SleepSheet, type PlannedNight } from '../sleep/SleepSheet'
+import { SleepSheet } from '../sleep/SleepSheet'
 import { EventForm } from '../week/EventForm'
 import { RebalancePreview } from '../week/RebalancePreview'
 import { WeekScreen } from '../week/WeekScreen'
@@ -343,7 +344,11 @@ export function RoomShell({
    * Below the `today === null` guard because there is no honest deadline to derive without a
    * day to count from.
    */
-  const week = stampSoftDeadlines(schedule, today, blockLog)
+  // Two stamps, both readings of the log rather than properties of the week: the deadline
+  // every event is held to, and §2.4's correction for this particular work. Neither is ever
+  // saved -- what reaches storage is whatever a handler passes to `setSchedule`, and a stale
+  // correction baked into a saved week would ignore every answer given after it.
+  const week = stampEstimateBias(stampSoftDeadlines(schedule, today), blockLog)
 
   // Threaded alongside `today` from the same clock read -- see the comment above this
   // effect block: the clock enters here and nowhere deeper, so `checkIn.ts` takes it as a
@@ -626,31 +631,24 @@ export function RoomShell({
   const panelRows = panelRowsFor(week, today, blockLog, reportedNights(sleepNights))
 
   /**
-   * Tonight and the two nights after it, each already labelled and already carrying its own
-   * forecast -- so `SleepSheet` derives nothing and cannot disagree with the room about a
-   * date. `dayLabel` is the only place a day index becomes a name (§9).
+   * The days whose load will come out of a night, in words.
    *
-   * Three, matching the window every other trend on the Today panel reads: far enough ahead
-   * to be worth planning, near enough that the schedule behind it still means something.
+   * Today and the next two, the window every other trend on the Today panel reads. Sentences
+   * rather than editable rows: the page asks for a target and for tonight and nothing else,
+   * because nobody knows on Saturday what they will sleep on Monday. These are what the app
+   * has to SAY about those nights instead of asking.
+   *
+   * `shortDayLabel` rather than `dayLabel`, and `domain/calendar` is the only place either is
+   * derived (§9): the full label reads "Today, Sat 12 Sept's deadline will cost you...".
    */
-  const sleepNightRows: readonly PlannedNight[] = Array.from(
+  const sleepForecasts: readonly string[] = Array.from(
     { length: Math.min(3, Math.max(0, week.horizonDays - today)) },
-    (_, offset) => {
-      const dayIndex = today + offset
-
-      return {
-        dayIndex,
-        // The full label above the row, the short one inside the sentence. "Today, Sat 12
-        // Sept's deadline will cost you..." is what the full label produces in prose.
-        label: dayLabel(week, dayIndex, today),
-        hours: week.sleepByDay[dayIndex] ?? sleepTarget,
-        forecast: sleepForecastLine(
-          squeezeOn(week, dayIndex),
-          shortDayLabel(week, dayIndex, today),
-        ),
-      }
-    },
-  )
+    (_, offset) =>
+      sleepForecastLine(
+        squeezeOn(week, today + offset),
+        shortDayLabel(week, today + offset, today),
+      ),
+  ).filter((sentence): sentence is string => sentence !== null)
 
   const noticeCount = cards.length
   const noticeLabel =
@@ -776,15 +774,34 @@ export function RoomShell({
              one moment a student is thinking about the gap between what they aim for and
              what they get. Withheld in low-energy mode, as on the sleep page itself. */
           sleepRealityLine={lowEnergy ? null : sleepRealityLine(sleepNights, sleepTarget)}
+          /* What the week planned for the night being asked about, so the card can confirm
+             rather than merely ask. Null on day 0, whose night began before the fortnight --
+             `lastNight` is the one place that subtraction is done. */
+          plannedLastNight={(() => {
+            const night = lastNight(today)
+            return night === null ? null : (week.sleepByDay[night] ?? null)
+          })()}
           onEnergy={(energy) => {
             if (todayDate === null) return
             setProfile({ ...profile, predictions: resolvePrediction(profile.predictions, todayDate, energy) })
           }}
           onSleep={(bucket) => {
-            setSchedule(withSleep(week, today, bucket))
-            // And as an ANSWERED night, which the week cannot carry: `sleepByDay` holds the
-            // figure and says nothing about whether anybody was asked. Only with a real date,
-            // since the log is keyed by one -- the same condition the Telegram side applies.
+            /*
+             * Last night, which is `today - 1` and not `today`.
+             *
+             * `sleepByDay[d]` is the night at the END of day d (§6.1 puts sleep in
+             * `recovery[d]`, which produces `reserve[d+1]`), so the night that finished this
+             * morning is yesterday's entry. Writing it to `today` put a night already past
+             * onto tonight's plan, and left the day it explained untouched -- which is why
+             * the app could not say "you are low today because you slept five hours".
+             * `lastNight` is the only place that subtraction is done.
+             */
+            const night = lastNight(today)
+            if (night !== null) setSchedule(withSleep(week, night, bucket))
+
+            // Recorded whatever the week could hold. The log is keyed by the morning the
+            // night ended, which exists even on day 0 -- where the night before began
+            // outside the fortnight and has no `sleepByDay` entry at all.
             if (todayDate !== null) reportNight(todayDate, bucket)
             setSleepAnsweredToday(true)
           }}
@@ -802,6 +819,25 @@ export function RoomShell({
           model={blockModel}
           onClose={closeToRoom}
           onBack={goBack}
+          previewLater={(itemId) => {
+            const planned = deferralOf(week, itemId, params)
+            if (planned === null) return ''
+
+            return describeDeferral(
+              {
+                schedule: planned.schedule,
+                title: week.items.find((entry) => entry.id === itemId)?.title ?? 'It',
+                from: planned.from,
+                to: planned.to,
+                skippedFull: planned.skippedFull,
+                skippedWithRoom: planned.skippedWithRoom,
+                blocked: planned.blocked,
+                floorBefore: planned.floorBefore,
+                floorAfter: planned.floorAfter,
+              },
+              'planned',
+            )
+          }}
           onLater={(itemId) => {
             // Ruling 16: never silently reshuffle. `deferItem` returns the week *unchanged*
             // when nothing between here and the deadline has room -- deliberately, so a
@@ -827,7 +863,12 @@ export function RoomShell({
                 to: outcome.to,
                 skippedFull: outcome.skippedFull,
                 skippedWithRoom: outcome.skippedWithRoom,
-              }),
+                blocked: outcome.blocked,
+                floorBefore: outcome.floorBefore,
+                floorAfter: outcome.floorAfter,
+              },
+                'done',
+              ),
             )
             // Back to the week, not the room: it is the screen the student pressed Later
             // from, the screen the sentence is about, and the one where they can see the
@@ -929,7 +970,8 @@ export function RoomShell({
         <SleepSheet
           key="sleep"
           targetHours={sleepTarget}
-          nights={sleepNightRows}
+          tonightHours={week.sleepByDay[today] ?? sleepTarget}
+          forecasts={sleepForecasts}
           /* Withheld in low-energy mode. A measured statement about the student's own habits
              is exactly what §1.5's reduced interface exists to hold back -- the same reason
              the reserve breakdown is withheld -- while the page itself stays reachable. */
@@ -939,7 +981,10 @@ export function RoomShell({
             setSchedule(retargetSleep(week, sleepTarget, hours))
             setSleepTarget(hours)
           }}
-          onSetNight={(dayIndex, hours) => setSchedule(withSleepHours(week, dayIndex, hours))}
+          /* `today`, which under §6.1 is the night at the END of today -- tonight. The same
+             index the bed row deliberately stopped reading, because for the bed that night
+             has not happened yet. */
+          onSetTonight={(hours) => setSchedule(withSleepHours(week, today, hours))}
           onClose={closeToRoom}
         />
       )}
@@ -969,6 +1014,7 @@ export function RoomShell({
           schedule={week}
           params={params}
           today={today}
+          blockLog={blockLog}
           item={editing}
           dayIndex={editing.dayIndex}
           onSave={(fields) => {
@@ -986,6 +1032,7 @@ export function RoomShell({
           schedule={week}
           params={params}
           today={today}
+          blockLog={blockLog}
           item={null}
           dayIndex={view.dayIndex}
           onSave={(fields) => {

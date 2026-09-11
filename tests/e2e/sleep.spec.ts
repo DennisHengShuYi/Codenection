@@ -61,21 +61,34 @@ test('takes a typed target, including one no fixed choice would offer', async ({
   await expect(target).toHaveValue('6.5')
 })
 
-/** Each night takes one too, independently of the target. */
-test('takes a typed figure for one night on its own', async ({ page }) => {
+/** Tonight is settable on its own, independently of the target. */
+test('takes a typed figure for tonight on its own', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openApp(page)
   await page.getByTestId('open-sleep').click()
 
-  // A figure no night in the demo week already holds -- it puts 5.5 on every weeknight, so
-  // choosing one of its own values would make the second assertion prove nothing.
-  const tonight = page.getByTestId('sleep-night-0-hours')
+  const tonight = page.getByTestId('sleep-tonight')
   await tonight.fill('3')
   await tonight.blur()
 
   await expect(tonight).toHaveValue('3')
-  // The night beside it is untouched: setting one night is not setting the week.
-  await expect(page.getByTestId('sleep-night-1-hours')).not.toHaveValue('3')
+})
+
+/**
+ * Two fields, not four.
+ *
+ * The next three nights were typed once, and asking for them was the mistake: nobody knows on
+ * Saturday what they will sleep on Monday. Those nights still drive the projection, so the
+ * page states what it assumes rather than asking somebody to guess.
+ */
+test('asks for a target and tonight, and nothing else', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openApp(page)
+  await page.getByTestId('open-sleep').click()
+
+  await expect(page.getByTestId('sleep-target')).toBeVisible()
+  await expect(page.getByTestId('sleep-tonight')).toBeVisible()
+  await expect(page.locator('input[type="number"]')).toHaveCount(2)
 })
 
 /** Refused in the field and refused again by `withSleepHours`, so nothing a student can type
@@ -90,18 +103,10 @@ test('says why a figure it cannot use was not taken', async ({ page }) => {
   await target.blur()
 
   await expect(page.getByTestId('sleep-target-error')).toHaveCount(1)
-  await expect(page.getByTestId('sleep-night-0-hours')).not.toHaveValue('99')
+  await expect(page.getByTestId('sleep-tonight')).not.toHaveValue('99')
 })
 
-test('lists the nights ahead, each one settable', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await openApp(page)
-  await page.getByTestId('open-sleep').click()
 
-  const nights = page.getByTestId(/^sleep-night-\d+$/)
-  await expect(nights.first()).toBeVisible()
-  expect(await nights.count()).toBeGreaterThan(1)
-})
 
 test('closes back to the room', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
@@ -209,5 +214,7 @@ test('warns that an over-committed day will cost tonight', async ({ page }) => {
 
   await page.getByTestId('open-sleep').click()
 
-  await expect(page.getByTestId('sleep-forecast-3')).toContainText('will cost you about 4 hours')
+  await expect(page.getByTestId('sleep-forecast').first()).toContainText(
+    'will cost you about 4 hours',
+  )
 })

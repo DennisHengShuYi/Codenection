@@ -76,13 +76,17 @@ export function TodayPanel({ rows }: { rows: readonly PanelRow[] }) {
                 {/* Counted where counting is the honest measure -- a box is one errand, not
                     half an hour of one -- and timed everywhere else. */}
                 <span className="text-sm tabular-nums text-ink-soft">
-                  {row.id === 'boxes'
-                    ? row.count === 1
-                      ? '1 thing'
-                      : `${row.count} things`
-                    : row.hours === 0
-                      ? 'nothing today'
-                      : hoursLabel(row.hours)}
+                  {/* The row's own words first, where it has them. Only the bed does, and
+                      only on the fortnight's first morning: it has no night before it to
+                      report, and "nothing today" would read as an all-nighter. */}
+                  {row.reading ??
+                    (row.id === 'boxes'
+                      ? row.count === 1
+                        ? '1 thing'
+                        : `${row.count} things`
+                      : row.hours === 0
+                        ? 'nothing today'
+                        : hoursLabel(row.hours))}
                 </span>
                 {row.trend !== null && (
                   <span

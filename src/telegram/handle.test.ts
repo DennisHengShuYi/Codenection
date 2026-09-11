@@ -1242,6 +1242,10 @@ describe('looking back at yesterday', () => {
  * Ruling 22's last three, at the handler rather than the renderer: a reply that looks right and
  * writes nothing is the failure mode these are guarding against.
  */
+/** Midday on 1970-01-03, so a week anchored to 1970-01-01 puts "today" on day 2 whatever
+ *  zone the run is in -- and day 2 has a day before it to carry last night. */
+const NOON_ON_DAY_TWO = Date.parse('1970-01-03T12:00:00Z')
+
 describe('answering from chat', () => {
   const anchoredWeek = () => ({
     ...week(),
@@ -1276,12 +1280,24 @@ describe('answering from chat', () => {
     expect(reply?.text).toMatch(/cannot place/i)
   })
 
+  /**
+   * Anchored two days back rather than on `now`, because the night being reported is
+   * `today - 1`: `sleepByDay[d]` is the night at the END of day d (§6.1 puts sleep in
+   * `recovery[d]`, which produces `reserve[d+1]`). On a week starting today there is no such
+   * entry at all, which the day-zero case below covers.
+   */
   it('writes a reported night into the week, exactly as the today card does', async () => {
-    const h = harness({ loadWeek: async () => anchoredWeek() })
+    const h = harness({ loadWeek: async () => ({ ...week(), startedOn: '1970-01-01' }) })
 
-    await handleIntent({ kind: 'sleepAnswer', chatId: 7, bucket: 'under5' } as never, h.store, 1000)
+    await handleIntent(
+      { kind: 'sleepAnswer', chatId: 7, bucket: 'under5' } as never,
+      h.store,
+      NOON_ON_DAY_TWO,
+    )
 
-    expect(h.saved[0]?.sleepByDay[0]).toBe(4.5)
+    expect(h.saved[0]?.sleepByDay[1]).toBe(4.5)
+    // Not tonight, which has not happened.
+    expect(h.saved[0]?.sleepByDay[2]).toBe(7)
   })
 
   /**
@@ -1590,34 +1606,36 @@ describe('Ruling 62 when storage will not answer', () => {
  * left `sleepReality` unable to count it.
  */
 describe('a night reported in chat', () => {
-  const anchored = (): Schedule => ({ ...week(), startedOn: '2026-09-12' })
-  const noon = Date.parse('2026-09-12T12:00:00Z')
   const sleepAnswer = { kind: 'sleepAnswer', chatId: 7, bucket: 'six' } as never
 
   it('is recorded as an answered night, not only written into the week', async () => {
-    const h = harness({ loadWeek: async () => anchored() })
+    const h = harness({ loadWeek: async () => ({ ...week(), startedOn: '1970-01-01' }) })
 
-    await handleIntent(sleepAnswer, h.store, noon)
+    await handleIntent(sleepAnswer, h.store, NOON_ON_DAY_TWO)
 
+    // Keyed by the morning the night ended, which is the date the app has in hand and the
+    // one that exists even when the night began outside the fortnight.
     expect(h.sleepNights).toEqual([
-      expect.objectContaining({ isoDate: '2026-09-12', hours: 6 }),
+      expect.objectContaining({ isoDate: '1970-01-03', hours: 6 }),
     ])
-    expect(h.saved[0]?.sleepByDay[0]).toBe(6)
+    expect(h.saved[0]?.sleepByDay[1]).toBe(6)
   })
 
   /**
-   * An unanchored week has no real dates, and the log is keyed by one -- the same constraint
-   * the energy branch already states: recording against a day index "means something
-   * different tomorrow". The week write still happens, because it is index-based and has
-   * always worked; only the dated record is skipped.
+   * The fortnight's first day has no entry for the night before it -- that night began
+   * outside the week the app holds -- so there is nothing to write. The record is still
+   * kept, because the log is keyed by a date rather than bounded by the horizon, and that
+   * is what keeps the seven-night average honest from the first morning.
    */
-  it('still writes the week when there is no real date to key the record to', async () => {
-    const h = harness({ loadWeek: async () => week() })
+  it('records the night on day zero, where the week has no entry to write', async () => {
+    const h = harness({ loadWeek: async () => ({ ...week(), startedOn: '1970-01-01' }) })
 
-    const reply = await handleIntent(sleepAnswer, h.store, noon)
+    const reply = await handleIntent(sleepAnswer, h.store, Date.parse('1970-01-01T12:00:00Z'))
 
-    expect(h.saved[0]?.sleepByDay[0]).toBe(6)
-    expect(h.sleepNights).toEqual([])
+    expect(h.saved).toEqual([])
+    expect(h.sleepNights).toEqual([
+      expect.objectContaining({ isoDate: '1970-01-01', hours: 6 }),
+    ])
     expect(reply).not.toBeNull()
   })
 })

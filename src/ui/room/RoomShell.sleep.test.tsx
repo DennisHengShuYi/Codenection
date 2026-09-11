@@ -15,11 +15,16 @@ import { RoomShell } from './RoomShell'
  * that a reported night survives a remount -- which is the defect the durable log fixes and
  * which nothing below this level can see.
  */
-const daysAgo = (days: number): string => {
-  const then = new Date()
-  then.setUTCDate(then.getUTCDate() - days)
-  return then.toISOString().split('T')[0] ?? ''
-}
+/**
+ * Local, like the app.
+ *
+ * `toISOString()` gives a UTC date while `domain/calendar` derives the student's day locally
+ * (§9 puts this app at UTC+8), so a UTC-derived anchor makes "three days ago" land on day 4
+ * for the first eight hours of every day -- and any test asserting a day index then fails on
+ * the clock rather than on the code. This suite has now been bitten by that twice.
+ */
+const daysAgo = (days: number): string =>
+  isoDateOf(new Date(Date.now() - days * 24 * 60 * 60 * 1000))
 
 /**
  * Asked of the app, not re-derived.
@@ -29,7 +34,7 @@ const daysAgo = (days: number): string => {
  * and a test that re-derived it would pass or fail depending on the hour it ran. That exact
  * latent failure has already bitten `RoomShell.prediction.test.tsx` once.
  */
-const today = (): string => isoDateOf(new Date())
+const today = (): string => daysAgo(0)
 
 const week = (over: Partial<Schedule> = {}): Schedule => ({
   items: [],
@@ -119,22 +124,27 @@ describe('the sleep page', () => {
     })
   })
 
-  /** Setting one night is the student overruling the target for that night only, so the
-   *  others must not follow it. */
-  it('leaves the other nights alone when one is set', async () => {
+  /**
+   * Tonight is the one night the page still asks about, and it is the student overruling the
+   * target for that night only -- so the rest of the fortnight must not follow it.
+   *
+   * The next three nights used to be typed too. They asked for something nobody can answer:
+   * on Saturday you do not know what you will sleep on Monday. Those nights still matter to
+   * the projection, which is why the page now SAYS what it assumes instead of asking.
+   */
+  it('sets tonight without moving the rest of the fortnight', async () => {
     const { repository } = await openRoom()
     await userEvent.click(screen.getByTestId('open-sleep'))
 
-    const rows = await screen.findAllByTestId(/^sleep-night-\d+$/)
-    const second = rows[1]?.getAttribute('data-testid')?.split('-').pop() ?? '1'
-    const field = screen.getByTestId(`sleep-night-${second}-hours`)
-    await userEvent.clear(field)
-    await userEvent.type(field, '6')
+    const tonight = await screen.findByTestId('sleep-tonight')
+    await userEvent.clear(tonight)
+    await userEvent.type(tonight, '6')
     await userEvent.tab()
 
     await waitFor(async () => {
       const saved = await repository.loadWeek()
-      expect(saved?.sleepByDay[Number(second)]).toBe(6)
+      // Anchored three days back, so today is day 3.
+      expect(saved?.sleepByDay[3]).toBe(6)
       expect(saved?.sleepByDay.filter((hours) => hours === 6)).toHaveLength(1)
     })
   })
@@ -161,5 +171,54 @@ describe('the sleep page', () => {
     await userEvent.click(screen.getByTestId('open-notices'))
 
     await waitFor(() => expect(screen.queryByTestId('sleep-six')).toBeNull())
+  })
+})
+
+/**
+ * The night a student reports this morning is the night that ended this morning.
+ *
+ * `sleepByDay[d]` is the night at the END of day d, because §6.1 puts sleep in `recovery[d]`
+ * and `recovery[d]` produces `reserve[d+1]`. So "last night" is `today - 1`. The card wrote
+ * it to `today` -- tonight -- so the figure never reached the day it explained and tonight's
+ * plan was overwritten by a night already past.
+ */
+describe('reporting last night', () => {
+  const answerSleep = async () => {
+    await userEvent.click(screen.getByTestId('open-notices'))
+    await userEvent.click(await screen.findByTestId('sleep-six'))
+  }
+
+  it('writes it to the night that ended this morning, not to tonight', async () => {
+    // Anchored three days ago, so today is day 3 and there is a day before it.
+    const { repository } = await openRoom()
+
+    await answerSleep()
+
+    await waitFor(async () => {
+      const saved = await repository.loadWeek()
+      expect(saved?.sleepByDay[2]).toBe(6)
+    })
+    // Tonight is still the plan, not a copy of a night already gone.
+    expect((await repository.loadWeek())?.sleepByDay[3]).toBe(8)
+  })
+
+  /** Day 0 has no night before it inside the fortnight, so there is nothing to write -- but
+   *  the log is keyed by date and holds it anyway, which is what keeps the average honest. */
+  it('still records the night on day zero, where there is no week entry to write', async () => {
+    counter += 1
+    const repository = createLocalRepository(`sleep-day-zero-${counter}`)
+    await repository.clear()
+    await repository.saveWeek(week({ startedOn: today() }))
+    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+
+    await answerSleep()
+
+    await waitFor(async () => {
+      const settings = await repository.loadSettings()
+      expect(settings.sleepNights).toHaveLength(1)
+    })
+    const saved = await repository.loadWeek()
+    expect(saved?.sleepByDay.every((hours) => hours === 8)).toBe(true)
   })
 })

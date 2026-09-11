@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { MIN_SAMPLES_TO_SPEAK } from './evidence'
 import type { SleepNight } from './sleepLog'
-import { measuredNight, sleepRealityLine } from './sleepReality'
+import { MEASURED_NIGHTS, measuredNight, sleepRealityLine } from './sleepReality'
 
 const nights = (...hours: readonly number[]): readonly SleepNight[] =>
   hours.map((value, index) => ({
@@ -29,6 +29,32 @@ describe('measuredNight', () => {
 
   it('says nothing about an empty log', () => {
     expect(measuredNight([])).toBeNull()
+  })
+})
+
+/**
+ * A week, not a lifetime.
+ *
+ * The average is a claim about how the student sleeps *now*, and it is what the app reasons
+ * about the nights ahead from. A term's worth of history drags that toward a student who no
+ * longer exists -- a good October should not keep a bad December looking survivable, which is
+ * the same argument `dial/trend` makes for judging a reserve on its most recent days rather
+ * than on the whole projection.
+ */
+describe('measuredNight over a week', () => {
+  it('reads only the most recent week of nights', () => {
+    const older = Array.from({ length: MEASURED_NIGHTS }, () => 8)
+
+    // A run of 4-hour nights before the window, which must not pull the average down.
+    expect(measuredNight(nights(4, 4, 4, ...older))).toBe(8)
+  })
+
+  it('uses everything it has while it has less than a week', () => {
+    expect(measuredNight(nights(6, 6, 6))).toBe(6)
+  })
+
+  it('counts a week as seven nights', () => {
+    expect(MEASURED_NIGHTS).toBe(7)
   })
 })
 

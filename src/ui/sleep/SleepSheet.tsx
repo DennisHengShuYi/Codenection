@@ -10,25 +10,19 @@ import { Sheet } from '../kit/Sheet'
  * intends, reachable whenever they want it. The two write to different places for that reason,
  * and `domain/sleepReality` is what compares them.
  *
- * Typed, not chosen. It offered four fixed figures first, which made a tidy row of buttons and
- * a dishonest instrument: a student who sleeps five and a half hours had no way to say so, and
- * the page put sixteen buttons on a narrow sheet to offer twelve figures nobody asked for. A
- * number field says anything, in less space.
+ * Two fields, and that is the design rather than a simplification.
  *
- * Every commit is still owned by the parent -- `RestPreview`'s division, and the established
- * one here. What this component owns is the half-typed state of a field, which is nobody
- * else's business: a draft of "1" on the way to "12" must not reach the week.
+ * It offered four: a target and the next three nights, each typed. The three were asking for
+ * something a student cannot answer -- nobody knows on Saturday what they will sleep on
+ * Monday. Those nights matter enormously to the model, which projects three weeks from them,
+ * but the answer belongs to the student's own history (`sleepReality`) rather than to a form.
+ * What the page owes them instead is the ASSUMPTION the app is making, which was invisible
+ * while four fields asked them to fill it in by hand.
+ *
+ * Every commit is owned by the parent -- `RestPreview`'s division, and the established one
+ * here. What this component owns is the half-typed state of a field, which is nobody else's
+ * business: a draft of "1" on the way to "12" must not reach the week.
  */
-
-/** One night as the page shows it: already labelled, already carrying its own forecast, so
- *  this component derives nothing and cannot disagree with the room about a date. */
-export interface PlannedNight {
-  readonly dayIndex: number
-  readonly label: string
-  readonly hours: number
-  /** Null when the day fits, which renders no element at all rather than an empty one. */
-  readonly forecast: string | null
-}
 
 const INPUT =
   'min-h-11 w-24 rounded border border-line bg-surface px-2 py-1 text-sm tabular-nums text-ink'
@@ -54,44 +48,45 @@ function readHours(text: string): { hours: number } | { problem: string } {
 
 export function SleepSheet({
   targetHours,
-  nights,
+  tonightHours,
   realityLine,
+  forecasts,
   onSetTarget,
-  onSetNight,
+  onSetTonight,
   onClose,
 }: {
   readonly targetHours: number
-  readonly nights: readonly PlannedNight[]
+  /** `sleepByDay[today]`, which under §6.1 is the night at the END of today -- tonight. */
+  readonly tonightHours: number
   /**
-   * §7.6's line, or null.
+   * §7.6's line about the gap between what is planned and what is actually slept, or null.
    *
-   * Null both when nothing has been measured and when low-energy mode is withholding it: a
-   * measured statement about the student's own habits is exactly what that mode exists to
-   * hold back, and this component does not need to know which reason applies.
+   * Null both when nothing has been measured -- fewer than three reported nights -- and when
+   * low-energy mode is withholding it, because a measured statement about the student's own
+   * habits is exactly what that mode exists to hold back. This component does not need to
+   * know which reason applies.
    */
   readonly realityLine: string | null
+  /** Days whose load will come out of a night, each sentence already naming its own day, so
+   *  this component derives nothing and cannot disagree with the room about a date. */
+  readonly forecasts: readonly string[]
   readonly onSetTarget: (hours: number) => void
-  readonly onSetNight: (dayIndex: number, hours: number) => void
+  readonly onSetTonight: (hours: number) => void
   readonly onClose: () => void
 }): JSX.Element {
   /**
    * What is in each field, which is not the same as what the week holds.
    *
-   * Keyed by day index, with `null` for the target. A field is only in here while the student
-   * is editing it; everything else reads its value from the week, so a change made anywhere
-   * else still shows up.
+   * A field is only in here while the student is editing it; otherwise it reads its value
+   * from the week, so a change made anywhere else still shows up.
    */
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [problems, setProblems] = useState<Record<string, string>>({})
 
-  const valueOf = (key: string, stored: number): string | number =>
-    drafts[key] ?? stored
-
-  const clearProblem = (key: string) =>
-    setProblems((current) => {
-      const { [key]: _gone, ...rest } = current
-      return rest
-    })
+  const forget = (key: string, from: Record<string, string>): Record<string, string> => {
+    const { [key]: _gone, ...rest } = from
+    return rest
+  }
 
   /**
    * While typing: hold the text, say whether it can be used, and write nothing.
@@ -111,7 +106,7 @@ export function SleepSheet({
       return
     }
 
-    clearProblem(key)
+    setProblems((current) => forget(key, current))
   }
 
   /**
@@ -129,40 +124,47 @@ export function SleepSheet({
     const read = readHours(text)
     if ('problem' in read) return
 
-    setDrafts((current) => {
-      const { [key]: _gone, ...rest } = current
-      return rest
-    })
-
+    setDrafts((current) => forget(key, current))
     if (read.hours !== stored) commit(read.hours)
   }
 
-  return (
-    <Sheet title="Sleep" onClose={onClose}>
-      <Field label="Hours a night you are aiming for" error={problems.target}>
+  const hoursField = (
+    key: string,
+    label: string,
+    stored: number,
+    commit: (hours: number) => void,
+  ) => (
+    <>
+      <Field label={label} error={problems[key]}>
         <input
           type="number"
-          data-testid="sleep-target"
+          data-testid={`sleep-${key}`}
           min={0}
           max={MAX_SLEEP_HOURS}
           step={0.5}
-          value={valueOf('target', targetHours)}
-          onChange={(event) => typing('target', event.target.value)}
-          onBlur={() => finished('target', targetHours, onSetTarget)}
+          value={drafts[key] ?? stored}
+          onChange={(event) => typing(key, event.target.value)}
+          onBlur={() => finished(key, stored, commit)}
           className={INPUT}
         />
       </Field>
 
       {/* `Field` renders the error itself for screen readers; this is the same sentence under
           a testid, so a test asserts what a student sees rather than a class name. */}
-      {problems.target !== undefined && (
-        <p data-testid="sleep-target-error" className="sr-only">
-          {problems.target}
+      {problems[key] !== undefined && (
+        <p data-testid={`sleep-${key}-error`} className="sr-only">
+          {problems[key]}
         </p>
       )}
+    </>
+  )
+
+  return (
+    <Sheet title="Sleep" onClose={onClose}>
+      {hoursField('target', 'Hours a night you are aiming for', targetHours, onSetTarget)}
 
       {/* Under the field rather than above it, mirroring where `TodayCard` puts its own bias
-          line and for that line's stated reason: above, it colours the choice being made
+          line and for that line's stated reason: above, it colours the figure being chosen
           rather than informing it. */}
       {realityLine !== null && (
         <p data-testid="sleep-reality" className="mt-3 text-sm text-ink-soft">
@@ -172,44 +174,21 @@ export function SleepSheet({
 
       <hr className="my-3 border-line" />
 
-      <ul className="flex flex-col gap-3">
-        {nights.map((night) => (
-          <li key={night.dayIndex} data-testid={`sleep-night-${night.dayIndex}`}>
-            <Field label={night.label} error={problems[String(night.dayIndex)]}>
-              <input
-                type="number"
-                data-testid={`sleep-night-${night.dayIndex}-hours`}
-                min={0}
-                max={MAX_SLEEP_HOURS}
-                step={0.5}
-                value={valueOf(String(night.dayIndex), night.hours)}
-                onChange={(event) => typing(String(night.dayIndex), event.target.value)}
-                onBlur={() =>
-                  finished(String(night.dayIndex), night.hours, (hours) =>
-                    onSetNight(night.dayIndex, hours),
-                  )
-                }
-                className={INPUT}
-              />
-            </Field>
+      {hoursField('tonight', 'Tonight', tonightHours, onSetTonight)}
 
-            {problems[String(night.dayIndex)] !== undefined && (
-              <p data-testid={`sleep-night-${night.dayIndex}-error`} className="sr-only">
-                {problems[String(night.dayIndex)]}
-              </p>
-            )}
-
-            {night.forecast !== null && (
-              <p
-                data-testid={`sleep-forecast-${night.dayIndex}`}
-                className="mt-1 text-xs font-medium text-ink"
-              >
-                {night.forecast}
-              </p>
-            )}
-          </li>
-        ))}
-      </ul>
+      {forecasts.length > 0 && (
+        <ul className="mt-3 flex flex-col gap-1">
+          {forecasts.map((sentence) => (
+            <li
+              key={sentence}
+              data-testid="sleep-forecast"
+              className="text-xs font-medium text-ink"
+            >
+              {sentence}
+            </li>
+          ))}
+        </ul>
+      )}
     </Sheet>
   )
 }

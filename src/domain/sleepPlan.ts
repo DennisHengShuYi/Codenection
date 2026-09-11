@@ -138,3 +138,24 @@ export function retargetSleep(
 
   return seedSleepPlan(schedule, toTarget, edited)
 }
+
+/**
+ * The day whose end-of-day night a student is reporting this morning.
+ *
+ * `sleepByDay[d]` is the night at the END of day d, which §6.1's arithmetic decides rather
+ * than anyone choosing: sleep enters `recovery[d]`, and `recovery[d]` produces `reserve[d+1]`.
+ * So the night that finished this morning belongs to yesterday's entry.
+ *
+ * This subtraction is done here and nowhere else, because getting it wrong is invisible. The
+ * check-in card asked "how much sleep last night?" and wrote the answer to `sleepByDay[today]`
+ * -- tonight, a night that had not happened. Last night's sleep therefore never reached the
+ * day it explained, so the app could never say "you are low today because you slept five
+ * hours", and tonight's plan was overwritten by a night already past.
+ *
+ * Null on day 0, and that is the honest answer rather than a clamp. The night before the
+ * fortnight began is outside the week the app holds; `domain/sleepLog` can still record it,
+ * because that log is keyed by date and not bounded by the horizon.
+ */
+export function lastNight(today: number): number | null {
+  return today <= 0 ? null : today - 1
+}

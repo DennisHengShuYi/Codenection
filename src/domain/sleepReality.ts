@@ -26,6 +26,22 @@ import { reportedNights, type SleepNight } from './sleepLog'
 const WORTH_SAYING_HOURS = 0.5
 
 /**
+ * A week of nights, and no further back.
+ *
+ * The average is a claim about how this student sleeps *now* -- it is what the app reasons
+ * about the nights ahead from, so it has to describe the student it has rather than the one
+ * they were. A term's worth of history drags it toward somebody who no longer exists: a good
+ * October would keep a bad December looking survivable, which is the failure §1.2 exists to
+ * prevent and the same argument `dial/trend` makes for judging a reserve on its most recent
+ * days rather than on the whole projection.
+ *
+ * Seven rather than three or fourteen because a week is the cycle a student's sleep actually
+ * has -- weeknights and a weekend -- so it is the shortest window that does not read a run of
+ * late essay nights as the new normal, or a rested Sunday as a recovery.
+ */
+export const MEASURED_NIGHTS = 7
+
+/**
  * What the student actually sleeps, or null when the app has not earned the right to say.
  *
  * Null rather than the target, and rather than a population figure: a caller wanting a
@@ -33,7 +49,9 @@ const WORTH_SAYING_HOURS = 0.5
  * figure ends up quoted as a measured one, which §8.2 is explicit the copy must never do.
  */
 export function measuredNight(log: readonly SleepNight[]): number | null {
-  const reported = reportedNights(log)
+  // The most recent week, oldest first -- `reportedNights` already orders by the night
+  // rather than by when it was answered, which is what makes this slice the right nights.
+  const reported = reportedNights(log).slice(-MEASURED_NIGHTS)
   if (reported.length < MIN_SAMPLES_TO_SPEAK) return null
 
   const total = reported.reduce((sum, hours) => sum + hours, 0)

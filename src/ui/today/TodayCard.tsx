@@ -74,6 +74,15 @@ export function TodayCard(props: {
    * withholding it, and this component does not need to know which.
    */
   readonly sleepRealityLine?: string | null
+  /**
+   * What the week planned for the night being asked about, when it planned anything.
+   *
+   * Named in the question so the answer is worth more: §7.6's Reality Check compares plan
+   * against outcome, and a reported figure with no plan beside it is only half that
+   * comparison. Null on the fortnight's first morning, whose night began before the week the
+   * app holds -- there the plain question is the honest one, because there was no plan.
+   */
+  readonly plannedLastNight?: number | null
   readonly onEnergy: (energy: number) => void
   readonly onSleep: (bucket: SleepBucket) => void
   readonly onBlock: (itemId: string, answer: BlockAnswer) => void
@@ -85,6 +94,7 @@ export function TodayCard(props: {
     askSleep,
     outcomes = [],
     sleepRealityLine = null,
+    plannedLastNight = null,
     onEnergy,
     onSleep,
     onBlock,
@@ -129,7 +139,11 @@ export function TodayCard(props: {
 
       {askSleep && (
         <fieldset className="flex flex-col gap-2">
-          <legend className="text-base font-medium">How much sleep last night?</legend>
+          <legend data-testid="sleep-question" className="text-base font-medium">
+            {plannedLastNight === null
+              ? 'How much sleep last night?'
+              : `Last night you planned ${plannedLastNight} hours. How did it go?`}
+          </legend>
           <div className="flex flex-wrap gap-2">
             {(Object.keys(SLEEP_HOURS) as SleepBucket[]).map((bucket) => (
               <Button

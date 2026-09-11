@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../../data'
 import type { BlockRecord } from '../../domain/blockLog'
+import { isoDateOf } from '../../domain/calendar'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule, ScheduledItem } from '../../optimizer'
 import { RoomShell } from './RoomShell'
@@ -194,13 +195,30 @@ describe('RoomShell with a block to confirm', () => {
    * -- see `checkIn.ts`'s own doc comment. This is the level that proves `RoomShell` really
    * wires the answer through to the stored week, not just that `withSleep` itself works.
    */
+  /**
+   * Anchored three days back, where it used to run on an unanchored week.
+   *
+   * The card reports LAST night, which is `sleepByDay[today - 1]`: that array is keyed by the
+   * day a night ends, because §6.1 puts sleep in `recovery[d]` and `recovery[d]` produces
+   * `reserve[d+1]`. On a week starting today there is no such entry at all -- the night began
+   * before the fortnight -- so the figure goes only to the durable log, which
+   * `RoomShell.sleep.test.tsx` covers. This case keeps its own claim, that the answer reaches
+   * the saved week, by giving the week a night to reach.
+   *
+   * The anchor is a LOCAL date. `toISOString()` is UTC and the app derives the student's day
+   * locally (§9), so a UTC anchor puts today on day 4 for the first eight hours of every day
+   * and this assertion would fail on the clock rather than on the code.
+   */
   it('recording a night of sleep on the today card writes it into the saved week', async () => {
-    const repository = await renderHome()
+    const startedOn = isoDateOf(new Date(Date.now() - 3 * 24 * 60 * 60 * 1000))
+    const repository = await renderHome(week({ startedOn }))
     await waitFor(() => expect(screen.getByTestId('sleep-under5')).toBeVisible())
 
     await userEvent.click(screen.getByTestId('sleep-under5'))
 
-    await waitFor(async () => expect((await repository.loadWeek())?.sleepByDay[0]).toBe(4.5))
+    await waitFor(async () => expect((await repository.loadWeek())?.sleepByDay[2]).toBe(4.5))
+    // Not tonight, which has not happened.
+    expect((await repository.loadWeek())?.sleepByDay[3]).toBe(7)
   })
 
   it('dismissing the today card with "Not now" hides it without answering anything', async () => {

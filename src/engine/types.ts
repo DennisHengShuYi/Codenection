@@ -89,6 +89,9 @@ export interface Activity {
 export interface DayInput {
   readonly dayIndex: number
   readonly activities: readonly Activity[]
+  /** Hours slept on the night at the END of this day -- the night between it and the next.
+   *  It enters §6.1's `recovery[d]`, which produces `reserve[d+1]`, so this is the sleep the
+   *  student wakes up on tomorrow. `Schedule.sleepByDay` states the same rule at length. */
   readonly sleepHours: number
   /** Distinct venues visited; drives travel load (§6.4). */
   readonly venueChanges: number

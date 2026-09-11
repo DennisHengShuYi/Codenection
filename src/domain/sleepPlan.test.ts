@@ -5,6 +5,7 @@ import {
   MAX_SLEEP_HOURS,
   SLEEP_HOURS,
   isRealSleepHours,
+  lastNight,
   retargetSleep,
   seedSleepPlan,
   withSleep,
@@ -195,5 +196,30 @@ describe('withSleepHours and a figure it cannot hold', () => {
   it('rounds to one decimal rather than storing a float remainder', () => {
     expect(withSleepHours(week(8), 3, 6.25).sleepByDay[3]).toBe(6.3)
     expect(withSleepHours(week(8), 3, 7.049).sleepByDay[3]).toBe(7)
+  })
+})
+
+/**
+ * Which night "last night" is, in one place.
+ *
+ * `sleepByDay[d]` is the night at the END of day d -- §6.1 puts sleep in `recovery[d]`, which
+ * produces `reserve[d+1]` -- so the night a student reports this morning is `today - 1`. The
+ * check-in card wrote it to `today` instead, which is tonight, so the report never reached the
+ * day it explained. This function exists so that subtraction is done once and named.
+ */
+describe('lastNight', () => {
+  it('is the day before today, because that is the night that ended this morning', () => {
+    expect(lastNight(5)).toBe(4)
+    expect(lastNight(1)).toBe(0)
+  })
+
+  /**
+   * Null on the fortnight's first day, and that is the honest answer rather than a clamp to
+   * zero. The night before day 0 happened before the week the app knows about, so there is no
+   * entry for it -- writing it to day 0 would put last night's figure on tonight, which is
+   * the very bug this replaces.
+   */
+  it('is nothing on the first day, whose night before the app has no slot for', () => {
+    expect(lastNight(0)).toBeNull()
   })
 })

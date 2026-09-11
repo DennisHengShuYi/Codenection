@@ -27,7 +27,7 @@ const parsed = (over: Partial<ParsedItem> = {}): ParsedItem => ({
 })
 
 /**
- * §38: recurrence is expanded at entry and never stored as a rule.
+ * Ruling 38: recurrence is expanded at entry and never stored as a rule.
  *
  * One weekly class becomes three items across the 21-day horizon, exactly as the `umWeek`
  * fixture already hand-writes them. The engine takes a flat list by design, the horizon is
@@ -59,7 +59,7 @@ describe('expandRecurring', () => {
     expect(expanded.map((item) => item.deadlineDay)).toEqual([1, 3, 8, 10, 15, 17])
   })
 
-  /** §40: an end date, for semester break. Nothing monthly, nothing fortnightly, no rules. */
+  /** Ruling 40: an end date, for semester break. Nothing monthly, nothing fortnightly, no rules. */
   it('stops at the end of the series', () => {
     const expanded = expandRecurring(
       parsed({ repeat: { weekdays: [2], untilDay: 9 } }),
@@ -94,7 +94,7 @@ describe('expandRecurring', () => {
   })
 
   /**
-   * §39: one field, and it buys the three operations expansion otherwise makes painful --
+   * Ruling 39: one field, and it buys the three operations expansion otherwise makes painful --
    * cancel just this Tuesday, this class has ended, it moved to Thursday. Without it,
    * dropping a module means deleting three items one at a time.
    */
@@ -154,7 +154,7 @@ describe('expandRecurring', () => {
 })
 
 /**
- * §37: the same class, noticed rather than declared.
+ * Ruling 37: the same class, noticed rather than declared.
  *
  * If a student adds something and a similar-titled block already sits on the same weekday
  * at the same hour, that is a series they are typing out one instance at a time. Offering to
@@ -205,7 +205,7 @@ describe('suggestRepeat', () => {
     expect(suggestRepeat(parsed({ deadlineDay: 8 }), existing)?.weekdays).toEqual([2])
   })
 
-  /** Suggested, never applied. §41: it is a question put on the chip, and the returned
+  /** Suggested, never applied. Ruling 41: it is a question put on the chip, and the returned
    *  repeat runs to the end of the horizon rather than inventing an end date nobody gave. */
   it('suggests a weekly series with no invented end date', () => {
     const existing = anchored([block({ dayIndex: 1, startHour: 9 })])

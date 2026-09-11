@@ -70,7 +70,7 @@ export type View =
    *  preview notice, the room in words, the accuracy line and the live cards -- behind one
    *  button, so the room is the drawing again. */
   | { readonly kind: 'notices' }
-  /** §46: what each object in the room means, and what is behind it today. Floating beside
+  /** Ruling 46: what each object in the room means, and what is behind it today. Floating beside
    *  the room from 768px; below that this address is how it opens. */
   | { readonly kind: 'today' }
   /**

@@ -5,9 +5,9 @@ import type { Schedule, ScheduledItem } from '../../optimizer'
 import { panelRowsFor } from './todayRows'
 
 /**
- * §46: what each object in the room means, and what is behind it today.
+ * Ruling 46: what each object in the room means, and what is behind it today.
  *
- * §45 made the room a picture of today -- study stacks books, exercise puts a dumbbell out
+ * Ruling 45 made the room a picture of today -- study stacks books, exercise puts a dumbbell out
  * -- and nothing anywhere says so. This is the vocabulary, written down, and it doubles as
  * today's list because every row names a real thing on the day.
  *
@@ -66,7 +66,7 @@ describe('the rows, as a legend', () => {
   })
 
   /**
-   * The legend is only useful if it matches the drawing. These are the groupings §45 bound
+   * The legend is only useful if it matches the drawing. These are the groupings Ruling 45 bound
    * the furniture from, and the panel reading them differently would teach a student a
    * vocabulary the room does not speak.
    */
@@ -148,7 +148,7 @@ describe('the rows, as today', () => {
 
 describe('the two rows that are not ordinary objects', () => {
   /**
-   * §45 gave rest no furniture deliberately -- it is the one thing on a day that is not a
+   * Ruling 45 gave rest no furniture deliberately -- it is the one thing on a day that is not a
    * duty. But a panel that is also today's list would be lying by omission if a rest block
    * on today appeared nowhere, so it earns a row that says it has no object.
    */

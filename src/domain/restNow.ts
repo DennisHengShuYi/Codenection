@@ -29,7 +29,7 @@ import { missedSoftDeadlines } from './softDeadlines'
  *
  * Nothing here applies anything. `planRest` computes an offer; adopting it is a decision the
  * student makes on the preview this feeds — the same shape as `rebalanceOutcome`, and for
- * the same reason (§16: a week that changes behind somebody's back is one they lose their
+ * the same reason (Ruling 16: a week that changes behind somebody's back is one they lose their
  * grip on).
  *
  * Deterministic, and free of any clock of its own. `today` and `nowHour` are supplied by the

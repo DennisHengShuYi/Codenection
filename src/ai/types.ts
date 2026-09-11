@@ -2,13 +2,13 @@ import type { Repeat } from '../domain/recurrence'
 import type { ActivityKind, LoadType } from '../engine'
 
 /**
- * §44: which real day the horizon's day 0 is.
+ * Ruling 44: which real day the horizon's day 0 is.
  *
  * Both readers needed it and neither had it. The rules computed a named weekday from
  * `today % 7`, which assumes day 0 is a Sunday; the model was told "day index from 0
  * (today)" and never told what day today was, so it had to guess -- guess Monday, and a
  * stated Thursday comes back as day 3. Either way "gym thursday" landed on the wrong day,
- * and §43's Day select is what finally showed it to the student.
+ * and Ruling 43's Day select is what finally showed it to the student.
  *
  * `startWeekday` is 0 for Sunday, matching `Date.getUTCDay` and `Repeat.weekdays`.
  */
@@ -35,7 +35,7 @@ export interface ParsedItem {
   /** Day index within the horizon, or null when nothing in the text implied one. */
   readonly deadlineDay: number | null
   /**
-   * §43: the hour of the day the student actually said, or null when they said none.
+   * Ruling 43: the hour of the day the student actually said, or null when they said none.
    *
    * The schema carried a day and never a time, so "WIA3001 lecture Tuesday 9am" arrived as
    * Tuesday and nothing else, and `placement.ts` then picked an hour -- a free slot, or a
@@ -70,7 +70,7 @@ export interface ParsedItem {
   /**
    * How often this comes round, or null for a one-off.
    *
-   * §36: the schema returned one `deadlineDay`, so "WIA3001 lecture every Tuesday 9am"
+   * Ruling 36: the schema returned one `deadlineDay`, so "WIA3001 lecture every Tuesday 9am"
    * produced a single item on a single day -- and recurring items are almost entirely the
    * fixed set that everything else is measured against. If the timetable is wrong, every
    * projection is wrong, and nothing in the app revealed it.
@@ -80,7 +80,7 @@ export interface ParsedItem {
    */
   readonly repeat: Repeat | null
   /**
-   * §39: which series this instance came from, when it came from one.
+   * Ruling 39: which series this instance came from, when it came from one.
    *
    * Optional because a one-off has none. One field, and it is what makes "this class has
    * ended" a single operation rather than deleting three items by hand.

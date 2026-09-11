@@ -33,7 +33,7 @@ const stateFor = (reserves: Reserves, week: Schedule = schedule()) =>
     reserves,
     project(reserves, toDayInputs(week, ALL_PRESENT), DEFAULT_PARAMS),
     week,
-    // §45: the room draws a day now. These older tests are about the bindings that still
+    // Ruling 45: the room draws a day now. These older tests are about the bindings that still
     // read reserves -- the character, the door, the weather -- so they look at a day with
     // nothing on it and say so, rather than leaving the day to a default.
     0,
@@ -42,7 +42,7 @@ const stateFor = (reserves: Reserves, week: Schedule = schedule()) =>
 
 describe('roomStateFor', () => {
 
-  // §1.3: "Floor clutter -- errands, one box per pending item." §45 narrows the pool to
+  // §1.3: "Floor clutter -- errands, one box per pending item." Ruling 45 narrows the pool to
   // today, so the floor speaks about the same day as the rest of the room; that the boxes
   // are still one-per-item is what this test is about, and `the floor, which is part of
   // today too` below covers the narrowing.
@@ -60,7 +60,7 @@ describe('roomStateFor', () => {
   // A floor with twenty boxes is not readable, and the room's whole job is being
   // readable without being read.
   it('caps the clutter so the floor stays legible', () => {
-    // All on today, since §45 made the floor today's: twenty errands on one day is the
+    // All on today, since Ruling 45 made the floor today's: twenty errands on one day is the
     // case the cap exists for.
     const many = Array.from({ length: 20 }, (_, i) => errand(`e${i}`, 0))
 
@@ -113,7 +113,7 @@ describe('roomStateFor', () => {
 })
 
 /**
- * §45: the furniture reads today, not the fortnight.
+ * Ruling 45: the furniture reads today, not the fortnight.
  *
  * Every binding below used to be a function of the reserves -- a coherent picture of two
  * weeks and a vague one about the day in front of the student. The reserve has a better
@@ -185,7 +185,7 @@ describe('the room as today', () => {
     expect(dayState(items, 0).paperHeight).toBeGreaterThan(dayState(items, 1).paperHeight)
   })
 
-  /** §47 moved this to the clock: the ceiling's depth is drawn in viewBox units and so
+  /** Ruling 47 moved this to the clock: the ceiling's depth is drawn in viewBox units and so
    *  means different amounts at different window sizes, which is no way to carry a number.
    *  The reading itself is unchanged and lives in `the clock, and the ceiling that no longer
    *  speaks` below. */
@@ -205,7 +205,7 @@ describe('the room as today', () => {
 })
 
 /**
- * §45's darkness: a day that cannot fit inside its waking hours takes the difference out of
+ * Ruling 45's darkness: a day that cannot fit inside its waking hours takes the difference out of
  * sleep, and the room says so before the night rather than after it.
  */
 describe('a day that does not fit', () => {
@@ -233,7 +233,7 @@ describe('a day that does not fit', () => {
 })
 
 /**
- * §45: the gauge reads the reserve, and the light no longer does.
+ * Ruling 45: the gauge reads the reserve, and the light no longer does.
  *
  * Found by looking at the room rather than by a test: with the light rebound to the day's
  * spill, the corner gauge -- which derived its percentage from the light -- read 100% on a
@@ -262,7 +262,7 @@ describe('the reserve the gauge shows', () => {
  *
  * Every other object had moved to today, so a room could show one book for today's single
  * hour of study and six boxes for errands spread over two weeks -- two timeframes in one
- * picture, which is precisely what §45 set out to stop.
+ * picture, which is precisely what Ruling 45 set out to stop.
  */
 describe('the floor, which is part of today too', () => {
   const errandOn = (id: string, dayIndex: number): ScheduledItem => ({
@@ -286,9 +286,9 @@ describe('the floor, which is part of today too', () => {
 })
 
 /**
- * §47: the ceiling stops meaning anything, and the day's fullness moves to a clock.
+ * Ruling 47: the ceiling stops meaning anything, and the day's fullness moves to a clock.
  *
- * §45 rebound the ceiling from the fortnight's reserve to today's hours, which was a better
+ * Ruling 45 rebound the ceiling from the fortnight's reserve to today's hours, which was a better
  * source for a worse home: the ceiling's depth is drawn in viewBox units, so it scales with
  * the stage and is 13 real pixels on a phone -- too thin to hold the controls that sit in
  * it, and too variable to read as a quantity. A clock face says "how much of today is

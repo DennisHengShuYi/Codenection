@@ -84,7 +84,7 @@ describe('readPhoto', () => {
 })
 
 /**
- * §44: the anchor has to reach the endpoint, not just exist in the prompt.
+ * Ruling 44: the anchor has to reach the endpoint, not just exist in the prompt.
  *
  * A prompt line that is never given a calendar is a fix that does nothing, and the photo
  * reader is where a stated weekday matters most -- a timetable is mostly weekdays.

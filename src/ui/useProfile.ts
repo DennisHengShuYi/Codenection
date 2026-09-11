@@ -26,7 +26,7 @@ const seedAnchor = (): string => new Date().toISOString().split('T')[0] ?? '2026
  * Applied on screen whether or not it persists, for the same reason: a student who picks a
  * mode should see it selected even if the write fails.
  *
- * `session` gates the demo seed. §14 step 0 wants a session-less preview to open on a week
+ * `session` gates the demo seed. Ruling 14 step 0 wants a session-less preview to open on a week
  * with history rather than "not enough data", but that seed is fabricated -- invented
  * predictions and ~20 invented `BlockRecord`s tuned to read as measured. A signed-in
  * account is a real student, not a preview, so `session !== null` skips the seed entirely
@@ -68,7 +68,7 @@ export function useProfile(
         // adapter when nothing has been saved yet -- carries the same `DEFAULT_PROFILE`
         // reference, so a legacy blob missing the field and a brand-new install both land
         // here and both get the seed rather than the empty default.
-        // §14 step 0: a profile with history, so §8's accuracy line has something to publish
+        // Ruling 14 step 0: a profile with history, so §8's accuracy line has something to publish
         // on first open rather than "not enough data" for the whole demo -- but only for a
         // session-less preview. A real signed-in student never gets the fabricated seed.
         const calibration = saved.calibration

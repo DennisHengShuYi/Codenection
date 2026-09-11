@@ -174,13 +174,13 @@ export function dayLabel(schedule: Schedule, dayIndex: number, today: number): s
 }
 
 /**
- * §44: which real day the horizon's day 0 is, for the readers that need it.
+ * Ruling 44: which real day the horizon's day 0 is, for the readers that need it.
  *
  * Both readers needed this and neither had it. The rules parser worked out a named weekday
  * from `today % 7`, which is only right if day 0 is a Sunday; the model was told
  * "deadlineDay is a day index from 0 (today)" and never told what today was, so a stated
  * "thursday" could only be guessed at. Either way "gym thursday 7pm" landed on a day chosen
- * by arithmetic rather than by the student, and §43's Day select is what finally showed it.
+ * by arithmetic rather than by the student, and Ruling 43's Day select is what finally showed it.
  *
  * `todayLabel` is absent for a week that has never been dated. There is nothing true to
  * say there, and a made-up date would send the model a confident wrong answer -- the rules

@@ -59,7 +59,7 @@ describe('RoomShell with the planner', () => {
     await userEvent.click(screen.getByRole('button', { name: /read this/i }))
     await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(2))
 
-    // §43: the week will not take an item that does not say when it happens, so the day is
+    // Ruling 43: the week will not take an item that does not say when it happens, so the day is
     // answered on the chip first -- the same press a student makes.
     for (const select of screen.getAllByTestId(/^when-day-/)) {
       await userEvent.selectOptions(select, '2')
@@ -73,7 +73,7 @@ describe('RoomShell with the planner', () => {
   })
 
   /**
-   * §16: never silently reshuffle. A student who adds something and finds their week
+   * Ruling 16: never silently reshuffle. A student who adds something and finds their week
    * quietly rearranged has lost their grip on it, so the app says what it did and offers
    * anything further as a choice.
    */
@@ -84,7 +84,7 @@ describe('RoomShell with the planner', () => {
     await userEvent.click(screen.getByRole('button', { name: /read this/i }))
     await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(2))
 
-    // §43: the week will not take an item that does not say when it happens, so the day is
+    // Ruling 43: the week will not take an item that does not say when it happens, so the day is
     // answered on the chip first -- the same press a student makes.
     for (const select of screen.getAllByTestId(/^when-day-/)) {
       await userEvent.selectOptions(select, '2')
@@ -109,7 +109,7 @@ describe('RoomShell with the planner', () => {
     await userEvent.click(screen.getByRole('button', { name: /read this/i }))
     await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(1))
 
-    // §43: the week will not take an item that does not say when it happens, so the day is
+    // Ruling 43: the week will not take an item that does not say when it happens, so the day is
     // answered on the chip first -- the same press a student makes.
     for (const select of screen.getAllByTestId(/^when-day-/)) {
       await userEvent.selectOptions(select, '2')
@@ -134,7 +134,7 @@ describe('RoomShell with the planner', () => {
     await userEvent.click(screen.getByRole('button', { name: /read this/i }))
     await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(2))
 
-    // §43: the week will not take an item that does not say when it happens, so the day is
+    // Ruling 43: the week will not take an item that does not say when it happens, so the day is
     // answered on the chip first -- the same press a student makes.
     for (const select of screen.getAllByTestId(/^when-day-/)) {
       await userEvent.selectOptions(select, '2')
@@ -165,7 +165,7 @@ describe('RoomShell with the planner', () => {
   })
 
   /**
-   * §37, end to end, and the regression that matters most here: `suggestRepeat` was written
+   * Ruling 37, end to end, and the regression that matters most here: `suggestRepeat` was written
    * and tested and then wired to nothing, which is the same defect §9 and §11 were on the
    * list for. A test at the domain proves the function works; only this proves it runs.
    *
@@ -183,14 +183,14 @@ describe('RoomShell with the planner', () => {
       const repository = createLocalRepository(`planner-repeat-${counter}`)
       await repository.clear()
 
-      // §44: "tuesday" lands on a real Tuesday now. The week starts Monday 2026-09-07, so
+      // Ruling 44: "tuesday" lands on a real Tuesday now. The week starts Monday 2026-09-07, so
       // day 1 is Tuesday the 8th -- where the typed item goes -- and day 8 is the Tuesday
       // after it, where the block already in the week has to sit for the two to be
       // instances of one weekly series.
       //
       // This fixture used to say day 9, a WEDNESDAY, because that is where `deadlineOf`
       // put "tuesday" while it read `today % 7` as today's weekday. The comment explaining
-      // that was the bug written down and left in place; §43's Day select is what finally
+      // that was the bug written down and left in place; Ruling 43's Day select is what finally
       // made a student see it.
       await repository.saveWeek({
         ...emptyWeek(),
@@ -230,7 +230,7 @@ describe('RoomShell with the planner', () => {
     }
   })
 
-  /** Suggested, not applied. §41: one tap says no, and the accept is what commits it. */
+  /** Suggested, not applied. Ruling 41: one tap says no, and the accept is what commits it. */
   it('lets the student say it is a one-off after all', async () => {
     await openPlanner()
 
@@ -238,7 +238,7 @@ describe('RoomShell with the planner', () => {
     await userEvent.click(screen.getByRole('button', { name: /read this/i }))
     await waitFor(() => expect(screen.getAllByTestId(/^chip-/)).toHaveLength(1))
 
-    // §43: the week will not take an item that does not say when it happens, so the day is
+    // Ruling 43: the week will not take an item that does not say when it happens, so the day is
     // answered on the chip first -- the same press a student makes.
     for (const select of screen.getAllByTestId(/^when-day-/)) {
       await userEvent.selectOptions(select, '2')

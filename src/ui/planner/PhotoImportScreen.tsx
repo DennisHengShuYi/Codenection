@@ -27,7 +27,7 @@ export function PhotoImportScreen({
   calendar,
 }: {
   onAccept: (items: readonly ParsedItem[]) => void
-  /** §37, as `PlannerScreen` takes it: a timetable photo is the likeliest place a repeating
+  /** Ruling 37, as `PlannerScreen` takes it: a timetable photo is the likeliest place a repeating
    *  class arrives one instance at a time. */
   suggestRepeat?: (item: ParsedItem) => ParsedItem['repeat']
   /** Ruling 60: one level up, to the chooser this was chosen from. */
@@ -36,9 +36,9 @@ export function PhotoImportScreen({
    *  Wired to `onCancel` before Ruling 60, which meant the sheet's own close control
    *  quietly dropped the student at the chooser instead of closing. */
   onClose: () => void
-  /** §43: the horizon's days in a student's words, for the chip's "when" question. */
+  /** Ruling 43: the horizon's days in a student's words, for the chip's "when" question. */
   dayLabels: readonly string[]
-  /** §44: which real day day 0 is, so a weekday printed on a timetable lands on that
+  /** Ruling 44: which real day day 0 is, so a weekday printed on a timetable lands on that
    *  weekday rather than on a day the model guessed at. */
   calendar: Calendar
 }) {
@@ -77,7 +77,7 @@ export function PhotoImportScreen({
     }
   }
 
-  // §43, as in `PlannerScreen`: a photographed timetable is exactly where a stated time
+  // Ruling 43, as in `PlannerScreen`: a photographed timetable is exactly where a stated time
   // exists to be read, and exactly where a row the model could not date must be asked
   // about rather than placed on a day nobody named.
   const missingWhen = (items ?? []).filter((item) => !saysWhen(item))

@@ -161,7 +161,7 @@ describe('parseWithRules', () => {
 })
 
 /**
- * §43: the clock time, read by the rules as well as by the model.
+ * Ruling 43: the clock time, read by the rules as well as by the model.
  *
  * This parser is not a lesser path -- it is what runs whenever there is no key configured,
  * no /api under `vite dev`, a timeout, or a reply that fails validation. If only the model
@@ -203,7 +203,7 @@ describe('the stated time', () => {
 })
 
 /**
- * §44: a named weekday has to land on that weekday.
+ * Ruling 44: a named weekday has to land on that weekday.
  *
  * `deadlineOf` computed `(named - today % 7 + 7) % 7`, which reads `today % 7` as today's
  * weekday -- true only if day index 0 is a Sunday, and it is whatever weekday the student's

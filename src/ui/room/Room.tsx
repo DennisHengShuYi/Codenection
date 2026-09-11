@@ -53,7 +53,7 @@ export function Room({
   onOpenReserves?: () => void
 }) {
   const { state } = model
-  // §45: the reserve, not the light. The light means the day's spill now, and deriving the
+  // Ruling 45: the reserve, not the light. The light means the day's spill now, and deriving the
   // gauge from it read 100% on a nine-hour day at 43% reserve.
   const percent = Math.round(state.reserve * 100)
   const fills = frame === 'fill'

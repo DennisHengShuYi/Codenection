@@ -176,7 +176,7 @@ describe('AddSheet', () => {
     await userEvent.click(screen.getByRole('button', { name: /read this/i }))
     await screen.findByTestId(/^chip-/)
 
-    // §43: the week will not take an item that does not say when it happens, so the day is
+    // Ruling 43: the week will not take an item that does not say when it happens, so the day is
     // answered on the chip first -- the same press a student makes.
     for (const select of screen.getAllByTestId(/^when-day-/)) {
       await userEvent.selectOptions(select, '2')

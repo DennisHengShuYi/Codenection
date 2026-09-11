@@ -38,7 +38,7 @@ export interface ScheduledItem {
    *  cannot schedule anything over it either. */
   readonly protectedRest: boolean
   /**
-   * §39: which recurring series this block came from, when it came from one.
+   * Ruling 39: which recurring series this block came from, when it came from one.
    *
    * Optional, because most blocks are one-offs and every week saved before recurrence
    * existed has none. The optimizer never reads it -- recurrence is expanded at entry and

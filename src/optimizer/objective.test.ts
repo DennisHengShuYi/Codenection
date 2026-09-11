@@ -211,13 +211,13 @@ describe('score', () => {
 })
 
 /**
- * §20: four hours of final-year project and four hours of laundry were interchangeable load.
+ * Ruling 20: four hours of final-year project and four hours of laundry were interchangeable load.
  *
  * The solver could defer the FYP chapter to its deadline to protect the floor, and nothing
  * in the score called that a bad trade -- the two differed only by `typeIntensity`, which
  * says how tiring they are, not what it costs to leave one until the last day.
  *
- * The weight is derived, never asked for. §20 is explicit that nobody should be made to
+ * The weight is derived, never asked for. Ruling 20 is explicit that nobody should be made to
  * rank their own work, because everybody marks everything high; it comes from the load type
  * and the size of the block, both of which the app already knows.
  */
@@ -275,7 +275,7 @@ describe('score and what it costs to leave something until the deadline', () => 
 })
 
 /**
- * §21: on a fortnight with almost nothing fixed, the objective inverts from flattening peaks
+ * Ruling 21: on a fortnight with almost nothing fixed, the objective inverts from flattening peaks
  * to defending a floor.
  *
  * The reason is that burnout there has a different cause. A student with a timetable burns
@@ -315,7 +315,7 @@ describe('score and the shape of the week', () => {
   /**
    * With no frame, how the work is grouped is not the thing hurting anybody -- so the term
    * that tidies it yields. It does not fall silent: a student who has not entered a
-   * timetable yet is a low-structure week by this measure, and §42 exists because that is
+   * timetable yet is a low-structure week by this measure, and Ruling 42 exists because that is
    * the common case, so switching tidying off entirely would stop spreading their work for
    * a reason they never chose.
    */

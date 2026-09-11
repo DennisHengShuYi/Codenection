@@ -32,9 +32,9 @@ const SYSTEM_PROMPT = [
   'where the page gives them.',
   `deadlineDay is a day index from 0 (today) to ${HORIZON_DAYS - 1}, or null if the page`,
   'does not state one. hard is true only where a fixed date is actually printed.',
-  // §43, ported from the text planner, which asked for this and this did not -- so every
+  // Ruling 43, ported from the text planner, which asked for this and this did not -- so every
   // photographed timetable lost the one thing a timetable is mostly made of. A printed
-  // clock time is stronger evidence than a typed one, and this is the reader §44's comment
+  // clock time is stronger evidence than a typed one, and this is the reader Ruling 44's comment
   // calls "the reader that needed the anchor most": a roster gives the weekday AND the hour.
   'startHour is the hour of day printed on the page, 0-23, or null where none is printed.',
   'Read it only from a real clock time ("9am", "14:00", "0900-1100" gives 9). Never from an',
@@ -63,7 +63,7 @@ const SYSTEM_PROMPT = [
  * brain dump does.
  */
 /**
- * §44: the prompt, with today's real date when the caller knows it.
+ * Ruling 44: the prompt, with today's real date when the caller knows it.
  *
  * The same gap the planner had, in the reader that needed it most: a photographed
  * timetable says "Tuesday" far more often than anything a student types, and this prompt
@@ -80,7 +80,7 @@ const systemPromptFor = (calendar?: Calendar): string => {
 export async function askVision(
   dataUrl: string,
   apiKey: string,
-  /** §44: which real day day 0 is, so a weekday printed on a timetable lands on it. */
+  /** Ruling 44: which real day day 0 is, so a weekday printed on a timetable lands on it. */
   calendar?: Calendar,
 ): Promise<ParsedItem[] | null> {
   const controller = new AbortController()

@@ -338,7 +338,7 @@ describe('callbackIdOf', () => {
 })
 
 /**
- * §24: navigation without a session table.
+ * Ruling 24: navigation without a session table.
  *
  * Telegram lets a message's text and keyboard be replaced in place, so `/schedule` can
  * become a day view and then go back without leaving a trail of dead menus in the chat.
@@ -370,7 +370,7 @@ describe('messageIdOf', () => {
 /**
  * The callbacks that carry their whole answer in the button.
  *
- * §24's navigation and §8's check-in deliberately keep nothing between one message and the
+ * Ruling 24's navigation and §8's check-in deliberately keep nothing between one message and the
  * next -- the day index, the energy, the sleep bucket all travel in the callback data. That
  * makes this function the only thing standing between a webhook anyone can post to and a
  * write into a student's week, and none of these five shapes was being read by a test.

@@ -65,7 +65,7 @@ export function deferItem(
     items: schedule.items.map((item) => {
       if (item.id !== id) return item
 
-      // Ruling 62/§45: whichever deadline actually applies, real or synthetic. This read
+      // Ruling 62/Ruling 45: whichever deadline actually applies, real or synthetic. This read
       // `item.deadlineDay` alone, so undated work -- a walk, a rest, seeing someone -- could
       // be pushed to the end of the fortnight for free. `softDeadlines`' own docstring names
       // this line as one of the three reasons that module exists, and it was not changed

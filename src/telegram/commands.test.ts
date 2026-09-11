@@ -69,7 +69,7 @@ describe('readCommand', () => {
 })
 
 /**
- * §22: two thirds of the model was unreachable from chat.
+ * Ruling 22: two thirds of the model was unreachable from chat.
  *
  * Almost none of this is new logic -- `handle.ts` already imports from `src/domain` and
  * `src/optimizer` directly, so these are commands over functions that were already built,

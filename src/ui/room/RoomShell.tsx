@@ -527,7 +527,7 @@ export function RoomShell({
    * behind the button at all: it sits on the room, under the controls.
    */
   /**
-   * §46: what each object means and what is behind it today. Derived from the same week the
+   * Ruling 46: what each object means and what is behind it today. Derived from the same week the
    * furniture is bound from, so the legend cannot teach a vocabulary the room does not
    * speak.
    */
@@ -562,7 +562,7 @@ export function RoomShell({
           {paragraph}
         </p>
 
-        {/* §16: never silently reshuffle. What was added, where it went, and -- only when
+        {/* Ruling 16: never silently reshuffle. What was added, where it went, and -- only when
             something had to give -- the single move that would help, offered rather than
             taken. "Leave it" is the healthy default: doing nothing keeps the week the
             student decided on. */}
@@ -1026,7 +1026,7 @@ export function RoomShell({
             </Button>
           )}
 
-          {/* §46: only below 768px. Above it the panel is already beside the room, and a
+          {/* Ruling 46: only below 768px. Above it the panel is already beside the room, and a
               button that opens what is visibly open is furniture with nothing to do. */}
           <Button
             variant="secondary"
@@ -1042,7 +1042,7 @@ export function RoomShell({
           </Button>
         </div>
 
-        {/* §46: the panel, floating over the wall from 768px up.
+        {/* Ruling 46: the panel, floating over the wall from 768px up.
           
           A SIBLING of the stage, never a child of the drawing: the `<svg>` carries
           `role="img"`, which hides its whole subtree from the accessibility tree, so a row

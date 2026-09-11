@@ -22,7 +22,7 @@ export function Window({
 }: {
   weather: RoomState['weather']
   /**
-   * §45: 0..1, how far into the night the sky outside has gone, from the hours today
+   * Ruling 45: 0..1, how far into the night the sky outside has gone, from the hours today
    * cannot fit inside its waking day.
    *
    * A separate pane over the weather rather than a different set of weather fills: the two
@@ -144,11 +144,11 @@ export function Light({ level }: { level: number }) {
 }
 
 /**
- * §47: how much of today is already spoken for.
+ * Ruling 47: how much of today is already spoken for.
  *
  * A clock rather than the ceiling that used to carry this, because the shape means the
  * thing: a face filling is a day filling. It pairs with the window -- the clock fills up to
- * a full day, and the window darkens once the day runs past what the day has (§45's spill),
+ * a full day, and the window darkens once the day runs past what the day has (Ruling 45's spill),
  * so the two together say "full" and "more than full" without either having to say both.
  *
  * Drawn as a swept wedge from twelve o'clock, the direction a clock actually moves. An arc

@@ -5,7 +5,7 @@ import { dateFor } from './calendar'
 /**
  * How often a thing comes round, in the only terms this app supports.
  *
- * §40: weekday or weekdays, and an end date for semester break. Nothing monthly, nothing
+ * Ruling 40: weekday or weekdays, and an end date for semester break. Nothing monthly, nothing
  * fortnightly, no custom rules. Recurring items are almost entirely the fixed set --
  * classes, labs, shifts -- which meet weekly or not at all, and a rule language rich enough
  * to express anything else would be a setup burden this design has cut everywhere.
@@ -30,7 +30,7 @@ const sameTitle = (a: string, b: string): boolean =>
 /**
  * A weekly series this item looks like another instance of, or null.
  *
- * §37: the same class, noticed rather than declared. A student adding something whose title
+ * Ruling 37: the same class, noticed rather than declared. A student adding something whose title
  * matches a block already sitting on the same weekday is entering a series one instance at a
  * time, and spotting it costs no new screen and no new input path. It is also the only
  * answer available for part-time shifts, which arrive as photos in group chats and change
@@ -42,7 +42,7 @@ const sameTitle = (a: string, b: string): boolean =>
  * to nothing. Title and weekday together are what remain -- still a conjunction, because
  * title alone matches two unrelated essays and a weekday alone matches half the timetable.
  *
- * A suggestion, never an application. §41 puts it on the chip as a question the student
+ * A suggestion, never an application. Ruling 41 puts it on the chip as a question the student
  * confirms or dismisses in one tap, and `expandRecurring` still only ever runs on a repeat
  * they kept. It runs to the end of the horizon rather than inventing an end date nobody gave.
  */
@@ -71,13 +71,13 @@ const nextSeriesId = (): string => {
 /**
  * Turns one repeating item into the instances it actually produces.
  *
- * §38: expanded at entry, never stored as a rule. One weekly class becomes three items
+ * Ruling 38: expanded at entry, never stored as a rule. One weekly class becomes three items
  * across the 21-day horizon -- exactly the shape `umWeek` already hand-writes -- and no
  * consumer downstream ever learns that recurrence exists. The engine takes a flat list by
  * design, and a fortnight is short enough that recurrence never compounds into anything
  * needing its own machinery.
  *
- * §39: every instance carries a shared `seriesId`. One field, and it buys the three
+ * Ruling 39: every instance carries a shared `seriesId`. One field, and it buys the three
  * operations expansion would otherwise make painful -- cancel just this Tuesday, this class
  * has ended, it moved to Thursday. Without it, dropping a module means deleting three items
  * one at a time.

@@ -22,6 +22,10 @@
     "scripts",
     "vite.config.ts",
     "vitest.config.ts",
+    // The integration config was the only one left out, and it is the one that
+    // deliberately handles credentials -- `loadEnv` against a real .env -- so it was
+    // the worst candidate for going unchecked.
+    "vitest.integration.config.ts",
     "playwright.config.ts"
   ]
 }

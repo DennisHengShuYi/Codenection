@@ -8,7 +8,7 @@ import type { LoadType } from '../engine'
  * These are pure: values in, a payload out, nothing sent. That is what lets every reply be
  * tested without a network, and it is why the endpoint has almost no wording of its own.
  *
- * §25's render layer, and the file was already it -- the rename is what stops the name
+ * Ruling 25's render layer, and the file was already it -- the rename is what stops the name
  * arguing with the contents. `send.ts` sent nothing; the network call has always lived in
  * `api/telegram.ts`.
  *
@@ -30,7 +30,7 @@ export interface Reply {
    */
   readonly parseMode?: undefined
   /**
-   * §24: replace the message the button was pressed on, rather than sending a new one.
+   * Ruling 24: replace the message the button was pressed on, rather than sending a new one.
    *
    * Set only by replies that are *navigation* -- a day opened from the fortnight, a step
    * back out of it. Everything else stays an ordinary new message, because a reply that
@@ -190,7 +190,7 @@ export function blocksReply(
   day: 'today' | 'yesterday',
   blocks: readonly BlockLine[],
   answered: readonly string[] = [],
-  /** §24: set when this day was opened from the fortnight, so it replaces that message and
+  /** Ruling 24: set when this day was opened from the fortnight, so it replaces that message and
    *  offers a way back instead of stranding the student in a dead end. */
   nav: { readonly replacing: true } | undefined = undefined,
 ): Reply {
@@ -377,7 +377,7 @@ export function scheduleReply(
     deficit: boolean
     unconfirmed: boolean
   }[],
-  /** §24: set when this is a step *back* from a day, so it replaces that message rather
+  /** Ruling 24: set when this is a step *back* from a day, so it replaces that message rather
    *  than leaving the day view behind as a dead menu. */
   nav: { readonly replacing: true } | undefined = undefined,
 ): Reply {
@@ -505,7 +505,7 @@ export const photoUnavailableReply = (): Reply => ({
 })
 
 /**
- * §22's parity renderers, and the rule they exist under.
+ * Ruling 22's parity renderers, and the rule they exist under.
  *
  * The bot never decides anything. Every figure below arrives already computed by
  * `src/domain` or `src/optimizer` -- the same functions the app's own screens read -- so
@@ -564,7 +564,7 @@ export function weekReply(summary: WeekSummary): Reply {
  *
  * The app was changed to propose and wait (`c81da05`); this door went on saving the result
  * the moment the command arrived, so the same word rearranged a student's week behind them
- * in chat and asked first on screen. §16's rule -- never silently reshuffle -- is a property
+ * in chat and asked first on screen. Ruling 16's rule -- never silently reshuffle -- is a property
  * of the product, not of the screen.
  */
 export function rebalanceReply(
@@ -589,7 +589,7 @@ export function rebalanceReply(
 
 /** What the student sees when they approve a plan made for a week that has since moved on.
  *  Refused rather than applied: the moves were worked out against blocks that may no longer
- *  be where they were, and applying them anyway is the silent reshuffle §16 forbids. */
+ *  be where they were, and applying them anyway is the silent reshuffle Ruling 16 forbids. */
 export const rebalanceStaleReply = (): Reply => ({
   text: 'Your week changed since I worked that out, so I have not touched it. Send /rebalance again for a fresh plan.',
 })

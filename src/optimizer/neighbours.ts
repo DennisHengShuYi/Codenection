@@ -105,7 +105,7 @@ function restMoves(schedule: Schedule): Move[] {
             intensity: 1,
             dayIndex: day,
             // Computed inside `apply` rather than at generation, deliberately. The
-            // neighbourhood size is unchanged -- still one insertion per day (§17) -- and a
+            // neighbourhood size is unchanged -- still one insertion per day (Ruling 17) -- and a
             // move's effect stays a function of the schedule it is applied to, which is what
             // makes `smallestFixes` able to measure `apply(s)` against a schedule that may
             // have moved on since the move was generated.

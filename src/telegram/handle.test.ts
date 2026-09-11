@@ -81,7 +81,7 @@ function harness(over: Partial<ChatStore> = {}): Harness {
 const parse = vi.fn()
 vi.mock('../ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  // Ruling 62/§44: the calendar is forwarded, not dropped. The mock used to take only the
+  // Ruling 62/Ruling 44: the calendar is forwarded, not dropped. The mock used to take only the
   // text, which would have let the anchor go missing without a test noticing.
   parseBrainDump: (text: string, calendar?: unknown) => parse(text, calendar),
 }))
@@ -144,7 +144,7 @@ describe('planning', () => {
 
     const reply = await handleIntent({ kind: 'plan', chatId: 7, text: 'essay' }, h.store, 1000)
 
-    // Ruling 62/§44: the reader is handed the calendar alongside the text now, so a stated
+    // Ruling 62/Ruling 44: the reader is handed the calendar alongside the text now, so a stated
     // weekday lands on that weekday rather than on a guess. The text is what this test is
     // about; that the anchor travels is covered in `the chat door, held to what the app does`.
     expect(parse).toHaveBeenCalledWith('essay', expect.anything())
@@ -355,7 +355,7 @@ describe('the command surface', () => {
   })
 
   /**
-   * §22: two thirds of the model was unreachable from chat. Almost none of this is new
+   * Ruling 22: two thirds of the model was unreachable from chat. Almost none of this is new
    * logic -- these are commands over functions the app's own screens already read, so the
    * thing worth testing is that both doors get the same answer rather than two models.
    */
@@ -994,7 +994,7 @@ describe('a voice note', () => {
     const reply = await handleIntent(voice(), h.store, 1000, { transcribe })
 
     expect(transcribe).toHaveBeenCalledOnce()
-    // Ruling 62/§44: the reader is handed the calendar alongside the text now, so a stated
+    // Ruling 62/Ruling 44: the reader is handed the calendar alongside the text now, so a stated
     // weekday lands on that weekday rather than on a guess. The text is what this test is
     // about; that the anchor travels is covered in `the chat door, held to what the app does`.
     expect(parse).toHaveBeenCalledWith('essay due friday and gym', expect.anything())
@@ -1229,7 +1229,7 @@ describe('looking back at yesterday', () => {
 })
 
 /**
- * §22's last three, at the handler rather than the renderer: a reply that looks right and
+ * Ruling 22's last three, at the handler rather than the renderer: a reply that looks right and
  * writes nothing is the failure mode these are guarding against.
  */
 describe('answering from chat', () => {
@@ -1308,7 +1308,7 @@ describe('answering from chat', () => {
 })
 
 /**
- * §24: navigation without a session table. Nothing is remembered between presses -- the day
+ * Ruling 24: navigation without a session table. Nothing is remembered between presses -- the day
  * travels in the callback -- and each step replaces the message it came from rather than
  * leaving a trail of menus that no longer mean anything.
  */
@@ -1413,7 +1413,7 @@ describe('the chat door, held to what the app does', () => {
   })
 
   /**
-   * §45's soft deadlines are stamped onto the week before anything reads them, and only
+   * Ruling 45's soft deadlines are stamped onto the week before anything reads them, and only
    * `RoomShell` was doing it. `missedSoftDeadlines` skips any item with no stamp, so `/rest`
    * reported nothing overdue where the app would have shown a prescription -- the bot
    * disagreeing with the screen about whether the student is neglecting anything.
@@ -1506,7 +1506,7 @@ describe('approving a rebalance', () => {
   /**
    * The case the fingerprint exists for. Between the offer and the tap the student added a
    * block in the app, so the moves were worked out against a week that no longer exists --
-   * applying them anyway is the silent reshuffle §16 forbids.
+   * applying them anyway is the silent reshuffle Ruling 16 forbids.
    */
   it('refuses a plan made for a week that has since changed', async () => {
     const h = harness({ loadWeek: async () => weekWith() as never })

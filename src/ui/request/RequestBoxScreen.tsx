@@ -89,9 +89,9 @@ export function RequestBoxScreen({
    *  Wired to `onCancel` before Ruling 60, which meant the sheet's own close control
    *  quietly dropped the student at the chooser instead of closing. */
   onClose: () => void
-  /** §43: the horizon's days in a student's words, for the chip's "when" question. */
+  /** Ruling 43: the horizon's days in a student's words, for the chip's "when" question. */
   dayLabels: readonly string[]
-  /** §44: which real day the horizon's day 0 is, so "next thursday" means that thursday. */
+  /** Ruling 44: which real day the horizon's day 0 is, so "next thursday" means that thursday. */
   calendar: Calendar
 }) {
   const [text, setText] = useState('')

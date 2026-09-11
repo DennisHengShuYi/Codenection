@@ -210,7 +210,7 @@ describe('adding a block by hand', () => {
 })
 
 /**
- * Ruling 62/§45: deferring undated work is no longer free.
+ * Ruling 62/Ruling 45: deferring undated work is no longer free.
  *
  * `softDeadlines`' own docstring names this function as one of the three reasons it exists
  * -- "`scheduleEdits.deferItem` clamps undated work to the horizon edge and nothing sooner"

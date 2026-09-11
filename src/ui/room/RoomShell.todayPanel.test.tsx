@@ -7,7 +7,7 @@ import type { Schedule } from '../../optimizer'
 import { RoomShell } from './RoomShell'
 
 /**
- * §46: the panel, in the two places it lives.
+ * Ruling 46: the panel, in the two places it lives.
  *
  * The room is full-bleed, so there is no "beside" at 320px -- and Ruling 55 forbids covering
  * the character. From 768px the panel floats over the wall; below it, it opens from a button

@@ -259,7 +259,7 @@ async function fetchTelegramFile(botToken: string, fileId: string): Promise<Blob
 }
 
 /**
- * §24: replaces a message in place when the reply asks for it and there is one to replace.
+ * Ruling 24: replaces a message in place when the reply asks for it and there is one to replace.
  *
  * Falls back to sending, always. An edit can fail for reasons that are nobody's fault -- the
  * message is too old, or its content is unchanged, which Telegram treats as an error -- and

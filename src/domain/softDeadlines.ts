@@ -31,7 +31,7 @@ import type { BlockRecord } from './blockLog'
 /**
  * How long each kind may go before it is overdue, in days.
  *
- * The app's numbers, not the student's. §20 is explicit that nobody should be made to rank
+ * The app's numbers, not the student's. Ruling 20 is explicit that nobody should be made to rank
  * their own work, "because everybody marks everything high and the ranking carries no
  * information once they have". §5.1's user-set floor is a real and separate feature that
  * layers on top of this rather than replacing it.

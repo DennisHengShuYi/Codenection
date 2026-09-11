@@ -139,7 +139,7 @@ describe('rebalance', () => {
     const result = rebalance(makeSchedule([...fixtures, ...movable]), DEFAULT_PARAMS, makeRng(5))
 
     // Measured at 2,322 for this fixture and seed after the restart loop came out, and it
-    // has since done its job: §20's deadline-pressure term drove this to 4,326 on a first
+    // has since done its job: Ruling 20's deadline-pressure term drove this to 4,326 on a first
     // attempt that fell off smoothly with buffer, which gave the objective a gradient at
     // every item and left the climber always able to find one more fractional improvement.
     // Charging only the last day or two brought it back inside. The bound leaves room for a

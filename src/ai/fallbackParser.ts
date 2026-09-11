@@ -129,12 +129,12 @@ function kindOf(type: LoadType, lower: string): ActivityKind {
 }
 
 /**
- * §44: the day index a named weekday falls on.
+ * Ruling 44: the day index a named weekday falls on.
  *
  * This read `(named - today % 7 + 7) % 7`, treating `today % 7` as today's weekday -- true
  * only if day index 0 were a Sunday, and it is whatever weekday the student's week actually
  * began on. "gym thursday" therefore landed on whatever day the arithmetic produced, and
- * once the chip started showing the day (§43) the student could finally see it: a Thursday
+ * once the chip started showing the day (Ruling 43) the student could finally see it: a Thursday
  * offered as Monday.
  *
  * `startWeekday` is that anchor -- the weekday of day index 0, 0 for Sunday -- passed in
@@ -167,7 +167,7 @@ function hoursOf(lower: string): number {
 
 
 /**
- * §43: the hour a fragment states, or null when it states none.
+ * Ruling 43: the hour a fragment states, or null when it states none.
  *
  * Two shapes, and nothing else counts. `9am` / `7.30pm` is a clock time with a meridiem;
  * `14:00` is a 24-hour clock. A bare number is deliberately NOT read: "3 hours" is an

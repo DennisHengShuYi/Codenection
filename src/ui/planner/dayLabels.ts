@@ -3,7 +3,7 @@ import { HORIZON_DAYS } from '../../engine'
 import type { Schedule } from '../../optimizer'
 
 /**
- * §43: the horizon's days, named the way a student recognises them.
+ * Ruling 43: the horizon's days, named the way a student recognises them.
  *
  * The chip now asks which day an item lands on, and the answer it stores is a day index --
  * the domain's own number. A `<select>` offering "Day 0" through "Day 20" would be asking

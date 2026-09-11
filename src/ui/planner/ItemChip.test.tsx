@@ -19,7 +19,7 @@ const item = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   ...over,
 })
 
-/** §43: real dates rather than day indices. "Day 2" is a modelling term; "Tue 10 Sep" is
+/** Ruling 43: real dates rather than day indices. "Day 2" is a modelling term; "Tue 10 Sep" is
  *  what a student recognises as their own week. */
 const DAY_LABELS = [
   'Today, Mon 8 Sep',
@@ -166,7 +166,7 @@ describe('ItemChip', () => {
   })
 
   /**
-   * §41: recurrence is a property confirmed on something the student was already adding,
+   * Ruling 41: recurrence is a property confirmed on something the student was already adding,
    * not a screen of its own.
    *
    * A form with weekday checkboxes and an until-date picker is exactly the setup burden this
@@ -204,7 +204,7 @@ describe('ItemChip', () => {
 })
 
 /**
- * §43: what will be added, and WHEN.
+ * Ruling 43: what will be added, and WHEN.
  *
  * The chip showed What, Kind, Detail and Hours -- everything except the one thing a
  * calendar entry is for. The day and the hour were decided after the accept, by
@@ -278,7 +278,7 @@ describe('the chip saying when', () => {
  * series rather than a single dated item, which is right, and `expandRecurring` then
  * derives a day for every instance.
  *
- * The first cut of §43's gate asked "when is this?" of exactly those items: a lecture that
+ * The first cut of Ruling 43's gate asked "when is this?" of exactly those items: a lecture that
  * had said Tuesday twice over was told it had not said when it happens.
  */
 describe('an item that repeats', () => {

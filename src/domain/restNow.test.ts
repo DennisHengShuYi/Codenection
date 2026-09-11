@@ -333,7 +333,7 @@ describe('planRest, when room has to be made', () => {
   })
 
   /** The move is offered, never taken. Nothing about the week changes until the student
-   *  says yes -- §16 again, and the reason this rung returns a plan rather than a schedule. */
+   *  says yes -- Ruling 16 again, and the reason this rung returns a plan rather than a schedule. */
   it('changes nothing by offering it', () => {
     const before = week({ items: [...chunksToday(), ...laterDaysTaken()] })
 

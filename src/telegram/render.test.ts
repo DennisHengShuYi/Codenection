@@ -266,7 +266,7 @@ describe('blocksReply', () => {
   })
 
   /**
-   * §23: Telegram silently drops a `sendMessage` whose `callback_data` exceeds 64 bytes,
+   * Ruling 23: Telegram silently drops a `sendMessage` whose `callback_data` exceeds 64 bytes,
    * and `api/telegram.ts` ignores the response -- so the failure mode is a keyboard that
    * simply never appears, with nothing logged anywhere. The single-character type and
    * answer codes exist to buy headroom; this is the test that proves the budget is still
@@ -486,7 +486,7 @@ describe('the wording at its edges', () => {
 })
 
 /**
- * §22's parity renderers.
+ * Ruling 22's parity renderers.
  *
  * The rule these are written to: the bot never decides anything. Every number below is
  * computed in `src/domain` or `src/optimizer` and handed here already made -- if a
@@ -567,7 +567,7 @@ describe('lapsedReply', () => {
 })
 
 /**
- * §22's last three gaps: the fortnight at a glance, the daily check-in, and the provisional
+ * Ruling 22's last three gaps: the fortnight at a glance, the daily check-in, and the provisional
  * yes. All three existed in the app and none was reachable from chat.
  */
 describe('scheduleReply', () => {
@@ -657,7 +657,7 @@ describe('askReply offering a provisional yes', () => {
 })
 
 /**
- * §24: navigation without a session table. The fortnight offers its days; opening one
+ * Ruling 24: navigation without a session table. The fortnight offers its days; opening one
  * replaces the message rather than adding to the log, and stepping back replaces it again.
  * Nothing is remembered between messages -- the day index travels in the callback.
  */

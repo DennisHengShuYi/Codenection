@@ -54,6 +54,24 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reportsDirectory: 'coverage',
+      /**
+       * `src` only, and the thresholds below therefore describe `src` only.
+       *
+       * `api/` is 1,600 lines and holds every credential in the product, and it is outside
+       * this gate. That is partly deliberate -- `api/telegram.ts` says "this file is
+       * deliberately thin. Every decision lives in `src/telegram/`, where the unit suite can
+       * reach it" -- and it works for that one endpoint, which `telegramStore.test.ts`
+       * reaches by importing across. It does not work for the rest: `google-connect.ts`,
+       * `google-push.ts`, `daily.ts`, `read-photo.ts` and `plan.ts` contribute nothing to
+       * the numbers CI enforces.
+       *
+       * Adding `api/**` here is the right end state and is NOT a one-line change: it would
+       * drop every figure below its floor, and `.claude/CLAUDE.md` is explicit that these
+       * only ever go up -- "if a change cannot meet the line, the answer is a test, not a
+       * smaller number". So the honest step is to say what this gate covers rather than
+       * quietly widen it and weaken the thresholds in the same breath. The work it names is
+       * covering those endpoints' pure parts the way `telegramStore.test.ts` already does.
+       */
       include: ['src/**/*.{ts,tsx}'],
       // main.tsx is the composition root: three lines of wiring with nothing to assert
       // that the browser test does not already cover. test-setup.ts is the harness.

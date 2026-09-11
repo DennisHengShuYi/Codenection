@@ -10,7 +10,7 @@ import { toDayInputs, type Schedule } from '../src/optimizer'
 import { readServiceRoleKey, readSupabaseUrl } from '../src/data/serverEnv'
 
 /**
- * §26's daily proactive check: the one capability the PWA does not have.
+ * Ruling 26's daily proactive check: the one capability the PWA does not have.
  *
  * Web push on iOS is unreliable and needs the app installed. Telegram always delivers. That
  * is the whole argument for the channel, and it only holds while the messages are worth

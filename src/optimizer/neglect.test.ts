@@ -79,7 +79,7 @@ describe('the search budget, with every item carrying a soft deadline', () => {
    * *undated* work, where `deadlinePressure` skips every item and `neglectPressure` charges
    * every one of them.
    *
-   * That is precisely the shape that blew the budget when §20's term first fell off
+   * That is precisely the shape that blew the budget when Ruling 20's term first fell off
    * smoothly -- 4,326 evaluations, because a gradient at every item leaves the climber
    * always able to find one more fractional improvement. Same bound as hillClimb's, for the
    * same reason: evaluations are identical on every machine, wall-clock is not.

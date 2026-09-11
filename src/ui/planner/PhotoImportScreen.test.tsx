@@ -35,7 +35,7 @@ const setup = () => {
     onBack: vi.fn(),
     onClose: vi.fn(),
     dayLabels: ['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep'],
-    // §44: which real day day 0 is, for the reader rather than for the screen.
+    // Ruling 44: which real day day 0 is, for the reader rather than for the screen.
     calendar: { today: 0, startWeekday: 5, todayLabel: '11 September 2026' },
   }
   render(<PhotoImportScreen {...props} />)
@@ -211,7 +211,7 @@ describe('PhotoImportScreen', () => {
 })
 
 /**
- * §44's last reader. The planner and the request box were told what today is; this screen
+ * Ruling 44's last reader. The planner and the request box were told what today is; this screen
  * was not, so a timetable saying "Tuesday" still had its day guessed at -- in the one path
  * where nearly every item is a weekday.
  */

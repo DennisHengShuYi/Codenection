@@ -8,7 +8,7 @@ const hoursLabel = (hours: number): string =>
   hours === 1 ? '1 hour' : Number.isInteger(hours) ? `${hours} hours` : `${hours} h`
 
 /**
- * §46: what each object in the room means, and what is behind it today.
+ * Ruling 46: what each object in the room means, and what is behind it today.
  *
  * **This is the control surface, and the drawing is not.** §3 removed tap-to-open from the
  * room and the e2e guard protecting it names this exact change in its own docstring -- but
@@ -29,7 +29,7 @@ export function TodayPanel({ rows }: { rows: readonly PanelRow[] }) {
 
   return (
     <div className="flex flex-col gap-2">
-      {/* §46: the rule the rows below are instances of, said once.
+      {/* Ruling 46: the rule the rows below are instances of, said once.
       
           Without it the panel is a list of nouns and numbers -- a student reads "Books, 4
           hours" and still has to work out that the books on the desk ARE those four hours.

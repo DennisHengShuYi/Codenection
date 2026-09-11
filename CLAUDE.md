@@ -1,108 +1,131 @@
-# <Project Name>
+# Codenection — a stress and workload manager for students
 
-Keep this file short — it's an index, not documentation. Depth lives in the docs this file
-points to; link to it rather than restating it here. If a section below doesn't apply to this
-project, delete it rather than leaving it empty.
+A student opens this and sees one screen: a room that fills up with what the fortnight is
+asking of them. The point is not tracking. The point is that **recovery gets less effective
+the more depleted you are**, so a week looks survivable right up until it isn't — and a
+linear tracker cannot show that. Everything here exists to make that spiral visible early
+enough to act on, and then to offer one concrete action rather than a dashboard.
 
-## Project
+Nothing here touches money or anyone else's data. The stakes are quieter and still real: a
+student decides what to drop based on what this says, so a number that is confidently wrong
+is worse than one the app admits it cannot compute. Several rules further down follow from
+exactly that.
 
-<One paragraph: what this is, who it's for, and the one thing that makes it different. Name the
-user in their own terms, not in implementation terms. If the project has real-world stakes —
-real money, real customer data, irreversible actions — say so here, because every rule further
-down follows from it.>
-
-<If the project splits into distinct bounded contexts with their own vocabulary, name them here
-and point at the map that relates them.>
+The authority on intent is **`burnout-app-spec-v3.md`** at the repository root. Code cites it
+as `§1.2`, `§6.3` and so on, and those stop at §13. Decisions taken in conversation are cited
+as `Ruling 41`, and are indexed in **`docs/rulings.md`**.
 
 ## Repository status
 
-<What is actually built and verified today, as opposed to planned. Written so a session starting
-cold knows what it can rely on and what is still a stub. Update this as things land — a stale
-status section is worse than none, because it gets trusted.>
+Built and passing: the engine and optimizer, the room and week screens, the say-anything
+planner, photo and calendar import, Micro-Start, the Rest button, the request box, accounts,
+and the Telegram channel. `npx tsc --noEmit` is clean and `npm test` is green.
 
-<Where the source lives: the top-level directories and what each one owns.>
+Known not built, with the spec amended to say so rather than promising it: §7.2's three-day
+painter and its parameter extraction, §7.7's calibration meter, §9's Malaysia-specific holiday
+and get-outside lists, and §6.4's rolling debt. There is also no server-side quota on the
+public AI endpoints — `plan`, `draft`, `read-photo` and `micro-start` spend the Groq budget
+unauthenticated, which `api/micro-start.ts` states in place.
+
+Where the source lives:
+
+| Directory | Owns |
+|---|---|
+| `src/engine` | The model. Four coupled reserves, the drain and recovery equations, the projection band. Pure: no I/O, no clock, no randomness. |
+| `src/optimizer` | The rebalancer. Hill-climbs a fortnight against §2.1's objective. Pure except for an injected `Rng`. Never imports `src/domain`. |
+| `src/domain` | Everything the model needs deciding around it: the calendar anchor, placement, deadlines, prescriptions, calibration, the block log. |
+| `src/ui` | React. `ui/room/RoomShell.tsx` is the router as well as the room. |
+| `src/ai` | Groq prompts and the Zod schemas every model reply is validated against. |
+| `src/telegram` | The bot's intents and wording. Pure; decides nothing the app does not. |
+| `src/data` | The repository contract and its local and Supabase adapters. |
+| `api/` | Vercel functions. The only place a credential is ever read. |
 
 ## Build / run / test
 
 | What | Command | Notes |
 |---|---|---|
-| Dev server | `<command>` | <host/port, what it needs running first> |
-| Tests | `<command>` | <what it covers; whether it touches the network> |
-| Unit tests only | `<command>` | <the fast inner-loop command> |
-| Typecheck | `<command>` | |
-| Lint | `<command>` | |
-| Build | `<command>` | |
-| <Any dangerous command> | `<command>` | **<State plainly what real thing it touches.>** |
+| Dev server | `npm run dev` | http://127.0.0.1:5180 |
+| Tests | `npm test` | ~155s. Excludes `*.integration.test.ts`, which need a real database. |
+| Typecheck | `npx tsc --noEmit` | Covers `src`, `api`, `tests`, `scripts` and the configs. |
+| Coverage | `npm run test:coverage` | Thresholds are enforced and describe `src` only — see `vitest.config.ts`. |
+| Integration | `npm run test:integration` | **Talks to a real Supabase project and clears the store before every test.** Disposable account only. |
+| Browser suite | `npm run test:e2e` | Playwright, against the dev server. |
+| Build | `npm run build` | |
+| Solver timing | `npm run measure:solve` | Re-run after any engine change; §2.1 budgets a solve under 100ms. |
+| Solver freedom | `npm run measure:dof` | What the rebalancer can actually move, and what it gains. |
+| Telegram webhook | `npm run telegram:webhook` | **Points the live bot at a URL.** |
 
-Setup: <the exact steps from a fresh clone to a running app, including which env vars must be
-filled in and which ones have failure modes that look like bugs in your own code.>
+Setup: copy `.env.example` to `.env` and fill it in — it documents every variable, what reads
+it, and what silently stops working when it is unset. Two failure modes look like bugs in your
+own code rather than missing configuration: without `GROQ_API_KEY` the planner silently falls
+back to its rule-based parser, and without all four `GOOGLE_*` values the calendar entry point
+disappears from the UI entirely.
 
-Every pull request must pass the CI check before it can merge, and **any change to behaviour
-updates the test files in the same change** — new behaviour gets new tests, changed behaviour
-gets its existing tests rewritten, removed behaviour gets its tests deleted, and a bug fix gets
-a failing regression test first. A green build on stale tests proves only that the code still
-does what it used to. Never make a check pass by weakening a test or disabling a step. The full
-rule is in `.claude/CLAUDE.md`.
+Every pull request must pass CI, and **any change to behaviour updates the test files in the
+same change** — new behaviour gets new tests, changed behaviour gets its existing tests
+rewritten, removed behaviour gets its tests deleted, and a bug fix gets a failing regression
+test first. A green build on stale tests proves only that the code still does what it used to.
+Never make a check pass by weakening a test or disabling a step. The full rule is in
+`.claude/CLAUDE.md`.
 
 ## Stack at a glance
 
-<Languages, frameworks, and the shape of the system in two or three sentences: which piece owns
-what, and which piece is allowed to talk to which. Point at the architecture docs for the full
-reasoning rather than reproducing it here.>
+React 19 and TypeScript on Vite, Tailwind, Supabase for auth and storage, Vercel functions in
+`api/`, Groq for language and vision, a Telegram bot as a second door.
+
+The dependency order is `engine → optimizer → domain → ui`, and it is one-way in one place
+that matters: **`src/optimizer` must never import `src/domain`**, because `src/domain` imports
+the optimizer. `src/telegram` may use `src/domain` but decides nothing itself.
 
 ## Hard invariants — never compromise
 
-<The rules needed on every task, where violating one silently breaks the product's central
-promise. These are the highest-value lines in this file — a coding agent reads them on every
-change, so state each as a rule, not as background. Give each one a reason and a pointer to the
-decision record behind it. Delete the examples below and write this project's real ones.>
-
-- **<Rule, stated as an imperative.>** <One sentence on what breaks if it's violated.> (<ADR/issue ref>)
-- **Untrusted input is validated at the boundary.** <Name this project's specific version:
-  which values may never originate from a model, a client, or a third party, and where they must
-  be re-derived instead.>
-- **Limits and permissions are enforced server-side.** A client's claim about its own quota,
-  role, or budget is never taken at face value.
-- **<Name the single source of truth for the state that matters most>**, and what may not cache
-  or duplicate it. Fix slowness with a loading state, not a cache — unless there's a recorded
-  exception, in which case name it and its test.
-- **No irreversible action without an explicit human confirmation.** Never unattended, never on
-  a value the user hasn't actually been shown.
-- **One path for <the thing that must stay consistent>.** Nothing else may derive it, or two
-  parts of the system disagree.
-- **Never commit a secret.** `.env` is gitignored; credentials used for testing are disposable
-  and scoped to nothing valuable.
-
-## Skills
-
-<Project-specific skills and slash commands, one line each on when to reach for them. The
-workflow skills that gate feature work live in `.claude/CLAUDE.md` instead — this section is for
-the ones unique to this project.>
-
-## Post-mortems
-
-None yet. When something bites, write it up as `docs/post-mortem/YYYY-MM-DD-<slug>.md` and link
-it here with a one-line lesson.
+- **The engine is pure.** Nothing in `src/engine` reads a clock, a network or a random number.
+  The optimizer calls `project` thousands of times per solve; that is what makes it possible,
+  and what lets the whole model be tested without a single mock.
+- **Each reserve is priced and repaid on its own level, never the average of four.** Burnout is
+  a floor problem. Averaging let three healthy reserves subsidise a collapsed one and damped the
+  spiral exactly where it matters. `overallReserve` is the dial's headline and an input to
+  nothing. (`engine/efficiency.ts`)
+- **"Deficit" means the floor, everywhere.** The dial, the room's weather, the week grid and the
+  optimizer objective all test `floorReserve < DEFICIT_THRESHOLD`. The mean is strictly laxer
+  and one screen using it is one screen disagreeing with the model it renders.
+- **Model output is never trusted.** Every Groq reply is parsed by a Zod schema in `src/ai` that
+  takes its vocabulary from `engine/types.ts`. A model may describe an item; it may never
+  originate an id, a day index, an hour, a load type or a block kind.
+- **Protected rest has one door.** `domain/scheduleRecovery` is the only thing that creates it,
+  and nothing arriving from a parse may create it whatever the text says. §5.1 calls this the
+  most important design decision in the app.
+- **The student's own day, not the server's.** `domain/calendar.dayLabel` and `todayIndex` are
+  the only places a day index becomes a date or a name. §9 puts this app at UTC+8, where a
+  UTC-derived "today" is wrong for the first eight hours of every day.
+- **A credential is read only in `api/`.** Nothing under `src/` reads a server-side secret, and
+  the `VITE_` prefix is a security boundary rather than a naming convention: it publishes the
+  value into the browser bundle.
+- **Limits and permissions are enforced server-side.** A client's claim about who it is is
+  re-verified against Supabase, never decoded and trusted.
+- **Errors are never silently swallowed.** Every hook that persists something a student changed
+  reports a failed write; a change that applied on screen and vanished later, silently, is the
+  specific bug this rule exists to stop.
+- **Never commit a secret.** `.env` is gitignored and the credentials used for testing are
+  disposable and scoped to nothing valuable.
 
 ## Read on demand — don't preload everything
 
-<Each entry: the file, one line on what's in it, and — in bold — the trigger that means it must
-be read. The trigger is the part that makes this section work; a list without triggers just gets
-skipped.>
-
-- **`<glossary file>`** — the project's vocabulary. **Read before naming anything, or whenever a
-  term in a request feels ambiguous.**
-- **`docs/adr/`** — the decisions and why they went that way, including which supersede which.
-  **Read before changing architecture, or when code looks deliberately odd and you're tempted to
-  "fix" it.**
-- **`README.md`** — setup, layout, and the public surface. **Read before running or wiring
-  anything.**
-- **`<design or spec artifacts>`** — <what's settled in them, and any habits in them that must
-  NOT cross over into production code>. **Read before <the work they govern>.**
+- **`burnout-app-spec-v3.md`** — what the product is for, section by section, including what was
+  amended and what was cut. **Read before building anything a `§` reference points at, and
+  before assuming a feature is missing rather than deliberately absent.**
+- **`docs/rulings.md`** — the decisions the code cites as `Ruling N`. **Read when a comment
+  cites one and you are about to change what it decided.**
+- **`.claude/CLAUDE.md`** — the workflow every change goes through, and the rule that tests ship
+  with behaviour. **Read before starting any non-trivial change.**
+- **`docs/superpowers/specs/`** — the design record per feature, richer than the spec on the
+  screens. **Read before changing the room, the week, or the routing.**
+- **`.env.example`** — every variable, what reads it, and what quietly stops working without it.
+  **Read before running or deploying anything.**
 
 ## When sources conflict
 
-<Name the winner for each kind of question — typically: the glossary wins on vocabulary, the ADRs
-win on architecture with higher-numbered ones superseding those they name, and code wins on what
-is actually built today. This file and the README describe intent as well as reality, so verify
-before relying on either.>
+The code wins on what is true today. The spec wins on what the product is *for*, and carries
+inline amendments where the two were reconciled. `docs/rulings.md` is an index reconstructed
+from citations, so the citing comment at the cited line outranks it. This file describes intent
+as well as reality — verify before relying on it.

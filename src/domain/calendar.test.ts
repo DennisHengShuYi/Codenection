@@ -186,7 +186,7 @@ describe('dayIndexFor', () => {
   })
 })
 
-/** §44's anchor, moved here with `calendarFor` itself: the Telegram door needs it as much
+/** Ruling 44's anchor, moved here with `calendarFor` itself: the Telegram door needs it as much
  *  as the add sheet does, and a UI module is not somewhere `src/telegram` can import from. */
 const dated = (over: Partial<Schedule> = {}): Schedule => ({
   items: [],
@@ -197,11 +197,11 @@ const dated = (over: Partial<Schedule> = {}): Schedule => ({
 })
 
 /**
- * §44: which real day the horizon's day 0 is, for the readers rather than for the screen.
+ * Ruling 44: which real day the horizon's day 0 is, for the readers rather than for the screen.
  *
  * The rules parser computed a named weekday from `today % 7` -- as if day 0 were always a
  * Sunday -- and the model was told "day 0 is today" without being told what today was. Both
- * therefore put "gym thursday" on whatever day fell out, and §43's Day select is what
+ * therefore put "gym thursday" on whatever day fell out, and Ruling 43's Day select is what
  * finally showed the student.
  */
 describe('the calendar handed to the readers', () => {

@@ -14,7 +14,7 @@ import { MAX_INPUT_LENGTH, type Calendar, type ParseOutcome } from './types'
 export async function parseBrainDump(
   text: string,
   /**
-   * §44: which real day the horizon's day 0 is. Optional because two callers have no dated
+   * Ruling 44: which real day the horizon's day 0 is. Optional because two callers have no dated
    * week to offer -- and where it is absent, both readers behave exactly as they did
    * before, which is the honest answer for a week that has never been dated.
    */

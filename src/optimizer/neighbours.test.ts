@@ -170,7 +170,7 @@ describe('neighbours', () => {
 })
 
 /**
- * §13/§14: the solver's two remaining hardcoded hours.
+ * §13/Ruling 14: the solver's two remaining hardcoded hours.
  *
  * `REST_START_HOUR` and `SOCIAL_START_HOUR` placed every inserted block at 20:00 and 18:00
  * whatever was already there. For rest that was merely wasteful -- inserted rest is
@@ -233,7 +233,7 @@ describe('neighbours placing what it inserts', () => {
     )
   })
 
-  /** §17: one candidate per insertion. A finder that returned a list here would multiply the
+  /** Ruling 17: one candidate per insertion. A finder that returned a list here would multiply the
    *  neighbourhood, and the search is already at four thousand evaluations on the crunch
    *  fixture. */
   it('still offers exactly one rest insertion per day', () => {

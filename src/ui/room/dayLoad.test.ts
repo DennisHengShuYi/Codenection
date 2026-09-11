@@ -5,7 +5,7 @@ import type { Schedule } from '../../optimizer'
 import { WAKING_HOURS, dayLoadFor } from './dayLoad'
 
 /**
- * §45: what today actually consists of.
+ * Ruling 45: what today actually consists of.
  *
  * The room's nine bindings all read the same few numbers -- the overall reserve, the mental
  * reserve, the projected deficit -- which is a coherent picture of a fortnight and a vague
@@ -101,7 +101,7 @@ describe('the hours today asks for, by kind', () => {
 })
 
 /**
- * §45's fourth decision: the room empties as the day is worked through. A block the student
+ * Ruling 45's fourth decision: the room empties as the day is worked through. A block the student
  * has answered on the today card is put away -- nothing is counted up, which is what keeps
  * the room a mirror rather than a scoreboard (§1.3).
  */
@@ -141,7 +141,7 @@ describe('what is left of today', () => {
 })
 
 /**
- * §45's darkness. What spills past the end of the waking day is what has to come out of
+ * Ruling 45's darkness. What spills past the end of the waking day is what has to come out of
  * sleep, and it is computed BEFORE the bad night -- the last moment at which the student can
  * still move something.
  */

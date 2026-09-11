@@ -18,7 +18,7 @@ const UNAVAILABLE =
 
 export async function readPhoto(
   file: File,
-  /** §44: which real day day 0 is, so a weekday printed on a timetable lands on that
+  /** Ruling 44: which real day day 0 is, so a weekday printed on a timetable lands on that
    *  weekday. A photographed timetable is mostly weekdays, which makes this the reader
    *  that needed the anchor most and got it last. */
   calendar?: Calendar,

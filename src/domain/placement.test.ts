@@ -106,7 +106,7 @@ describe('placeItems', () => {
   })
 
   /**
-   * §16: never silently reshuffle. Inaction produces the healthy outcome and the student
+   * Ruling 16: never silently reshuffle. Inaction produces the healthy outcome and the student
    * stays in charge of their own week -- so placing something new may read the schedule but
    * must never write to any part of it that was already there.
    */
@@ -155,7 +155,7 @@ describe('placeItems', () => {
 })
 
 /**
- * §16: say what was done. Silent displacement breaks a student's mental model of their own
+ * Ruling 16: say what was done. Silent displacement breaks a student's mental model of their own
  * week -- they look at Tuesday, remember putting something there, and it is gone.
  */
 describe('describePlacement', () => {
@@ -196,8 +196,8 @@ describe('describePlacement', () => {
 })
 
 /**
- * §15's second question -- "could it fit if something moved?" -- answered without building
- * the second scheduler §16 forbids.
+ * Ruling 15's second question -- "could it fit if something moved?" -- answered without building
+ * the second scheduler Ruling 16 forbids.
  *
  * `smallestFixes` ranks by deficit days and floor, which is not the same question as "does
  * this open a gap on the day my essay wanted". Taking its top move meant the app often
@@ -262,7 +262,7 @@ describe('fixThatMakesRoom', () => {
 })
 
 /**
- * §43: a stated hour is the student's, not a suggestion.
+ * Ruling 43: a stated hour is the student's, not a suggestion.
  *
  * Placement used to choose every hour -- the first free slot on the day, or
  * `FALLBACK_START_HOUR` when the day was full. That was the only possible behaviour while
@@ -299,7 +299,7 @@ describe('an item that states its own hour', () => {
   /**
    * A stated hour on a day with nothing free is still the student's answer. The app says
    * what it did in the placement note rather than moving the lecture somewhere emptier --
-   * two things at once is a real week, and §16 is about never reshuffling silently.
+   * two things at once is a real week, and Ruling 16 is about never reshuffling silently.
    */
   it('keeps the stated hour even where the day is already busy', () => {
     const busy = {

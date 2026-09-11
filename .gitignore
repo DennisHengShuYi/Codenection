@@ -8,5 +8,12 @@ coverage/
 playwright-report/
 test-results/
 
-# Claude Code project configuration is kept local rather than shared.
-.claude/
+# Claude Code project configuration is kept local rather than shared -- except the rules,
+# which are not local to anybody. `.claude/CLAUDE.md` holds the workflow every change goes
+# through and the rule that tests ship with behaviour, and excluding it meant a fresh clone
+# got the root template and no rules at all.
+#
+# Everything else here stays out: `settings.local.json` is one machine's, and `worktrees/`
+# is working state.
+.claude/*
+!.claude/CLAUDE.md

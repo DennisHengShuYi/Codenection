@@ -185,7 +185,7 @@ describe('Room', () => {
   })
 
   /**
-   * §45: off the reserve itself, not off the light.
+   * Ruling 45: off the reserve itself, not off the light.
    *
    * The light means the day's spill now, and a gauge derived from it read 100% on a
    * nine-hour day at 43% reserve -- caught by looking at the room, not by a test, which is
@@ -242,7 +242,7 @@ describe('Room', () => {
 })
 
 /**
- * §45: the two objects today puts in the room.
+ * Ruling 45: the two objects today puts in the room.
  *
  * The drawing is where this feature actually lives -- `roomState` deciding a number means
  * nothing if no shape reads it -- and both of these are new, so nothing else in the suite
@@ -296,7 +296,7 @@ describe('what today puts in the room', () => {
     expect(figuresIn(many)).toBeLessThanOrEqual(3)
   })
 
-  /** §45: rest is deliberately not an object. It is the one thing on a day that is not a
+  /** Ruling 45: rest is deliberately not an object. It is the one thing on a day that is not a
    *  duty, and drawing it as another thing waiting would make it one. */
   it('draws nothing for rest', () => {
     const { container } = render(<Room model={modelOf(state())} frame="inline" />)
@@ -304,7 +304,7 @@ describe('what today puts in the room', () => {
     expect(container.querySelector('[data-testid="room-rest"]')).toBeNull()
   })
 
-  /** §45's darkness reaches the glass, not just the state. */
+  /** Ruling 45's darkness reaches the glass, not just the state. */
   it('darkens the window when the day does not fit', () => {
     render(<Room model={modelOf(state({ windowDark: 0.7 }))} frame="inline" />)
 
@@ -319,7 +319,7 @@ describe('what today puts in the room', () => {
 })
 
 /**
- * §47: the clock, which took the reading the ceiling could not carry.
+ * Ruling 47: the clock, which took the reading the ceiling could not carry.
  */
 describe('the clock on the wall', () => {
   it('hangs there whatever today looks like, because a blank wall is not a reading', () => {

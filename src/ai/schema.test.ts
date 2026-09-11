@@ -163,7 +163,7 @@ describe('parseModelReply', () => {
 })
 
 /**
- * §43: the clock time, which the schema never carried.
+ * Ruling 43: the clock time, which the schema never carried.
  *
  * "WIA3001 lecture Tuesday 9am" produced a day and no hour, and `placement.ts` then chose
  * one -- a free slot, or a fallback constant. So the app decided when a student's own

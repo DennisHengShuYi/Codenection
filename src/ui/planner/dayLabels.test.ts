@@ -4,7 +4,7 @@ import type { Schedule } from '../../optimizer'
 import { dayLabelsFor } from './dayLabels'
 
 /**
- * §43: the horizon's days, named the way a student recognises them.
+ * Ruling 43: the horizon's days, named the way a student recognises them.
  *
  * The chip asks which day an item lands on, and a `<select>` of "Day 0" through "Day 20"
  * is the modelling term, not the week. This is the translation, kept out of the chip

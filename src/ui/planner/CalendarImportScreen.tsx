@@ -49,7 +49,7 @@ export function CalendarImportScreen({
   /** Done entirely -- straight to the room, whatever depth this was opened to. Distinct
    *  from `onBack`, which is what a single `onCancel` used to conflate. */
   readonly onClose: () => void
-  /** §43: the horizon's days in a student's words, for the chip's "when" question. */
+  /** Ruling 43: the horizon's days in a student's words, for the chip's "when" question. */
   readonly dayLabels: readonly string[]
   readonly suggestRepeat?: (item: ParsedItem) => ParsedItem['repeat']
 }) {
@@ -78,7 +78,7 @@ export function CalendarImportScreen({
   }
 
   /**
-   * §43, as in the other two import screens. A calendar row almost always says when it
+   * Ruling 43, as in the other two import screens. A calendar row almost always says when it
    * happens -- that is the whole reason to read one -- but almost always is not always, and
    * a row that arrived without a day must be asked about rather than placed on a day nobody
    * named.

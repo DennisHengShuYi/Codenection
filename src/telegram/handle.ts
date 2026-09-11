@@ -87,7 +87,7 @@ export interface ChatServices {
    * Fetches the image from Telegram and runs the app's own reader over it. Null when it
    * could not be read at all.
    *
-   * `calendar` is §44's anchor, and this had no parameter to carry it -- so the bot called
+   * `calendar` is Ruling 44's anchor, and this had no parameter to carry it -- so the bot called
    * `readPhoto` with one argument while the app's own screen passed a calendar. `readPhoto`
    * itself says why that matters most here: "a photographed timetable is mostly weekdays,
    * which makes this the reader that needed the anchor most and got it last". Without it
@@ -256,7 +256,7 @@ async function offerParse(
  * network. Null means there is nothing to answer — no chat to answer to.
  */
 /**
- * Ruling 62/§44: which real day day 0 is, for the reader this door calls.
+ * Ruling 62/Ruling 44: which real day day 0 is, for the reader this door calls.
  *
  * The app hands `parseBrainDump` a calendar so a stated weekday lands on that weekday; this
  * door handed it nothing, so the model was left to guess -- and chat is where a student is
@@ -370,7 +370,7 @@ export async function handleIntent(
       }
 
       /**
-       * §22: the state of the fortnight, which chat could not see at all.
+       * Ruling 22: the state of the fortnight, which chat could not see at all.
        *
        * Every figure is computed by the same functions the room and the dial read -- the
        * projection, `accuracyLine`, `biasLine` -- so the two doors cannot quote a student
@@ -404,7 +404,7 @@ export async function handleIntent(
       }
 
       /**
-       * §22: the fortnight at a glance, which chat could not see at all.
+       * Ruling 22: the fortnight at a glance, which chat could not see at all.
        *
        * The same `scheduleView` the week grid renders, so the two doors cannot disagree
        * about which days are heavy or where the deficit starts.
@@ -425,7 +425,7 @@ export async function handleIntent(
       case 'checkin':
         return checkInReply(intent.argument.trim() === 'sleep' ? 'sleep' : 'energy')
 
-      /** §22: any day of the fortnight, not only today and yesterday. */
+      /** Ruling 22: any day of the fortnight, not only today and yesterday. */
       case 'day': {
         const asked = Number.parseInt(intent.argument, 10)
         const week = await store.loadWeek(accountId)
@@ -440,7 +440,7 @@ export async function handleIntent(
       }
 
       /**
-       * §22: the same rebalance the week screen runs, through `runRebalance` -- which now
+       * Ruling 22: the same rebalance the week screen runs, through `runRebalance` -- which now
        * lives in `src/domain` for exactly this reason. Two rearranging algorithms with
        * different logic would disagree, and the one that ran last would win.
        */
@@ -490,7 +490,7 @@ export async function handleIntent(
         // "nothing has been kept up" and prescribe against a fiction.
         if (blockLog === null) return restUnavailableReply()
 
-        // Ruling 62/§45: stamped first. `missedSoftDeadlines` skips any item with no
+        // Ruling 62/Ruling 45: stamped first. `missedSoftDeadlines` skips any item with no
         // stamp, and only `RoomShell` was stamping -- so this door reported nothing
         // neglected where the screen would have shown a prescription.
         const today = todayFor(week, now)
@@ -700,7 +700,7 @@ export async function handleIntent(
    * the other person themselves, in their own words, from one of the drafts.
    */
   /**
-   * §24: the fortnight and a day, in one message that changes rather than a chat filling
+   * Ruling 24: the fortnight and a day, in one message that changes rather than a chat filling
    * with dead menus. Nothing is remembered between presses -- the day travels in the
    * callback, which is what makes this navigation without a session table.
    */

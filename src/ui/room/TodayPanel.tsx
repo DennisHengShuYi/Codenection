@@ -61,10 +61,29 @@ export function TodayPanel({ rows }: { rows: readonly PanelRow[] }) {
               <span className="flex flex-col">
                 <span className="text-sm font-medium text-ink">{row.label}</span>
                 <span className="text-xs text-ink-soft">{row.meaning}</span>
-                {/* Only where something measured it. A phrase on a row with no reading behind
-                    it is a claim -- the same rule `DomainBarList` applies to its glyph. Words
-                    rather than an arrow, because up means "more load" here and "more reserve"
-                    two taps away, and those are opposite news. */}
+              </span>
+
+              {/* The number, and under it where that number is heading.
+                  Together on the right because the phrase qualifies the figure: beside the
+                  meaning on the left it sat three lines from the number it was about, and read
+                  as unrelated to it.
+
+                  The phrase only where something measured it -- one on a row with no reading
+                  behind it is a claim, the same rule `DomainBarList` applies to its glyph. And
+                  words rather than an arrow, because up means "more load" here and "more
+                  reserve" two taps away, which are opposite news. */}
+              <span className="flex shrink-0 flex-col items-end">
+                {/* Counted where counting is the honest measure -- a box is one errand, not
+                    half an hour of one -- and timed everywhere else. */}
+                <span className="text-sm tabular-nums text-ink-soft">
+                  {row.id === 'boxes'
+                    ? row.count === 1
+                      ? '1 thing'
+                      : `${row.count} things`
+                    : row.hours === 0
+                      ? 'nothing today'
+                      : hoursLabel(row.hours)}
+                </span>
                 {row.trend !== null && (
                   <span
                     data-testid={`panel-trend-${row.id}`}
@@ -73,18 +92,6 @@ export function TodayPanel({ rows }: { rows: readonly PanelRow[] }) {
                     {row.trend}
                   </span>
                 )}
-              </span>
-
-              {/* Counted where counting is the honest measure -- a box is one errand, not
-                  half an hour of one -- and timed everywhere else. */}
-              <span className="shrink-0 text-sm tabular-nums text-ink-soft">
-                {row.id === 'boxes'
-                  ? row.count === 1
-                    ? '1 thing'
-                    : `${row.count} things`
-                  : row.hours === 0
-                    ? 'nothing today'
-                    : hoursLabel(row.hours)}
               </span>
             </button>
 

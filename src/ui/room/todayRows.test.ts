@@ -193,14 +193,14 @@ describe('the two rows that are not ordinary objects', () => {
  * the load, the blocks behind an opened row are the factors, and this is the third.
  */
 describe('the trend on a row', () => {
-  it('says more is coming when the next days are heavier', () => {
+  it('says the load is picking up when the next days are heavier', () => {
     const schedule = week([
       block({ id: 'a', dayIndex: 0, hours: 1 }),
       block({ id: 'b', dayIndex: 1, hours: 2 }),
       block({ id: 'c', dayIndex: 2, hours: 4 }),
     ])
 
-    expect(rowFor(schedule, 'books')?.trend).toBe('more coming')
+    expect(rowFor(schedule, 'books')?.trend).toBe('picking up')
   })
 
   it('says nothing at all on an even run of days', () => {

@@ -91,5 +91,8 @@ export function trendPhrase(trend: Trend, unit: TrendUnit): string | null {
   if (unit === 'count') return trend === 'rising' ? 'piling up' : 'clearing'
   if (unit === 'room') return trend === 'rising' ? 'more room than usual' : 'less room ahead'
 
-  return trend === 'rising' ? 'more coming' : 'easing off'
+  // "picking up" rather than "more coming", decided by looking at it: on a row reading
+  // "nothing today", "more coming" claims more than something when there is nothing yet.
+  // This works from zero and from four hours alike, and pairs with "easing off".
+  return trend === 'rising' ? 'picking up' : 'easing off'
 }

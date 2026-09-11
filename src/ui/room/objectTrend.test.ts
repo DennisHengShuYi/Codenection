@@ -103,8 +103,14 @@ describe('trendPhrase', () => {
     expect(trendPhrase('flat', 'room')).toBeNull()
   })
 
+  /**
+   * "picking up" rather than "more coming", and that was decided by looking at the screen
+   * rather than by reasoning: on a row whose number reads "nothing today", "more coming"
+   * claims more than something when there is nothing yet. This reads from zero and from four
+   * hours alike.
+   */
   it('names more and less time in the student own terms', () => {
-    expect(trendPhrase('rising', 'hours')).toBe('more coming')
+    expect(trendPhrase('rising', 'hours')).toBe('picking up')
     expect(trendPhrase('falling', 'hours')).toBe('easing off')
   })
 

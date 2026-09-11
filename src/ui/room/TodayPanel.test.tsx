@@ -38,9 +38,9 @@ describe('the panel as a legend', () => {
   })
 
   it('shows a row the words for where its load is heading', () => {
-    render(<TodayPanel rows={[row({ id: 'books', trend: 'more coming' })]} />)
+    render(<TodayPanel rows={[row({ id: 'books', trend: 'picking up' })]} />)
 
-    expect(screen.getByTestId('panel-trend-books')).toHaveTextContent('more coming')
+    expect(screen.getByTestId('panel-trend-books')).toHaveTextContent('picking up')
   })
 
   /**

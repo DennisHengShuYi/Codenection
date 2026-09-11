@@ -1,3 +1,4 @@
+import { LOAD_TYPE_LABELS } from '../kit/labels'
 import {
   LOAD_TYPES,
   type DayInput,
@@ -40,12 +41,10 @@ const DENSITY_STRETCHED_ABOVE = 60
  *  getting between places are not free time. */
 const FULL_DAY_HOURS = 12
 
-const LABELS: Record<LoadType, string> = {
-  mental: 'Study & thinking',
-  physical: 'Body & movement',
-  social: 'People',
-  errands: 'Life admin',
-}
+/** The shared four words. This held a byte-identical second copy of them, which is exactly
+ *  what `kit/labels.ts`'s own docstring forbids: "two copies of one vocabulary is how the
+ *  planner and the week come to call the same thing different things". */
+const LABELS = LOAD_TYPE_LABELS
 
 /**
  * §0: schedule density is a derived view, not a fifth reserve.

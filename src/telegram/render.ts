@@ -69,8 +69,20 @@ export const nothingUnderstoodReply = (): Reply => ({
   text: 'I could not pick anything out of that. Try naming the things themselves, like "essay due friday, gym twice, mum\'s birthday sunday".',
 })
 
+/**
+ * §1.4: flagged rather than silently guessed. A student cannot correct what they were never
+ * shown -- and this dropped `entry.confident` entirely, so a row the model guessed at looked
+ * identical to a plainly-stated one, immediately above a one-tap "Add them".
+ *
+ * The app's own chip has said so since §1.4 was built ("Not sure about this one -- check it
+ * before adding"). The bot is meant to be the same app through another door, so it says the
+ * same thing in the shape a text message has: a suffix rather than a second line, because
+ * there are no chips to colour here.
+ */
 export function confirmationReply(dumpId: string, items: readonly ParsedItem[]): Reply {
-  const lines = items.map((entry) => `• ${shorten(entry.title)}`).join('\n')
+  const lines = items
+    .map((entry) => `• ${shorten(entry.title)}${entry.confident ? '' : ' — not sure, check this'}`)
+    .join('\n')
 
   return {
     text: `Here is what I understood:\n\n${lines}\n\nAdd these to your week?`,

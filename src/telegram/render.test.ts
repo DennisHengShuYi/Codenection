@@ -84,6 +84,28 @@ describe('confirmationReply', () => {
     expect(reply.text).toContain('gym')
   })
 
+  /**
+   * §1.4: flagged rather than silently guessed.
+   *
+   * This dropped `confident` entirely, so a row the model had guessed at looked identical to
+   * a plainly-stated one immediately above a one-tap "Add them" -- while the app's own chip
+   * has flagged it since §1.4 was built. Both directions asserted, because a flag on
+   * everything is as useless as a flag on nothing.
+   */
+  it('flags a row it was not sure about, and leaves a confident one plain', () => {
+    const reply = confirmationReply('dump-1', [
+      { ...item('essay'), confident: false },
+      item('gym'),
+    ])
+
+    const [unsureLine, confidentLine] = reply.text
+      .split(String.fromCharCode(10))
+      .filter((line) => line.startsWith('•'))
+
+    expect(unsureLine).toMatch(/not sure/i)
+    expect(confidentLine).not.toMatch(/not sure/i)
+  })
+
   it('offers a way to accept and a way to refuse', () => {
     const reply = confirmationReply('dump-1', [item('essay')])
     const actions = reply.buttons?.flatMap((row) => row.map((button) => button.data)) ?? []

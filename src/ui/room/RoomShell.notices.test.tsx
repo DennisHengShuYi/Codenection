@@ -142,3 +142,96 @@ describe('the room, with its band behind a button', () => {
     expect(await screen.findByRole('dialog', { name: /waiting/i })).toBeVisible()
   })
 })
+
+/**
+ * Everything still owed an answer, listed rather than met one at a time.
+ *
+ * The check-in card asks about one block a day -- §8's "one card, three taps, once a day" --
+ * which is right for the card and leaves a student who went quiet for a week with no way to
+ * see, or clear, what built up behind it. The list lives behind `Waiting` because that is
+ * where things needing the student already are, and it counts as one notice rather than one
+ * per block: a badge that reaches double figures is a badge people learn to ignore.
+ *
+ * Not shown at low energy. §1.5 is explicit that a student at 12% reserve should not be
+ * handed a dashboard, and a backlog is the most dashboard-like thing in the app.
+ */
+const daysAgo = (days: number): string =>
+  new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0] as string
+
+const lived = (): Partial<Schedule> => ({
+  items: [
+    {
+      id: 'lab',
+      title: 'WIA3001 lab',
+      type: 'mental',
+      kind: 'studyBlock',
+      hours: 2,
+      intensity: 1,
+      dayIndex: 0,
+      startHour: 9,
+      fixed: false,
+      deadlineDay: null,
+      protectedRest: false,
+    },
+    {
+      id: 'gym',
+      title: 'Gym',
+      type: 'physical',
+      kind: 'hardExercise',
+      hours: 1,
+      intensity: 1,
+      dayIndex: 1,
+      startHour: 18,
+      fixed: false,
+      deadlineDay: null,
+      protectedRest: false,
+    },
+  ],
+  startedOn: daysAgo(3),
+})
+
+describe('what is still owed an answer', () => {
+  /**
+   * Everything owed appears exactly once. The check-in card is already asking about one of
+   * these, so the list carries the rest -- a block in both places reads as a bug, and a
+   * block in neither is owed and invisible.
+   */
+  it('lists what the check-in card is not already asking about', async () => {
+    await renderShell(lived())
+
+    await userEvent.click(screen.getByTestId('open-notices'))
+    const sheet = await screen.findByRole('dialog', { name: /waiting/i })
+
+    expect(within(sheet).getByTestId('pending-gym')).toHaveTextContent('Gym')
+    expect(within(sheet).queryByTestId('pending-lab')).toBeNull()
+    // ...and the one it left out is the one the card has.
+    expect(within(sheet).getByText(/WIA3001 lab/)).toBeVisible()
+  })
+
+  it('says when each one was, so a student knows which day they are answering for', async () => {
+    await renderShell(lived())
+
+    await userEvent.click(screen.getByTestId('open-notices'))
+    const sheet = await screen.findByRole('dialog', { name: /waiting/i })
+
+    expect(within(sheet).getByTestId('pending-gym')).toHaveTextContent('18:00')
+  })
+
+  it('opens the block itself, where the answers are', async () => {
+    await renderShell(lived())
+
+    await userEvent.click(screen.getByTestId('open-notices'))
+    await userEvent.click(await screen.findByTestId('pending-gym'))
+
+    expect(await screen.findByTestId('answer-right')).toBeVisible()
+  })
+
+  it('says nothing at all when nothing is owed', async () => {
+    await renderShell()
+
+    await userEvent.click(screen.getByTestId('open-notices'))
+    const sheet = await screen.findByRole('dialog', { name: /waiting/i })
+
+    expect(within(sheet).queryByTestId('pending-checkins')).toBeNull()
+  })
+})

@@ -1,5 +1,9 @@
 import { useState } from 'react'
-import type { BlockRecord } from '../../domain/blockLog'
+import { checkedInDays, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
+import { describeDeficit, explainDeficit } from '../../domain/deficitCause'
+import { paramsFor } from '../../domain/engineParams'
+import { project } from '../../engine'
+import { toDayInputs } from '../../optimizer'
 import type { Fix, Schedule } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { dayGrid } from './dayGrid'
@@ -82,6 +86,17 @@ export function WeekScreen(props: {
   readonly working: boolean
   readonly report: string | null
   /**
+   * What the last edit on this screen did, when it needs saying.
+   *
+   * Separate from `report`, which belongs to Rebalance. Later is the reason it exists:
+   * `deferItem` returns the week unchanged when nothing between here and the deadline has
+   * room, and the two outcomes were indistinguishable once the sheet closed. The room's own
+   * `placement-note` could not carry it -- that lives behind the `Waiting` button, whose
+   * count does not know about it, so the message would have waited behind a button reading
+   * "Nothing waiting". This says it where the student already is.
+   */
+  readonly note?: string | null
+  /**
    * §2.2/§4: the single best remaining move, when Rebalance could not improve the
    * fortnight but the fortnight still needs help. Null when the solver found something to
    * do, or when the week needs nothing at all -- `describeRebalance` already tells those
@@ -125,6 +140,7 @@ export function WeekScreen(props: {
     today,
     working,
     report,
+    note = null,
     fallback = null,
     onRebalance,
     onSelectBlock,
@@ -157,6 +173,29 @@ export function WeekScreen(props: {
   const hasFixedLoad = schedule.items.some((item) => item.fixed && !item.protectedRest)
 
   const grid = openDay === null ? null : dayGrid(schedule, openDay)
+
+  /**
+   * Why the open day is marked, or null when it is not.
+   *
+   * The grid's ⚠ says a day is in deficit and nothing else, and the days that most need
+   * explaining are the ones that look empty: a light day carrying a warning is where a
+   * fortnight of load finally lands, and nothing on that day accounts for it.
+   *
+   * Computed from the same projection that produced the mark, so the sentence cannot
+   * describe a day the model did not simulate -- see `domain/deficitCause`.
+   */
+  const params = paramsFor(outcomesFrom(blockLog), predictions)
+  const days = toDayInputs(schedule, checkedInDays(blockLog, today, schedule.horizonDays))
+  const cause =
+    openDay === null
+      ? null
+      : explainDeficit({
+          start: schedule.start,
+          days,
+          projection: project(schedule.start, days, params),
+          params,
+          dayIndex: openDay,
+        })
 
   return (
     <div className="flex flex-col gap-4">
@@ -216,6 +255,12 @@ export function WeekScreen(props: {
           </p>
         )}
 
+        {note !== null && note !== undefined && (
+          <p data-testid="week-note" role="status" className="text-sm text-ink-soft">
+            {note}
+          </p>
+        )}
+
         {/* The outward write, under the actions rather than beside Rebalance: it is the one
             control on this screen that reaches outside the app, and it should not sit at
             the same weight as the one a student presses several times a week. */}
@@ -231,6 +276,18 @@ export function WeekScreen(props: {
 
       {grid !== null && openDay !== null && (
         <div className="flex flex-col gap-3">
+          {/* Above the day rather than beside the mark: the mark is in a cell the size of a
+              thumbnail, and this is two sentences. It also reads in the order a student
+              asks the question -- they tapped the day because of the warning. */}
+          {cause !== null && (
+            <p
+              data-testid="deficit-why"
+              role="status"
+              className="rounded-lg border border-line bg-attention/10 p-3 text-sm text-ink"
+            >
+              {describeDeficit(cause)}
+            </p>
+          )}
           <div
             data-testid="day-grid"
             className="relative mx-auto w-full max-w-2xl rounded-xl border border-line bg-surface"

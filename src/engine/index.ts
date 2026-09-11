@@ -41,7 +41,7 @@ export {
 export { efficiencyAt, floorReserve, overallReserve } from './efficiency'
 export { carryoverAt } from './carryover'
 export { actualCost, stateMultiplier } from './stateCost'
-export { drainForDay, fragmentation } from './drain'
+export { drainForDay, drainSources, fragmentation, type DrainSource } from './drain'
 export { applyCoupling, recoveryForDay, tick } from './tick'
 /** §5.1's per-block recovery ceiling. Exported because three places were carrying their own
  *  copy of the same 3 with a comment saying it was this one. */

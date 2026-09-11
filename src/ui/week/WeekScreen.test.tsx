@@ -412,3 +412,76 @@ describe('WeekScreen and the calendar', () => {
     expect(await screen.findByTestId('push-calendar')).toBeVisible()
   })
 })
+
+/**
+ * Why a day is marked, on the day itself.
+ *
+ * The grid puts a ⚠ on a deficit day and says nothing else, and the days that most need
+ * explaining are the ones that look empty -- a light day carrying a warning is where a
+ * fortnight of load finally lands, and nothing on that day accounts for it. A student
+ * reading the mark has no way to connect it to anything they did.
+ *
+ * Everything in the sentence is recomputed from the projection that produced the mark, so it
+ * cannot describe a day the model did not simulate. See `domain/deficitCause`.
+ */
+describe('opening a deficit day', () => {
+  const heavy = (dayIndex: number) => ({
+    id: `study-${dayIndex}`,
+    title: 'Thesis',
+    type: 'mental' as const,
+    kind: 'studyBlock' as const,
+    hours: 9,
+    intensity: 1,
+    dayIndex,
+    startHour: 9,
+    fixed: true,
+    deadlineDay: null,
+    protectedRest: false,
+  })
+
+  /** Heavy enough, long enough, on short nights: mental gives way and the days after it stay
+   *  under the line with nothing on them. */
+  const crushing = (): Schedule => ({
+    items: Array.from({ length: 9 }, (_, dayIndex) => heavy(dayIndex)),
+    start: { mental: 70, physical: 70, social: 70, errands: 70 },
+    horizonDays: HORIZON_DAYS,
+    sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 6),
+  })
+
+  const openDeficitDay = async () => {
+    setup(crushing())
+
+    const marked = screen
+      .getAllByTestId(/^day-\d+$/)
+      .find((cell) => cell.textContent?.includes('⚠'))
+
+    if (marked === undefined) throw new Error('no deficit day was marked')
+
+    await userEvent.click(marked)
+
+    return marked
+  }
+
+  it('says why, rather than leaving the mark unexplained', async () => {
+    await openDeficitDay()
+
+    expect(await screen.findByTestId('deficit-why')).toBeVisible()
+  })
+
+  it('names the reserve that gave way and where it is forecast to land', async () => {
+    await openDeficitDay()
+
+    const why = await screen.findByTestId('deficit-why')
+
+    expect(why).toHaveTextContent(/study and writing/i)
+    expect(why.textContent ?? '').toMatch(/\d+/)
+  })
+
+  it('says nothing on a day that is not in deficit', async () => {
+    setup()
+
+    await userEvent.click(screen.getByTestId('day-4'))
+
+    expect(screen.queryByTestId('deficit-why')).toBeNull()
+  })
+})

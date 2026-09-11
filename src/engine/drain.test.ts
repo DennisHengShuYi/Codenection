@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { drainForDay, fragmentation } from './drain'
+import { drainForDay, drainSources, fragmentation } from './drain'
 import { DEFAULT_PARAMS } from './params'
 import type { Activity, DayInput, Reserves } from './types'
 
@@ -251,5 +251,99 @@ describe('a block that carries its own estimate bias', () => {
     const padded = { ...DEFAULT_PARAMS, estimateBias: { ...DEFAULT_PARAMS.estimateBias, mental: 2 } }
 
     expect(drainOf(study, padded)).toBeCloseTo(drainOf({ ...study, estimateBias: 2 }), 6)
+  })
+})
+
+/**
+ * The same day's drain, itemised.
+ *
+ * `drainForDay` returns four totals, which is all the model needs and nothing a student can
+ * be told. Explaining a deficit day means naming where the points went -- so this returns the
+ * same arithmetic with the sources kept apart.
+ *
+ * Deliberately a second function rather than a refactor of the first. `drainForDay` runs
+ * thousands of times inside the optimizer's search, and building a breakdown object per day
+ * per candidate is a cost the search would pay for a sentence it never reads.
+ *
+ * That leaves two copies of one formula, so the test below binds them: the sources must sum
+ * to the total, or they have drifted and the explanation is describing a day the model did
+ * not simulate.
+ */
+describe('drainSources', () => {
+  const day = (activities: Activity[], over: Partial<DayInput> = {}): DayInput => ({
+    dayIndex: 0,
+    activities,
+    sleepHours: 7,
+    venueChanges: 0,
+    daysToNearestDeadline: null,
+    checkedIn: true,
+    ...over,
+  })
+
+  const rested: Reserves = { mental: 100, physical: 100, social: 100, errands: 100 }
+
+  const study = (hours: number): Activity => ({
+    kind: 'studyBlock',
+    type: 'mental',
+    hours,
+    intensity: 1,
+    startHour: 9,
+  })
+
+  /** The guard that keeps the explanation honest. If these ever disagree, a student is being
+   *  told about a day the projection did not run. */
+  it('sums to exactly what drainForDay charged', () => {
+    const busy = day([study(3), { ...study(2), startHour: 14 }], {
+      venueChanges: 2,
+      daysToNearestDeadline: 1,
+    })
+
+    for (const type of ['mental', 'physical', 'social', 'errands'] as const) {
+      const itemised = drainSources(busy, rested, DEFAULT_PARAMS)
+        .filter((source) => source.type === type)
+        .reduce((total, source) => total + source.points, 0)
+
+      expect(itemised).toBeCloseTo(drainForDay(busy, rested, DEFAULT_PARAMS)[type], 6)
+    }
+  })
+
+  it('names the kind of work an activity was', () => {
+    const sources = drainSources(day([study(3)]), rested, DEFAULT_PARAMS)
+
+    expect(sources.some((source) => source.source === 'studyBlock')).toBe(true)
+  })
+
+  it('gathers repeated work of one kind into a single line', () => {
+    const sources = drainSources(
+      day([study(2), { ...study(2), startHour: 14 }]),
+      rested,
+      DEFAULT_PARAMS,
+    )
+
+    expect(sources.filter((source) => source.source === 'studyBlock')).toHaveLength(1)
+  })
+
+  it('keeps the day-level charges apart from the work itself', () => {
+    const sources = drainSources(
+      day([study(2), { ...study(2), startHour: 14 }], { daysToNearestDeadline: 0, venueChanges: 1 }),
+      rested,
+      DEFAULT_PARAMS,
+    )
+
+    expect(sources.map((source) => source.source)).toEqual(
+      expect.arrayContaining(['fragmentation', 'deadline', 'travel']),
+    )
+  })
+
+  it('charges isolation on a day with nobody in it', () => {
+    const sources = drainSources(day([study(2)]), rested, DEFAULT_PARAMS)
+
+    expect(sources.some((source) => source.source === 'isolation')).toBe(true)
+  })
+
+  it('leaves out anything that cost nothing, rather than listing zeroes', () => {
+    const sources = drainSources(day([study(2)]), rested, DEFAULT_PARAMS)
+
+    expect(sources.every((source) => source.points > 0)).toBe(true)
   })
 })

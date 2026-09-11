@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { expectWeekStored } from './storedWeek'
 
 /**
  * The week screen in a real browser.
@@ -136,37 +137,8 @@ test('a block added by hand survives a reload', async ({ page }) => {
 
   await expect(page.getByRole('dialog', { name: /the week/i })).toBeVisible()
 
-  /*
-   * Wait for the write to actually land before reloading.
-   *
-   * `useSchedule.setSchedule` fires `saveWeek` and does not await it -- deliberately, so a
-   * slow write cannot block the screen the student is looking at. That leaves a real race
-   * against a reload in the very next instant, and reloading blind made this test flaky
-   * (passing alone, failing about one run in three in the full suite). Polling the store the
-   * app actually writes to says exactly what is being waited for, rather than hiding the
-   * race behind a sleep. The race itself is pre-existing and applies to every edit path, not
-   * just this one.
-   */
-  await expect
-    .poll(
-      () =>
-        page.evaluate(
-          () =>
-            new Promise<string>((resolve) => {
-              const request = indexedDB.open('codenection')
-              request.onerror = () => resolve('')
-              request.onsuccess = () => {
-                const db = request.result
-                if (!db.objectStoreNames.contains('state')) return resolve('')
-                const read = db.transaction('state', 'readonly').objectStore('state').get('week')
-                read.onerror = () => resolve('')
-                read.onsuccess = () => resolve(JSON.stringify(read.result ?? ''))
-              }
-            }),
-        ),
-      { timeout: 10_000 },
-    )
-    .toContain('Coffee with Sam')
+  // The write is fired and not awaited, so reloading in the next instant races it.
+  await expectWeekStored(page, 'Coffee with Sam')
 
   await page.reload()
 

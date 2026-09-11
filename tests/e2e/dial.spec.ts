@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { expectWeekStored } from './storedWeek'
 
 /**
  * Every browser test enters the way a judge would: no credentials are configured for
@@ -85,6 +86,10 @@ test('keeps the week after a reload', async ({ page }) => {
   }
   await page.getByRole('button', { name: /add these/i }).click()
   await expect(page.getByTestId('room-scene')).toBeVisible()
+
+  // The add fires the write and does not await it, so reloading in the very next instant
+  // races it -- which is what made this test pass locally and fail on CI.
+  await expectWeekStored(page, title)
 
   // Re-entering through the preview, because choosing to look around is not remembered
   // across a reload -- a signed-out visitor meets the sign-in screen again. That is

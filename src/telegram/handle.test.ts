@@ -307,11 +307,22 @@ describe('the command surface', () => {
    * ever, while every other block on the day stayed unreachable from chat.
    */
   describe('/today and what has already been answered', () => {
-    // Early enough to have finished by the harness's clock. The bot asks only about blocks
-    // that have actually happened now -- `domain/dayBlocks.hasHappened`, the same rule the
-    // today card has always used -- so a fixture at 09:00 checked at 08:00 is a block with
-    // nothing to say about it yet, and this test is about which block gets asked rather than
-    // about when.
+    /**
+     * A clock these tests state rather than inherit.
+     *
+     * The bot asks only about blocks that have actually happened -- `dayBlocks.hasHappened`,
+     * the same rule the today card uses -- so every test here turns on what hour it is. They
+     * took it from `1000`, one second past the epoch, read back through
+     * `new Date(now).getHours()`. That is the **local** hour, so the harness's clock was
+     * whichever zone the machine ran in: 08:00 at UTC+8, where these fixtures have finished,
+     * and 00:00 in CI, where they have not. The suite passed on the author's machine and
+     * failed on GitHub, and nothing in the test named the hour it was relying on.
+     *
+     * Built from local components, so `getHours()` reads 09:00 in every zone. The production
+     * code is right as it stands: §9 wants the student's own clock, not UTC.
+     */
+    const NINE_IN_THE_MORNING = new Date(1970, 0, 1, 9, 0, 0).getTime()
+
     const early = { ...studyBlock, startHour: 5, hours: 1 }
     const second = { ...early, id: 'b2', title: 'Stats problem set' }
     const bothBlocks = () => week([early, second]) as never
@@ -323,7 +334,7 @@ describe('the command surface', () => {
     it('moves on to the next block once the first has been answered', async () => {
       const h = harness({ loadWeek: bothBlocks, loadBlockLog: async () => logFor('b1') })
 
-      const reply = await handleIntent(command('today'), h.store, 1000)
+      const reply = await handleIntent(command('today'), h.store, NINE_IN_THE_MORNING)
 
       expect(reply?.text).toContain('Did Stats problem set happen?')
       expect(reply?.buttons?.flat().every((b) => b.data.startsWith('block:b2:'))).toBe(true)
@@ -335,7 +346,7 @@ describe('the command surface', () => {
         loadBlockLog: async () => [...logFor('b1'), ...logFor('b2')],
       })
 
-      const reply = await handleIntent(command('today'), h.store, 1000)
+      const reply = await handleIntent(command('today'), h.store, NINE_IN_THE_MORNING)
 
       expect(reply?.buttons).toBeUndefined()
       expect(reply?.text).toContain('Ethics essay')
@@ -355,7 +366,7 @@ describe('the command surface', () => {
         },
       })
 
-      const reply = await handleIntent(command('today'), h.store, 1000)
+      const reply = await handleIntent(command('today'), h.store, NINE_IN_THE_MORNING)
 
       expect(reply?.buttons).toBeUndefined()
       expect(reply?.text).toContain('Ethics essay')

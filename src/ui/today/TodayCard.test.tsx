@@ -227,3 +227,73 @@ describe('TodayCard reality check', () => {
     expect(screen.getByTestId('answer-right')).toBeInTheDocument()
   })
 })
+
+/**
+ * §7.6's Reality Check, for sleep.
+ *
+ * Beside the question it is about, which is why it lives here as well as on the sleep page:
+ * a student answering "how much sleep last night?" is the one moment they are thinking about
+ * the gap between what they aim for and what they get.
+ */
+describe('TodayCard and the sleep reality line', () => {
+  it('shows the line when there is something measured to say', () => {
+    render(
+      <TodayCard
+        block={null}
+        askEnergy={false}
+        askSleep
+        sleepRealityLine="You plan 8 hours and average about 6."
+        onEnergy={vi.fn()}
+        onSleep={vi.fn()}
+        onBlock={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByTestId('sleep-reality-line')).toHaveTextContent('average about 6')
+  })
+
+  /** Absence, not empty text: an element rendered with nothing in it still takes up space
+   *  and is still announced. */
+  it('renders no element at all when there is nothing measured', () => {
+    render(
+      <TodayCard
+        block={null}
+        askEnergy={false}
+        askSleep
+        onEnergy={vi.fn()}
+        onSleep={vi.fn()}
+        onBlock={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByTestId('sleep-reality-line')).toBeNull()
+  })
+
+  /**
+   * Under the four buckets, never above them.
+   *
+   * The same rule the estimate-bias line follows, and for its stated reason: Ruling 22 keeps
+   * the answer buttons visually equal so the card does not steer the answer, and a line about
+   * the student's own shortfall sitting above them would undo exactly that.
+   */
+  it('sits below the buckets rather than above them', () => {
+    const { container } = render(
+      <TodayCard
+        block={null}
+        askEnergy={false}
+        askSleep
+        sleepRealityLine="You plan 8 hours and average about 6."
+        onEnergy={vi.fn()}
+        onSleep={vi.fn()}
+        onBlock={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    )
+
+    const html = container.innerHTML
+
+    expect(html.indexOf('sleep-eightPlus')).toBeLessThan(html.indexOf('sleep-reality-line'))
+  })
+})

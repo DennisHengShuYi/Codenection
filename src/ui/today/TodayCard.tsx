@@ -65,12 +65,31 @@ export function TodayCard(props: {
    * has no outcomes, and the card still has to render.
    */
   readonly outcomes?: readonly BlockOutcome[]
+  /**
+   * §7.6's Reality Check for sleep, or null.
+   *
+   * Supplied rather than computed here, for the reason every other day figure in this app is:
+   * it needs the stated target and the durable night log, neither of which a card should be
+   * reaching for. Null both when nothing has been measured and when low-energy mode is
+   * withholding it, and this component does not need to know which.
+   */
+  readonly sleepRealityLine?: string | null
   readonly onEnergy: (energy: number) => void
   readonly onSleep: (bucket: SleepBucket) => void
   readonly onBlock: (itemId: string, answer: BlockAnswer) => void
   readonly onDismiss: () => void
 }): JSX.Element | null {
-  const { block, askEnergy, askSleep, outcomes = [], onEnergy, onSleep, onBlock, onDismiss } = props
+  const {
+    block,
+    askEnergy,
+    askSleep,
+    outcomes = [],
+    sleepRealityLine = null,
+    onEnergy,
+    onSleep,
+    onBlock,
+    onDismiss,
+  } = props
   const askBlock = block !== null
 
   // §7.6, and only for the block actually on the card: a bias quoted about some other load
@@ -124,6 +143,16 @@ export function TodayCard(props: {
               </Button>
             ))}
           </div>
+
+          {/* Under the buckets, never above them -- the rule the estimate-bias line below
+              follows, and for its stated reason: Ruling 22 keeps these buttons visually equal
+              so the card does not steer the answer, and a line about the student's own
+              shortfall sitting above them would undo exactly that. */}
+          {sleepRealityLine !== null && (
+            <p data-testid="sleep-reality-line" className="text-xs text-ink-soft">
+              {sleepRealityLine}
+            </p>
+          )}
         </fieldset>
       )}
 

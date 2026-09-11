@@ -756,6 +756,10 @@ export function RoomShell({
           askEnergy={askEnergy}
           askSleep={askSleep}
           outcomes={outcomes}
+          /* Beside the question it is about: answering "how much sleep last night?" is the
+             one moment a student is thinking about the gap between what they aim for and
+             what they get. Withheld in low-energy mode, as on the sleep page itself. */
+          sleepRealityLine={lowEnergy ? null : sleepRealityLine(sleepNights, sleepTarget)}
           onEnergy={(energy) => {
             if (todayDate === null) return
             setProfile({ ...profile, predictions: resolvePrediction(profile.predictions, todayDate, energy) })

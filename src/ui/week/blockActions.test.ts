@@ -43,16 +43,23 @@ describe('blockSheet', () => {
   it('offers the full set for a movable block today or later', () => {
     // `move` is intentionally absent -- see blockActions.ts's doc comment: it was wired
     // once with no picker behind it, indistinguishable from "Later", and was dropped at
-    // the combined 12+13 review rather than left as a silent stub.
-    expect(sheet(item())?.actions).toEqual(['done', 'later', 'microStart', 'edit', 'remove'])
+    // the combined 12+13 review rather than left as a silent stub. `done` left the same way
+    // and for the same reason: it deleted the block, which is what `remove` is called.
+    expect(sheet(item())?.actions).toEqual(['later', 'microStart', 'edit', 'remove'])
   })
 
-  it('offers only Done for a fixed block, because the optimizer cannot move it either', () => {
-    expect(sheet(item({ fixed: true }))?.actions).toEqual(['done', 'microStart', 'edit', 'remove'])
+  it('offers no Later on a fixed block, because the optimizer cannot move it either', () => {
+    expect(sheet(item({ fixed: true }))?.actions).toEqual(['microStart', 'edit', 'remove'])
   })
 
-  it('asks protected rest whether it actually happened', () => {
-    expect(sheet(item({ protectedRest: true, fixed: true }))?.actions).toEqual(['didRest', 'microStart', 'edit', 'remove'])
+  /** A nap three days out has not happened, so there is no true answer to "did you rest" --
+   *  and an answer given now would be read by `softDeadlines` as a rhythm satisfied. */
+  it('asks a future protected-rest block nothing about whether it happened', () => {
+    expect(sheet(item({ protectedRest: true, fixed: true }))?.actions).toEqual([
+      'microStart',
+      'edit',
+      'remove',
+    ])
   })
 
   // A past, unanswered protected-rest block keeps rest's own question: "did it happen" is
@@ -142,7 +149,7 @@ describe('editing and removing, which every block allows', () => {
       model?.actions.filter(
         (action) => action !== 'edit' && action !== 'remove' && action !== 'microStart',
       ),
-    ).toEqual(['done', 'later'])
+    ).toEqual(['later'])
   })
 
   describe('the micro-start button', () => {

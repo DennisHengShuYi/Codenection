@@ -66,9 +66,9 @@ describe('deferItem', () => {
   })
 
   // An item pushed off the end vanishes from the model while still existing in the
-  // student's life.
+  // student's life. On the last day there is no later day to search, so it stays put.
   it('never pushes an item off the end of the horizon', () => {
-    const after = deferItem(schedule([item('a', HORIZON_DAYS - 1)]), 'a', 5)
+    const after = deferItem(schedule([item('a', HORIZON_DAYS - 1)]), 'a')
 
     expect(after.items[0]!.dayIndex).toBeLessThan(HORIZON_DAYS)
   })
@@ -241,26 +241,115 @@ describe('deferring something with only a synthetic deadline', () => {
     protectedRest: false,
   }
 
+  /**
+   * Rewritten with the days in between filled, because the mechanism changed under it.
+   *
+   * The old defer jumped `byDays` and clamped, so a ten-day push landed exactly on the
+   * deadline from anywhere. It now steps day by day looking for an opening, so reaching the
+   * deadline means every day before it was full -- which is the only way the clamp was ever
+   * load-bearing in the first place.
+   */
   it('stops at the soft deadline rather than the end of the fortnight', () => {
-    const week = schedule([{ ...walk, softDeadlineDay: 3 }])
+    const full = (dayIndex: number) =>
+      item(`wall-${dayIndex}`, dayIndex, { hours: 16, startHour: 8, fixed: true })
 
-    const after = deferItem(week, 'walk', 10)
+    const week = schedule([{ ...walk, softDeadlineDay: 3 }, full(2)])
 
-    expect(after.items[0]?.dayIndex).toBe(3)
+    expect(deferItem(week, 'walk').items[0]?.dayIndex).toBe(3)
+  })
+
+  it('never lands past the soft deadline, however full the days before it', () => {
+    const full = (dayIndex: number) =>
+      item(`wall-${dayIndex}`, dayIndex, { hours: 16, startHour: 8, fixed: true })
+
+    const week = schedule([{ ...walk, softDeadlineDay: 3 }, full(2), full(3)])
+
+    // Nowhere legal at all, so it does not move rather than moving past the wall.
+    expect(deferItem(week, 'walk').items[0]?.dayIndex).toBe(1)
   })
 
   /** A real deadline still wins over a derived one -- it is a fact about the world. */
   it('still stops at a real deadline when there is one', () => {
     const week = schedule([{ ...walk, deadlineDay: 2, softDeadlineDay: 6 }])
 
-    expect(deferItem(week, 'walk', 10).items[0]?.dayIndex).toBe(2)
+    expect(deferItem(week, 'walk').items[0]?.dayIndex).toBeLessThanOrEqual(2)
   })
 
-  /** Nothing stamped and nothing stated is the old behaviour, unchanged: there is no
-   *  deadline to hold it to, so the horizon edge is the only honest limit. */
+  /** Nothing stamped and nothing stated: there is no deadline to hold it to, so the horizon
+   *  edge is the only limit -- and with every day before it full, that is where it lands. */
   it('falls back to the horizon when the week has never been stamped', () => {
-    const week = schedule([walk])
+    // Days 2 to 19 full, leaving only the last day of the horizon open.
+    const walls = Array.from({ length: HORIZON_DAYS - 3 }, (_, offset) =>
+      item(`wall-${offset + 2}`, offset + 2, { hours: 16, startHour: 8, fixed: true }),
+    )
 
-    expect(deferItem(week, 'walk', 100).items[0]?.dayIndex).toBe(HORIZON_DAYS - 1)
+    expect(deferItem(schedule([walk, ...walls]), 'walk').items[0]?.dayIndex).toBe(
+      HORIZON_DAYS - 1,
+    )
+  })
+})
+
+/**
+ * Later, as a placement rather than as arithmetic.
+ *
+ * It used to be `dayIndex + 2` at the same hour, clamped to the deadline. That moved a block
+ * without looking at where it was moving it to: onto a day already full, on top of a fixed
+ * class, at an hour the student was asleep. And when the block already sat on its deadline
+ * the clamp returned the day it was on, so the sheet closed and nothing at all had happened.
+ *
+ * It now searches the days it is allowed to use and puts the block in a real opening, at an
+ * hour that suits the kind of work -- the same `slotOn` every other placement path in the
+ * app goes through.
+ */
+describe('deferItem, looking for somewhere to put it', () => {
+  const busy = (dayIndex: number): ScheduledItem =>
+    item(`wall-${dayIndex}`, dayIndex, {
+      hours: 16,
+      startHour: 8,
+      fixed: true,
+      kind: 'studyBlock',
+      type: 'mental',
+    })
+
+  it('skips a day with no room and lands on one that has some', () => {
+    const week = schedule([item('a', 1), busy(2), busy(3)])
+
+    expect(deferItem(week, 'a').items[0]!.dayIndex).toBeGreaterThan(3)
+  })
+
+  it('puts it in a real opening rather than at the hour it used to be', () => {
+    const week = schedule([
+      item('a', 1, { startHour: 9 }),
+      item('taken', 2, { startHour: 9, hours: 4, fixed: true }),
+    ])
+
+    const moved = deferItem(week, 'a').items[0]!
+
+    const clash =
+      moved.dayIndex === 2 && moved.startHour < 13 && moved.startHour + moved.hours > 9
+
+    expect(clash).toBe(false)
+  })
+
+  it('still never moves anything past its deadline', () => {
+    const after = deferItem(schedule([item('a', 1, { deadlineDay: 3 })]), 'a')
+
+    expect(after.items[0]!.dayIndex).toBeLessThanOrEqual(3)
+  })
+
+  /** The no-op that read as a broken button: a block already sitting on its own deadline
+   *  had nowhere legal to go, so Later closed the sheet and changed nothing. It is still
+   *  not moved -- there is nowhere to move it to -- but that is now a stated outcome rather
+   *  than a silent one, and the caller can tell. */
+  it('reports that it moved nothing when the deadline leaves no room', () => {
+    const week = schedule([item('a', 3, { deadlineDay: 3 })])
+
+    expect(deferItem(week, 'a')).toBe(week)
+  })
+
+  it('reports the week back unchanged for an id that is not there', () => {
+    const week = schedule([item('a', 1)])
+
+    expect(deferItem(week, 'nope')).toBe(week)
   })
 })

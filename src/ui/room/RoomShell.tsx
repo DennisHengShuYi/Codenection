@@ -106,7 +106,7 @@ export function RoomShell({
   blockLog: readonly BlockRecord[]
   onAnswerBlock: (record: BlockRecord) => void
 }) {
-  const { schedule, setSchedule, problem: saveProblem } = useSchedule(repository)
+  const { schedule, setSchedule, problem: saveProblem } = useSchedule(repository, session)
   const { profile, setProfile, problem: profileProblem } = useProfile(repository, session)
   const { ladders, loaded: laddersLoaded, saveLadder, dropLadder, problem: ladderProblem } =
     useLadders(repository)
@@ -656,11 +656,6 @@ export function RoomShell({
           model={blockModel}
           onClose={closeToRoom}
           onBack={goBack}
-          onDone={(itemId) => {
-            setSchedule(completeItem(week, itemId))
-            dropLadder(itemId)
-            closeToRoom()
-          }}
           onLater={(itemId) => {
             setSchedule(deferItem(week, itemId))
             closeToRoom()

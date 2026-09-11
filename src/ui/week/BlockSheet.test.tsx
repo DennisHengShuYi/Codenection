@@ -18,7 +18,7 @@ const model = (over: Partial<BlockSheetModel> = {}): BlockSheetModel => ({
     deadlineDay: null,
     protectedRest: false,
   },
-  actions: ['done', 'later', 'microStart'],
+  actions: ['later', 'microStart'],
   recordedAnswer: null,
   ...over,
 })
@@ -27,7 +27,6 @@ const setup = (over: Partial<BlockSheetModel> = {}) => {
   const handlers = {
     onClose: vi.fn(),
     onBack: vi.fn(),
-    onDone: vi.fn(),
     onLater: vi.fn(),
     onConfirm: vi.fn(),
     onRested: vi.fn(),
@@ -53,16 +52,16 @@ describe('BlockSheet', () => {
     expect(screen.getByTestId('block-when')).toHaveTextContent('3')
   })
 
-  it('completes the block', async () => {
-    const { onDone } = setup()
+  /** `done` is gone from the model: it called `completeItem`, which deletes the block --
+   *  the same thing Remove does, without the confirmation or the name. */
+  it('offers no Done, which was a delete wearing another word', () => {
+    setup()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Done' }))
-
-    expect(onDone).toHaveBeenCalledWith('essay')
+    expect(screen.queryByRole('button', { name: 'Done' })).not.toBeInTheDocument()
   })
 
   it('offers nothing it was not given', () => {
-    setup({ actions: ['done'] })
+    setup({ actions: ['edit'] })
 
     expect(screen.queryByRole('button', { name: 'Later' })).not.toBeInTheDocument()
   })
@@ -75,13 +74,30 @@ describe('BlockSheet', () => {
     expect(onConfirm).toHaveBeenCalledWith('essay', 'longer')
   })
 
-  it('labels the four confirm answers in the student-facing words', () => {
+  /**
+   * Three, not four. "Didn't happen" sat one row above Remove doing the same job, so the
+   * question narrowed to the one thing Reality Check reads: how long it took. The answer
+   * itself still exists -- the today card and the bot both write it, and `softDeadlines`
+   * depends on it to stop a skipped rest satisfying the rest rhythm.
+   */
+  it('labels the three confirm answers in the student-facing words', () => {
     setup({ actions: ['confirm'] })
 
-    expect(screen.getByTestId('answer-didnt')).toHaveTextContent("Didn't happen")
     expect(screen.getByTestId('answer-less')).toHaveTextContent('Took less')
     expect(screen.getByTestId('answer-right')).toHaveTextContent('About right')
     expect(screen.getByTestId('answer-longer')).toHaveTextContent('Took longer')
+    expect(screen.queryByTestId('answer-didnt')).toBeNull()
+  })
+
+  /** They report on the past; Micro start, Edit and Remove change the plan. Mixed into one
+   *  wrapped row a student picked "Edit" out of a line that began "Took less". */
+  it('keeps the answers on a row of their own', () => {
+    setup({ actions: ['confirm', 'edit', 'remove'] })
+
+    const row = screen.getByTestId('answer-row')
+
+    expect(within(row).getByTestId('answer-less')).toBeVisible()
+    expect(within(row).queryByRole('button', { name: 'Edit' })).toBeNull()
   })
 
   it('asks protected rest whether it happened', async () => {
@@ -135,8 +151,8 @@ describe('BlockSheet', () => {
     setup()
 
     const bar = screen.getByTestId('sheet-actions')
-    expect(within(bar).getByRole('button', { name: 'Done' })).toBeInTheDocument()
     expect(within(bar).getByRole('button', { name: 'Later' })).toBeInTheDocument()
+    expect(within(bar).getByRole('button', { name: /micro start/i })).toBeInTheDocument()
   })
 
   /**
@@ -161,7 +177,7 @@ describe('BlockSheet', () => {
 })
 
 describe('changing the block rather than answering about it', () => {
-  const editable = { actions: ['done', 'edit', 'remove'] as const }
+  const editable = { actions: ['later', 'edit', 'remove'] as const }
 
   it('opens the form when Edit is pressed', async () => {
     const { onEdit } = setup({ actions: [...editable.actions] })

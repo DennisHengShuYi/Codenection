@@ -4,9 +4,15 @@ import type { Schedule, ScheduledItem } from '../../optimizer'
 /**
  * §5: what a block offers, derived from the block.
  *
- * Done, Later, micro-start and confirmation were four entries on a feature list. They are
- * four *states of a block*, and collapsing them here is what lets the week screen carry all
- * of them without a row of buttons that are mostly wrong for whatever block was tapped.
+ * Later, micro-start and confirmation were entries on a feature list. They are *states of a
+ * block*, and collapsing them here is what lets the week screen carry all of them without a
+ * row of buttons that are mostly wrong for whatever block was tapped.
+ *
+ * `done` is not in this union and was removed rather than left. It called `completeItem`,
+ * which is `withoutItem` -- the same deletion `remove` performs, with no confirmation and
+ * no record written anywhere. Two buttons doing one thing, one of them sounding like
+ * progress and behaving like a delete. If finishing early is to mean something it has to be
+ * logged, and until it is, Remove is the honest name for what that button did.
  *
  * `move` is not in this union, and now genuinely does not need to be. It was specified and
  * wired once with no day/time picker behind it, so "Move" behaved identically to "Later"
@@ -16,7 +22,6 @@ import type { Schedule, ScheduledItem } from '../../optimizer'
  * more.
  */
 export type BlockAction =
-  | 'done'
   | 'later'
   | 'microStart'
   | 'confirm'
@@ -79,17 +84,19 @@ const actionsFor = (
     return alreadyAsked ? ['undo', ...MANUAL] : ['confirm', ...MANUAL]
   }
 
-  // A future or today protected-rest block has nothing to be "answered" about yet -- it
-  // keeps asking whether it happened.
-  if (item.protectedRest) return ['didRest', ...MANUAL]
+  // Nothing to answer about a block that has not happened. "Did you rest" on a nap still
+  // three days out is a question with no true answer, and offering one invites an entry in
+  // the log about an evening nobody has lived -- which `softDeadlines` would then read as a
+  // rhythm satisfied. Past rest keeps the question, above.
+  //
+  // Fixed means classes, shifts and hard deadlines, and protected rest is fixed by
+  // construction. The optimizer may not move them, so there is no Later to offer --
+  // deferring is a request the model would refuse. Editing one by hand is a different act
+  // entirely: not asking the solver to move it, but telling the app the class itself
+  // changed.
+  if (item.protectedRest || item.fixed) return [...MANUAL]
 
-  // Fixed means classes, shifts and hard deadlines. The optimizer may not move them, so
-  // there is no Later to offer -- deferring is a request the model would refuse. Editing one
-  // by hand is a different act entirely: not asking the solver to move it, but telling the
-  // app the class itself changed.
-  if (item.fixed) return ['done', ...MANUAL]
-
-  return ['done', 'later', ...MANUAL]
+  return ['later', ...MANUAL]
 }
 
 export function blockSheet({

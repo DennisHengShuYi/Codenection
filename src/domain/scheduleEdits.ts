@@ -1,9 +1,9 @@
 import { HORIZON_DAYS, type ActivityKind, type LoadType } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
 import { dropCommitmentFor } from './commitments'
+import { slotOn } from './slotFinder'
 import { effectiveDeadline } from './softDeadlines'
 
-const DEFAULT_DEFER_DAYS = 2
 
 /**
  * The first place in the app that edits a week outside the optimizer.
@@ -64,26 +64,39 @@ export function completeItem(schedule: Schedule, id: string): Schedule {
  * yet, so this moves the item honestly and the interface says the cost is coming, rather
  * than implying the week just got easier.
  */
-export function deferItem(
-  schedule: Schedule,
-  id: string,
-  byDays: number = DEFAULT_DEFER_DAYS,
-): Schedule {
-  return {
-    ...schedule,
-    items: schedule.items.map((item) => {
-      if (item.id !== id) return item
+export function deferItem(schedule: Schedule, id: string): Schedule {
+  const item = schedule.items.find((candidate) => candidate.id === id)
+  if (item === undefined) return schedule
 
-      // Ruling 62/Ruling 45: whichever deadline actually applies, real or synthetic. This read
-      // `item.deadlineDay` alone, so undated work -- a walk, a rest, seeing someone -- could
-      // be pushed to the end of the fortnight for free. `softDeadlines`' own docstring names
-      // this line as one of the three reasons that module exists, and it was not changed
-      // when the module landed.
-      const latest = effectiveDeadline(item) ?? HORIZON_DAYS - 1
+  // Ruling 62/Ruling 45: whichever deadline actually applies, real or synthetic. This read
+  // `item.deadlineDay` alone, so undated work -- a walk, a rest, seeing someone -- could be
+  // pushed to the end of the fortnight for free. `softDeadlines`' own docstring names this
+  // line as one of the three reasons that module exists.
+  const latest = Math.min(effectiveDeadline(item) ?? HORIZON_DAYS - 1, HORIZON_DAYS - 1)
 
-      return { ...item, dayIndex: Math.min(item.dayIndex + byDays, latest, HORIZON_DAYS - 1) }
-    }),
+  // The block itself is out of the way while its new home is looked for, or it would be
+  // found clashing with where it already is -- and on a day it shares with nothing else,
+  // that would rule out the only opening there is.
+  const without = withoutItem(schedule, id)
+  const need = { hours: item.hours, type: item.type, kind: item.kind }
+
+  for (let day = item.dayIndex + 1; day <= latest; day += 1) {
+    const slot = slotOn(without, day, need)
+    if (slot === null) continue
+
+    return {
+      ...schedule,
+      items: schedule.items.map((candidate) =>
+        candidate.id === id ? { ...candidate, dayIndex: day, startHour: slot.startHour } : candidate,
+      ),
+    }
   }
+
+  // Nowhere legal to put it: every day between here and the deadline is full. The week comes
+  // back untouched and identical, so a caller can tell nothing happened -- which is what the
+  // old arithmetic could not say. It returned the same day it was given and looked like a
+  // move, and the sheet closed on a button that had done nothing.
+  return schedule
 }
 
 /**

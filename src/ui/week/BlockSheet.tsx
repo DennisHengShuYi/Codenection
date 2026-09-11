@@ -21,17 +21,24 @@ const CONFIRM_LABELS: Record<BlockAnswer, string> = {
   longer: 'Took longer',
 }
 
-const CONFIRM_ORDER: readonly BlockAnswer[] = ['didnt', 'less', 'right', 'longer']
+/**
+ * The three answers this sheet asks for, and deliberately not four.
+ *
+ * "Didn't happen" was doing the same job as Remove one row below it -- a student looking at
+ * a block that did not happen has two buttons for it -- so the question here is narrowed to
+ * the one thing Reality Check reads: how long it took. `didnt` remains a `BlockAnswer` and
+ * is still written by the today card, by the bot, and by "I didn't" on a rest block, because
+ * `softDeadlines` reads it: a skipped rest must not satisfy the rest rhythm.
+ */
+const CONFIRM_ORDER: readonly BlockAnswer[] = ['less', 'right', 'longer']
 
 const SIMPLE_LABELS = {
-  done: 'Done',
   later: 'Later',
 } as const
 
 type SimpleAction = keyof typeof SIMPLE_LABELS
 
-const isSimpleAction = (action: BlockAction): action is SimpleAction =>
-  action === 'done' || action === 'later'
+const isSimpleAction = (action: BlockAction): action is SimpleAction => action === 'later'
 
 /**
  * The line under the title: when the block runs, what it spends, and how long for.
@@ -54,7 +61,6 @@ export function BlockSheet({
   model,
   onClose,
   onBack,
-  onDone,
   onLater,
   onConfirm,
   onRested,
@@ -67,7 +73,6 @@ export function BlockSheet({
   /** Ruling 60: one level up, to the week this block was opened from. `onClose` means done
    *  entirely, and goes to the room. */
   readonly onBack: () => void
-  readonly onDone: (itemId: string) => void
   readonly onLater: (itemId: string) => void
   readonly onConfirm: (itemId: string, answer: BlockAnswer) => void
   readonly onRested: (itemId: string, rested: boolean) => void
@@ -82,7 +87,6 @@ export function BlockSheet({
   const { item, actions, recordedAnswer } = model
 
   const simpleHandlers: Record<SimpleAction, (itemId: string) => void> = {
-    done: onDone,
     later: onLater,
   }
 
@@ -99,27 +103,46 @@ export function BlockSheet({
         )
       })}
 
-      {actions.includes('confirm') &&
-        CONFIRM_ORDER.map((answer) => (
-          <Button
-            key={answer}
-            variant="secondary"
-            data-testid={`answer-${answer}`}
-            onClick={() => onConfirm(item.id, answer)}
-          >
-            {CONFIRM_LABELS[answer]}
-          </Button>
-        ))}
+      {/*
+        What happened, on a line of its own.
 
+        `order-first` with a full-width basis puts it above Back and the three buttons that
+        change the block, rather than in a wrapped row with them. They are different kinds of
+        act -- one reports on the past, the others edit the plan -- and mixed into one row a
+        student picked "Edit" out of a line that began "Took less".
+      */}
+      {actions.includes('confirm') && (
+        <div
+          data-testid="answer-row"
+          className="order-first flex w-full flex-wrap items-center justify-end gap-2"
+        >
+          {CONFIRM_ORDER.map((answer) => (
+            <Button
+              key={answer}
+              variant="secondary"
+              data-testid={`answer-${answer}`}
+              onClick={() => onConfirm(item.id, answer)}
+            >
+              {CONFIRM_LABELS[answer]}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {/* Rest's own question, in the same place on the sheet, so every block reads the same
+          shape however it is answered. */}
       {actions.includes('didRest') && (
-        <>
+        <div
+          data-testid="answer-row"
+          className="order-first flex w-full flex-wrap items-center justify-end gap-2"
+        >
           <Button variant="secondary" data-testid="rested-yes" onClick={() => onRested(item.id, true)}>
             I rested
           </Button>
           <Button variant="secondary" data-testid="rested-no" onClick={() => onRested(item.id, false)}>
             I didn't
           </Button>
-        </>
+        </div>
       )}
 
       {/* §4.1's manual trigger, and now on every block. It asks for no explanation, which

@@ -11,6 +11,29 @@ import type { Schedule } from '../optimizer'
  * here, and the real `Date` is supplied once, at the UI edge.
  */
 
+/**
+ * The days of the week, in `Date.getUTCDay()`'s order.
+ *
+ * Sunday first because that is the order the platform counts in, and `expandRecurring`
+ * matches a repeat against exactly that index -- so a prettier Monday-first list here would
+ * silently shift every recurring item by a day.
+ *
+ * One list. There were four, all correct and all separately maintained: `ai/calendarAnchor`
+ * built a prompt from one, `domain/placement` named a day from another, `ui/planner/ItemChip`
+ * offered a third to the student, and `ai/fallbackParser` matched text against a lowercase
+ * fourth. Kept here because this module is where the `getUTCDay` reading the order belongs to
+ * already lives.
+ */
+export const WEEKDAY_NAMES = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+] as const
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000

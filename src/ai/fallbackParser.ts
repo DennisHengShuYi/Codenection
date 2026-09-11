@@ -1,3 +1,4 @@
+import { WEEKDAY_NAMES } from '../domain/calendar'
 import { HORIZON_DAYS, type ActivityKind, type LoadType } from '../engine'
 import { DEFAULT_EFFORT_HOURS, MAX_ITEMS, type ParsedItem } from './types'
 
@@ -11,7 +12,7 @@ import { DEFAULT_EFFORT_HOURS, MAX_ITEMS, type ParsedItem } from './types'
  * nothing.
  */
 
-const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+const WEEKDAYS = WEEKDAY_NAMES.map((day) => day.toLowerCase())
 
 /**
  * Words that reliably indicate a load type. Deliberately short: a longer list guesses more

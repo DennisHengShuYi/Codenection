@@ -1,3 +1,4 @@
+import { USEFUL_REST_HOURS } from '../engine'
 import type { Schedule } from '../optimizer'
 
 /**
@@ -30,7 +31,7 @@ import type { Schedule } from '../optimizer'
  * rest is enough, and §5.3's "the app refuses to help you work" stance is the app being
  * firm about resting more, never less.
  */
-export const DAILY_RECOVERY_CEILING = 6
+export const DAILY_RECOVERY_CEILING = 2 * USEFUL_REST_HOURS
 
 /**
  * Rest already scheduled on a day.

@@ -89,9 +89,16 @@ export interface RequestCost {
 /**
  * The first day the floor crosses into deficit, or null if it never does.
  *
- * The projection already counts deficit days but has never said when the first one arrives,
- * and the day is the half a student can act on -- §2.3 asks for "day 21 to day 14", not
- * "seven deficit days".
+ * The projection already carries this as a field. It was reimplemented here, and again in
+ * `restNow.ts`, in nine identical lines that hand-listed the four load types instead of
+ * calling `floorReserve` -- so a fifth reserve would have been counted in one place and
+ * silently skipped in the other two, which is exactly what `engine/types.ts` says a fifth
+ * reserve must never be able to do.
+ *
+ * Kept as a named function rather than deleted outright because `ai/drafts.ts` and three
+ * test files read it, and a pass-through is a smaller change than moving all of them. Both
+ * read the same band: `project` computes the field with `summariseBand(start, central)`, the
+ * very band the copies were iterating, so this is the same answer and not merely a close one.
  */
 /**
  * The lowest a single reserve type reaches anywhere on the horizon.
@@ -105,12 +112,7 @@ const lowestOf = (projection: Projection, type: LoadType): number =>
   projection.central.reduce((lowest, day) => Math.min(lowest, day[type]), FULL_RESERVE)
 
 export function firstDeficitDay(projection: Projection): number | null {
-  for (const [day, reserves] of projection.central.entries()) {
-    const floor = Math.min(reserves.mental, reserves.physical, reserves.social, reserves.errands)
-    if (floor < DEFICIT_THRESHOLD) return day
-  }
-
-  return null
+  return projection.firstDeficitDay
 }
 
 /**

@@ -1,3 +1,4 @@
+import { WEEKDAY_NAMES } from '../../domain/calendar'
 import type { ParsedItem } from '../../ai'
 import { BLOCK_KINDS, LOAD_TYPES, type ActivityKind, type LoadType } from '../../engine'
 import { Button } from '../kit/Button'
@@ -24,15 +25,7 @@ const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
 
 /** §40's whole vocabulary needs names a student reads, and `Date.getUTCDay`'s ordering is
  *  what `expandRecurring` matches against -- so this is that order, not a prettier one. */
-const WEEKDAY_NAMES = [
-  'Sunday',
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-]
+
 
 export function ItemChip({
   item,

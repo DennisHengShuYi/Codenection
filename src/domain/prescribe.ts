@@ -1,13 +1,15 @@
-import type { ActivityKind, LoadType } from '../engine'
+import { USEFUL_REST_HOURS, type ActivityKind, type LoadType } from '../engine'
 import type { Schedule } from '../optimizer'
 import { blocksOnDay } from './dayBlocks'
 import { DAY_END_HOUR, gapsOn, MIN_GAP_HOURS, WAKE_HOUR, type FreeSlot } from './slotFinder'
 import type { BlockRecord } from './blockLog'
 import { missedSoftDeadlines } from './softDeadlines'
 
-/** `USEFUL_REST_HOURS`. Past this the engine credits nothing, so a longer suggestion would
- *  promise recovery the model refuses to pay out. */
-const MAX_BLOCK_HOURS = 3
+/** Past this the engine credits nothing, so a longer suggestion would promise recovery the
+ *  model refuses to pay out. Imported rather than restated: `engine/index.ts` exports it
+ *  "because three places were carrying their own copy of the same 3 with a comment saying it
+ *  was this one", and this was the fourth. */
+const MAX_BLOCK_HOURS = USEFUL_REST_HOURS
 
 /** Waking hours in a day, once sleep is set aside. `MIN_GAP_HOURS` and `WAKE_HOUR` are
  *  `slotFinder`'s now: they describe the shape of a day rather than anything about advice,

@@ -137,15 +137,6 @@ const projectionOf = (
 const floorAcross = (projection: Projection): number =>
   projection.worstFloor
 
-const firstDeficitDay = (projection: Projection): number | null => {
-  for (const [day, reserves] of projection.central.entries()) {
-    const floor = Math.min(reserves.mental, reserves.physical, reserves.social, reserves.errands)
-    if (floor < DEFICIT_THRESHOLD) return day
-  }
-
-  return null
-}
-
 /** Adds the block to a copy, so nothing a caller holds is ever touched. `scheduleRecovery`
  *  is the only door to protected rest and stays that way here. */
 const withRest = (schedule: Schedule, block: RestBlock): Schedule =>
@@ -202,8 +193,8 @@ function gainOf(
     dayAfter: round(overallOn(a, onDay)),
     floorBefore: round(floorAcross(b)),
     floorAfter: round(floorAcross(a)),
-    firstDeficitDayBefore: firstDeficitDay(b),
-    firstDeficitDayAfter: firstDeficitDay(a),
+    firstDeficitDayBefore: b.firstDeficitDay,
+    firstDeficitDayAfter: a.firstDeficitDay,
     deepestLift: round(deepestLift),
   }
 }

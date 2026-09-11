@@ -1,14 +1,7 @@
+import { WEEKDAY_NAMES } from '../domain/calendar'
 import type { Calendar } from './types'
 
-const WEEKDAYS = [
-  'Sunday',
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-] as const
+const WEEKDAYS = WEEKDAY_NAMES
 
 /**
  * The longest a `todayLabel` may be.

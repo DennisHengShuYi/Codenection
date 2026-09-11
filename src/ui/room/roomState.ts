@@ -11,8 +11,26 @@ export type { CharacterState } from './characterState'
  *  readable, and the room's whole job is being readable without being read. */
 const MAX_CLUTTER_BOXES = 6
 
-/** Hours below which sleep debt accrues. */
-const SLEEP_DEBT_BASELINE = 7
+/**
+ * What a rested night is, for the bed to draw a shortfall against.
+ *
+ * Deliberately NOT the engine's `sleepBaselineHours`, and worth saying so, because the two
+ * numbers sit one import apart and look like they should match. They answer different
+ * questions. The engine's five is where sleep starts *paying reserve back*: §6.1's
+ * `max(0, sleep - 5) x k_sleep`, a flow. This seven is where a student is *short*, which is
+ * a stock -- and the two coexist without contradiction, since six hours can both leave you
+ * a night down and still give something back.
+ *
+ * Reading the engine's figure here would be the wrong fix rather than the tidy one: at five,
+ * a student sleeping five and a half hours would have no visible sleep debt at all, and the
+ * bed would stop saying the one thing it is on the wall to say.
+ *
+ * What is genuinely unfinished: the engine's baseline is a per-student parameter (§7.3's
+ * painter was to measure it, and §11 records that nothing does), while this is a population
+ * norm and fixed. For a student who needs nine hours the bed under-reports. That wants the
+ * same calibration the engine's side is waiting on, not a constant swapped here.
+ */
+const RESTED_NIGHT_HOURS = 7
 
 /** Below this on physical *and* social, getting outside is the highest-value move: it is
  *  the one action that answers both at once (§5.3). */
@@ -126,10 +144,10 @@ export function roomStateFor(
 
   const averageSleep =
     schedule.sleepByDay.length === 0
-      ? SLEEP_DEBT_BASELINE
+      ? RESTED_NIGHT_HOURS
       : schedule.sleepByDay.reduce((sum, hours) => sum + hours, 0) / schedule.sleepByDay.length
 
-  const sleepDebt = Math.max(0, SLEEP_DEBT_BASELINE - averageSleep)
+  const sleepDebt = Math.max(0, RESTED_NIGHT_HOURS - averageSleep)
 
   return {
     // §47: the same reading, in the object that can actually carry it.

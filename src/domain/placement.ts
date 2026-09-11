@@ -2,7 +2,7 @@ import type { ParsedItem } from '../ai'
 import { HORIZON_DAYS } from '../engine'
 import type { EngineParams } from '../engine'
 import { smallestFixes, type Fix, type Schedule, type ScheduledItem } from '../optimizer'
-import { dateFor } from './calendar'
+import { dateFor, WEEKDAY_NAMES } from './calendar'
 import { expandRecurring } from './recurrence'
 import { gapsOn, slotOn, type SlotNeed } from './slotFinder'
 
@@ -144,7 +144,7 @@ export function placeItems(
   return { schedule: placed, notes }
 }
 
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const WEEKDAYS = WEEKDAY_NAMES
 
 /**
  * What to call a day, in the student's terms where possible.

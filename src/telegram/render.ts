@@ -1,5 +1,6 @@
 import type { ParsedItem } from '../ai'
 import type { BlockAnswer } from '../domain/blockLog'
+import { hasHappened } from '../domain/dayBlocks'
 import type { LoadType } from '../engine'
 
 /**
@@ -190,6 +191,16 @@ export function blocksReply(
   day: 'today' | 'yesterday',
   blocks: readonly BlockLine[],
   answered: readonly string[] = [],
+  /**
+   * Where the student is in the fortnight, so this asks only about what has happened.
+   *
+   * Required, and for the reason `checkIn.ts` wrote down about its own clock: "an optional
+   * clock is one a caller forgets to pass". Without it this asked about the first unanswered
+   * block on the day whatever the hour -- an 8pm essay at 9am, or a block on a day still
+   * ahead when `/day` was given a future index -- and recorded the answer as a measurement
+   * of a block nobody had lived.
+   */
+  now: { readonly today: number; readonly hour: number },
   /** Ruling 24: set when this day was opened from the fortnight, so it replaces that message and
    *  offers a way back instead of stranding the student in a dead end. */
   nav: { readonly replacing: true } | undefined = undefined,
@@ -207,11 +218,17 @@ export function blocksReply(
 
   const listed = blocks.map((block) => `• ${clockOf(block.startHour)} ${shorten(block.title)}`)
   const heading = `${day === 'today' ? 'Today' : 'Yesterday'}:`
-  const ask = blocks.find((block) => !answered.includes(block.id))
+  // The same rule the today card applies, from the same place: a past day is askable, a
+  // future one never is, and today only once the block has finished.
+  const ask = blocks.find(
+    (block) =>
+      !answered.includes(block.id) &&
+      hasHappened(block, now.today, now.hour),
+  )
 
-  // Everything on the day is already in the log. The list is still worth sending -- they
-  // asked what was on it -- but there is nothing left to ask, and inventing a question
-  // would re-record an answer they have already given.
+  // Everything on the day is already in the log, or has not happened yet. The list is still
+  // worth sending -- they asked what was on it -- but there is nothing left to ask, and
+  // inventing a question would record an answer about a block nobody has lived.
   if (ask === undefined) {
     return { text: [heading, '', ...listed].join('\n') }
   }

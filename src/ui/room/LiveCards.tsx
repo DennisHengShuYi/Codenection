@@ -1,12 +1,10 @@
 import type { BlockAnswer } from '../../domain/blockLog'
 import type { BlockOutcome } from '../../domain/calibration'
 import type { Commitment } from '../../optimizer'
-import type { Prescription as PrescriptionData } from '../../domain/prescribe'
 import type { MicroStart } from '../../domain/microStart'
 import type { ScheduledItem } from '../../optimizer'
 import type { SleepBucket } from '../today/checkIn'
 import { DistressCard } from '../distress/DistressCard'
-import { RecoveryCard } from '../recovery/RecoveryCard'
 import { LapsedNotice } from '../request/LapsedNotice'
 import { MicroStartCard } from '../microStart/MicroStartCard'
 import { TodayCard } from '../today/TodayCard'
@@ -20,9 +18,6 @@ import type { CardId } from './cardPrecedence'
 export function LiveCards({
   cards,
   onDistressDismiss,
-  recoveryPrescription,
-  onRecoveryAccept,
-  onRecoveryDismiss,
   lapsedCommitments,
   onLapsedDismiss,
   stuckMicroStart,
@@ -39,9 +34,6 @@ export function LiveCards({
 }: {
   readonly cards: readonly CardId[]
   readonly onDistressDismiss: () => void
-  readonly recoveryPrescription: PrescriptionData | null
-  readonly onRecoveryAccept: (taken: PrescriptionData) => void
-  readonly onRecoveryDismiss: () => void
   readonly lapsedCommitments: readonly Commitment[]
   readonly onLapsedDismiss: () => void
   readonly stuckMicroStart: MicroStart | null
@@ -62,15 +54,6 @@ export function LiveCards({
     switch (id) {
       case 'distress':
         return <DistressCard key="distress" onDismiss={onDistressDismiss} />
-      case 'recovery':
-        return (
-          <RecoveryCard
-            key="recovery"
-            prescription={recoveryPrescription}
-            onAccept={onRecoveryAccept}
-            onDismiss={onRecoveryDismiss}
-          />
-        )
       case 'lapsed':
         return <LapsedNotice key="lapsed" commitments={lapsedCommitments} onDismiss={onLapsedDismiss} />
       case 'stuck':

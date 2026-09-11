@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS, HORIZON_DAYS, USEFUL_REST_HOURS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
 import { DAILY_RECOVERY_CEILING } from './recoveryCeiling'
-import { planRest } from './restNow'
+import { applyRest, planRest, restBlockTitle } from './restNow'
 import { stampSoftDeadlines } from './softDeadlines'
 
 const item = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
@@ -176,5 +176,44 @@ describe('planRest', () => {
     planRest(schedule, DEFAULT_PARAMS, TODAY, 14, [])
 
     expect(JSON.stringify(schedule)).toBe(snapshot)
+  })
+})
+
+/**
+ * The half of the Rest button that changes the week.
+ *
+ * `planRest` is the half with all the arithmetic and all the tests; `applyRest` is the half
+ * that actually writes, and it was reached by nothing. Its own docstring calls it "the only
+ * place the two-step order is written down" -- so if that order were ever reversed, the rest
+ * would be placed into a slot the move had not yet freed, and nothing would have said so.
+ */
+describe('applyRest', () => {
+  it('adds the rest a fitting plan describes', () => {
+    const before = week()
+    const out = plan(before)
+    expect(out.kind).toBe('fits')
+
+    const after = applyRest(before, out)
+    const added = after.items.filter((block) => block.protectedRest)
+
+    expect(added).toHaveLength(1)
+    expect(added[0]?.title).toBe(restBlockTitle())
+  })
+
+  it('leaves the week exactly as it was when the plan was a refusal', () => {
+    const nowhere = week({ items: Array.from({ length: HORIZON_DAYS }, (_, day) => packed(day)) })
+    const out = plan(nowhere)
+    expect(out.kind).toBe('refused')
+
+    expect(applyRest(nowhere, out)).toEqual(nowhere)
+  })
+
+  it('never modifies the week it was given', () => {
+    const before = week()
+    const snapshot = JSON.parse(JSON.stringify(before))
+
+    applyRest(before, plan(before))
+
+    expect(before).toEqual(snapshot)
   })
 })

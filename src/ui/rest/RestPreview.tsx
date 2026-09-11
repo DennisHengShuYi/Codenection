@@ -11,7 +11,8 @@ import { Sheet } from '../kit/Sheet'
  * nothing to consent to. That is a deliberate choice for consistency: one screen and one
  * mental model beats a button that sometimes acts instantly and sometimes asks.
  *
- * One sentence and two numbers, in `RecoveryCard`'s register. `RestGain` computes rather more
+ * One sentence and two numbers, in the register the retired recovery card used. `RestGain`
+ * computes rather more
  * than this shows — the fortnight's floor either side, the deficit-day shift, the deepest
  * lift anywhere on the horizon — and most of it is deliberately withheld. §5.2's rule about
  * menus is really a rule about load: somebody who has just pressed a button because they are

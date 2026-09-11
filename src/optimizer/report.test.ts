@@ -85,6 +85,39 @@ describe('describeRebalance', () => {
     expect(text).toMatch(/beyond what rearranging can fix/i)
   })
 
+  /**
+   * The sentence the app says when the rearrangement WORKED -- the worst day's reserve
+   * comes out higher than it went in.
+   *
+   * Constructed rather than solved for, like the no-moves case above: whether a given seed
+   * and fixture happen to lift the floor is the solver's business, and this is a test of
+   * the reporting. It was the one describeGain branch nothing reached, which meant the
+   * app's good-news sentence -- the most likely one a student ever sees -- was unchecked.
+   */
+  it('names the lift in the worst day when the rearrangement worked', () => {
+    const schedule = pileUp()
+    const better: RebalanceResult = {
+      schedule,
+      before: schedule,
+      moves: [
+        {
+          kind: 'shiftDay' as MoveKind,
+          itemId: 'essay',
+          description: 'moved the essay to Thursday',
+          apply: (week: typeof schedule) => week,
+        },
+      ],
+      evaluations: 12,
+      worstBefore: 33,
+      worstAfter: 41,
+    }
+
+    const text = describeRebalance(better, DEFAULT_PARAMS)
+
+    expect(text).toMatch(/worst day goes from 33 to 41/i)
+    expect(text).not.toMatch(/optimis|optimiz/i)
+  })
+
   it('counts each kind of change it made', () => {
     const result = rebalance(pileUp(), DEFAULT_PARAMS, makeRng(1))
     const text = describeRebalance(result, DEFAULT_PARAMS)

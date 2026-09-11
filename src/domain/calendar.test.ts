@@ -63,6 +63,44 @@ describe('isAnchored', () => {
   })
 })
 
+/**
+ * §9 is Malaysia-specific, which makes UTC+8 the case that matters -- and the one the
+ * helper above never reaches. `at()` samples 09:00Z, five in the afternoon in Kuala
+ * Lumpur, so every test in this file has always asked about an hour where the local date
+ * and the UTC date agree.
+ *
+ * They disagree for the first eight hours of every Malaysian day: local 02:00 on the 11th
+ * is 18:00Z on the 10th. A "today" derived from `toISOString()` reads the UTC date, so it
+ * named yesterday all night, every night, and anchored a week begun after midnight to the
+ * day before it started.
+ *
+ * The zone is passed rather than read from the runtime so these stay pure and pin the
+ * behaviour on any machine, whatever its own clock is set to.
+ */
+const KL = 'Asia/Kuala_Lumpur'
+
+/** 02:00 local in Kuala Lumpur, which is the previous calendar day in UTC. */
+const earlyMorningKL = (iso: string) => new Date(`${iso}T02:00:00+08:00`)
+
+describe('local rather than UTC days', () => {
+  it('names the local day in the eight hours after midnight, not the UTC one', () => {
+    const anchored = anchorTo(week(), at('2026-09-09'))
+
+    expect(todayIndex(anchored, earlyMorningKL('2026-09-11'), KL)).toBe(2)
+  })
+
+  it('anchors a week begun after midnight to the day it actually began', () => {
+    expect(anchorTo(week(), earlyMorningKL('2026-09-11'), KL).startedOn).toBe('2026-09-11')
+  })
+
+  it('still agrees with UTC at an hour where the two do not differ', () => {
+    const anchored = anchorTo(week(), at('2026-09-09'), KL)
+
+    expect(anchored.startedOn).toBe('2026-09-09')
+    expect(todayIndex(anchored, at('2026-09-12'), KL)).toBe(3)
+  })
+})
+
 describe('todayIndex', () => {
   it('is zero on the day the week began', () => {
     const anchored = anchorTo(week(), at('2026-09-09'))

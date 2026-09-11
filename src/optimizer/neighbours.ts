@@ -1,6 +1,6 @@
 import type { EngineParams } from '../engine'
 import { violations } from './constraints'
-import { hourNear } from './gaps'
+import { DAY_END_HOUR,hourNear } from './gaps'
 import type { Move, Schedule, ScheduledItem } from './types'
 
 /** How far a single move may shift a task. Small on purpose: §2.2 observes that a
@@ -61,6 +61,16 @@ function batchMoves(schedule: Schedule): Move[] {
       if (other.id === target.id || other.dayIndex === target.dayIndex) continue
       if (other.deadlineDay !== null && target.dayIndex > other.deadlineDay) continue
 
+      // Past the end of the day is not a placement. `startHour + hours` is unbounded here,
+      // and `constraints.violations` checks deadlines, overlaps and the daily cap but never
+      // the day's own edge -- so a batch onto a late target produced a valid-looking
+      // candidate starting at 25, which `drain` and `carryover` then charged to today.
+      //
+      // Deliberately not routed through `hourNear`: these two moves exist to place a block
+      // immediately after another one, and `hourNear` finds whichever gap fits, which is a
+      // different move.
+      if (target.startHour + target.hours + other.hours > DAY_END_HOUR) continue
+
       moves.push({
         kind: 'batchErrands',
         itemId: other.id,
@@ -84,6 +94,23 @@ function restMoves(schedule: Schedule): Move[] {
   const moves: Move[] = []
 
   for (let day = 0; day < schedule.horizonDays; day += 1) {
+    /**
+     * One rest block a day, and that stays a count rather than a sum of hours.
+     *
+     * The engine credits rest per block up to `USEFUL_REST_HOURS`, so on paper a day holding
+     * one short block still has room and this guard is stricter than the model -- the same
+     * mismatch `socialMoves` has below. It was changed to measure hours and changed back,
+     * because the cost is larger than the mismatch: offering a second block per day took the
+     * undated-fortnight search from 2,9xx evaluations to 3,368, past the bound
+     * `neglect.test.ts` guards and explains, and §2.1 budgets the whole solve under 100ms on
+     * a phone. It also broke `runRebalance`'s "proposes nothing when there is nothing to
+     * move" -- a settled week started collecting fourteen rest proposals nobody asked for.
+     *
+     * So the simplification is deliberate: one block a day is what the solver offers, and a
+     * student wanting a second can add it themselves. `DAILY_RECOVERY_CEILING` is the limit
+     * on what a day's rest is *worth*, which is a different question and lives in
+     * `domain/recoveryCeiling`.
+     */
     if (schedule.items.some((item) => item.dayIndex === day && item.kind === 'rest')) continue
 
     const id = `rest-${day}`
@@ -138,6 +165,16 @@ function socialMoves(schedule: Schedule): Move[] {
   const moves: Move[] = []
 
   for (let day = 0; day < schedule.horizonDays; day += 1) {
+    /**
+     * One social item a day, a count rather than a sum -- see `restMoves` above for why this
+     * stayed a count after being tried the other way.
+     *
+     * The mismatch is real and worth naming: the engine charges `isolationDrainPerDay` on any
+     * day under `socialFloorHoursPerDay`, half an hour, so a fifteen-minute coffee satisfies
+     * this guard while the day goes on draining. Measuring hours here is the consistent
+     * change and it widens the search past the budget `neglect.test.ts` guards, on the exact
+     * fixture -- a fortnight of undated work -- that test exists to protect.
+     */
     if (schedule.items.some((item) => item.dayIndex === day && item.type === 'social')) continue
 
     const id = `social-${day}`
@@ -191,6 +228,8 @@ function reorderMoves(schedule: Schedule): Move[] {
     for (const other of sameDay) {
       const startHour = other.startHour + other.hours
       if (startHour === item.startHour) continue
+      // The day's edge, for the reason given on `batchErrands` above.
+      if (startHour + item.hours > DAY_END_HOUR) continue
 
       moves.push({
         kind: 'reorderWithinDay',

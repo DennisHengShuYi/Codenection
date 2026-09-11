@@ -354,7 +354,11 @@ export function RoomShell({
   // `roomModel.ts`, so the breakdown and the room agree about what "silent" means.
   const days = toDayInputs(week, checkedInDays(blockLog, today, week.horizonDays))
   const projection = project(week.start, days, params)
-  const bars = domainBars(week.start, projection, days)
+  // `model.reserves`, like the needle above them and the corner gauge -- not `week.start`.
+  // Day zero has no writer in the running app, so bars read off it never moved: not when a
+  // student edited the plan, not after a rebalance, not overnight. They sat under a headline
+  // that had been repointed at today, and the two disagreed on screen.
+  const bars = domainBars(model.reserves, projection, days)
 
   async function onRebalance() {
     if (working) return

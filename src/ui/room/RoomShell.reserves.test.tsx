@@ -1,0 +1,113 @@
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createLocalRepository } from '../../data'
+import { HORIZON_DAYS, LOAD_TYPES } from '../../engine'
+import type { Schedule } from '../../optimizer'
+import { LOAD_TYPE_LABELS } from '../kit/labels'
+import { RoomShell } from './RoomShell'
+
+/**
+ * One reading of the reserves, shown two ways.
+ *
+ * The needle and the five bars below it describe the same four numbers, so a student can
+ * check one against the other -- and they did not. The headline was repointed at the reserve
+ * entering today; the bars were left reading `schedule.start`, day zero of the fortnight,
+ * which no code path in the running app ever writes. The sheet showed 67% above bars
+ * averaging 43, and nothing a student did -- editing today, rebalancing, or simply waking up
+ * the next morning -- moved the bars at all.
+ *
+ * The guard is the arithmetic itself: the headline is the mean of the four reserve bars by
+ * definition, so if the two are fed from different places the mean stops matching. That
+ * cannot be satisfied by pointing either one at a plausible-looking constant.
+ */
+const heavyDay = (dayIndex: number) => ({
+  id: `study-${dayIndex}`,
+  title: 'Thesis',
+  type: 'mental' as const,
+  kind: 'studyBlock' as const,
+  hours: 7,
+  intensity: 1,
+  dayIndex,
+  startHour: 9,
+  fixed: true,
+  deadlineDay: null,
+  protectedRest: false,
+})
+
+/**
+ * Days already lived, heavily enough that the reserves have moved and lightly enough that
+ * the floor stays above §1.5's threshold -- below 20 the whole sheet is replaced by the
+ * low-energy interface and there is nothing here to check.
+ *
+ * Without days already lived the bug is invisible: on day zero the two sources agree by
+ * definition, which is exactly why this needs a student mid-fortnight.
+ */
+const DAYS_IN = 5
+
+const livedInWeek = (): Schedule => ({
+  items: Array.from({ length: DAYS_IN }, (_, day) => heavyDay(day)),
+  start: { mental: 70, physical: 70, social: 70, errands: 70 },
+  horizonDays: HORIZON_DAYS,
+  sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 6),
+  startedOn: new Date(Date.now() - DAYS_IN * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+})
+
+let counter = 0
+
+const openReserves = async () => {
+  counter += 1
+  const repository = createLocalRepository(`reserves-${counter}`)
+  await repository.clear()
+  await repository.saveWeek(livedInWeek())
+
+  render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+  await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+
+  await userEvent.click(screen.getByTestId('room-gauge'))
+
+  return await screen.findByRole('dialog', { name: /reserves/i })
+}
+
+/** Read off the meter's own announced value, by the name a student hears -- no test-only
+ *  hook, and it checks the accessible reading at the same time. */
+const barValue = (sheet: HTMLElement, type: keyof typeof LOAD_TYPE_LABELS): number => {
+  const meter = within(sheet).getByRole('meter', { name: LOAD_TYPE_LABELS[type] })
+  return Number(meter.getAttribute('aria-valuenow'))
+}
+
+beforeEach(() => window.history.replaceState(null, '', '/'))
+
+describe('the reserves sheet', () => {
+  /**
+   * The strong guard, and it has to be per type.
+   *
+   * Comparing the headline against the mean of the bars looks like the obvious check and
+   * very nearly misses this: on this fortnight the frozen opening week means 70.0 and the
+   * reserve entering today means 69.7, because a physical reserve clamped at 100 hides a
+   * mental reserve that has fallen to 37.6. That is the single-number failure the engine's
+   * own docstrings keep naming, arriving inside a test written to catch it.
+   */
+  it('reads each bar off the reserve entering today, not the one the week opened with', async () => {
+    const sheet = await openReserves()
+
+    // Five days of seven-hour study on six hours' sleep. Mental cannot still be at its
+    // opening 70, and physical -- spent on nothing, repaid every night -- cannot still be
+    // below it.
+    expect(barValue(sheet, 'mental')).toBeLessThan(50)
+    expect(barValue(sheet, 'physical')).toBeGreaterThan(90)
+  })
+
+  it('shows a headline that is the mean of the bars beneath it', async () => {
+    const sheet = await openReserves()
+
+    const headline = Number(
+      (within(sheet).getByTestId('capacity-value').textContent ?? '').replace('%', ''),
+    )
+    const values = LOAD_TYPES.map((type) => barValue(sheet, type))
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length
+
+    // Both sides are rounded for display, so allow the rounding and nothing more.
+    expect(Math.abs(headline - mean)).toBeLessThanOrEqual(1)
+  })
+})

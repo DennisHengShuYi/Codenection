@@ -100,3 +100,25 @@ describe('CapacityDial', () => {
     expect(() => renderDial(0, flat)).not.toThrow()
   })
 })
+
+/**
+ * The headline row: a bounded readout beside the number it reads, rather than a needle the
+ * size of the panel with the answer somewhere beneath it.
+ */
+describe('the gauge as a readout', () => {
+  it('says what the number is a percentage of', () => {
+    renderDial(43)
+
+    // The text equivalent says the same thing in its own sentence, which is the point --
+    // so this matches the caption's own wording rather than the phrase they share.
+    expect(screen.getByText(/of your reserve left, as today began/i)).toBeVisible()
+  })
+
+  /** The compact readout is one figure in a corner; a sentence beside it is a second thing
+   *  to read, which is the whole reason §1.1 has a compact form at all. */
+  it('leaves the compact readout as a bare figure', () => {
+    renderDial(43, healthy, true)
+
+    expect(screen.queryByText(/of your reserve left, as today began/i)).toBeNull()
+  })
+})

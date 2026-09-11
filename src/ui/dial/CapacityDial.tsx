@@ -49,61 +49,76 @@ export function CapacityDial({
   return (
     <section className="flex flex-col gap-4">
       {/*
-        A viewBox and no width attribute: the gauge scales to its container at every
-        breakpoint without a single media query, which is §10's whole argument for
-        hand-rolled SVG over canvas or an image.
+        The arc and the number read as one thing, on one line: the gauge is a readout of
+        the figure beside it, not the panel's subject.
 
-        Hidden from assistive technology because the text equivalent below carries the
-        same information in a form that can actually be read -- announcing both would be
-        noise rather than access.
+        It carried `w-full` on a viewBox with no width of its own, which this comment used
+        to praise as scaling to any container without a media query -- and it did, straight
+        past the point of usefulness. In a 512px sheet that is 294px of needle above a 48px
+        number, with the five bars the sheet exists for starting below the fold. Bounded
+        here for the full dial and left to fill its corner in the compact one, where being
+        the whole of a small box is the job.
+
+        Hidden from assistive technology because the text equivalent below carries the same
+        information in a form that can actually be read -- announcing both would be noise
+        rather than access.
       */}
-      <svg
-        data-testid={compact ? 'dial-gauge-compact' : 'dial-gauge'}
-        viewBox="0 0 200 115"
-        className="w-full"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path
-          d={arcPath(CX, CY, R, -90, 90)}
-          fill="none"
-          stroke="currentColor"
-          strokeOpacity="0.15"
-          strokeWidth="12"
-          strokeLinecap="round"
-        />
-        <path
-          d={arcPath(CX, CY, R, -90, angleForPercent(capacity))}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="12"
-          strokeLinecap="round"
-          className="text-ink-soft"
-        />
-        <line
-          x1={CX}
-          y1={CY}
-          x2={needle.x}
-          y2={needle.y}
-          stroke="currentColor"
-          strokeWidth="3"
-          strokeLinecap="round"
-        />
-        <circle cx={CX} cy={CY} r="5" fill="currentColor" />
-      </svg>
-
-      <p className="text-center">
-        <span
-          data-testid={compact ? 'capacity-value-compact' : 'capacity-value'}
-          className={
-            compact
-              ? 'text-2xl font-semibold tabular-nums'
-              : 'text-5xl font-semibold tabular-nums'
-          }
+      <div className="flex items-center gap-4">
+        <svg
+          data-testid={compact ? 'dial-gauge-compact' : 'dial-gauge'}
+          viewBox="0 0 200 115"
+          className={compact ? 'w-full' : 'w-32 shrink-0'}
+          aria-hidden="true"
+          focusable="false"
         >
-          {Math.round(capacity)}%
-        </span>
-      </p>
+          <path
+            d={arcPath(CX, CY, R, -90, 90)}
+            fill="none"
+            stroke="currentColor"
+            strokeOpacity="0.15"
+            strokeWidth="12"
+            strokeLinecap="round"
+          />
+          <path
+            d={arcPath(CX, CY, R, -90, angleForPercent(capacity))}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="12"
+            strokeLinecap="round"
+            className="text-ink-soft"
+          />
+          <line
+            x1={CX}
+            y1={CY}
+            x2={needle.x}
+            y2={needle.y}
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+          <circle cx={CX} cy={CY} r="5" fill="currentColor" />
+        </svg>
+
+        <p className={compact ? 'text-center' : 'flex flex-col'}>
+          <span
+            data-testid={compact ? 'capacity-value-compact' : 'capacity-value'}
+            className={
+              compact
+                ? 'text-2xl font-semibold tabular-nums'
+                : 'text-4xl font-semibold tabular-nums'
+            }
+          >
+            {Math.round(capacity)}%
+          </span>
+
+          {/* The number on its own is ambiguous in the worst direction: 43 reads as
+              "43% used" as readily as "43% left", and the two mean opposite things. The
+              text equivalent has said which since Ruling 60; the drawing now does too. */}
+          {!compact && (
+            <span className="text-sm text-ink-soft">of your reserve left, as today began</span>
+          )}
+        </p>
+      </div>
 
       {/* Directly under the number it is the history of, and dropped on the compact dial
           for the same reason the bars are: §1.1's corner readout is one figure, and a

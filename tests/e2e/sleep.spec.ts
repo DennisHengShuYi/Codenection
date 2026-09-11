@@ -215,8 +215,12 @@ test('warns that an over-committed day will cost tonight', async ({ page }) => {
 
   await page.getByTestId('open-sleep').click()
 
+  // The INFERRED wording, because nothing in this day is actually booked over the night --
+  // the blocks all end by 16:00. Twenty hours in a sixteen-hour day will cost sleep, but
+  // nothing is scheduled at one in the morning, and the two claims are worded differently on
+  // purpose.
   await expect(page.getByTestId('sleep-forecast').first()).toContainText(
-    'will cost you about 4 hours',
+    'asks for about 4 hours more than the day has',
   )
 })
 
@@ -290,29 +294,63 @@ test('draws the night under the day, not across two of them', async ({ page }) =
 })
 
 /** The forecast's sentence, with a picture behind it at last. */
-test('marks the hours an over-committed day will take from the night', async ({ page }) => {
+/**
+ * The band marks hours something is actually BOOKED over, found by the clock.
+ *
+ * An essay running 21:00 to 01:00 against a 23:00 bedtime takes two hours off the night. The
+ * volume detector this replaced could never see it: four hours on an otherwise light day is
+ * nowhere near sixteen.
+ */
+test('marks the hours a late block takes from the night', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  const crammed = Array.from({ length: 4 }, (_, index) => ({
-    id: `cram-${index}`,
+  const late = {
+    id: 'essay',
     title: 'Ethics essay',
     type: 'mental',
     kind: 'studyBlock',
-    hours: 5,
+    hours: 4,
     intensity: 1,
     dayIndex: 3,
-    startHour: 8 + index,
+    startHour: 21,
     fixed: false,
     deadlineDay: 3,
     protectedRest: false,
-  }))
+  }
 
   await seed(page, {
-    week: { ...anchoredWeek(crammed), sleepByDay: Array.from({ length: 21 }, () => 8) },
+    week: { ...anchoredWeek([late]), sleepByDay: Array.from({ length: 21 }, () => 8) },
     settings: { lowEnergyOverride: 'off', sleepWakeHour: 7 },
   })
 
   await page.getByTestId('open-week').click()
   await page.getByTestId('day-3').click()
 
-  await expect(page.getByTestId('night-lost')).toContainText('4 hours')
+  await expect(page.getByTestId('night-lost')).toContainText('2 hours')
+})
+
+/** And the forecast names it, which the volume wording never could. */
+test('names the block that is eating the night', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const late = {
+    id: 'essay',
+    title: 'Ethics essay',
+    type: 'mental',
+    kind: 'studyBlock',
+    hours: 4,
+    intensity: 1,
+    dayIndex: 3,
+    startHour: 21,
+    fixed: false,
+    deadlineDay: 3,
+    protectedRest: false,
+  }
+
+  await seed(page, {
+    week: { ...anchoredWeek([late]), sleepByDay: Array.from({ length: 21 }, () => 8) },
+    settings: { lowEnergyOverride: 'off', sleepWakeHour: 7 },
+  })
+  await page.getByTestId('open-sleep').click()
+
+  await expect(page.getByTestId('sleep-forecast').first()).toContainText('Ethics essay')
+  await expect(page.getByTestId('sleep-forecast').first()).toContainText('runs past bedtime')
 })

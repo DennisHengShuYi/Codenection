@@ -1,4 +1,5 @@
 import { DEFAULT_SLEEP_HOURS, summarise, type DayInput, type EngineParams } from '../engine'
+import { DAY_END_HOUR } from './gaps'
 import { modeOf, type Mode } from './mode'
 import type { Schedule, ScheduledItem } from './types'
 
@@ -409,6 +410,51 @@ const MODE_WEIGHTS: Record<Mode, { fragmentation: number; deficitArea: number }>
   lowStructure: { fragmentation: FRAGMENTATION_WEIGHT / 4, deficitArea: DEFICIT_AREA_WEIGHT * 10 },
 }
 
+/**
+ * Ruling 68: what it costs to put work in somebody's night.
+ *
+ * A tiebreaker, never a fourth objective, and sized like `DEADLINE_PRESSURE_WEIGHT` for the
+ * same reason: §2.1's ordering is not up for negotiation, and the solver may never trade a
+ * genuinely higher worst day for a better bedtime. At this weight a fortnight with ten hours
+ * of night work costs a tenth of a point -- less than any real gain in the floor and far less
+ * than a single deficit day.
+ *
+ * Soft rather than a wall. Clamping `gapsOn` to the bedtime instead would forbid the solver
+ * from ever touching a night, which makes a crunch fortnight genuinely unsolvable exactly
+ * when the rebalancer is most needed. This makes it PREFER 14:00 when 14:00 is free, and
+ * still use 23:00 when there is nowhere else -- at which point `domain/sleepForecast` says so
+ * honestly.
+ */
+export const NIGHT_HOURS_WEIGHT = 0.01
+
+/**
+ * Hours of work sitting after bedtime, across the fortnight.
+ *
+ * Sparse in the way `deadlinePressure` is: zero until the bedtime and linear after it, rather
+ * than a smooth falloff across the evening. That comment records why -- a gradient on every
+ * item on every day gives the hill climber an endless supply of fractional improvements, and
+ * measured it took an ordinary fortnight from 402 evaluations to 2,407.
+ *
+ * Nothing is charged when the week does not carry a bedtime, and rest is not charged at all:
+ * this module's own `isWork` is the same test the daily cap uses, and protected rest placed
+ * late in the evening is recovery rather than something eating a night.
+ */
+function nightHours(schedule: Schedule): number {
+  const bedHour = schedule.bedHour
+  if (bedHour === undefined) return 0
+
+  let total = 0
+
+  for (const item of schedule.items) {
+    if (!isWork(item.kind)) continue
+
+    const end = item.startHour + item.hours
+    total += Math.max(0, Math.min(end, DAY_END_HOUR) - Math.max(item.startHour, bedHour))
+  }
+
+  return total
+}
+
 export function score(schedule: Schedule, params: EngineParams): number {
   // Grouped once and shared. The search calls this for every candidate on every
   // iteration, so a second pass over the same items to count fragmentation is pure waste.
@@ -428,6 +474,7 @@ export function score(schedule: Schedule, params: EngineParams): number {
     weights.deficitArea * projection.deficitArea -
     DEADLINE_PRESSURE_WEIGHT * deadlinePressure(schedule, params) -
     NEGLECT_PRESSURE_WEIGHT * neglectPressure(schedule, params) -
-    DAILY_LOAD_WEIGHT * dailyLoad(byDay)
+    DAILY_LOAD_WEIGHT * dailyLoad(byDay) -
+    NIGHT_HOURS_WEIGHT * nightHours(schedule)
   )
 }

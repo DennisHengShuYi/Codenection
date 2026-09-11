@@ -375,7 +375,17 @@ export function RoomShell({
    * runs.
    */
   const week = assumeSleep({
-    schedule: stampEstimateBias(stampSoftDeadlines(schedule, today), blockLog),
+    schedule: {
+      // Ruling 68: the bedtime the solver charges work against. Stamped because the resolved
+      // hour needs the target and any night the student set, both of which live in settings
+      // and are unreachable from `src/optimizer` -- and because the assumed `sleepByDay` here
+      // has each night's bite already taken out of it, so a bedtime derived from it would
+      // move with the very thing being measured.
+      ...stampEstimateBias(stampSoftDeadlines(schedule, today), blockLog),
+      // AFTER the spread, so the figure derived from current settings wins over any stale one
+      // a saved week happens to carry -- the derived week does reach storage.
+      bedHour: nightWindow(sleepWakeHour, sleepTarget).bedHour,
+    },
     today,
     measuredHours: measuredNight(sleepNights),
     chosenByDate: sleepChosenByDate,

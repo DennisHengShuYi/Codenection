@@ -352,3 +352,39 @@ costs about 15 mental and 12 physical on the day, which is a serious visible hit
 all-nighter recovers from.
 
 `src/engine/params.ts` — the coefficients and their reasoning; `src/engine/drain.ts` — the term
+
+## Ruling 68
+
+Recorded at the time.
+
+**The solver prefers not to put work in a student's night, and is never forbidden from it.**
+Hours of work sitting after the stamped bedtime are charged as a small penalty in
+`objective.score`.
+
+`gapsOn` treats everything from `WAKE_HOUR` to midnight as placeable, so the search has always
+been free to put work at 23:00 — and nothing scored it, so among arrangements it was allowed
+to make it had no preference at all for protecting a night. Measured: asked for two hours near
+09:00 on a day whose only wide opening is the last one, `hourNear` returns 22:00.
+
+The lower bound of that window was always a statement about when a student is awake —
+`WAKE_HOUR = 8` exists precisely so nothing lands at four in the morning. This is the upper
+bound finally saying the same thing.
+
+Soft, not a wall. Clamping `gapsOn` to the bedtime instead would forbid the solver from ever
+touching a night, which makes a crunch fortnight genuinely unsolvable exactly when the
+rebalancer is most needed — the "promise rather than guess" option Ruling 64 already rejected.
+This makes the solver *prefer* 14:00 when 14:00 is free, still use 23:00 when there is nowhere
+else, and leaves `domain/sleepForecast` to say so honestly when it does.
+
+Sparse in the way `deadlinePressure` is — zero until bedtime, linear after it, rather than a
+falloff across the evening. That term's comment records the measurement behind the choice: a
+smooth gradient on every item on every day took an ordinary fortnight from 402 evaluations to
+2,407. Measured here with a bedtime stamped on both fixtures, the eval count and score are
+unchanged, because neither fixture places work past 23:00.
+
+Weighted like `DEADLINE_PRESSURE_WEIGHT` and for the same reason: §2.1's ordering is not up for
+negotiation, and the solver may never trade a genuinely higher worst day for a better bedtime.
+A test pins that as an inequality rather than trusting the weight to stay small.
+
+`src/optimizer/objective.ts` — the term; `src/optimizer/types.ts` — why the bedtime is stamped
+rather than derived

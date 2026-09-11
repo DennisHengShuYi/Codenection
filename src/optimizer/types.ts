@@ -113,6 +113,29 @@ export interface Schedule {
    */
   readonly sleepByDay: readonly number[]
   /**
+   * The clock hour after which work costs the solver extra, when the app knows it.
+   *
+   * `gapsOn` treats everything from `WAKE_HOUR` to midnight as placeable, so the solver has
+   * always been free to put work at 23:00 -- and nothing scored it, so among arrangements it
+   * was allowed to make it had no preference for protecting a night. Measured: asked for two
+   * hours near 09:00 on a full day, `hourNear` returns 22:00.
+   *
+   * The lower bound of that window was always a statement about when a student is awake --
+   * `WAKE_HOUR = 8` exists precisely so nothing lands at four in the morning. This is the
+   * upper bound finally saying the same thing.
+   *
+   * Stamped rather than derived. The resolved bedtime needs the student's target and any
+   * night they set, which live in settings and are unreachable from `src/optimizer`; and
+   * `sleepByDay` here already has the night's bite taken out of it, so deriving a bedtime
+   * from it would move with the very thing being measured.
+   *
+   * One figure for the fortnight rather than one per night, deliberately: this drives a
+   * tiebreaker, and a tiebreaker does not need to be right about the rare night a student
+   * set differently. Absent on weeks saved before this existed, and on any caller that has
+   * no reason to care -- then nothing is charged, exactly as before.
+   */
+  readonly bedHour?: number
+  /**
    * The real date day 0 falls on, as YYYY-MM-DD, or absent for a week saved before anchoring
    * existed.
    *

@@ -83,11 +83,16 @@ export function drainForDay(
 
     const residue = carryoverAt(day.activities, activity.startHour)[activity.type]
 
+    // The block's own correction where §2.4 has enough to give it one, the area-wide
+    // figure otherwise. A student whose essays run 3x over and whose lab reports land on
+    // time used to pay the average of the two on both.
+    const bias = activity.estimateBias ?? params.estimateBias[activity.type]
+
     totals[activity.type] +=
       activity.hours *
       activity.intensity *
       params.typeIntensity[activity.type] *
-      params.estimateBias[activity.type] *
+      bias *
       stateMultiplier(reserves[activity.type], residue)
   }
 

@@ -71,6 +71,19 @@ export interface Activity {
   readonly intensity: number
   /** Local hour the activity starts, 0..24. Fractional values allowed. */
   readonly startHour: number
+  /**
+   * §2.4's correction for *this* work, where the log has enough to say.
+   *
+   * `EngineParams.estimateBias` is one number per load type, which is all Reality Check
+   * could learn until `paddingForItem` put a ladder under it -- and a per-type parameter
+   * cannot carry a per-block answer. So the block brings its own and the parameter stays the
+   * fallback.
+   *
+   * Optional because most callers have no block log in hand: the optimizer's neighbours, the
+   * fixtures, every projection built before this. Absent means the type's, which is what
+   * every block got before.
+   */
+  readonly estimateBias?: number
 }
 
 export interface DayInput {

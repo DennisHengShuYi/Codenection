@@ -263,6 +263,10 @@ function dayInputsFrom(
         hours: item.hours,
         intensity: item.intensity,
         startHour: item.startHour,
+        // Carried through where something stamped it. Absent is the ordinary case -- the
+        // search builds thousands of these and has no log in hand -- and means the
+        // type-wide bias, which is what every block used before §2.4 gained a ladder.
+        ...(item.estimateBias === undefined ? {} : { estimateBias: item.estimateBias }),
       })),
       sleepHours: schedule.sleepByDay[dayIndex] ?? DEFAULT_SLEEP_HOURS,
       // Each distinct working block is treated as a venue; back-to-back commitments in

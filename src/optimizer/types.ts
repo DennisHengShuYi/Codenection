@@ -33,6 +33,15 @@ export interface ScheduledItem {
    * this existed, which is what makes it optional. `domain/softDeadlines` owns it.
    */
   readonly softDeadlineDay?: number
+  /**
+   * §2.4's correction for this block, stamped from the block log before the engine sees it.
+   *
+   * Derived rather than stored, exactly like `softDeadlineDay` above: it is a reading of the
+   * log at a moment, not a property of the block, and a week saved with one baked in would
+   * carry a stale correction for ever. `domain/estimateBias` owns it, and `drain` falls back
+   * to the type-wide figure wherever it is absent.
+   */
+  readonly estimateBias?: number
   /** Stronger than `fixed`. §5.1 calls structurally protected recovery the most
    *  important design decision in the app: the optimizer cannot move protected rest, and
    *  cannot schedule anything over it either. */

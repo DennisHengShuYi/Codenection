@@ -141,6 +141,10 @@ export function createStore(client: SupabaseClient): ChatStore {
           account_id: accountId,
           block_id: answer.blockId,
           load_type: answer.type,
+          // §2.4's narrow rungs, migration 0008. Null rather than absent, so a block the
+          // bot could not find on the week clears a stale title rather than keeping one.
+          activity_kind: answer.kind ?? null,
+          title: answer.title ?? null,
           planned_hours: answer.plannedHours,
           day_index: answer.dayIndex,
           answer: answer.answer,
@@ -167,7 +171,7 @@ export function createStore(client: SupabaseClient): ChatStore {
     async loadBlockLog(accountId) {
       const { data, error } = await client
         .from('block_answers')
-        .select('block_id, load_type, planned_hours, day_index, answer, answered_at')
+        .select('block_id, load_type, activity_kind, title, planned_hours, day_index, answer, answered_at')
         .eq('account_id', accountId)
 
       // An empty log and an unreadable one mean opposite things. Collapsing them would
@@ -179,6 +183,12 @@ export function createStore(client: SupabaseClient): ChatStore {
         (row): BlockRecord => ({
           blockId: row.block_id as string,
           type: row.load_type as BlockRecord['type'],
+          // Absent before migration 0008, and absent is the truth: nothing recorded what
+          // those blocks were.
+          ...(row.activity_kind === null || row.activity_kind === undefined
+            ? {}
+            : { kind: row.activity_kind as BlockRecord['kind'] }),
+          ...(row.title === null || row.title === undefined ? {} : { title: row.title as string }),
           plannedHours: row.planned_hours as number,
           dayIndex: row.day_index as number,
           answer: row.answer as BlockRecord['answer'],

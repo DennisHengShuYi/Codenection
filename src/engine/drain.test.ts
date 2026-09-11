@@ -213,3 +213,43 @@ describe('fragmentation', () => {
     expect(fragmentation([study(9, 4), resting])).toBe(0)
   })
 })
+
+/**
+ * §2.4's correction, per block rather than per area of life.
+ *
+ * `params.estimateBias` is one number per load type, so every study block was padded by the
+ * same factor -- which was the whole of Reality Check until the ladder in `paddingForItem`
+ * made a narrower answer possible. A per-type parameter cannot carry a per-block answer, so
+ * the block brings its own and the parameter stays the fallback.
+ *
+ * Optional on the activity, because most callers have no log in hand: the optimizer's
+ * neighbours, the fixtures, every test written before this. Absent means "use the type's",
+ * which is exactly what happened before.
+ */
+describe('a block that carries its own estimate bias', () => {
+  const study = { kind: 'studyBlock' as const, type: 'mental' as const, hours: 2, intensity: 1, startHour: 9 }
+
+  const drainOf = (activity: Activity, params = DEFAULT_PARAMS): number =>
+    drainForDay(
+      { dayIndex: 0, activities: [activity], sleepHours: 7, venueChanges: 0, daysToNearestDeadline: null, checkedIn: true },
+      { mental: 100, physical: 100, social: 100, errands: 100 },
+      params,
+    ).mental
+
+  it('costs more when its own bias says this work runs long', () => {
+    expect(drainOf({ ...study, estimateBias: 2 })).toBeGreaterThan(drainOf(study))
+  })
+
+  it('uses its own bias rather than the type-wide one', () => {
+    const padded = { ...DEFAULT_PARAMS, estimateBias: { ...DEFAULT_PARAMS.estimateBias, mental: 3 } }
+
+    // The block says 1 -- this work has never overrun -- and that beats the area-wide 3.
+    expect(drainOf({ ...study, estimateBias: 1 }, padded)).toBeLessThan(drainOf(study, padded))
+  })
+
+  it('falls back to the type-wide bias when the block carries none', () => {
+    const padded = { ...DEFAULT_PARAMS, estimateBias: { ...DEFAULT_PARAMS.estimateBias, mental: 2 } }
+
+    expect(drainOf(study, padded)).toBeCloseTo(drainOf({ ...study, estimateBias: 2 }), 6)
+  })
+})

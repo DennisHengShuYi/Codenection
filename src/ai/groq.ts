@@ -1,6 +1,7 @@
 import { BLOCK_KINDS, HORIZON_DAYS } from '../engine'
 import { GROQ_TEXT_MODEL, GROQ_TRANSCRIBE_MODEL } from './models'
 import { parseModelReply } from './schema'
+import { vocabularyLines } from './vocabulary'
 import { anchorLines } from './calendarAnchor'
 import { MAX_ITEMS, type Calendar, type ParsedItem } from './types'
 
@@ -11,10 +12,13 @@ import { MAX_ITEMS, type Calendar, type ParsedItem } from './types'
  * what today WAS -- so a stated "thursday" could only be guessed at. The lines themselves
  * are shared with the photo reader, which has the same prompt and had the same gap.
  */
-const systemPromptFor = (calendar?: Calendar): string => {
-  const anchor = anchorLines(calendar)
+const systemPromptFor = (calendar?: Calendar, vocabulary: readonly string[] = []): string => {
+  // Both are context the browser holds and the endpoint does not: which real day is day 0,
+  // and what this student already calls things. Appended rather than woven in, so a prompt
+  // with neither is byte for byte the one that shipped before either existed.
+  const parts = [SYSTEM_PROMPT, anchorLines(calendar), vocabularyLines(vocabulary)]
 
-  return anchor === '' ? SYSTEM_PROMPT : `${SYSTEM_PROMPT} ${anchor}`
+  return parts.filter((part) => part !== '').join(' ')
 }
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
@@ -61,6 +65,10 @@ export async function askGroq(
   /** Ruling 44: which real day day 0 is. Without it the model is told "day index from 0 (today)"
    *  and never told what today is, so a stated weekday can only be guessed at. */
   calendar?: Calendar,
+  /** The names this student already uses, so the model can reuse one rather than inventing a
+   *  second phrasing for the same habit. Advice only -- `domain/snapTitle` holds the reply
+   *  to it. */
+  vocabulary: readonly string[] = [],
 ): Promise<ParsedItem[] | null> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), GROQ_TIMEOUT_MS)
@@ -80,7 +88,7 @@ export async function askGroq(
         temperature: 0,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: systemPromptFor(calendar) },
+          { role: 'system', content: systemPromptFor(calendar, vocabulary) },
           { role: 'user', content: text },
         ],
       }),

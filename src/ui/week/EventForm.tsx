@@ -149,8 +149,8 @@ export function EventForm({
 
         {/* Outside the field, because `Field` clones a single child to attach its label. */}
         <datalist id="what-before">
-          {vocabulary.map((name) => (
-            <option key={name} value={name} />
+          {vocabulary.map((known) => (
+            <option key={known.title} value={known.title} />
           ))}
         </datalist>
 

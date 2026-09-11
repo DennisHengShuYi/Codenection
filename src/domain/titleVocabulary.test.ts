@@ -4,6 +4,11 @@ import type { Schedule, ScheduledItem } from '../optimizer'
 import type { BlockRecord } from './blockLog'
 import { titleVocabulary } from './titleVocabulary'
 
+/** Most of these are about which name comes back and in what order, so they read the titles
+ *  out of the entries. The kind on each is covered on its own below. */
+const titles = (input: Parameters<typeof titleVocabulary>[0]): string[] =>
+  titleVocabulary(input).map((entry) => entry.title)
+
 /**
  * What this student has called things before.
  *
@@ -53,17 +58,17 @@ const answered = (title: string, answeredAt: number): BlockRecord => ({
 
 describe('titleVocabulary', () => {
   it('offers what the student has answered for', () => {
-    expect(titleVocabulary({ schedule: week([]), blockLog: [answered('Gym', 1)] })).toContain('Gym')
+    expect(titles({ schedule: week([]), blockLog: [answered('Gym', 1)] })).toContain('Gym')
   })
 
   it('offers what is written down but not yet lived', () => {
-    expect(titleVocabulary({ schedule: week([item('WIA3001 lab')]), blockLog: [] })).toContain(
+    expect(titles({ schedule: week([item('WIA3001 lab')]), blockLog: [] })).toContain(
       'WIA3001 lab',
     )
   })
 
   it('says each name once, however often it was used', () => {
-    const vocabulary = titleVocabulary({
+    const vocabulary = titles({
       schedule: week([item('Gym')]),
       blockLog: [answered('Gym', 1), answered('Gym', 2)],
     })
@@ -74,7 +79,7 @@ describe('titleVocabulary', () => {
   /** The point of the whole thing: one spelling comes back, so the student taps rather than
    *  inventing a second. The one they use most is the one they meant. */
   it('keeps the spelling used most often', () => {
-    const vocabulary = titleVocabulary({
+    const vocabulary = titles({
       schedule: week([]),
       blockLog: [answered('gym', 1), answered('Gym', 2), answered('Gym', 3)],
     })
@@ -84,7 +89,7 @@ describe('titleVocabulary', () => {
   })
 
   it('puts what is used most at the top', () => {
-    const vocabulary = titleVocabulary({
+    const vocabulary = titles({
       schedule: week([]),
       blockLog: [answered('Gym', 1), answered('Gym', 2), answered('Essay', 3)],
     })
@@ -95,7 +100,7 @@ describe('titleVocabulary', () => {
   /** A tie on frequency goes to whatever was touched last: this term's modules beat last
    *  term's, without anything having to know what a term is. */
   it('breaks a tie with whatever was used most recently', () => {
-    const vocabulary = titleVocabulary({
+    const vocabulary = titles({
       schedule: week([]),
       blockLog: [answered('Old module', 1), answered('New module', 9)],
     })
@@ -104,13 +109,13 @@ describe('titleVocabulary', () => {
   })
 
   it('leaves out blank titles rather than offering an empty line', () => {
-    expect(titleVocabulary({ schedule: week([item('   ')]), blockLog: [] })).toEqual([])
+    expect(titles({ schedule: week([item('   ')]), blockLog: [] })).toEqual([])
   })
 
   it('stops at a length a dropdown can actually be read at', () => {
     const many = Array.from({ length: 40 }, (_, index) => item(`Thing ${index}`, { id: `i${index}` }))
 
-    expect(titleVocabulary({ schedule: week(many), blockLog: [] }).length).toBeLessThanOrEqual(12)
+    expect(titles({ schedule: week(many), blockLog: [] }).length).toBeLessThanOrEqual(12)
   })
 })
 
@@ -125,7 +130,7 @@ describe('titleVocabulary', () => {
  */
 describe('a name from the current week against one from history', () => {
   it('ranks the one in this week as the more recent', () => {
-    const vocabulary = titleVocabulary({
+    const vocabulary = titles({
       schedule: week([item('Typed just now')]),
       blockLog: [answered('Answered in September', 9_999_999)],
     })
@@ -134,7 +139,7 @@ describe('a name from the current week against one from history', () => {
   })
 
   it('still ranks by how often, before how recently', () => {
-    const vocabulary = titleVocabulary({
+    const vocabulary = titles({
       schedule: week([item('Typed just now')]),
       blockLog: [answered('Gym', 1), answered('Gym', 2)],
     })

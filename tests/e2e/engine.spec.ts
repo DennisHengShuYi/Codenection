@@ -60,11 +60,22 @@ test('says whether the fortnight crosses into deficit', async ({ page }) => {
   await expect(page.getByTestId('reserve-text-equivalent')).toHaveText(/deficit/i)
 })
 
-// §2.1 puts the solver on the phone. This proves it runs there, on the shipped bundle.
+// §2.1 puts the solver on the phone. This proves it runs there, on the shipped bundle --
+// and, since the solve stopped applying itself, that the whole propose-and-approve round
+// trip works in a real browser rather than only under jsdom.
 test('runs the rebalancer in the browser and reports what it changed', async ({ page }) => {
   await openWeek(page)
 
   await page.getByTestId('rebalance').click()
+
+  // The offer, before anything has been written.
+  const summary = page.getByTestId('proposal-summary')
+  await expect(summary).toBeVisible()
+  await expect(summary).toHaveText(/^I'd /)
+  await expect(page.getByTestId('proposal-moves').locator('li').first()).toBeVisible()
+  await expect(page.getByTestId('rebalance-report')).toHaveCount(0)
+
+  await page.getByTestId('approve-rebalance').click()
 
   const report = page.getByTestId('rebalance-report')
   await expect(report).toBeVisible()
@@ -72,4 +83,16 @@ test('runs the rebalancer in the browser and reports what it changed', async ({ 
 
   // §2.1: never "optimised", always specific about what actually moved.
   await expect(report).not.toHaveText(/optimis|optimiz/i)
+})
+
+// The other half of the gate: a proposal the student walks away from changes nothing.
+test('leaves the week alone when the proposal is discarded', async ({ page }) => {
+  await openWeek(page)
+
+  await page.getByTestId('rebalance').click()
+  await expect(page.getByTestId('discard-rebalance')).toBeVisible()
+  await page.getByTestId('discard-rebalance').click()
+
+  await expect(page.getByTestId('rebalance')).toBeVisible()
+  await expect(page.getByTestId('rebalance-report')).toHaveCount(0)
 })

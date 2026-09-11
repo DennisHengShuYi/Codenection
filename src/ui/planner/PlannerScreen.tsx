@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import type { ParsedItem } from '../../ai'
+import type { Calendar, ParsedItem } from '../../ai'
 import { Button } from '../kit/Button'
 import { Field } from '../kit/Field'
 import { Sheet } from '../kit/Sheet'
 import { ItemChip } from './ItemChip'
+import { saysWhen } from './when'
 
 /**
  * §3.1 calls manual task entry the single largest reason students abandon planners. This is
@@ -19,6 +20,8 @@ export function PlannerScreen({
   onAccept,
   onBack,
   onClose,
+  dayLabels,
+  calendar,
   suggestRepeat = () => null,
 }: {
   onAccept: (items: readonly ParsedItem[]) => void
@@ -28,6 +31,12 @@ export function PlannerScreen({
    *  Wired to `onCancel` before Ruling 60, which meant the sheet's own close control
    *  quietly dropped the student at the chooser instead of closing. */
   onClose: () => void
+  /** §43: the horizon's days in a student's words, for the chip's own "when" question.
+   *  Threaded from the caller because the names depend on when the week started. */
+  dayLabels: readonly string[]
+  /** §44: which real day the horizon's day 0 is, so a stated weekday lands on that weekday
+   *  rather than on whatever `today % 7` produced. */
+  calendar: Calendar
   /**
    * §37: given a freshly parsed item, a weekly series it looks like another instance of.
    *
@@ -55,7 +64,7 @@ export function PlannerScreen({
        * the tap that needs it.
        */
       const { parseBrainDump } = await import('../../ai')
-      const outcome = await parseBrainDump(text)
+      const outcome = await parseBrainDump(text, calendar)
       setItems(outcome.items.map((item) => ({ ...item, repeat: item.repeat ?? suggestRepeat(item) })))
     } finally {
       // In a finally block because parseBrainDump is built never to reject -- but if that
@@ -64,15 +73,27 @@ export function PlannerScreen({
     }
   }
 
-  const canAccept = items !== null && items.length > 0
+  /**
+   * §43: nothing reaches the week until it says when it happens.
+   *
+   * Most of what a student types implies no day -- "read chapter 3" -- and the old flow
+   * accepted those anyway, letting `placement.ts` choose one. The entry then landed on a
+   * day nobody had named. The chip asks the question; this is what makes it a question
+   * rather than a suggestion.
+   *
+   * Only the day. An hour left at "any time" is a real answer that keeps the optimizer
+   * free to place the block, and demanding one would pin everything.
+   */
+  const missingWhen = (items ?? []).filter((item) => !saysWhen(item))
+  const canAccept = items !== null && items.length > 0 && missingWhen.length === 0
 
   const actions = (
     <>
       <Button onClick={() => void onRead()} disabled={reading}>
         {reading ? 'Reading…' : 'Read this'}
       </Button>
-      {canAccept && (
-        <Button variant="primary" onClick={() => onAccept(items)}>
+      {items !== null && items.length > 0 && (
+        <Button variant="primary" onClick={() => onAccept(items)} disabled={!canAccept}>
           Add these to my week
         </Button>
       )}
@@ -94,6 +115,14 @@ export function PlannerScreen({
           />
         </Field>
 
+        {missingWhen.length > 0 && (
+          <p data-testid="when-blocked" role="status" className="text-sm text-attention">
+            {missingWhen.length === 1
+              ? 'One of these does not say when it happens. Pick a day for it before adding.'
+              : `${missingWhen.length} of these do not say when they happen. Pick a day for each before adding.`}
+          </p>
+        )}
+
         {items !== null && items.length === 0 && (
           <p className="text-sm text-ink-soft">
             I could not find anything in that. Type something and try again.
@@ -108,6 +137,7 @@ export function PlannerScreen({
               <ItemChip
                 key={item.id}
                 item={item}
+                dayLabels={dayLabels}
                 onChange={(next) =>
                   setItems(items.map((existing) => (existing.id === next.id ? next : existing)))
                 }

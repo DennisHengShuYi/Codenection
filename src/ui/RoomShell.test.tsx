@@ -29,7 +29,11 @@ describe('RoomShell', () => {
     renderHome()
 
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
-    expect(screen.getByTestId('room-text-equivalent')).toBeVisible()
+
+    // Ruling 61: the room in words moved behind the `Waiting` button with everything else
+    // that used to be stacked beneath the drawing.
+    await userEvent.click(screen.getByTestId('open-notices'))
+    expect(await screen.findByTestId('room-text-equivalent')).toBeVisible()
   })
 
   describe('routing', () => {
@@ -183,8 +187,11 @@ describe('RoomShell', () => {
       fireEvent.click(await screen.findByTestId('rebalance'))
 
       expect(screen.getByTestId('rebalance')).toBeDisabled()
-      await screen.findByTestId('rebalance-report', undefined, { timeout: 20_000 })
-      expect(screen.getByTestId('rebalance')).toBeEnabled()
+      // The proposal sheet, not the report: the solve no longer writes the week, so what
+      // marks the end of the working state is the offer arriving rather than a change.
+      await screen.findByTestId('approve-rebalance', undefined, { timeout: 20_000 })
+      await userEvent.click(screen.getByTestId('discard-rebalance'))
+      expect(await screen.findByTestId('rebalance')).toBeEnabled()
     }, 30_000)
 
     it('reports what a rebalance changed, in specifics', async () => {
@@ -193,6 +200,8 @@ describe('RoomShell', () => {
       await userEvent.click(screen.getByTestId('open-week'))
 
       await userEvent.click(screen.getByTestId('rebalance'))
+      // The report is what the app says AFTER a change it was given permission to make.
+      await userEvent.click(await screen.findByTestId('approve-rebalance'))
 
       const report = await screen.findByTestId('rebalance-report')
       // §2.1: never "optimised" -- a claim the app cannot justify to the person who has to
@@ -200,14 +209,32 @@ describe('RoomShell', () => {
       expect(report).not.toHaveTextContent(/optimis|optimiz/i)
     }, 30_000)
 
-    it('saves the rebalanced week so it survives a reload', async () => {
-      const repository = renderHome()
+    /**
+     * Strengthened when rebalance stopped applying itself.
+     *
+     * The old assertion -- that a week comes back at all -- was true before the tap as well
+     * as after it, so it could not tell an approved rebalance from a discarded one. It now
+     * checks that what is stored actually CHANGED, which is the thing approving is for.
+     */
+    it('saves the rebalanced week only once it has been approved', async () => {
+      // Its own database, not `renderHome`'s default one. This test compares the stored week
+      // before and after, so an earlier test in this file that already approved a rebalance
+      // into the shared store would leave nothing left to change and the comparison would
+      // read as a failure to save.
+      const repository = createLocalRepository('roomshell-rebalance-save')
+      await repository.clear()
+      render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
       await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
       await userEvent.click(screen.getByTestId('open-week'))
+      const before = await repository.loadWeek()
 
       await userEvent.click(screen.getByTestId('rebalance'))
+      await screen.findByTestId('approve-rebalance')
+      expect(await repository.loadWeek()).toEqual(before)
 
-      await waitFor(async () => expect(await repository.loadWeek()).not.toBeNull())
+      await userEvent.click(screen.getByTestId('approve-rebalance'))
+
+      await waitFor(async () => expect(await repository.loadWeek()).not.toEqual(before))
     }, 30_000)
   })
 
@@ -265,6 +292,32 @@ describe('RoomShell', () => {
       await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
     })
 
+    /**
+     * A failed week write used to be swallowed on the grounds that "the week is rewritten on
+     * the next change, so a lost save retries by itself" -- true of every change except the
+     * last one, which is exactly the one a student makes before closing the tab. Said out
+     * loud now, per the project's rule against swallowing errors.
+     */
+    it('says so when a change could not be saved', async () => {
+      const readOnly = {
+        loadWeek: () => Promise.resolve(null),
+        saveWeek: () => Promise.reject(new Error('network down')),
+        loadSettings: () => Promise.resolve({ lowEnergyOverride: 'auto' as const }),
+        saveSettings: () => Promise.reject(new Error('network down')),
+        loadBlockLog: () => Promise.resolve([]),
+        recordBlockAnswer: () => Promise.reject(new Error('network down')),
+        clear: () => Promise.resolve(),
+      }
+
+      render(<RoomShell repository={readOnly} blockLog={[]} onAnswerBlock={vi.fn()} />)
+      await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+      await userEvent.click(screen.getByTestId('open-week'))
+      await userEvent.click(screen.getByTestId('rebalance'))
+      await userEvent.click(await screen.findByTestId('approve-rebalance'))
+
+      expect(await screen.findByTestId('save-problem')).toHaveTextContent(/could not save/i)
+    }, 30_000)
+
     it('does not fall over when saving fails', async () => {
       const readOnly = {
         loadWeek: () => Promise.resolve(null),
@@ -280,6 +333,7 @@ describe('RoomShell', () => {
       await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
       await userEvent.click(screen.getByTestId('open-week'))
       await userEvent.click(screen.getByTestId('rebalance'))
+      await userEvent.click(await screen.findByTestId('approve-rebalance'))
 
       // The rebalance still shows on screen even though it could not be persisted.
       expect(await screen.findByTestId('rebalance-report')).toBeVisible()

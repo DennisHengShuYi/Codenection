@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getSession, onSessionChange, register, signIn, signInWithGoogle, signOut } from './auth'
+import {
+  getAccessToken,
+  getSession,
+  onSessionChange,
+  register,
+  signIn,
+  signInWithGoogle,
+  signOut,
+} from './auth'
 
 const stub = {
   signUpResult: {} as Record<string, unknown>,
@@ -303,5 +311,35 @@ describe('onSessionChange', () => {
 
   it('returns a function that stops listening', () => {
     expect(typeof onSessionChange(() => undefined)).toBe('function')
+  })
+})
+
+/**
+ * The session token this app's own endpoints are called with.
+ *
+ * Never a Google token, and that distinction is the point: the Google credential lives
+ * server-side and the browser is deliberately never given it. This is the ordinary Supabase
+ * token every authenticated request already carries, exposed so `src/google/client.ts` can
+ * put it in a header rather than reaching into Supabase's storage itself.
+ */
+describe('getAccessToken', () => {
+  it('hands back the signed-in session token', async () => {
+    stub.sessionResult = { data: { session: { access_token: 'token-abc', user: { id: 'u1' } } } }
+
+    expect(await getAccessToken()).toBe('token-abc')
+  })
+
+  /** Nobody signed in is an ordinary state, not a failure: the calendar way in is simply
+   *  hidden, because there would be nowhere to store a grant. */
+  it('hands back nothing when nobody is signed in', async () => {
+    stub.sessionResult = { data: { session: null } }
+
+    expect(await getAccessToken()).toBeNull()
+  })
+
+  it('hands back nothing when the session carries no token', async () => {
+    stub.sessionResult = { data: { session: { user: { id: 'u1' } } } }
+
+    expect(await getAccessToken()).toBeNull()
   })
 })

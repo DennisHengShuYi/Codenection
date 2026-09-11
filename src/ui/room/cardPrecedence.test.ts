@@ -3,7 +3,6 @@ import { visibleCards } from './cardPrecedence'
 
 const all = {
   distress: false,
-  recovery: true,
   lapsed: true,
   stuck: true,
   today: true,
@@ -12,39 +11,33 @@ const all = {
 
 describe('visibleCards', () => {
   it('shows nothing when nothing applies', () => {
-    expect(visibleCards({ ...all, recovery: false, lapsed: false, stuck: false, today: false }))
-      .toEqual([])
+    expect(visibleCards({ ...all, lapsed: false, stuck: false, today: false })).toEqual([])
   })
 
   it('caps at two, in order, when the student is not flattened', () => {
-    expect(visibleCards(all)).toEqual(['recovery', 'lapsed'])
+    expect(visibleCards(all)).toEqual(['lapsed', 'stuck'])
   })
 
   it('shows exactly one below the low-energy threshold', () => {
-    expect(visibleCards({ ...all, lowEnergy: true })).toEqual(['recovery'])
+    expect(visibleCards({ ...all, lowEnergy: true })).toEqual(['lapsed'])
   })
 
-  it('leads with recovery, because it addresses why the others are hard', () => {
-    expect(visibleCards({ ...all, recovery: true, lapsed: true })[0]).toBe('recovery')
-  })
-
-  it('puts the day s question last, because it asks rather than offers', () => {
-    expect(visibleCards({ ...all, recovery: false, lapsed: false })).toEqual(['stuck', 'today'])
+  it("puts the day's question last, because it asks rather than offers", () => {
+    expect(visibleCards({ ...all, lapsed: false })).toEqual(['stuck', 'today'])
   })
 
   it('skips what does not apply rather than leaving a gap', () => {
-    expect(visibleCards({ ...all, recovery: false, stuck: false })).toEqual(['lapsed', 'today'])
+    expect(visibleCards({ ...all, stuck: false })).toEqual(['lapsed', 'today'])
   })
 
   /**
-   * Above everything, including recovery.
+   * Above everything.
    *
-   * Recovery leads normally because it addresses why the other cards are hard. It does not
-   * address this: a student who has reported the bottom four days running is not helped by
-   * being told to go for a walk, and offering that first would read as the app not having
-   * heard them.
+   * A student who has reported the bottom four days running is not helped by being told
+   * what is lapsed or what is stuck, and leading with either would read as the app not
+   * having heard them.
    */
-  it('leads with distress, above even recovery', () => {
+  it('leads with distress', () => {
     expect(visibleCards({ ...all, distress: true })[0]).toBe('distress')
   })
 
@@ -54,6 +47,6 @@ describe('visibleCards', () => {
   })
 
   it('changes nothing when it does not apply', () => {
-    expect(visibleCards({ ...all, distress: false })).toEqual(['recovery', 'lapsed'])
+    expect(visibleCards({ ...all, distress: false })).toEqual(['lapsed', 'stuck'])
   })
 })

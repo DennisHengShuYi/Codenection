@@ -1,7 +1,21 @@
 import { BLOCK_KINDS, HORIZON_DAYS } from '../engine'
 import { GROQ_TEXT_MODEL, GROQ_TRANSCRIBE_MODEL } from './models'
 import { parseModelReply } from './schema'
-import { MAX_ITEMS, type ParsedItem } from './types'
+import { anchorLines } from './calendarAnchor'
+import { MAX_ITEMS, type Calendar, type ParsedItem } from './types'
+
+/**
+ * §44: the prompt, with today's real date when the caller knows it.
+ *
+ * `deadlineDay` is described as "a day index from 0 (today)", and the model was never told
+ * what today WAS -- so a stated "thursday" could only be guessed at. The lines themselves
+ * are shared with the photo reader, which has the same prompt and had the same gap.
+ */
+const systemPromptFor = (calendar?: Calendar): string => {
+  const anchor = anchorLines(calendar)
+
+  return anchor === '' ? SYSTEM_PROMPT : `${SYSTEM_PROMPT} ${anchor}`
+}
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
@@ -11,7 +25,7 @@ const GROQ_TIMEOUT_MS = 8000
 
 const SYSTEM_PROMPT = [
   "You turn a student's unstructured notes into a task list.",
-  'Reply with JSON only, shaped {"items":[{"title","type","kind","hours","deadlineDay","hard","confident"}]}.',
+  'Reply with JSON only, shaped {"items":[{"title","type","kind","hours","deadlineDay","startHour","hard","confident"}]}.',
   'type is one of: mental, physical, social, errands.',
   // Derived from `BLOCK_KINDS` rather than typed out, so the prompt cannot go on asking
   // for a kind `ai/schema.ts` rejects. It used to offer `sleep`, which the boundary now
@@ -22,6 +36,11 @@ const SYSTEM_PROMPT = [
   'When unsure about physical work choose hardExercise, and for anything social choose socialDraining.',
   'hours is your estimate of effort, between 0 and 24.',
   `deadlineDay is a day index from 0 (today) to ${HORIZON_DAYS - 1}, or null if none is implied.`,
+  // §43. The hour was the one thing the student could state and the app could not hear:
+  // "lecture Tuesday 9am" arrived as Tuesday, and placement then chose an hour of its own.
+  'startHour is the hour of the day the student stated, 0-23, or null if they stated none.',
+  'Read it only from a real clock time ("9am", "14:00"). Never from an effort estimate',
+  '("3 hours") or a number that is part of the task itself ("chapter 3").',
   'hard is true only when the student stated a fixed date or deadline.',
   'confident is false when you had to guess at what an item is or how long it takes, and',
   'true when the notes say it plainly.',
@@ -36,7 +55,13 @@ const SYSTEM_PROMPT = [
  * The reply is validated by the same schema the client uses, so a malformed answer is
  * caught here rather than travelling one hop further into the app.
  */
-export async function askGroq(text: string, apiKey: string): Promise<ParsedItem[] | null> {
+export async function askGroq(
+  text: string,
+  apiKey: string,
+  /** §44: which real day day 0 is. Without it the model is told "day index from 0 (today)"
+   *  and never told what today is, so a stated weekday can only be guessed at. */
+  calendar?: Calendar,
+): Promise<ParsedItem[] | null> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), GROQ_TIMEOUT_MS)
 
@@ -55,7 +80,7 @@ export async function askGroq(text: string, apiKey: string): Promise<ParsedItem[
         temperature: 0,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: systemPromptFor(calendar) },
           { role: 'user', content: text },
         ],
       }),

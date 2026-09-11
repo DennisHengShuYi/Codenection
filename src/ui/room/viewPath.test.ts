@@ -5,7 +5,13 @@ import {
   isAscent,
   toAdd,
   toBlock,
+  toEditBlock,
+  toMicroStart,
+  toNewBlock,
   toPath,
+  toNotices,
+  toRebalance,
+  toRest,
   toReserves,
   toSettings,
   toWeek,
@@ -25,12 +31,17 @@ const TABLE: readonly { readonly path: string; readonly view: View }[] = [
   { path: '/', view: ROOM },
   { path: '/week', view: toWeek() },
   { path: '/week/block/essay', view: toBlock('essay') },
+  { path: '/week/rebalance', view: toRebalance() },
+  { path: '/week/block/essay/edit', view: toEditBlock('essay') },
+  { path: '/week/new/3', view: toNewBlock(3) },
   { path: '/settings', view: toSettings() },
   { path: '/reserves', view: toReserves() },
+  { path: '/notices', view: toNotices() },
   { path: '/add', view: toAdd() },
   { path: '/add/photo', view: toAdd('photo') },
   { path: '/add/type', view: toAdd('type') },
   { path: '/add/request', view: toAdd('request') },
+  { path: '/rest', view: toRest() },
 ]
 
 describe('the address a view is written to', () => {
@@ -87,6 +98,7 @@ describe('ascending', () => {
   it('is true when closing a sheet to the room', () => {
     expect(isAscent(toSettings(), ROOM)).toBe(true)
     expect(isAscent(toReserves(), ROOM)).toBe(true)
+    expect(isAscent(toNotices(), ROOM)).toBe(true)
     expect(isAscent(toAdd('type'), ROOM)).toBe(true)
   })
 
@@ -124,5 +136,71 @@ describe('ascending', () => {
   it('compares whole segments rather than string prefixes', () => {
     expect(isAscent({ kind: 'week' }, { kind: 'room' })).toBe(true)
     expect(fromPath('/weekend')).toEqual(ROOM)
+  })
+})
+
+/**
+ * The day index in `/week/new/<day>` is the one number in the whole address space a person
+ * can type, so it is the one that has to be checked rather than trusted -- a form opened
+ * onto day 99 would render a picker over a day that does not exist.
+ */
+describe('addresses that name nothing real', () => {
+  it('reads a day outside the fortnight as the room', () => {
+    expect(fromPath('/week/new/99')).toEqual(ROOM)
+  })
+
+  it('reads a day that is not a number as the room', () => {
+    expect(fromPath('/week/new/tuesday')).toEqual(ROOM)
+  })
+
+  it('reads a negative day as the room', () => {
+    expect(fromPath('/week/new/-1')).toEqual(ROOM)
+  })
+
+  it('reads an unknown fourth segment under a block as the room', () => {
+    expect(fromPath('/week/block/essay/delete')).toEqual(ROOM)
+  })
+})
+
+describe('ascending out of the new doors', () => {
+  it('is true when closing a proposal back to the week', () => {
+    expect(isAscent(toRebalance(), toWeek())).toBe(true)
+  })
+
+  it('is true when closing an edit form back to its block', () => {
+    expect(isAscent(toEditBlock('essay'), toBlock('essay'))).toBe(true)
+  })
+
+  it('is false when opening an edit form from a block', () => {
+    expect(isAscent(toBlock('essay'), toEditBlock('essay'))).toBe(false)
+  })
+})
+
+describe('the micro-start address', () => {
+  it('sits under the block it is about', () => {
+    expect(toPath(toMicroStart('b1'))).toBe('/week/block/b1/start')
+  })
+
+  it('round-trips through the address', () => {
+    expect(fromPath('/week/block/b1/start')).toEqual({ kind: 'microStart', itemId: 'b1' })
+  })
+
+  // Ids are free-form -- the planner derives one from whatever the student typed -- so an
+  // unencoded slash would write a path with an extra segment in it.
+  it('encodes an id with a slash in it', () => {
+    const view = toMicroStart('a/b')
+
+    expect(toPath(view)).toBe('/week/block/a%2Fb/start')
+    expect(fromPath(toPath(view))).toEqual(view)
+  })
+
+  it('is a descent from the block, so Back does not walk forward into it', () => {
+    expect(isAscent(toBlock('b1'), toMicroStart('b1'))).toBe(false)
+    expect(isAscent(toMicroStart('b1'), toBlock('b1'))).toBe(true)
+  })
+
+  it('does not confuse the edit form or an unknown leaf with the page', () => {
+    expect(fromPath('/week/block/b1/edit')).toEqual(toEditBlock('b1'))
+    expect(fromPath('/week/block/b1/elsewhere')).toEqual(ROOM)
   })
 })

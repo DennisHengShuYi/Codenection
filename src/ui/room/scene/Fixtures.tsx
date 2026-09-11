@@ -16,7 +16,22 @@ const WEATHER_FILL: Record<RoomState['weather'], string> = {
 
 /** The projection, rendered literally. Panes rather than one sheet, because a single filled
  *  rectangle at this size reads as a wall-mounted screen -- which is what it looked like. */
-export function Window({ weather }: { weather: RoomState['weather'] }) {
+export function Window({
+  weather,
+  dark,
+}: {
+  weather: RoomState['weather']
+  /**
+   * §45: 0..1, how far into the night the sky outside has gone, from the hours today
+   * cannot fit inside its waking day.
+   *
+   * A separate pane over the weather rather than a different set of weather fills: the two
+   * are independent facts and both have to stay readable at once. A dark clear window is an
+   * exhausted student with a calm week ahead; a bright storm is a rested one with a rough
+   * patch coming.
+   */
+  dark: number
+}) {
   return (
     <g data-testid="room-window">
       <rect x="196" y="56" width="60" height="44" fill={WEATHER_FILL[weather]} />
@@ -34,6 +49,20 @@ export function Window({ weather }: { weather: RoomState['weather'] }) {
             opacity="0.55"
           />
         ))}
+
+      {/* Night over the weather, under the glazing bars: the bars and the frame stay part of
+          the room's own lit interior, so the window still reads as a window at full dark. */}
+      {dark > 0 && (
+        <rect
+          data-testid="window-night"
+          x="196"
+          y="56"
+          width="60"
+          height="44"
+          fill={PALETTE.night}
+          opacity={dark * 0.82}
+        />
+      )}
 
       {/* Glazing bars, then the frame over them, so the bars sit behind the frame's edge. */}
       <line x1="226" y1="56" x2="226" y2="100" stroke={PALETTE.linen} strokeWidth="2.5" />

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
-import { completeItem, deferItem } from './scheduleEdits'
+import { addBlock, completeItem, deferItem, editItem, removeItem, type ItemFields } from './scheduleEdits'
 
 const item = (id: string, dayIndex: number, over: Partial<ScheduledItem> = {}): ScheduledItem => ({
   id,
@@ -83,5 +83,128 @@ describe('deferItem', () => {
     deferItem(before, 'a')
 
     expect(JSON.stringify(before)).toBe(snapshot)
+  })
+})
+
+const fields = (over: Partial<ItemFields> = {}): ItemFields => ({
+  title: 'Essay draft',
+  type: 'mental',
+  kind: 'studyBlock',
+  hours: 2,
+  dayIndex: 3,
+  startHour: 14,
+  fixed: false,
+  ...over,
+})
+
+describe('editing a block by hand', () => {
+  it('writes the new fields onto the one block named', () => {
+    const before = schedule([item('essay', 5, { startHour: 9 }), item('lab', 6)])
+
+    const after = editItem(before, 'essay', fields({ dayIndex: 3, startHour: 14, hours: 2 }))
+
+    expect(after.items.find((candidate) => candidate.id === 'essay')).toMatchObject({
+      dayIndex: 3,
+      startHour: 14,
+      hours: 2,
+      title: 'Essay draft',
+    })
+    expect(after.items.find((candidate) => candidate.id === 'lab')).toEqual(
+      before.items.find((candidate) => candidate.id === 'lab'),
+    )
+  })
+
+  it('never mutates the week it was handed', () => {
+    const before = schedule([item('essay', 5)])
+
+    editItem(before, 'essay', fields({ dayIndex: 1 }))
+
+    expect(before.items[0]!.dayIndex).toBe(5)
+  })
+
+  /**
+   * The test that stops the form quietly stripping protection off a nap, or clearing a
+   * deadline it never asked the student about. Everything outside `ItemFields` survives.
+   */
+  it('keeps what the form never asked about', () => {
+    const before = schedule([
+      item('nap', 4, {
+        protectedRest: true,
+        intensity: 0.5,
+        deadlineDay: 4,
+        seriesId: 'series-1',
+      }),
+    ])
+
+    expect(editItem(before, 'nap', fields({ dayIndex: 2 })).items[0]).toMatchObject({
+      protectedRest: true,
+      intensity: 0.5,
+      deadlineDay: 4,
+      seriesId: 'series-1',
+      dayIndex: 2,
+    })
+  })
+
+  // The same stale-id case `blockSheet` already handles by closing: it happens for real.
+  it('leaves the week untouched when no block has that id', () => {
+    const before = schedule([item('essay', 3)])
+
+    expect(editItem(before, 'ghost', fields())).toEqual(before)
+  })
+})
+
+describe('removing a block', () => {
+  it('takes it out of the week', () => {
+    const before = schedule([item('essay', 3), item('lab', 4)])
+
+    expect(removeItem(before, 'essay').items.map((candidate) => candidate.id)).toEqual(['lab'])
+  })
+
+  it('takes the acceptance that created it out too', () => {
+    const before = {
+      ...schedule([item('essay', 3)]),
+      commitments: [{ id: 'c1', title: 'Essay', reviewDay: 7, itemId: 'essay' }],
+    }
+
+    expect(removeItem(before, 'essay').commitments).toEqual([])
+  })
+})
+
+describe('adding a block by hand', () => {
+  /**
+   * The case that distinguishes this from `placeItems`. The student chose the day and the
+   * hour on a grid they were looking at; auto-placing it elsewhere would be the app
+   * overriding a decision it had just asked them to make.
+   */
+  it('puts it exactly where it was told, not where a solver would prefer', () => {
+    const before = schedule([item('lab', 3, { startHour: 14, hours: 3 })])
+
+    const after = addBlock(before, fields({ dayIndex: 3, startHour: 14, hours: 2 }))
+
+    expect(after.items[after.items.length - 1]).toMatchObject({
+      dayIndex: 3,
+      startHour: 14,
+      hours: 2,
+      title: 'Essay draft',
+    })
+  })
+
+  it('gives it an id nothing else in the week is using', () => {
+    const ids = addBlock(schedule([item('lab', 1)]), fields()).items.map((c) => c.id)
+
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  // 5.1: a student may SCHEDULE rest. Only the app's own advice may pin it as protected.
+  it('never creates protected rest, whatever was typed', () => {
+    const after = addBlock(schedule([]), fields({ kind: 'rest', type: 'physical' }))
+
+    expect(after.items[0]!.protectedRest).toBe(false)
+  })
+
+  it('leaves every existing block alone', () => {
+    const before = schedule([item('lab', 1)])
+
+    expect(addBlock(before, fields()).items[0]).toEqual(before.items[0])
   })
 })

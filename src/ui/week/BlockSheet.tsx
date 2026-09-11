@@ -1,9 +1,8 @@
 import { useState, type JSX } from 'react'
-import { firstAction, type MicroStart } from '../../domain/microStart'
 import { IN_THEIR_WORDS } from '../../domain/realityCheck'
 import type { BlockAnswer } from '../../domain/blockLog'
 import { Button, type ButtonVariant } from '../kit/Button'
-import { Card } from '../kit/Card'
+import { hourLabel } from '../kit/labels'
 import { Sheet } from '../kit/Sheet'
 import type { BlockAction, BlockSheetModel } from './blockActions'
 
@@ -34,19 +33,8 @@ type SimpleAction = keyof typeof SIMPLE_LABELS
 const isSimpleAction = (action: BlockAction): action is SimpleAction =>
   action === 'done' || action === 'later'
 
-const formatHour = (hour: number): string => `${String(hour).padStart(2, '0')}:00`
-
 const whenText = (item: BlockSheetModel['item']): string =>
-  `${formatHour(item.startHour)}–${formatHour(item.startHour + item.hours)} · ${IN_THEIR_WORDS[item.type]} · ${item.hours} hours`
-
-function MicroStartCard({ microStart }: { readonly microStart: MicroStart }): JSX.Element {
-  return (
-    <Card tone="calm" data-testid="micro-start" className="mt-4">
-      <p>{microStart.action}</p>
-      <p>{microStart.minutes} minutes. That is the whole ask.</p>
-    </Card>
-  )
-}
+  `${hourLabel(item.startHour)}–${hourLabel(item.startHour + item.hours)} · ${IN_THEIR_WORDS[item.type]} · ${item.hours} hours`
 
 export function BlockSheet({
   model,
@@ -56,6 +44,9 @@ export function BlockSheet({
   onLater,
   onConfirm,
   onRested,
+  onEdit,
+  onRemove,
+  onMicroStart,
 }: {
   readonly model: BlockSheetModel
   readonly onClose: () => void
@@ -66,14 +57,15 @@ export function BlockSheet({
   readonly onLater: (itemId: string) => void
   readonly onConfirm: (itemId: string, answer: BlockAnswer) => void
   readonly onRested: (itemId: string, rested: boolean) => void
+  /** Opens the day/time form on this block. */
+  readonly onEdit: (itemId: string) => void
+  /** Takes the block out of the week. Called only after the confirmation below. */
+  readonly onRemove: (itemId: string) => void
+  /** §4.1's manual trigger: opens the ladder for this block on a page of its own. */
+  readonly onMicroStart: (itemId: string) => void
 }): JSX.Element {
-  const [revealed, setRevealed] = useState(false)
-  const { item, actions, microStart: given, recordedAnswer } = model
-
-  // §4.1's manual trigger: "I can't start this" reveals a first move even for a block the
-  // domain has not (yet) called stuck. A block already flagged stuck arrives with `given` set
-  // and is shown unasked -- clicking here would have nothing new to add.
-  const microStart = given ?? (revealed ? firstAction(item) : null)
+  const [confirmingRemove, setConfirmingRemove] = useState(false)
+  const { item, actions, recordedAnswer } = model
 
   const simpleHandlers: Record<SimpleAction, (itemId: string) => void> = {
     done: onDone,
@@ -116,13 +108,63 @@ export function BlockSheet({
         </>
       )}
 
-      {actions.includes('cantStart') && (
-        <Button variant="quiet" onClick={() => setRevealed(true)}>
-          I can't start this
+      {/* §4.1's manual trigger, and now on every block. It asks for no explanation, which
+          is the whole point: being asked why you are stuck is one more thing to be stuck
+          on. */}
+      {actions.includes('microStart') && (
+        <Button variant="secondary" data-testid="micro-start" onClick={() => onMicroStart(item.id)}>
+          Micro start
+        </Button>
+      )}
+
+      {actions.includes('edit') && (
+        <Button variant="secondary" data-testid="edit-block" onClick={() => onEdit(item.id)}>
+          Edit
+        </Button>
+      )}
+
+      {/* Quiet, and last. Removing is the only thing on this sheet that cannot be taken
+          back, so it should not sit where a thumb reaching for Done finds it first. */}
+      {actions.includes('remove') && (
+        <Button variant="quiet" data-testid="remove-block" onClick={() => setConfirmingRemove(true)}>
+          Remove
         </Button>
       )}
     </>
   )
+
+  /**
+   * Removing is the one action here that cannot be undone.
+   *
+   * Done and Later change a block, and an answer can be given again. This takes the block
+   * out of the week and there is no operation to put it back, so the question IS the
+   * safeguard -- which is why it names the block rather than asking "are you sure?" about
+   * nothing in particular. It replaces the body as well as the bar, so there is no way to
+   * answer it by accident while looking at something else.
+   */
+  if (confirmingRemove) {
+    return (
+      <Sheet
+        title={item.title}
+        onClose={onClose}
+        onBack={() => setConfirmingRemove(false)}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmingRemove(false)}>
+              Keep it
+            </Button>
+            <Button data-testid="confirm-remove-yes" onClick={() => onRemove(item.id)}>
+              Remove
+            </Button>
+          </>
+        }
+      >
+        <p data-testid="confirm-remove">
+          Remove {item.title}? This takes it out of your week, and I cannot put it back.
+        </p>
+      </Sheet>
+    )
+  }
 
   return (
     <Sheet title={item.title} onClose={onClose} onBack={onBack} actions={actionBar}>
@@ -142,8 +184,6 @@ export function BlockSheet({
             : `You said: ${CONFIRM_LABELS[recordedAnswer]}`}
         </p>
       )}
-
-      {microStart !== null && <MicroStartCard microStart={microStart} />}
     </Sheet>
   )
 }

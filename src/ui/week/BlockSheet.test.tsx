@@ -18,8 +18,7 @@ const model = (over: Partial<BlockSheetModel> = {}): BlockSheetModel => ({
     deadlineDay: null,
     protectedRest: false,
   },
-  actions: ['done', 'later', 'cantStart'],
-  microStart: null,
+  actions: ['done', 'later', 'microStart'],
   recordedAnswer: null,
   ...over,
 })
@@ -32,6 +31,9 @@ const setup = (over: Partial<BlockSheetModel> = {}) => {
     onLater: vi.fn(),
     onConfirm: vi.fn(),
     onRested: vi.fn(),
+    onEdit: vi.fn(),
+    onRemove: vi.fn(),
+    onMicroStart: vi.fn(),
   }
   render(<BlockSheet model={model(over)} {...handlers} />)
   return handlers
@@ -105,22 +107,23 @@ describe('BlockSheet', () => {
     expect(screen.getByTestId('rested-no')).toHaveTextContent("I didn't")
   })
 
-  it('shows the micro-start unasked when one is offered', () => {
-    setup({ microStart: { itemId: 'essay', action: 'Open the document and write the title.', minutes: 8 } })
+  it('opens the micro-start page for this block', async () => {
+    const handlers = setup()
 
-    expect(screen.getByTestId('micro-start')).toHaveTextContent('Open the document')
-    expect(screen.getByTestId('micro-start')).toHaveTextContent('8 minutes. That is the whole ask.')
+    await userEvent.click(screen.getByTestId('micro-start'))
+
+    expect(handlers.onMicroStart).toHaveBeenCalledWith('essay')
   })
 
-  it('reveals the micro-start when "I can\'t start this" is pressed and none was already shown', async () => {
-    setup({ actions: ['done', 'later', 'cantStart'], microStart: null })
+  // The inline reveal is gone. Two ways to a first move is two answers that can disagree
+  // about the same block, and only one of them can be the model's.
+  it('no longer reveals a micro-start inside the sheet', () => {
+    setup()
 
-    expect(screen.queryByTestId('micro-start')).not.toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('button', { name: "I can't start this" }))
-
-    expect(screen.getByTestId('micro-start')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: "I can't start this" })).not.toBeInTheDocument()
+    expect(screen.queryByText(/that is the whole ask/i)).not.toBeInTheDocument()
   })
+
 
   it('says the block type in the same words Reality Check uses', () => {
     setup({ item: { ...model().item, type: 'social' } })
@@ -154,5 +157,52 @@ describe('BlockSheet', () => {
 
       expect(screen.getByTestId('recorded-answer')).toHaveTextContent(/already answered/i)
     })
+  })
+})
+
+describe('changing the block rather than answering about it', () => {
+  const editable = { actions: ['done', 'edit', 'remove'] as const }
+
+  it('opens the form when Edit is pressed', async () => {
+    const { onEdit } = setup({ actions: [...editable.actions] })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+
+    expect(onEdit).toHaveBeenCalledWith('essay')
+  })
+
+  /**
+   * Removing is the one thing here that cannot be taken back. Done and Later change a block
+   * and an answer can be given again; this takes it out of the week with no operation to put
+   * it back, so the question IS the safeguard -- which is why it names the block rather than
+   * asking "are you sure?" about nothing in particular.
+   */
+  it('asks before it removes anything', async () => {
+    const { onRemove } = setup({ actions: [...editable.actions] })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
+
+    expect(onRemove).not.toHaveBeenCalled()
+    expect(screen.getByTestId('confirm-remove')).toHaveTextContent(/takes it out of your week/i)
+    expect(screen.getByTestId('confirm-remove')).toHaveTextContent('Essay draft')
+  })
+
+  it('removes it once the question is answered yes', async () => {
+    const { onRemove } = setup({ actions: [...editable.actions] })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    await userEvent.click(screen.getByTestId('confirm-remove-yes'))
+
+    expect(onRemove).toHaveBeenCalledWith('essay')
+  })
+
+  it('leaves it alone when the question is answered no', async () => {
+    const { onRemove } = setup({ actions: [...editable.actions] })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Keep it' }))
+
+    expect(onRemove).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('confirm-remove')).toBeNull()
   })
 })

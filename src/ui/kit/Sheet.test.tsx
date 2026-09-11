@@ -23,6 +23,13 @@ vi.mock('../../data', async (importOriginal) => ({
   hasTelegramLink: () => Promise.resolve(false),
 }))
 
+// Same reason, for the calendar row beside it: `CalendarConnection` asks the database on
+// mount whether a grant exists. Answering "yes" here is what makes the withdrawal control
+// render at all, which is the thing the settings-sheet test below is checking is wired in.
+vi.mock('../../google/connection', () => ({
+  hasCalendarConnected: () => Promise.resolve(true),
+}))
+
 const setup = (actions?: React.ReactNode) => {
   const onClose = vi.fn()
   render(
@@ -184,13 +191,24 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
   })
 
   it('PhotoImportScreen: Back is in the bar', () => {
-    render(<PhotoImportScreen onAccept={vi.fn()} onBack={vi.fn()} onClose={vi.fn()} />)
+    render(
+      <PhotoImportScreen
+        onAccept={vi.fn()}
+        onBack={vi.fn()}
+        onClose={vi.fn()}
+        dayLabels={['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep']}
+        calendar={{ today: 0, startWeekday: 5, todayLabel: '11 September 2026' }}
+      />,
+    )
 
     expect(within(actionBar()).getByTestId('sheet-back')).toBeVisible()
   })
 
   it('PlannerScreen: Back and Read this are in the bar', () => {
-    render(<PlannerScreen onAccept={vi.fn()} onBack={vi.fn()} onClose={vi.fn()} />)
+    render(
+      <PlannerScreen onAccept={vi.fn()} onBack={vi.fn()} onClose={vi.fn()} dayLabels={['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep']}
+        calendar={{ today: 0, startWeekday: 5, todayLabel: '11 September 2026' }} />,
+    )
 
     expect(within(actionBar()).getByTestId('sheet-back')).toBeVisible()
     expect(within(actionBar()).getByRole('button', { name: /read this/i })).toBeVisible()
@@ -207,6 +225,8 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         onAccept={vi.fn()}
         onBack={vi.fn()}
         onClose={vi.fn()}
+        dayLabels={['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep']}
+        calendar={{ today: 0, startWeekday: 5, todayLabel: '11 September 2026' }}
       />,
     )
 
@@ -229,8 +249,7 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         deadlineDay: null,
         protectedRest: false,
       },
-      actions: ['done', 'later', 'cantStart'],
-      microStart: null,
+      actions: ['done', 'later', 'microStart'],
       recordedAnswer: null,
     }
 
@@ -243,6 +262,9 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         onLater={vi.fn()}
         onConfirm={vi.fn()}
         onRested={vi.fn()}
+        onEdit={vi.fn()}
+        onRemove={vi.fn()}
+        onMicroStart={vi.fn()}
       />,
     )
 
@@ -265,5 +287,31 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
     await screen.findByRole('dialog', { name: /settings/i })
 
     expect(within(actionBar()).getByRole('button', { name: /sign out/i })).toBeVisible()
+  })
+
+  /**
+   * The way out of the calendar grant lives here, beside the Telegram unlink.
+   *
+   * This is the wiring assertion rather than the component's own: `CalendarConnection` is
+   * tested in full in its own file, and what is checked here is that a student who wants
+   * their calendar permission back can actually reach it -- a control nothing renders is
+   * the same as no control at all.
+   */
+  it('the settings sheet: the calendar can be disconnected from here', async () => {
+    const repository = createLocalRepository()
+    render(
+      <RoomShell
+        repository={repository}
+        session={{ userId: 'u1', email: 'ada@um.edu.my' }}
+        blockLog={[]}
+        onAnswerBlock={vi.fn()}
+      />,
+    )
+
+    await waitFor(() => expect(screen.getByTestId('open-settings')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-settings'))
+    await screen.findByRole('dialog', { name: /settings/i })
+
+    expect(await screen.findByTestId('calendar-disconnect')).toBeVisible()
   })
 })

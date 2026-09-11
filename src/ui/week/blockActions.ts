@@ -1,5 +1,4 @@
 import { answeredIds, type BlockAnswer, type BlockRecord } from '../../domain/blockLog'
-import { firstAction, isStuck, type MicroStart } from '../../domain/microStart'
 import type { Schedule, ScheduledItem } from '../../optimizer'
 
 /**
@@ -9,18 +8,45 @@ import type { Schedule, ScheduledItem } from '../../optimizer'
  * four *states of a block*, and collapsing them here is what lets the week screen carry all
  * of them without a row of buttons that are mostly wrong for whatever block was tapped.
  *
- * `move` is not in this union. It was specified and wired once, but nothing in this plan
- * ever built a day/time picker for it, so "Move" behaved identically to "Later" with no way
- * to actually choose where a block went -- a silent stub, caught at the combined 12+13
- * review. Dropped rather than left indistinguishable from a real action; reinstate it once
- * a picker exists to back it.
+ * `move` is not in this union, and now genuinely does not need to be. It was specified and
+ * wired once with no day/time picker behind it, so "Move" behaved identically to "Later"
+ * with no way to actually choose where a block went -- a silent stub, dropped rather than
+ * left indistinguishable from a real action. `edit` below is the picker arriving: a block's
+ * day, hour and length are all changeable now, which is what `move` was reaching for and
+ * more.
  */
-export type BlockAction = 'done' | 'later' | 'cantStart' | 'confirm' | 'undo' | 'didRest'
+export type BlockAction =
+  | 'done'
+  | 'later'
+  | 'microStart'
+  | 'confirm'
+  | 'undo'
+  | 'didRest'
+  | 'edit'
+  | 'remove'
+
+/**
+ * Offered on every block, whatever state it is in.
+ *
+ * Deliberately unconditional, where every other action here is conditional. The rest of this
+ * model answers "what can be said ABOUT this block", and that genuinely depends on whether
+ * it has happened yet. These two change what the block IS, and a student correcting their
+ * own week -- a cancelled class, a tutorial that turned out to be two hours -- is right to
+ * be able to do that on a fixed block, on protected rest, and on last Tuesday. The form says
+ * what each of those costs; it does not refuse.
+ *
+ * `microStart` joins them for that reason and one more. §4.1's manual trigger used to be
+ * hidden on fixed blocks, on protected rest and on anything past -- which is to say it was
+ * hidden on a good share of what a student is actually stuck on: the lab report for
+ * Tuesday's fixed lab, the errand that was due last week. What made hiding it feel safe was
+ * §5.1's protected recovery, and that protection now lives where it belongs -- in what the
+ * rest and sleep chains SAY (see `ruleLadder`) -- rather than in a missing button.
+ */
+const MANUAL: readonly BlockAction[] = ['microStart', 'edit', 'remove']
 
 export interface BlockSheetModel {
   readonly item: ScheduledItem
   readonly actions: readonly BlockAction[]
-  readonly microStart: MicroStart | null
   /**
    * What the student said, when `actions` is `['undo']`. Null otherwise.
    *
@@ -48,20 +74,22 @@ const actionsFor = (
     // that back to the student, and letting protectedRest short-circuit past it would make
     // an answered nap and a never-touched one read identically: asked cold again, with no
     // way to undo, while every other block kind on the same screen does offer that.
-    if (item.protectedRest && !alreadyAsked) return ['didRest']
+    if (item.protectedRest && !alreadyAsked) return ['didRest', ...MANUAL]
 
-    return alreadyAsked ? ['undo'] : ['confirm']
+    return alreadyAsked ? ['undo', ...MANUAL] : ['confirm', ...MANUAL]
   }
 
   // A future or today protected-rest block has nothing to be "answered" about yet -- it
   // keeps asking whether it happened.
-  if (item.protectedRest) return ['didRest']
+  if (item.protectedRest) return ['didRest', ...MANUAL]
 
   // Fixed means classes, shifts and hard deadlines. The optimizer may not move them, so
-  // offering Move here would be the interface promising something the model refuses.
-  if (item.fixed) return ['done']
+  // there is no Later to offer -- deferring is a request the model would refuse. Editing one
+  // by hand is a different act entirely: not asking the solver to move it, but telling the
+  // app the class itself changed.
+  if (item.fixed) return ['done', ...MANUAL]
 
-  return ['done', 'later', 'cantStart']
+  return ['done', 'later', ...MANUAL]
 }
 
 export function blockSheet({
@@ -80,16 +108,11 @@ export function blockSheet({
   // and the id in the open view no longer exists.
   if (item === undefined) return null
 
-  // How long it has been *waiting*, not how long until it is due. `item.dayIndex - today` is
-  // the wait *ahead* of a task, and using it reported a fortnight-out errand as sixteen days
-  // overdue -- the same bug roomModel already had to fix.
-  const daysWaiting = Math.max(0, today - item.dayIndex)
   const actions = actionsFor(item, blockLog, today)
 
   return {
     item,
     actions,
-    microStart: isStuck(item, daysWaiting) ? firstAction(item) : null,
     recordedAnswer: actions.includes('undo')
       ? (blockLog.find((record) => record.blockId === item.id)?.answer ?? null)
       : null,

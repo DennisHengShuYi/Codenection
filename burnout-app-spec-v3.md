@@ -232,9 +232,11 @@ A distinct failure mode from overload, and the only one in this document not cau
 **Triggers, both required:**
 
 - **Automatic.** A task sits untouched past a threshold. Suggested: two scheduled slots missed, or three days past first appearance.
-- **Manual.** A "can't start this" button on every task. Zero friction, no explanation asked for.
+- **Manual.** A "Micro start" button on **every** block, with no exceptions — a fixed class, a block already in the past and protected rest all carry it, because those are a large share of what a student is actually stuck on. Zero friction, no explanation asked for. What keeps this safe on rest is not a missing button but what the rest and sleep chains *say*: they lower the bar to resting and never ask anybody to finish, complete or get through it. (Amended 2026-09-11.)
 
-**Behaviour.** Task title plus context to the model, returning **one** concrete first action with a time box under ten minutes. One action, never a list, for the same reason as §5.2: a stuck person cannot choose from a menu.
+**Behaviour.** Task title plus context to the model, returning an ordered **chain** of concrete first actions, each time-boxed under ten minutes. **Exactly one is shown at a time**: ticking the current step reveals the next, and the others are never on screen. Never a visible list, for the same reason as §5.2 — a stuck person cannot choose from a menu, and a wall of unticked boxes reads as proof of how much is left. Revealing one step at a time asks for no choice at all, which is what that reasoning actually protects.
+
+> Amended 2026-09-11. This section previously read "returning **one** concrete first action... One action, never a list." The single action was real but thin: it unstuck the first minute and left the student with no way through. The prohibition being made was against *choosing*, and a chain that reveals its next rung only when the current one is ticked never asks anyone to choose — so the constraint is met rather than overridden. See [`docs/superpowers/specs/2026-09-11-micro-start-ladder-design.md`](docs/superpowers/specs/2026-09-11-micro-start-ladder-design.md).
 
 **Learning.** Log which micro-starts actually led to work. If "open the document" works for this student and "make an outline" does not, stop suggesting outlines. Same two-tap machinery as the block ratings in §6.6.
 

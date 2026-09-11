@@ -10,10 +10,12 @@ const state = (over: Partial<RoomState> = {}): RoomState => ({
   ceilingPressure: 0.2,
   paperHeight: 0.2,
   clutter: [],
-  plantHealth: 0.8,
+  exerciseWaiting: 0, companyWaiting: 0,
+  windowDark: 0,
   sleepDebt: 0,
   weather: 'clear',
   lightLevel: 0.8,
+  reserve: 0.7,
   doorLit: false,
   character: 'steady',
   ...over,
@@ -94,14 +96,13 @@ describe('Room', () => {
     expect(glow(lit)).toBeGreaterThan(glow(dark))
   })
 
-  it('draws all nine objects', () => {
+  it('draws all eight objects', () => {
     render(<Room model={modelOf(state({ clutter: [{ id: 'a', title: 'Laundry', dayIndex: 1 }] }))} frame="inline" />)
 
     for (const id of [
       'ceiling',
       'papers',
       'clutter',
-      'plant',
       'bed',
       'window',
       'light',
@@ -177,8 +178,15 @@ describe('Room', () => {
     expect(paintsOver(gauge, scene)).toBe(true)
   })
 
-  it('reads the reserve off the light level, as a percentage', () => {
-    render(<Room model={modelOf(state({ lightLevel: 0.42 }))} frame="inline" />)
+  /**
+   * §45: off the reserve itself, not off the light.
+   *
+   * The light means the day's spill now, and a gauge derived from it read 100% on a
+   * nine-hour day at 43% reserve -- caught by looking at the room, not by a test, which is
+   * why this one now names the field it depends on.
+   */
+  it('reads the reserve as a percentage, whatever the light is doing', () => {
+    render(<Room model={modelOf(state({ reserve: 0.42, lightLevel: 0.1 }))} frame="inline" />)
 
     expect(screen.getByTestId('room-gauge')).toHaveTextContent('42%')
   })
@@ -224,5 +232,82 @@ describe('Room', () => {
     render(<Room model={modelOf()} frame="inline" />)
 
     expect(screen.getByTestId('room-gauge').tagName).not.toBe('BUTTON')
+  })
+})
+
+/**
+ * §45: the two objects today puts in the room.
+ *
+ * The drawing is where this feature actually lives -- `roomState` deciding a number means
+ * nothing if no shape reads it -- and both of these are new, so nothing else in the suite
+ * would notice if they silently stopped rendering.
+ */
+describe('what today puts in the room', () => {
+  it('puts a dumbbell out when exercise is on today', () => {
+    render(<Room model={modelOf(state({ exerciseWaiting: 0.5 }))} frame="inline" />)
+
+    expect(screen.getByTestId('room-dumbbell')).toBeInTheDocument()
+  })
+
+  it('leaves the floor clear of it when there is none', () => {
+    render(<Room model={modelOf(state({ exerciseWaiting: 0 }))} frame="inline" />)
+
+    expect(screen.queryByTestId('room-dumbbell')).toBeNull()
+  })
+
+  it('draws a heavier session as a heavier dumbbell, not a second one', () => {
+    const { container: light } = render(<Room model={modelOf(state({ exerciseWaiting: 0.2 }))} frame="inline" />)
+    const { container: heavy } = render(<Room model={modelOf(state({ exerciseWaiting: 1 }))} frame="inline" />)
+
+    const widthOf = (root: HTMLElement) =>
+      Number(root.querySelector('[data-testid="room-dumbbell"] rect')?.getAttribute('width') ?? 0)
+
+    expect(widthOf(heavy)).toBeGreaterThan(widthOf(light))
+  })
+
+  it('puts people in the room when company is on today', () => {
+    render(<Room model={modelOf(state({ companyWaiting: 0.4 }))} frame="inline" />)
+
+    expect(screen.getByTestId('room-company')).toBeInTheDocument()
+  })
+
+  it('leaves it empty of people when none are', () => {
+    render(<Room model={modelOf(state({ companyWaiting: 0 }))} frame="inline" />)
+
+    expect(screen.queryByTestId('room-company')).toBeNull()
+  })
+
+  /** More time with people is more people -- and capped, because a room with nine figures
+   *  in it is a crowd scene rather than a Tuesday. */
+  it('adds figures with the hours, up to a crowd it will not exceed', () => {
+    const { container: few } = render(<Room model={modelOf(state({ companyWaiting: 0.2 }))} frame="inline" />)
+    const { container: many } = render(<Room model={modelOf(state({ companyWaiting: 1 }))} frame="inline" />)
+
+    const figuresIn = (root: HTMLElement) =>
+      root.querySelectorAll('[data-testid="room-company"] circle').length
+
+    expect(figuresIn(many)).toBeGreaterThan(figuresIn(few))
+    expect(figuresIn(many)).toBeLessThanOrEqual(3)
+  })
+
+  /** §45: rest is deliberately not an object. It is the one thing on a day that is not a
+   *  duty, and drawing it as another thing waiting would make it one. */
+  it('draws nothing for rest', () => {
+    const { container } = render(<Room model={modelOf(state())} frame="inline" />)
+
+    expect(container.querySelector('[data-testid="room-rest"]')).toBeNull()
+  })
+
+  /** §45's darkness reaches the glass, not just the state. */
+  it('darkens the window when the day does not fit', () => {
+    render(<Room model={modelOf(state({ windowDark: 0.7 }))} frame="inline" />)
+
+    expect(screen.getByTestId('window-night')).toBeInTheDocument()
+  })
+
+  it('leaves the window alone on a day there is room for', () => {
+    render(<Room model={modelOf(state({ windowDark: 0 }))} frame="inline" />)
+
+    expect(screen.queryByTestId('window-night')).toBeNull()
   })
 })

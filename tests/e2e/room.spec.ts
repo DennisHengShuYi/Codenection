@@ -62,8 +62,11 @@ test('shows the corner gauge on top of the room, not behind its wall', async ({ 
 })
 
 // §1.5: the picture carries nothing to a screen reader, so the words have to be there.
+// Ruling 61 moved them behind the `Waiting` button, which is where they are read from now.
 test('states the room in words as well as drawing it', async ({ page }) => {
   await openApp(page)
+
+  await page.getByTestId('open-notices').click()
 
   await expect(page.getByTestId('room-text-equivalent')).not.toHaveText('')
 })
@@ -89,9 +92,13 @@ test('draws the room without turning any of it back into a control', async ({ pa
   // zero controls whether or not any existed -- a guard that cannot fail.
   await expect(scene.locator('button, a, [role="button"], [role="link"]')).toHaveCount(0)
 
-  // And the behavioural half, the exact inverse of the deleted assertion: the plant was
-  // what `opens an object when it is tapped` drove, and tapping it now opens nothing.
-  await scene.getByTestId('room-plant').click()
+  // And the behavioural half, the exact inverse of the deleted assertion: `opens an object
+  // when it is tapped` drove a piece of furniture, and tapping one now opens nothing.
+  //
+  // The bed rather than the plant, which §45 retired along with the reserve it read. A
+  // permanent object on purpose -- the objects today puts in the room come and go with the
+  // day, so a test that tapped one would pass or fail on what the seed happened to contain.
+  await scene.getByTestId('room-bed').click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.getByTestId('sheet')).toHaveCount(0)
 })
@@ -144,9 +151,8 @@ for (const [width, height] of VIEWPORTS) {
 
     const stage = await page.getByTestId('room-stage').boundingBox()
     const scene = await page.getByTestId('room-scene').boundingBox()
-    const band = await page.getByTestId('room-band').boundingBox()
     const character = await page.getByTestId('room-character').boundingBox()
-    expect(stage && scene && band && character, 'a measured element has no box').toBeTruthy()
+    expect(stage && scene && character, 'a measured element has no box').toBeTruthy()
 
     // The room fills the screen: the drawing spans the stage, and the stage spans the
     // viewport. Not "is visible" -- the aspect-boxed room it replaces was visible too.
@@ -155,37 +161,16 @@ for (const [width, height] of VIEWPORTS) {
     )
     expect(scene!.height).toBeGreaterThanOrEqual(stage!.height - 1)
 
-    // The band overlays the LOWER room rather than sitting beneath it: it starts inside the
-    // drawing and ends at the bottom of the screen.
-    expect(band!.y).toBeGreaterThan(scene!.y)
-    expect(band!.y + band!.height).toBeGreaterThanOrEqual(stage!.y + stage!.height - 1)
+    // Ruling 61 emptied the band -- the words, the accuracy line and the cards wait behind
+    // the `Waiting` button -- so nothing is painted over the lower room at all.
+    await expect(page.getByTestId('room-band')).toHaveCount(0)
 
-    // Ruling 55's binding constraint. The whole character -- head, face, posture, feet on
-    // the floor line -- stays above the band's top edge, so nothing about how the student
-    // is doing is read through a translucent panel or lost behind one.
-    expect(
-      character!.y + character!.height,
-      `the band covers the character at ${width}px`,
-    ).toBeLessThanOrEqual(band!.y)
-
-    // And the same thing asked of the browser rather than of the arithmetic: what is
-    // actually painted at the character's face?
+    // Ruling 55's binding constraint, which outlived the band that made it necessary: the
+    // whole character -- head, face, posture, feet on the floor line -- is what says how the
+    // student is doing, and nothing may be painted over it. Asked of the browser rather than
+    // of arithmetic: what is actually at the character's face?
     const face = await controlAt(page, character!.x + character!.width / 2, character!.y + character!.height * 0.2)
     expect(face).toBe('room-character')
-
-    // The words are the room's text equivalent and the accuracy line is the app's own
-    // honesty about its predictions: both sit above the cards in the band and both must be
-    // on the screen without scrolling anything, at every width. The band scrolls only for
-    // what comes after them.
-    for (const id of ['room-text-equivalent', 'accuracy-note']) {
-      const box = await page.getByTestId(id).boundingBox()
-      expect(box, `${id} has no box at ${width}px`).not.toBeNull()
-      expect(box!.y, `${id} starts above the band at ${width}px`).toBeGreaterThanOrEqual(band!.y)
-      expect(
-        box!.y + box!.height,
-        `${id} is cut off by the bottom of the band at ${width}px`,
-      ).toBeLessThanOrEqual(band!.y + band!.height)
-    }
 
     // §1.5's fold rule, which is why the controls were outside the room in the first place:
     // nothing the student needs may require a scroll.
@@ -194,9 +179,11 @@ for (const [width, height] of VIEWPORTS) {
     )
     expect(scrolls, `the room screen scrolls at ${width}px`).toBe(false)
 
-    // All three controls, hit-tested where a thumb would land. `toBeVisible` passes on a
-    // button painted under an opaque band; `elementFromPoint` does not.
-    for (const id of ['open-settings', 'open-week', 'open-add']) {
+    // All four controls and the gauge, hit-tested where a thumb would land. `toBeVisible`
+    // passes on a button painted under something else; `elementFromPoint` does not -- and
+    // this is the check that caught `Waiting` widening the row until its own box reached
+    // across the gauge and swallowed the press meant for it.
+    for (const id of ['open-settings', 'open-week', 'open-notices', 'open-add', 'room-gauge']) {
       const control = page.getByTestId(id)
       await expect(control).toBeVisible()
 
@@ -241,17 +228,21 @@ test('reaches the edges of a screen the drawing does not fit, with room rather t
  * drawing. Asserted at 390px with them on screen at once, and clicked through, so this
  * cannot pass on a band that renders them somewhere unreachable.
  */
-test('carries the words, the accuracy line and the live cards in the band, and still opens the week from it', async ({
+test('carries the words, the accuracy line and the live cards behind the Waiting button, and still opens the week', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 800 })
   await openApp(page)
 
-  const band = page.getByTestId('room-band')
-  await expect(band.getByTestId('room-text-equivalent')).not.toHaveText('')
-  await expect(band.getByTestId('accuracy-note')).toBeVisible()
+  await page.getByTestId('open-notices').click()
+  const waiting = page.getByRole('dialog', { name: /waiting/i })
+  await expect(waiting.getByTestId('room-text-equivalent')).not.toHaveText('')
+  await expect(waiting.getByTestId('accuracy-note')).toBeVisible()
 
-  // And the band is a place a student can act from, not just read: the week opens from it.
+  await page.getByRole('button', { name: /close/i }).click()
+  await expect(waiting).toHaveCount(0)
+
+  // And the row is a place a student can act from, not just read: the week opens from it.
   // Since Ruling 59 the week is a sheet OVER the room rather than a page replacing it, so
   // what proves the click landed is the dialog, and the room stays where it was -- inert
   // behind the panel until the sheet closes.

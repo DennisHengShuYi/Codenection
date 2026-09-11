@@ -161,3 +161,90 @@ describe('parseModelReply', () => {
     expect(parseModelReply(reply)?.[0]?.kind).toBe('hardExercise')
   })
 })
+
+/**
+ * §43: the clock time, which the schema never carried.
+ *
+ * "WIA3001 lecture Tuesday 9am" produced a day and no hour, and `placement.ts` then chose
+ * one -- a free slot, or a fallback constant. So the app decided when a student's own
+ * lecture happened, and the student was never shown the answer before accepting it.
+ */
+describe('the stated time', () => {
+  it('reads an hour the model returns', () => {
+    const items = parseModelReply({
+      items: [
+        {
+          title: 'WIA3001 lecture',
+          type: 'mental',
+          kind: 'studyBlock',
+          hours: 2,
+          deadlineDay: 2,
+          startHour: 9,
+          hard: true,
+          confident: true,
+        },
+      ],
+    })
+
+    expect(items?.[0]?.startHour).toBe(9)
+  })
+
+  it('carries null when the notes implied no time at all', () => {
+    const items = parseModelReply({
+      items: [
+        {
+          title: 'read chapter 3',
+          type: 'mental',
+          kind: 'studyBlock',
+          hours: 1,
+          deadlineDay: null,
+          startHour: null,
+          hard: false,
+          confident: true,
+        },
+      ],
+    })
+
+    expect(items?.[0]?.startHour).toBeNull()
+  })
+
+  /** An older model, or one that forgets the field, must not take the whole reply down. */
+  it('treats a missing hour as no time stated, rather than refusing the reply', () => {
+    const items = parseModelReply({
+      items: [
+        {
+          title: 'gym',
+          type: 'physical',
+          kind: 'hardExercise',
+          hours: 1,
+          deadlineDay: 1,
+          hard: false,
+          confident: true,
+        },
+      ],
+    })
+
+    expect(items).not.toBeNull()
+    expect(items?.[0]?.startHour).toBeNull()
+  })
+
+  /** A boundary, like every other number here: 24 is not an hour of the day. */
+  it.each([24, -1, 9.5])('refuses %s as an hour', (startHour) => {
+    const items = parseModelReply({
+      items: [
+        {
+          title: 'lecture',
+          type: 'mental',
+          kind: 'studyBlock',
+          hours: 2,
+          deadlineDay: 2,
+          startHour,
+          hard: true,
+          confident: true,
+        },
+      ],
+    })
+
+    expect(items).toBeNull()
+  })
+})

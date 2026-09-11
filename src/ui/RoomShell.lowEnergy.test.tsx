@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
+import { CHARACTER_BOTTOM } from './room/scene/palette'
 import { HORIZON_DAYS } from '../engine'
 import { RoomShell } from './room/RoomShell'
 
@@ -108,7 +109,6 @@ describe('RoomShell in low energy', () => {
 
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
     const cards = [
-      screen.queryByTestId('recovery-card'),
       screen.queryByTestId('lapsed-notice'),
       screen.queryByTestId('micro-start'),
       screen.queryByRole('region', { name: /today's check-in/i }),
@@ -143,8 +143,14 @@ describe('the low-energy override, reachable from the settings sheet', () => {
     // if `open-settings` is one of the things low-energy mode hides.
     await userEvent.click(screen.getByTestId('open-settings'))
     await userEvent.click(await screen.findByRole('radio', { name: /full interface/i }))
+    await userEvent.click(screen.getByRole('button', { name: /close/i }))
 
     await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+
+    // Ruling 61: out of the collapsed interface, the paragraph is no longer under the room
+    // -- it waits behind the `Waiting` button with the rest of what there is to read. The
+    // uncapped version is what proves the mode really came off.
+    await userEvent.click(screen.getByTestId('open-notices'))
     expect(visibleSentences()).toBeGreaterThan(1)
   })
 
@@ -217,6 +223,43 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
    * and social sit at 70 -- above `prescribe`'s PRESCRIBE_BELOW of 40 -- so `recovery`, which
    * outranks `stuck`, does not apply. With no commitments, `lapsed` cannot apply either.
    */
+  /**
+   * A student who has kept up with themselves and is still stuck on one chore.
+   *
+   * `recovery` outranks `stuck` in §3's card precedence, and it fires on neglect now rather
+   * than on a low reserve -- so without these the room would show the recovery card and this
+   * file would be testing a route it does not mean to. Short blocks in the recent past,
+   * confirmed in the log, which is what actually restarts a rhythm's clock: a plan is not
+   * evidence.
+   */
+  const KEPT_UP = (['rest', 'lightExercise', 'hardExercise', 'socialRestorative'] as const).map(
+    (kind, index) => ({
+      id: `kept-${kind}`,
+      title: kind,
+      type: (kind === 'socialRestorative' ? 'social' : kind === 'rest' ? 'mental' : 'physical') as
+        | 'social'
+        | 'mental'
+        | 'physical',
+      kind,
+      hours: 0.5,
+      intensity: 1,
+      dayIndex: 3,
+      startHour: 7 + index,
+      fixed: false,
+      deadlineDay: null,
+      protectedRest: false,
+    }),
+  )
+
+  const KEPT_UP_LOG = KEPT_UP.map((block) => ({
+    blockId: block.id,
+    type: block.type,
+    plannedHours: block.hours,
+    dayIndex: block.dayIndex,
+    answer: 'right' as const,
+    answeredAt: 0,
+  }))
+
   const drainedWithStuckTask = async (label: string) => {
     counter += 1
     const repository = createLocalRepository(`${label}-${counter}`)
@@ -237,6 +280,7 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
           deadlineDay: null,
           protectedRest: false,
         },
+        ...KEPT_UP,
       ],
       start: { mental: 70, physical: 70, social: 70, errands: 10 },
       horizonDays: HORIZON_DAYS,
@@ -244,7 +288,7 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
       startedOn,
     })
 
-    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+    render(<RoomShell repository={repository} blockLog={KEPT_UP_LOG} onAnswerBlock={vi.fn()} />)
 
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
     // The premise, asserted rather than assumed. If precedence or the trigger ever changes
@@ -314,5 +358,43 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
 
     expect(await screen.findByRole('dialog', { name: /reserves/i })).toBeVisible()
     expect(screen.getAllByRole('meter').length).toBeGreaterThan(0)
+  })
+})
+
+describe('the collapsed interface, measured against the character', () => {
+
+  /**
+   * Moved here by Ruling 61, which emptied the band for an ordinary week: the only room
+   * that still has one is the collapsed interface, holding the single card §1.5 keeps. The
+   * cap is what stops that card growing over the character, so it is measured where the
+   * band actually renders.
+   *
+   * The other end of `Character.test.tsx`'s measurement, and the reason that one is worth
+   * having: the band's cap is a Tailwind arbitrary value, which cannot read a TypeScript
+   * constant, so nothing made the cap and the artwork move together. `room.spec.ts` catches
+   * the drift at four viewports in a real browser -- but only as an unexplained geometric
+   * failure, and only for the pair of numbers that happen to be in the string today.
+   *
+   * So the percentages are re-derived here from `CHARACTER_BOTTOM` and the fill viewBox the
+   * room draws into (`Room.tsx`: `0 0 300 260`). The character sits at
+   * `CHARACTER_BOTTOM x min(stageWidth/300, stageHeight/260)` down the stage, which is
+   * `min(CHARACTER_BOTTOM/300 of the width, CHARACTER_BOTTOM/260 of the height)`; the band
+   * may have the rest, less a finger's margin. Raise `CHARACTER_BOTTOM` and this fails at
+   * the line that has to change.
+   *
+   * Percentages rather than `dvh`, deliberately: the cap resolves against the stage, and
+   * `App` gives the stage less than the viewport when the degraded-storage notice is above
+   * it. `100dvh` there would cap the band against a height the stage does not have.
+   */
+  it('caps the band at the space the character leaves, derived rather than typed', async () => {
+    await renderDrained()
+    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+
+    const across = ((CHARACTER_BOTTOM / 300) * 100).toFixed(2)
+    const down = ((CHARACTER_BOTTOM / 260) * 100).toFixed(2)
+
+    expect(screen.getByTestId('room-band').className).toContain(
+      `max-h-[calc(100%-min(${across}vw,${down}%)-1rem)]`,
+    )
   })
 })

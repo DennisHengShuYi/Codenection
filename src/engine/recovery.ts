@@ -8,7 +8,7 @@ import { LOAD_TYPES, type DayInput, type EngineParams, type LoadType, type Reser
  * Capped per block rather than per day, so three separate hours of rest still pay out
  * three hours' worth. It is the single unbroken twelve-hour block that is suspect.
  */
-const USEFUL_REST_HOURS = 3
+export const USEFUL_REST_HOURS = 3
 
 /**
  * §6.1: `recovery[d] = max(0, sleep − 5) × k_sleep + rest_blocks × k_rest`.

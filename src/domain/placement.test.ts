@@ -4,7 +4,7 @@ import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
 import { DEFAULT_PARAMS } from '../engine'
 import { describePlacement, fixThatMakesRoom, placeItems } from './placement'
-import { slotOn } from './slotFinder'
+import { slotOn, type SlotNeed } from './slotFinder'
 
 const empty = (): Schedule => ({
   items: [],
@@ -20,6 +20,7 @@ const parsed = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   kind: 'studyBlock',
   hours: 3,
   deadlineDay: null,
+  startHour: null,
   fixed: false,
   confident: true,
   repeat: null,
@@ -204,12 +205,24 @@ describe('describePlacement', () => {
  * nothing about the thing the student had just been told did not fit.
  */
 describe('fixThatMakesRoom', () => {
-  const parsedNeed = (over: Partial<ParsedItem> = {}) => parsed({ hours: 4, ...over })
+  /**
+   * The three fields this function was ever reading, said directly.
+   *
+   * It used to take a whole `ParsedItem` and use `hours`, `type` and `kind` from it, so
+   * every caller had to have a parse in hand -- or fake one -- to ask a question about
+   * three numbers. `deadlineDay` in particular was never read here at all.
+   */
+  const need = (over: Partial<SlotNeed> = {}): SlotNeed => ({
+    hours: 4,
+    type: 'mental',
+    kind: 'studyBlock',
+    ...over,
+  })
 
   it('has nothing to offer when the week has nothing movable', () => {
     const walled = { ...empty(), items: [fullDay(3)] }
 
-    expect(fixThatMakesRoom(walled, parsedNeed({ deadlineDay: 3 }), 3, DEFAULT_PARAMS)).toBeNull()
+    expect(fixThatMakesRoom(walled, need(), 3, DEFAULT_PARAMS)).toBeNull()
   })
 
   /**
@@ -231,7 +244,7 @@ describe('fixThatMakesRoom', () => {
       ],
     }
 
-    const fix = fixThatMakesRoom(crowded, parsedNeed({ deadlineDay: 3 }), 3, DEFAULT_PARAMS)
+    const fix = fixThatMakesRoom(crowded, need(), 3, DEFAULT_PARAMS)
 
     if (fix !== null) {
       expect(slotOn(fix.move.apply(crowded), 3, { hours: 4, type: 'mental', kind: 'studyBlock' })).not.toBeNull()
@@ -242,8 +255,98 @@ describe('fixThatMakesRoom', () => {
     const crowded = { ...empty(), items: [{ ...fullDay(3), fixed: false, deadlineDay: 12 }] }
     const snapshot = JSON.stringify(crowded)
 
-    fixThatMakesRoom(crowded, parsedNeed({ deadlineDay: 3 }), 3, DEFAULT_PARAMS)
+    fixThatMakesRoom(crowded, need(), 3, DEFAULT_PARAMS)
 
     expect(JSON.stringify(crowded)).toBe(snapshot)
+  })
+})
+
+/**
+ * §43: a stated hour is the student's, not a suggestion.
+ *
+ * Placement used to choose every hour -- the first free slot on the day, or
+ * `FALLBACK_START_HOUR` when the day was full. That was the only possible behaviour while
+ * `ParsedItem` carried no time; now that a student can say "lecture Tuesday 9am", the app
+ * choosing 10am instead would be overruling them about their own timetable.
+ */
+describe('an item that states its own hour', () => {
+  it('lands on the hour the student stated', () => {
+    const { schedule } = placeItems(empty(), [parsed({ startHour: 9, deadlineDay: 2 })], 0)
+
+    expect(schedule.items[0]?.startHour).toBe(9)
+    expect(schedule.items[0]?.dayIndex).toBe(2)
+  })
+
+  /**
+   * The other half of "pinned": the optimizer may not move it. Without this the hour would
+   * be honoured at the moment of adding and quietly rearranged by the next rebalance,
+   * which is worse than never having honoured it -- the student would have watched it
+   * land correctly.
+   */
+  it('is fixed, so a rebalance may not move it', () => {
+    const { schedule } = placeItems(empty(), [parsed({ startHour: 9, deadlineDay: 2 })], 0)
+
+    expect(schedule.items[0]?.fixed).toBe(true)
+  })
+
+  it('leaves the hour to placement when the student stated none', () => {
+    const { schedule } = placeItems(empty(), [parsed({ startHour: null, deadlineDay: 2 })], 0)
+
+    expect(schedule.items[0]?.fixed).toBe(false)
+    expect(schedule.items[0]?.startHour).toEqual(expect.any(Number))
+  })
+
+  /**
+   * A stated hour on a day with nothing free is still the student's answer. The app says
+   * what it did in the placement note rather than moving the lecture somewhere emptier --
+   * two things at once is a real week, and §16 is about never reshuffling silently.
+   */
+  it('keeps the stated hour even where the day is already busy', () => {
+    const busy = {
+      ...empty(),
+      items: [
+        {
+          id: 'existing',
+          title: 'Lab',
+          type: 'mental' as const,
+          kind: 'studyBlock' as const,
+          hours: 3,
+          intensity: 1,
+          dayIndex: 2,
+          startHour: 9,
+          fixed: true,
+          deadlineDay: null,
+          protectedRest: false,
+        },
+      ],
+    }
+
+    const { schedule } = placeItems(busy, [parsed({ startHour: 9, deadlineDay: 2 })], 0)
+    const added = schedule.items.find((item) => item.id !== 'existing')
+
+    expect(added?.startHour).toBe(9)
+    expect(added?.dayIndex).toBe(2)
+  })
+})
+
+/**
+ * Where an item came from, kept on the block it becomes.
+ *
+ * The push side is the reason. A block imported from Google that gets pushed back is
+ * duplicated in the calendar it came from, and the next import reads both -- so the push
+ * has to be able to tell, and by then the `ParsedItem` is long gone. One field, carried,
+ * absent when there was no source.
+ */
+describe('placeItems and where an item came from', () => {
+  it('keeps the source of an item that came from outside the app', () => {
+    const { schedule } = placeItems(empty(), [parsed({ sourceId: 'gcal-evt-1' })], 0)
+
+    expect(schedule.items[0]?.sourceId).toBe('gcal-evt-1')
+  })
+
+  it('leaves an item typed by hand without one', () => {
+    const { schedule } = placeItems(empty(), [parsed()], 0)
+
+    expect(schedule.items[0]?.sourceId).toBeUndefined()
   })
 })

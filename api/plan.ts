@@ -1,4 +1,5 @@
 import { askGroq } from '../src/ai/groq'
+import { readCalendar } from '../src/ai/calendarAnchor'
 import { MAX_INPUT_LENGTH } from '../src/ai/types'
 
 /**
@@ -35,8 +36,11 @@ export default async function handler(request: Request): Promise<Response> {
   if (!apiKey) return new Response('Planner unavailable', { status: 503 })
 
   let text: unknown
+  let calendar: unknown
   try {
-    text = ((await request.json()) as { text?: unknown }).text
+    const body = (await request.json()) as { text?: unknown; calendar?: unknown }
+    text = body.text
+    calendar = body.calendar
   } catch {
     return new Response('Bad request', { status: 400 })
   }
@@ -47,7 +51,7 @@ export default async function handler(request: Request): Promise<Response> {
     return new Response('Bad request', { status: 400 })
   }
 
-  const items = await askGroq(text, apiKey)
+  const items = await askGroq(text, apiKey, readCalendar(calendar))
   if (items === null) return new Response('Planner unavailable', { status: 503 })
 
   return new Response(JSON.stringify({ items }), {

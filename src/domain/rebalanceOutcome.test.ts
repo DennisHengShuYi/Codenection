@@ -176,3 +176,38 @@ describe('runRebalance', () => {
     expect(first.report).toBe(second.report)
   })
 })
+
+describe('what an outcome carries for the preview', () => {
+  it('hands back every move so the student can read them one by one', () => {
+    const outcome = runRebalance(improvableWeek(), DEFAULT_PARAMS, SEED)
+
+    expect(outcome.moves.length).toBeGreaterThan(0)
+    for (const move of outcome.moves) {
+      expect(move.description).not.toBe('')
+    }
+  })
+
+  // Exact rather than reconstructed, so a discarded proposal costs the student nothing.
+  it('carries the week the search started from, untouched', () => {
+    const before = improvableWeek()
+
+    expect(runRebalance(before, DEFAULT_PARAMS, SEED).before).toEqual(before)
+  })
+
+  it('describes the same solve in both tenses', () => {
+    const outcome = runRebalance(improvableWeek(), DEFAULT_PARAMS, SEED)
+
+    expect(outcome.report).toMatch(/^I /)
+    expect(outcome.proposal).toMatch(/^I'd /)
+  })
+
+  // `stuckButFixableWeek`, not an empty week: on an empty fortnight `neighbours` can always
+  // insert a social visit and the solver takes it, so `week([])` never reaches the no-move
+  // branch at all. See this file's doc on that fixture for why it genuinely has nothing.
+  it('proposes nothing when there is nothing to move', () => {
+    const outcome = runRebalance(stuckButFixableWeek(), DEFAULT_PARAMS, SEED)
+
+    expect(outcome.moves).toEqual([])
+    expect(outcome.proposal).toBe(outcome.report)
+  })
+})

@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../data'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
-import { CHARACTER_BOTTOM } from './room/scene/palette'
 import { RoomShell } from './room/RoomShell'
 
 /**
@@ -66,10 +65,17 @@ describe('RoomShell with the room', () => {
   })
 
   // §1.5's text equivalent stays on screen permanently now, not behind a tap.
+  /**
+   * Ruling 61 moved both off the room and behind the `Waiting` button: they are things to
+   * read, and reading is not why anyone opens this app. They still exist, and this is the
+   * press that reaches them.
+   */
   it('states the room in words too, and publishes the accuracy line beside it', async () => {
     await renderWithErrand()
 
-    expect(screen.getByTestId('room-text-equivalent')).toBeVisible()
+    await userEvent.click(screen.getByTestId('open-notices'))
+
+    expect(await screen.findByTestId('room-text-equivalent')).toBeVisible()
     expect(screen.getByTestId('accuracy-note')).toBeVisible()
   })
 
@@ -150,9 +156,10 @@ describe('RoomShell with the room', () => {
    */
   it('does not double-announce the room to a screen reader', async () => {
     await renderWithErrand()
+    await userEvent.click(screen.getByTestId('open-notices'))
 
     const scene = screen.getByTestId('room-scene')
-    const paragraph = screen.getByTestId('room-text-equivalent')
+    const paragraph = await screen.findByTestId('room-text-equivalent')
 
     expect(scene.getAttribute('aria-label')).toBeTruthy()
     expect(paragraph).toHaveAttribute('aria-hidden', 'true')
@@ -193,19 +200,26 @@ describe('RoomShell with the room', () => {
   })
 
   /**
-   * Coordinator review: "Move" offered no real picker and was indistinguishable in effect
-   * from "Later" -- a silent stub. Dropped from `blockActions.ts` rather than left half-real
-   * (see its doc comment). This is the regression guard: a movable block's sheet must not
-   * offer it.
+   * Was "does not offer Move -- there is no picker behind it".
+   *
+   * "Move" was dropped because it offered no real picker and was indistinguishable in effect
+   * from "Later" -- a silent stub. The picker exists now, so the guard changes rather than
+   * disappears: what must not come back is a control that PROMISES to move a block without
+   * one behind it. Edit is that picker, and it is not called Move.
+   *
+   * Anchored on the exact name. The old `/move/i` also matched "Remove", which is a real
+   * control now, so the loose pattern would fail for a reason that has nothing to do with
+   * what this test is about.
    */
-  it('does not offer Move -- there is no picker behind it', async () => {
+  it('offers a real picker rather than a Move that only defers', async () => {
     await renderWithErrand()
 
     await userEvent.click(screen.getByTestId('open-week'))
     await userEvent.click(await screen.findByTestId('day-2'))
     await userEvent.click(await screen.findByTestId('block-laundry'))
 
-    expect(screen.queryByRole('button', { name: /move/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^move$/i })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeVisible()
     expect(screen.getByRole('button', { name: /^later$/i })).toBeVisible()
   })
 
@@ -366,71 +380,35 @@ describe('the room screen, with the controls inside the room', () => {
    * placed before the scene would be behind the room's own wall, which is exactly how the
    * corner gauge was invisible for a fortnight (Ruling 52).
    */
-  it('gathers the paragraph, the accuracy line and the cards into one band over the room', async () => {
+  it('gathers the paragraph, the accuracy line and the cards behind one button', async () => {
     await renderWithErrand()
 
-    const stage = screen.getByTestId('room-stage')
-    const scene = screen.getByTestId('room-scene')
-    const band = screen.getByTestId('room-band')
+    // Nothing is stacked under the drawing any more: the room is the room.
+    expect(screen.queryByTestId('room-band')).toBeNull()
 
-    expect(stage).toContainElement(band)
-    expect(band).toContainElement(screen.getByTestId('room-text-equivalent'))
-    expect(band).toContainElement(screen.getByTestId('accuracy-note'))
-    expect(band).toContainElement(screen.getByRole('region', { name: /today's check-in/i }))
+    await userEvent.click(screen.getByTestId('open-notices'))
+    const sheet = await screen.findByRole('dialog', { name: /waiting/i })
 
-    // Later in the tree than the drawing, so it paints over the room rather than under it.
-    expect(Boolean(scene.compareDocumentPosition(band) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    expect(sheet).toContainElement(screen.getByTestId('room-text-equivalent'))
+    expect(sheet).toContainElement(screen.getByTestId('accuracy-note'))
+    expect(sheet).toContainElement(screen.getByRole('region', { name: /today's check-in/i }))
   })
 
   /**
-   * The band can hold two cards at 320px, which is taller than the space between the
-   * character's head and the bottom of the screen, so the band scrolls rather than grow
-   * over the character. The three controls now share one row across the top, clear of the
-   * band entirely: `Settings`, `The week` and `+` in the same row, so a long card cannot
-   * scroll any of them away and there is a single place to look for a control.
+   * Ruling 61 emptied the band, so the controls are no longer competing with anything for
+   * the space under the drawing: all four sit in one row across the top -- `Settings`,
+   * `The week`, `Waiting` and `+` -- and there is a single place to look for a control.
    */
-  it('gathers the three controls into one row, clear of the band', async () => {
+  it('gathers the four controls into one row, with nothing stacked under the drawing', async () => {
     await renderWithErrand()
 
     const row = screen.getByTestId('open-settings').parentElement
     expect(row).not.toBeNull()
     expect(row).toContainElement(screen.getByTestId('open-week'))
+    expect(row).toContainElement(screen.getByTestId('open-notices'))
     expect(row).toContainElement(screen.getByTestId('open-add'))
 
-    const band = screen.getByTestId('room-band')
-    expect(band.contains(screen.getByTestId('open-week'))).toBe(false)
-    expect(band.contains(screen.getByTestId('open-add'))).toBe(false)
-    expect(screen.getByTestId('room-band-content')).toContainElement(
-      screen.getByTestId('room-text-equivalent'),
-    )
+    expect(screen.queryByTestId('room-band')).toBeNull()
   })
 
-  /**
-   * The other end of `Character.test.tsx`'s measurement, and the reason that one is worth
-   * having: the band's cap is a Tailwind arbitrary value, which cannot read a TypeScript
-   * constant, so nothing made the cap and the artwork move together. `room.spec.ts` catches
-   * the drift at four viewports in a real browser -- but only as an unexplained geometric
-   * failure, and only for the pair of numbers that happen to be in the string today.
-   *
-   * So the percentages are re-derived here from `CHARACTER_BOTTOM` and the fill viewBox the
-   * room draws into (`Room.tsx`: `0 0 300 260`). The character sits at
-   * `CHARACTER_BOTTOM x min(stageWidth/300, stageHeight/260)` down the stage, which is
-   * `min(CHARACTER_BOTTOM/300 of the width, CHARACTER_BOTTOM/260 of the height)`; the band
-   * may have the rest, less a finger's margin. Raise `CHARACTER_BOTTOM` and this fails at
-   * the line that has to change.
-   *
-   * Percentages rather than `dvh`, deliberately: the cap resolves against the stage, and
-   * `App` gives the stage less than the viewport when the degraded-storage notice is above
-   * it. `100dvh` there would cap the band against a height the stage does not have.
-   */
-  it('caps the band at the space the character leaves, derived rather than typed', async () => {
-    await renderWithErrand()
-
-    const across = ((CHARACTER_BOTTOM / 300) * 100).toFixed(2)
-    const down = ((CHARACTER_BOTTOM / 260) * 100).toFixed(2)
-
-    expect(screen.getByTestId('room-band').className).toContain(
-      `max-h-[calc(100%-min(${across}vw,${down}%)-1rem)]`,
-    )
-  })
 })

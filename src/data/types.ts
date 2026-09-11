@@ -1,6 +1,7 @@
 import type { BlockRecord } from '../domain/blockLog'
 import type { CalibrationProfile } from '../domain/calibration'
 import { DEFAULT_PROFILE } from '../domain/calibration'
+import type { Ladder } from '../domain/ladder'
 import type { Schedule } from '../optimizer'
 
 /** §1.5's low-energy mode is a product decision as much as an accessibility one, so the
@@ -16,6 +17,18 @@ export interface StoredSettings {
    * loading.
    */
   readonly calibration?: CalibrationProfile
+  /**
+   * §4.1's chains, one per block that has been opened on the micro-start page.
+   *
+   * Here rather than behind new `Repository` methods for the same reason `calibration` is:
+   * both adapters already persist settings as one blob, so this needs no migration and no
+   * adapter change. Optional, because settings saved before the ladder existed have no such
+   * field and must keep loading.
+   *
+   * A ladder is dropped when its block is completed or removed, so a record cannot outlive
+   * the thing it describes.
+   */
+  readonly ladders?: readonly Ladder[]
 }
 
 export const DEFAULT_SETTINGS: StoredSettings = {

@@ -28,10 +28,12 @@ const state = (character: RoomState['character']): RoomState => ({
   ceilingPressure: 0.2,
   paperHeight: 0.2,
   clutter: [],
-  plantHealth: 0.8,
+  exerciseWaiting: 0, companyWaiting: 0,
+  windowDark: 0,
   sleepDebt: 0,
   weather: 'clear',
   lightLevel: 0.8,
+  reserve: 0.7,
   doorLit: false,
   character,
 })

@@ -1,10 +1,12 @@
 import type { EngineParams } from '../engine'
 import {
+  describeProposal,
   describeRebalance,
   makeRng,
   rebalance,
   smallestFixes,
   type Fix,
+  type Move,
   type Schedule,
 } from '../optimizer'
 
@@ -24,11 +26,33 @@ import {
  * the likely case for a real final-year student, so "your fortnight has nothing to move,
  * but here is the one thing that would help most" is not a consolation prize, it is the
  * more likely headline.
+ *
+ * Nothing here applies the result. `runRebalance` computes an offer; adopting it is a
+ * decision the student makes, on the preview this outcome feeds.
  */
 export interface RebalanceOutcome {
-  /** The week to adopt. Unchanged from the input when the solver found nothing. */
+  /** The week to adopt IF the student approves. Unchanged from the input when the solver
+   *  found nothing. Nothing writes this until they say so -- see `RoomShell`. */
   readonly schedule: Schedule
+  /**
+   * The week the search started from.
+   *
+   * Carried so discarding a proposal is exact rather than reconstructed -- the same reason
+   * `RebalanceResult` carries it for §2.1's one-tap undo.
+   */
+  readonly before: Schedule
+  /**
+   * Every individual move, in its own words.
+   *
+   * §2.1 is explicit that a reshuffle a student cannot see is one they will not act on, and
+   * a change they are being ASKED to approve has to be legible one move at a time rather
+   * than only as a count. `report` says how many; this says which.
+   */
+  readonly moves: readonly Move[]
+  /** Past tense, for after it has been applied. */
   readonly report: string
+  /** The same finding in the conditional, for the preview shown before it is. */
+  readonly proposal: string
   /** The single best remaining move, when the solver could not improve the fortnight but
    *  the fortnight still needs help. Null otherwise. */
   readonly fallback: Fix | null
@@ -42,7 +66,6 @@ export function runRebalance(
   // Seeded rather than random: §2.1's search takes its randomness as a parameter, and a
   // student who taps twice should not see two different weeks.
   const result = rebalance(schedule, params, makeRng(seed))
-  const report = describeRebalance(result, params)
 
   // `describeRebalance` already distinguishes a healthy week with nothing to move from an
   // overloaded one, so the fallback is only wanted in the second case -- and only when the
@@ -50,5 +73,12 @@ export function runRebalance(
   const fallback =
     result.moves.length === 0 ? (smallestFixes(schedule, params, 1)[0] ?? null) : null
 
-  return { schedule: result.schedule, report, fallback }
+  return {
+    schedule: result.schedule,
+    before: result.before,
+    moves: result.moves,
+    report: describeRebalance(result, params),
+    proposal: describeProposal(result, params),
+    fallback,
+  }
 }

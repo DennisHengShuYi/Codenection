@@ -25,6 +25,10 @@ const renderHome = async (schedule = week()) => {
   render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
   await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
 
+  // Ruling 61: the live cards wait behind the `Waiting` button now, so opening it is part
+  // of arriving at one -- the press a student makes.
+  await userEvent.click(screen.getByTestId('open-notices'))
+
   return repository
 }
 
@@ -98,6 +102,10 @@ describe('RoomShell scoring its own predictions', () => {
     })
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one is
+    // the press a student makes.
+    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-notices'))
     const card = await screen.findByRole('region', { name: /today's check-in/i })
 
     await userEvent.click(within(card).getByTestId('energy-70'))
@@ -126,6 +134,10 @@ describe('RoomShell scoring its own predictions', () => {
     })
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one is
+    // the press a student makes.
+    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-notices'))
 
     await waitFor(() => expect(screen.getByTestId('accuracy-measured')).toBeVisible())
     expect(screen.getByTestId('accuracy-measured').textContent).toMatch(/off by about 10/i)

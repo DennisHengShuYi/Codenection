@@ -15,6 +15,13 @@ import type { Fix, Schedule, ScheduledItem } from '../../optimizer'
 import { BUSY_ABOVE_HOURS } from '../../domain/scheduleView'
 import { WeekScreen } from './WeekScreen'
 
+// `PushToCalendar` asks the database on mount whether a grant exists, and a real network
+// round trip has no place in this suite. Answering "yes" is what makes the control render,
+// which is what the wiring test below is about; the control's own behaviour is covered in
+// `PushToCalendar.test.tsx`.
+vi.mock('../../google/connection', () => ({ hasCalendarConnected: () => Promise.resolve(true) }))
+vi.mock('../../google/client', () => ({ pushCalendar: vi.fn() }))
+
 const item = (
   id: string,
   dayIndex: number,
@@ -62,6 +69,7 @@ const days = (schedule: Schedule): DayInput[] =>
 const setup = (schedule = week(), over: Partial<Parameters<typeof WeekScreen>[0]> = {}) => {
   const onRebalance = vi.fn()
   const onSelectBlock = vi.fn()
+  const onAddBlock = vi.fn()
   const projection = project(schedule.start, days(schedule), DEFAULT_PARAMS)
 
   render(
@@ -72,11 +80,12 @@ const setup = (schedule = week(), over: Partial<Parameters<typeof WeekScreen>[0]
       report={null}
       onRebalance={onRebalance}
       onSelectBlock={onSelectBlock}
+      onAddBlock={onAddBlock}
       {...over}
     />,
   )
 
-  return { onRebalance, onSelectBlock }
+  return { onRebalance, onSelectBlock, onAddBlock }
 }
 
 describe('WeekScreen', () => {
@@ -357,5 +366,63 @@ describe('WeekScreen with no fixed commitments', () => {
     expect(screen.queryByTestId('week-reserves')).toBeNull()
     expect(screen.queryAllByRole('meter')).toHaveLength(0)
     expect(screen.queryByTestId('reserve-text-equivalent')).toBeNull()
+  })
+})
+
+/**
+ * The fourth way in, and the only direct one. The `+` sheet's three ways all read something
+ * and then work out where it goes; this starts from a day the student is already looking at,
+ * so the day is what it hands back.
+ */
+describe('putting something into a day by hand', () => {
+  it('offers nothing until a day is open', () => {
+    setup(week([item('essay', 3)]))
+
+    expect(screen.queryByTestId('add-block')).toBeNull()
+  })
+
+  it('offers to add to whichever day is open', async () => {
+    const { onAddBlock } = setup(week([item('essay', 3)]))
+
+    await userEvent.click(screen.getByTestId('day-3'))
+    await userEvent.click(screen.getByTestId('add-block'))
+
+    expect(onAddBlock).toHaveBeenCalledWith(3)
+  })
+
+  // The button follows the day it sits under, rather than the first one ever opened.
+  it('follows the open day when it changes', async () => {
+    const { onAddBlock } = setup(week([item('essay', 3), item('lab', 5)]))
+
+    await userEvent.click(screen.getByTestId('day-3'))
+    await userEvent.click(screen.getByTestId('day-5'))
+    await userEvent.click(screen.getByTestId('add-block'))
+
+    expect(onAddBlock).toHaveBeenCalledWith(5)
+  })
+})
+
+/**
+ * The way out to Google, on the screen that shows the week it would write.
+ *
+ * The wiring assertion rather than the control's own: `PushToCalendar` is tested in full in
+ * its own file, and what matters here is that it is reachable from the one screen where a
+ * student can see what they would be sending.
+ */
+describe('WeekScreen and the calendar', () => {
+  it('offers to send the week to a connected calendar', async () => {
+    render(
+      <WeekScreen
+        schedule={{ ...week([item('a', 0)]), startedOn: '2026-09-11' }}
+        today={0}
+        working={false}
+        report={null}
+        onRebalance={vi.fn()}
+        onSelectBlock={vi.fn()}
+        onAddBlock={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByTestId('push-calendar')).toBeVisible()
   })
 })

@@ -80,6 +80,12 @@ const PHYSICAL_LIGHT_WORDS = ['walk', 'yoga']
  *
  * If these lists ever take a value from outside this file, that reasoning is void.
  */
+// Triaged, not ignored. Semgrep reads the interpolation and warns about ReDoS from an
+// injected pattern, but `word` is never user input: all three call sites pass a literal from
+// a module-level constant (`SIGNALS`, `PHYSICAL_LIGHT_WORDS`, `REST_WORDS`). The student's
+// text is `lower`, the haystack, and `\bword\b` has no nested quantifier to backtrack on. If
+// a signal word ever comes from anywhere but a constant in this file, this stops being true.
+// nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
 const hasSignalWord = (lower: string, word: string): boolean => new RegExp(`\\b${word}\\b`).test(lower)
 
 /** Splits on the punctuation people actually use in a dump. */
@@ -121,11 +127,25 @@ function kindOf(type: LoadType, lower: string): ActivityKind {
   return 'studyBlock'
 }
 
-function deadlineOf(lower: string, today: number): number | null {
+/**
+ * §44: the day index a named weekday falls on.
+ *
+ * This read `(named - today % 7 + 7) % 7`, treating `today % 7` as today's weekday -- true
+ * only if day index 0 were a Sunday, and it is whatever weekday the student's week actually
+ * began on. "gym thursday" therefore landed on whatever day the arithmetic produced, and
+ * once the chip started showing the day (§43) the student could finally see it: a Thursday
+ * offered as Monday.
+ *
+ * `startWeekday` is that anchor -- the weekday of day index 0, 0 for Sunday -- passed in
+ * rather than read from a clock, because this parser is pure and the caller is the one
+ * holding the dated week.
+ */
+function deadlineOf(lower: string, today: number, startWeekday: number): number | null {
   const named = WEEKDAYS.findIndex((day) => lower.includes(day))
   if (named === -1) return null
 
-  const ahead = (named - (today % 7) + 7) % 7
+  const weekdayOfToday = (startWeekday + today) % 7
+  const ahead = (named - weekdayOfToday + 7) % 7
 
   // A named day that is today means next week's one, not this morning's.
   return Math.min(today + (ahead === 0 ? 7 : ahead), HORIZON_DAYS - 1)
@@ -144,9 +164,48 @@ function hoursOf(lower: string): number {
   return DEFAULT_EFFORT_HOURS
 }
 
+
+/**
+ * §43: the hour a fragment states, or null when it states none.
+ *
+ * Two shapes, and nothing else counts. `9am` / `7.30pm` is a clock time with a meridiem;
+ * `14:00` is a 24-hour clock. A bare number is deliberately NOT read: "3 hours" is an
+ * effort estimate and "chapter 3" is a chapter, and turning either into a time of day
+ * would pin a block to an hour the student never mentioned -- the exact failure `fixed`
+ * exists to avoid.
+ *
+ * Minutes are dropped rather than rounded. The week is modelled in whole hours, and 09:30
+ * belongs in the 9 o'clock block; rounding 09:30 up to 10 would move a lecture out of the
+ * hour it starts in.
+ */
+const timeOf = (lower: string): number | null => {
+  const meridiem = lower.match(/\b(\d{1,2})(?:[.:](\d{2}))?\s*(am|pm)\b/)
+  if (meridiem?.[1] !== undefined) {
+    const stated = Number(meridiem[1])
+    if (stated < 1 || stated > 12) return null
+
+    // 12am is midnight and 12pm is noon: the only two the arithmetic does not cover.
+    const hour = stated === 12 ? 0 : stated
+    return meridiem[3] === 'pm' ? hour + 12 : hour
+  }
+
+  const clock = lower.match(/\b(\d{1,2}):(\d{2})\b/)
+  if (clock?.[1] !== undefined) {
+    const hour = Number(clock[1])
+    return hour >= 0 && hour <= 23 ? hour : null
+  }
+
+  return null
+}
+
 let counter = 0
 
-export function parseWithRules(text: string, today = 0): ParsedItem[] {
+/**
+ * `startWeekday` defaults to Sunday only so a caller with no dated week still gets a usable
+ * answer -- which is what the seeded fortnight is. Every caller that HAS a week passes its
+ * real anchor, and `parseBrainDump` threads it through.
+ */
+export function parseWithRules(text: string, today = 0, startWeekday = 0): ParsedItem[] {
   return splitFragments(text)
     .slice(0, MAX_ITEMS)
     .map((fragment) => {
@@ -157,7 +216,8 @@ export function parseWithRules(text: string, today = 0): ParsedItem[] {
       // about kind.
       const { type, confident } = isRest ? { type: 'mental' as const, confident: true } : typeOf(lower)
       const kind: ActivityKind = isRest ? 'rest' : kindOf(type, lower)
-      const deadlineDay = deadlineOf(lower, today)
+      const deadlineDay = deadlineOf(lower, today, startWeekday)
+      const startHour = timeOf(lower)
 
       counter += 1
 
@@ -168,6 +228,7 @@ export function parseWithRules(text: string, today = 0): ParsedItem[] {
         kind,
         hours: hoursOf(lower),
         deadlineDay,
+        startHour,
         // Never pre-pinned. The rules here can spot a stated *day*, which is a deadline
         // and is carried by `deadlineDay` already -- they cannot tell that from a stated
         // *time*, which is what `fixed` means. Guessing would pin blocks the optimizer may

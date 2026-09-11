@@ -7,6 +7,9 @@ import type { AddWay } from './room/view'
 import { Button } from './kit/Button'
 import { Sheet } from './kit/Sheet'
 import { suggestRepeat } from '../domain/recurrence'
+import { beginConnect, readCalendar } from '../google/client'
+import { CalendarImportScreen } from './planner/CalendarImportScreen'
+import { calendarFor, dayLabelsFor } from './planner/dayLabels'
 import { PhotoImportScreen } from './planner/PhotoImportScreen'
 import { PlannerScreen } from './planner/PlannerScreen'
 import { RequestBoxScreen } from './request/RequestBoxScreen'
@@ -26,7 +29,7 @@ import { RequestBoxScreen } from './request/RequestBoxScreen'
  * the `Sheet` for the choice itself.
  */
 /**
- * The three ways in, each saying what it actually does.
+ * The ways in, each saying what it actually does.
  *
  * Ruling 58: these were centred labels and nothing else, so "Someone asked me for
  * something" had to carry the whole idea -- that the request is PRICED against the week
@@ -56,6 +59,15 @@ const WAYS_IN: readonly {
     label: 'Someone asked me for something',
     help: 'Priced against your week before you answer.',
   },
+  {
+    way: 'calendar',
+    testid: 'add-calendar',
+    label: 'From my Google Calendar',
+    // Says what it will and will not do, because "sync" is the word people fear here. The
+    // read half is one-way and nothing is added without the same confirm screen the other
+    // ways use.
+    help: 'Read this fortnight in. Nothing is added until you say so.',
+  },
 ]
 
 export function AddSheet({
@@ -69,6 +81,7 @@ export function AddSheet({
   onClose,
   way,
   onWay,
+  calendarConnected = false,
   onBack,
 }: {
   readonly schedule: Schedule
@@ -90,6 +103,14 @@ export function AddSheet({
    *  written into the address, so `/add/photo` could not exist. */
   readonly way: AddWay | null
   readonly onWay: (way: AddWay | null) => void
+  /**
+   * Whether this student has already granted calendar access (§1.4's supplement).
+   *
+   * Defaulted to false so every caller written before the calendar way existed keeps
+   * compiling and behaving as it did -- and so a build with no Google configuration offers
+   * the connect step rather than pretending a connection already exists.
+   */
+  readonly calendarConnected?: boolean
   /** Ruling 60: one level up, from a sub-flow to the chooser. The chooser itself is given
    *  none -- it opens straight from the room, where Back and close would mean the same
    *  thing and two controls doing one job is how `Cancel` became ambiguous. */
@@ -97,9 +118,22 @@ export function AddSheet({
 }) {
   const close = () => onClose()
 
+  /**
+   * §43: computed once here rather than in each of the three screens.
+   *
+   * This is the only component in the add flow holding both the week and today, which is
+   * what the labels need -- the screens below it take the finished list and hand it to the
+   * chip.
+   */
+  const dayLabels = dayLabelsFor(schedule, today)
+  /** §44: and the same week, said in the terms the two readers need. */
+  const calendar = calendarFor(schedule, today)
+
   if (way === 'photo') {
     return (
       <PhotoImportScreen
+        dayLabels={dayLabels}
+        calendar={calendar}
         suggestRepeat={(item) => suggestRepeat(item, schedule)}
         onAccept={(items) => {
           onAcceptItems(items)
@@ -114,6 +148,26 @@ export function AddSheet({
   if (way === 'type') {
     return (
       <PlannerScreen
+        dayLabels={dayLabels}
+        calendar={calendar}
+        suggestRepeat={(item) => suggestRepeat(item, schedule)}
+        onAccept={(items) => {
+          onAcceptItems(items)
+          close()
+        }}
+        onBack={onBack}
+        onClose={close}
+      />
+    )
+  }
+
+  if (way === 'calendar') {
+    return (
+      <CalendarImportScreen
+        dayLabels={dayLabels}
+        connected={calendarConnected}
+        onConnect={() => void beginConnect()}
+        onRead={() => readCalendar(schedule)}
         suggestRepeat={(item) => suggestRepeat(item, schedule)}
         onAccept={(items) => {
           onAcceptItems(items)
@@ -128,6 +182,8 @@ export function AddSheet({
   if (way === 'request') {
     return (
       <RequestBoxScreen
+        dayLabels={dayLabels}
+        calendar={calendar}
         schedule={schedule}
         params={params}
         today={today}

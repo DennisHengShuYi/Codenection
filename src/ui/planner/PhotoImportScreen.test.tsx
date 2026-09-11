@@ -30,7 +30,14 @@ beforeEach(() => respondWith(503, {}))
 afterEach(() => vi.unstubAllGlobals())
 
 const setup = () => {
-  const props = { onAccept: vi.fn(), onBack: vi.fn(), onClose: vi.fn() }
+  const props = {
+    onAccept: vi.fn(),
+    onBack: vi.fn(),
+    onClose: vi.fn(),
+    dayLabels: ['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep'],
+    // §44: which real day day 0 is, for the reader rather than for the screen.
+    calendar: { today: 0, startWeekday: 5, todayLabel: '11 September 2026' },
+  }
   render(<PhotoImportScreen {...props} />)
   return props
 }
@@ -200,5 +207,29 @@ describe('PhotoImportScreen', () => {
     expect(props.onClose).toHaveBeenCalledOnce()
     expect(props.onBack).not.toHaveBeenCalled()
     expect(props.onAccept).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * §44's last reader. The planner and the request box were told what today is; this screen
+ * was not, so a timetable saying "Tuesday" still had its day guessed at -- in the one path
+ * where nearly every item is a weekday.
+ */
+describe('the calendar handed to the photo reader', () => {
+  it('sends the week it is importing into, with the photo', async () => {
+    let body = ''
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init: RequestInit) => {
+        body = String(init.body)
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(good) })
+      }),
+    )
+
+    const props = setup()
+    await choose()
+
+    await waitFor(() => expect(body).not.toBe(''))
+    expect(JSON.parse(body).calendar).toEqual(props.calendar)
   })
 })

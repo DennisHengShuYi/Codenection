@@ -3,7 +3,7 @@ import type { ParsedItem } from '../ai'
 import type { BlockRecord } from './blockLog'
 import { DEFAULT_PARAMS, HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
-import { accept, lapsed, REVIEW_DAYS } from './commitments'
+import { accept, dropCommitmentFor, lapsed, REVIEW_DAYS } from './commitments'
 
 const week = (over: Partial<Schedule> = {}): Schedule => ({
   items: [],
@@ -20,6 +20,7 @@ const item = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   kind: 'studyBlock',
   hours: 3,
   deadlineDay: 4,
+  startHour: null,
   fixed: false,
   confident: true,
   repeat: null,
@@ -158,5 +159,45 @@ describe('lapsed', () => {
     // Silent the whole time (the default, unanswered log): the same fortnight now reads as
     // unaffordable, and the commitment due for review lapses.
     expect(lapsed(accepted, today, DEFAULT_PARAMS)).toHaveLength(1)
+  })
+})
+
+/**
+ * A commitment points at the item `accept` created for it, and §2.3's whole mechanism reads
+ * that item through the projection. One left pointing at a block that has been removed by
+ * hand would go on being weighed, and go on being offered for withdrawal, for something no
+ * longer in the week.
+ */
+describe('a commitment whose block is gone', () => {
+  it('goes with it', () => {
+    const accepted = accept(week(), item(), 0)
+    const itemId = accepted.items[accepted.items.length - 1]!.id
+
+    expect(dropCommitmentFor(accepted, itemId).commitments).toEqual([])
+  })
+
+  it('leaves every other commitment alone', () => {
+    const one = accept(week(), item({ id: 'r1', title: 'One' }), 0)
+    const two = accept(one, item({ id: 'r2', title: 'Two' }), 0)
+    const goneId = two.items[two.items.length - 1]!.id
+
+    const after = dropCommitmentFor(two, goneId)
+
+    expect(after.commitments).toHaveLength(1)
+    expect(after.commitments?.[0]?.title).toBe('One')
+  })
+
+  // Identity, not just equality: a caller can then tell a real change from a no-op without
+  // comparing contents.
+  it('hands back the very same week when there was nothing to drop', () => {
+    const before = accept(week(), item(), 0)
+
+    expect(dropCommitmentFor(before, 'never-existed')).toBe(before)
+  })
+
+  it('is untroubled by a week that has never had a commitment', () => {
+    const before = week()
+
+    expect(dropCommitmentFor(before, 'anything')).toBe(before)
   })
 })

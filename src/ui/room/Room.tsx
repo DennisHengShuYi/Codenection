@@ -3,7 +3,7 @@ import type { RoomModel } from './roomModel'
 import { describeRoomFully } from './roomText'
 import { Door, Light, Window } from './scene/Fixtures'
 import { Bed, Desk, Mirror, Phone } from './scene/Furniture'
-import { Clutter, Papers, Plant } from './scene/Loose'
+import { Clutter, Company, Dumbbell, Papers } from './scene/Loose'
 import { FLOOR_Y, PALETTE } from './scene/palette'
 import { Ceiling, Floor, Wall } from './scene/Walls'
 
@@ -53,7 +53,9 @@ export function Room({
   onOpenReserves?: () => void
 }) {
   const { state } = model
-  const percent = Math.round(state.lightLevel * 100)
+  // §45: the reserve, not the light. The light means the day's spill now, and deriving the
+  // gauge from it read 100% on a nine-hour day at 43% reserve.
+  const percent = Math.round(state.reserve * 100)
   const fills = frame === 'fill'
 
   return (
@@ -121,14 +123,15 @@ export function Room({
         {/* Back to front, so nearer things overlap what is behind them -- the depth the flat
             elevation gets instead of perspective. */}
         <Mirror />
-        <Window weather={state.weather} />
+        <Window weather={state.weather} dark={state.windowDark} />
         <Door lit={state.doorLit} />
         <Desk />
         <Bed sleepDebt={state.sleepDebt} />
         <Phone />
         <Papers height={state.paperHeight} />
         <Character state={state.character} />
-        <Plant health={state.plantHealth} />
+        <Dumbbell waiting={state.exerciseWaiting} />
+        <Company waiting={state.companyWaiting} />
         <Clutter boxes={state.clutter} />
 
         {/* Overhead last: the ceiling presses over everything, and the lamp's glow has to

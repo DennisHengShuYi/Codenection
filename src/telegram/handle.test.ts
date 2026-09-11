@@ -23,6 +23,7 @@ const parsed = (title: string): ParsedItem => ({
   kind: 'studyBlock',
   hours: 2,
   deadlineDay: null,
+  startHour: null,
   fixed: false,
   confident: true,
   repeat: null,
@@ -442,22 +443,71 @@ describe('the command surface', () => {
       expect(reply?.text).toMatch(/cannot|right now/i)
       expect(h.saved).toEqual([])
     })
+
+    /**
+     * Predictions are not the block log, and the two failures are judged differently on
+     * purpose. An unreadable log means "we do not know" and the bot says so; unreadable
+     * predictions only mean the calibration falls back to population defaults, which §7.7
+     * says the app must work on anyway. So these still answer.
+     *
+     * A pre-existing gap: every `loadPredictions` fallback in this file was unreached, and
+     * a fallback nobody has run is a guess about what happens, not a fact.
+     */
+    it.each(['week', 'schedule', 'rebalance', 'lapsed'])(
+      'still answers /%s when predictions cannot be read',
+      async (name) => {
+        const h = harness({
+          loadPredictions: async () => {
+            throw new Error('offline')
+          },
+        })
+
+        const reply = await handleIntent(command(name), h.store, 1000)
+
+        expect(reply?.text).toBeTruthy()
+        expect(reply?.text).not.toMatch(/cannot|right now/i)
+      },
+    )
   })
 
-  it('answers /rest with one thing to do when something is low', async () => {
-    const h = harness({ loadWeek: async () => week([], depleted) as never })
+  /**
+   * The trigger is neglect now, not a low reserve -- see `prescribe`. So these fixtures are
+   * anchored to a real date and asked on a day far enough in that a rhythm with nothing
+   * scheduled for it has genuinely gone overdue.
+   */
+  const NEGLECTED = { ...week(), startedOn: '2026-09-02' }
+  const NINE_DAYS_IN = Date.parse('2026-09-11T12:00:00Z')
 
-    const reply = await handleIntent(command('rest'), h.store, 1000)
+  it('answers /rest with one thing to do when something has gone neglected', async () => {
+    const h = harness({ loadWeek: async () => NEGLECTED as never })
+
+    const reply = await handleIntent(command('rest'), h.store, NINE_DAYS_IN)
 
     expect(reply?.buttons?.flat().filter((b) => b.data.startsWith('rest:accept'))).toHaveLength(1)
   })
 
   // Nothing to prescribe is the honest answer for a week that is going fine, and offering
   // rest anyway would make the advice worth ignoring when it does matter.
-  it('offers nothing when no reserve is low enough to need it', async () => {
+  it('offers nothing on the first day of a fortnight, when nothing can be overdue yet', async () => {
     const h = harness({ loadWeek: async () => week() as never })
 
     expect((await handleIntent(command('rest'), h.store, 1000))?.buttons).toBeUndefined()
+  })
+
+  it('says so rather than guessing when the block log cannot be read', async () => {
+    // Ruling 41: the evidence is required, so a caller that cannot get it must not fall
+    // back on pretending there is none. That is the fault priceRequest records.
+    const h = harness({
+      loadWeek: async () => NEGLECTED as never,
+      loadBlockLog: async () => {
+        throw new Error('offline')
+      },
+    })
+
+    const reply = await handleIntent(command('rest'), h.store, NINE_DAYS_IN)
+
+    expect(reply?.text).toMatch(/cannot|right now/i)
+    expect(reply?.buttons).toBeUndefined()
   })
 
   it('asks which task when /stuck names none', async () => {
@@ -640,17 +690,25 @@ describe('answering a rest suggestion', () => {
   const restAnswer = (accepted: boolean, startHour: number | null = 15) =>
     ({ kind: 'restAnswer', chatId: 7, startHour, accepted }) as never
 
-  const lowWeek = () => ({
+  /**
+   * A fortnight where something has genuinely gone neglected, which is what prescribe
+   * answers to now. Anchored so `todayFor` lands nine days in rather than on day zero,
+   * where nothing can be overdue yet.
+   */
+  const neglectedWeek = () => ({
     items: [],
     start: { mental: 20, physical: 70, social: 70, errands: 70 },
     horizonDays: HORIZON_DAYS,
     sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+    startedOn: '2026-09-02',
   })
 
-  it('adds protected rest to the week when accepted', async () => {
-    const h = harness({ loadWeek: async () => lowWeek() as never })
+  const NINE_DAYS_IN = Date.parse('2026-09-11T12:00:00Z')
 
-    await handleIntent(restAnswer(true), h.store, 1000)
+  it('adds protected rest to the week when accepted', async () => {
+    const h = harness({ loadWeek: async () => neglectedWeek() as never })
+
+    await handleIntent(restAnswer(true), h.store, NINE_DAYS_IN)
 
     expect(h.saved).toHaveLength(1)
     const added = h.saved[0]?.items.at(-1)
@@ -660,9 +718,9 @@ describe('answering a rest suggestion', () => {
   // §5.1: the optimizer cannot move protected rest, and cannot schedule over it either.
   // Rest it can move to fit work in is not protected at all.
   it('adds it as fixed, so the optimizer cannot move it', async () => {
-    const h = harness({ loadWeek: async () => lowWeek() as never })
+    const h = harness({ loadWeek: async () => neglectedWeek() as never })
 
-    await handleIntent(restAnswer(true), h.store, 1000)
+    await handleIntent(restAnswer(true), h.store, NINE_DAYS_IN)
 
     expect(h.saved[0]?.items.at(-1)?.fixed).toBe(true)
   })

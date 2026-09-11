@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS } from '../engine'
-import { isValid, violations } from './constraints'
+import { isValid, overlaps, violations } from './constraints'
 import { makeSchedule, restItem, studyItem } from './testSupport'
 
 describe('constraints', () => {
@@ -74,5 +74,30 @@ describe('constraints', () => {
     ])
 
     expect(violations(schedule, DEFAULT_PARAMS).length).toBeGreaterThanOrEqual(2)
+  })
+})
+
+/**
+ * Exported so the manual edit form can ask the same question about a block that is not in
+ * the schedule yet. Two definitions of overlap -- one here, one in the form -- would
+ * eventually disagree about a boundary, and the one the student saw would be the wrong one.
+ */
+describe('overlapping, as one definition', () => {
+  const at = (dayIndex: number, startHour: number, hours: number) => ({
+    ...studyItem('x', dayIndex, hours),
+    startHour,
+  })
+
+  it('is true when two blocks share a day and any of the same hours', () => {
+    expect(overlaps(at(1, 9, 2), at(1, 10, 1))).toBe(true)
+  })
+
+  // A block ending at 11:00 and one starting at 11:00 are back to back, not in conflict.
+  it('is false when they share a day but only touch end to end', () => {
+    expect(overlaps(at(1, 9, 2), at(1, 11, 1))).toBe(false)
+  })
+
+  it('is false across different days whatever the hours', () => {
+    expect(overlaps(at(1, 9, 4), at(2, 9, 4))).toBe(false)
   })
 })

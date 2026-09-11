@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS } from '../engine'
 import { rebalance } from './hillClimb'
-import { describeRebalance, undo } from './report'
+import { describeProposal, describeRebalance, undo } from './report'
 import { makeRng } from './rng'
-import type { RebalanceResult } from './types'
+import type { MoveKind, RebalanceResult } from './types'
 import { makeSchedule, socialBaseline, studyItem } from './testSupport'
 
 const pileUp = () =>
@@ -85,6 +85,39 @@ describe('describeRebalance', () => {
     expect(text).toMatch(/beyond what rearranging can fix/i)
   })
 
+  /**
+   * The sentence the app says when the rearrangement WORKED -- the worst day's reserve
+   * comes out higher than it went in.
+   *
+   * Constructed rather than solved for, like the no-moves case above: whether a given seed
+   * and fixture happen to lift the floor is the solver's business, and this is a test of
+   * the reporting. It was the one describeGain branch nothing reached, which meant the
+   * app's good-news sentence -- the most likely one a student ever sees -- was unchecked.
+   */
+  it('names the lift in the worst day when the rearrangement worked', () => {
+    const schedule = pileUp()
+    const better: RebalanceResult = {
+      schedule,
+      before: schedule,
+      moves: [
+        {
+          kind: 'shiftDay' as MoveKind,
+          itemId: 'essay',
+          description: 'moved the essay to Thursday',
+          apply: (week: typeof schedule) => week,
+        },
+      ],
+      evaluations: 12,
+      worstBefore: 33,
+      worstAfter: 41,
+    }
+
+    const text = describeRebalance(better, DEFAULT_PARAMS)
+
+    expect(text).toMatch(/worst day goes from 33 to 41/i)
+    expect(text).not.toMatch(/optimis|optimiz/i)
+  })
+
   it('counts each kind of change it made', () => {
     const result = rebalance(pileUp(), DEFAULT_PARAMS, makeRng(1))
     const text = describeRebalance(result, DEFAULT_PARAMS)
@@ -139,5 +172,71 @@ describe('describeRebalance, naming what changed', () => {
 
     expect(text).toMatch(/batched/i)
     expect(text).toMatch(/reordered/i)
+  })
+})
+
+/**
+ * A result built by hand rather than solved for.
+ *
+ * The sentence is what is under test, not the search that produced it, so the moves are
+ * stated directly -- one per kind, in known counts. Solving for a schedule that happens to
+ * yield all five kinds would make this a test of the hill climb by proxy, and it would
+ * break the day the neighbourhood changed.
+ */
+const withMoves = (kinds: readonly MoveKind[]): RebalanceResult => {
+  const schedule = pileUp()
+
+  return {
+    schedule,
+    before: schedule,
+    moves: kinds.map((kind, index) => ({
+      kind,
+      itemId: `item-${index}`,
+      description: `${kind} on item-${index}`,
+      apply: (week: typeof schedule) => week,
+    })),
+    evaluations: 1,
+    worstBefore: 41,
+    worstAfter: 55,
+  }
+}
+
+describe('describeProposal', () => {
+  // §2.1's "never optimised" cuts both ways: a preview that borrowed the past-tense
+  // sentence would be claiming a change the student has not agreed to yet.
+  it('says what it would do, in verbs nothing has happened in yet', () => {
+    const sentence = describeProposal(
+      withMoves([
+        'shiftDay',
+        'shiftDay',
+        'batchErrands',
+        'insertRest',
+        'insertSocial',
+        'reorderWithinDay',
+      ]),
+      DEFAULT_PARAMS,
+    )
+
+    expect(sentence).toContain(
+      "I'd move 2 things, batch 1 errand, add 1 rest block, make time to see someone on 1 day and reorder 1 block within its day.",
+    )
+    expect(sentence).not.toMatch(/I moved/)
+  })
+
+  // Nothing done and nothing proposed is one state, and the sentence for it is about the
+  // week rather than about the solver -- so there is no tense for it to be in.
+  it('falls back to the same nothing-to-move sentence the past tense uses', () => {
+    const result = withMoves([])
+
+    expect(describeProposal(result, DEFAULT_PARAMS)).toBe(describeRebalance(result, DEFAULT_PARAMS))
+  })
+})
+
+describe('describeRebalance, after the two tenses started sharing a clause', () => {
+  // The guard on the refactor: the sentence that already ships must come out identical.
+  it('still reads in the past tense', () => {
+    expect(describeRebalance(withMoves(['shiftDay', 'batchErrands']), DEFAULT_PARAMS)).toContain(
+      'I moved 1 thing and batched 1 errand.',
+    )
   })
 })

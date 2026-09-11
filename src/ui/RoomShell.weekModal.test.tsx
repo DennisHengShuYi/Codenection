@@ -181,3 +181,146 @@ describe('the room behind an open sheet', () => {
     expect(screen.getByTestId('room-stage').contains(sheet)).toBe(false)
   })
 })
+
+/**
+ * Rebalance used to solve the week, write it, and then say what it had done. A student who
+ * disagreed with one of the moves had no moment at which to say so.
+ *
+ * These run against the whole shell rather than the preview component, because the point
+ * being tested is exactly that the solve does NOT reach the schedule until approved -- and
+ * no component-level test can see that.
+ */
+describe('rebalance, which now asks first', () => {
+  it('opens the proposal instead of changing the week', async () => {
+    await renderShell()
+    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(screen.getByTestId('rebalance'))
+
+    expect(await screen.findByRole('dialog', { name: /what i'd change/i })).toBeVisible()
+    expect(window.location.pathname).toBe('/week/rebalance')
+  })
+
+  it('says nothing about what it did while it is still only an offer', async () => {
+    await renderShell()
+    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(screen.getByTestId('rebalance'))
+    await screen.findByTestId('approve-rebalance')
+
+    expect(screen.queryByTestId('rebalance-report')).toBeNull()
+  })
+
+  it('leaves the week alone when the proposal is discarded', async () => {
+    await renderShell()
+    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(screen.getByTestId('rebalance'))
+    await userEvent.click(await screen.findByTestId('discard-rebalance'))
+
+    expect(await screen.findByRole('dialog', { name: /the week/i })).toBeVisible()
+    // The report is the app's own record that a rebalance happened. Its absence is the
+    // observable difference between a discarded proposal and an approved one.
+    expect(screen.queryByTestId('rebalance-report')).toBeNull()
+    expect(window.location.pathname).toBe('/week')
+  })
+
+  it('reports what it did, once approved', async () => {
+    await renderShell()
+    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(screen.getByTestId('rebalance'))
+    await userEvent.click(await screen.findByTestId('approve-rebalance'))
+
+    expect(await screen.findByTestId('rebalance-report')).toHaveTextContent(/^I /)
+    expect(window.location.pathname).toBe('/week')
+  })
+
+  /**
+   * A proposal is about a moment, not a place. A reload, a pasted link, or a Back into a
+   * discarded one all arrive here with nothing to approve -- and the same rule `fromPath`
+   * applies to an address it does not recognise applies: land somewhere real and correct
+   * the bar, rather than assert a state the app is not in.
+   */
+  it('lands on the week when a proposal address is opened cold', async () => {
+    window.history.replaceState(null, '', '/week/rebalance')
+    await renderShell()
+
+    expect(await screen.findByRole('dialog', { name: /the week/i })).toBeVisible()
+    expect(window.location.pathname).toBe('/week')
+  })
+})
+
+/**
+ * The picker `blockActions` recorded as missing, reached from both its doors.
+ *
+ * Run against the whole shell rather than the form alone: what is being tested is that the
+ * change reaches the schedule and comes back out on the grid, which is the half a
+ * component-level test cannot see.
+ */
+describe('editing the week by hand', () => {
+  const openTheOnlyBlock = async () => {
+    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(await screen.findByTestId('day-2'))
+    await userEvent.click(await screen.findByTestId('block-laundry'))
+  }
+
+  it('opens the edit form at its own address', async () => {
+    await renderShell()
+    await openTheOnlyBlock()
+    await userEvent.click(screen.getByTestId('edit-block'))
+
+    expect(await screen.findByRole('dialog', { name: /edit this block/i })).toBeVisible()
+    expect(window.location.pathname).toBe('/week/block/laundry/edit')
+  })
+
+  it('writes the change back into the week', async () => {
+    await renderShell()
+    await openTheOnlyBlock()
+    await userEvent.click(screen.getByTestId('edit-block'))
+
+    const name = await screen.findByLabelText('What')
+    await userEvent.clear(name)
+    await userEvent.type(name, 'Renamed by hand')
+    await userEvent.click(screen.getByTestId('save-block'))
+
+    expect(await screen.findByRole('dialog', { name: /the week/i })).toBeVisible()
+    await userEvent.click(await screen.findByTestId('day-2'))
+    expect(await screen.findByTestId('block-laundry')).toHaveTextContent('Renamed by hand')
+  })
+
+  it('takes a removed block out of the week', async () => {
+    await renderShell()
+    await openTheOnlyBlock()
+
+    await userEvent.click(screen.getByTestId('remove-block'))
+    await userEvent.click(screen.getByTestId('confirm-remove-yes'))
+
+    expect(await screen.findByRole('dialog', { name: /the week/i })).toBeVisible()
+    await userEvent.click(await screen.findByTestId('day-2'))
+    expect(screen.queryByTestId('block-laundry')).toBeNull()
+  })
+
+  it('adds a block where the student put it', async () => {
+    await renderShell()
+    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(await screen.findByTestId('day-4'))
+    await userEvent.click(await screen.findByTestId('add-block'))
+
+    expect(await screen.findByRole('dialog', { name: /add a block/i })).toBeVisible()
+    expect(window.location.pathname).toBe('/week/new/4')
+
+    await userEvent.type(screen.getByLabelText('What'), 'Coffee with Sam')
+    await userEvent.click(screen.getByTestId('save-block'))
+
+    expect(await screen.findByRole('dialog', { name: /the week/i })).toBeVisible()
+    await userEvent.click(await screen.findByTestId('day-4'))
+    expect(await screen.findByText('Coffee with Sam')).toBeVisible()
+  })
+
+  // The same stale-id case `blockSheet` already handles by closing: land somewhere real
+  // rather than render a form over a block that is not there.
+  it('lands on the week when an edit address names a block that is gone', async () => {
+    window.history.replaceState(null, '', '/week/block/no-such-block/edit')
+    await renderShell()
+
+    expect(await screen.findByRole('dialog', { name: /the week/i })).toBeVisible()
+    expect(window.location.pathname).toBe('/week')
+  })
+})

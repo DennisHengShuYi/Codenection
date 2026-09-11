@@ -170,6 +170,24 @@ export async function getSession(): Promise<Session | null> {
 /** Sign-ins and sign-outs that happen in another tab. Without this, signing out in one
  *  place leaves another tab holding a stale session and writing to a store it no longer
  *  has access to. */
+/**
+ * The signed-in student's own short-lived Supabase token, for calling this app's endpoints.
+ *
+ * Not a Google token and never one: the Google credential lives server-side and the browser
+ * is deliberately never given it. This is the ordinary session token every authenticated
+ * request already carries, exposed here so `src/google/client.ts` can put it in an
+ * `Authorization` header rather than reaching into Supabase's storage itself.
+ *
+ * Null when nobody is signed in, which is an ordinary state -- the calendar way in is hidden
+ * for a student without an account, because there would be nowhere to store a grant.
+ */
+export async function getAccessToken(): Promise<string | null> {
+  const client = await getClient()
+  const { data } = await client.auth.getSession()
+
+  return data.session?.access_token ?? null
+}
+
 export function onSessionChange(listener: (session: Session | null) => void): () => void {
   let unsubscribe: (() => void) | null = null
   let cancelled = false

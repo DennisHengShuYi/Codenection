@@ -14,10 +14,10 @@ export type {
   ScheduledItem,
 } from './types'
 export { DAY_END_HOUR, gapsOn, hourNear, MIN_GAP_HOURS, WAKE_HOUR, type FreeSlot } from './gaps'
-export { isValid, violations } from './constraints'
+export { isValid, isWork, overlaps, violations } from './constraints'
 export { ALL_PRESENT, DEFICIT_DAY_WEIGHT, FRAGMENTATION_WEIGHT, score, toDayInputs } from './objective'
 export { neighbours } from './neighbours'
 export { makeRng, type Rng } from './rng'
 export { rebalance } from './hillClimb'
 export { smallestFixes, type Fix } from './smallestFix'
-export { describeRebalance, undo } from './report'
+export { describeProposal, describeRebalance, undo } from './report'

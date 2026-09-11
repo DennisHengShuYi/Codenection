@@ -212,6 +212,26 @@ describe('ItemChip', () => {
  * and then discovered it in the week.
  */
 describe('the chip saying when', () => {
+  /**
+   * Renamed deliberately, because the old label was not true.
+   *
+   * This control writes `deadlineDay`, and `placement.ts` then searches *backwards* from it
+   * for a free slot -- so a chip reading "Day: Fri" could perfectly well land on Wednesday.
+   * "Day" reads as when am I doing this and answers when is this due, and the student had no
+   * way to tell the two apart. The behaviour is right and was left alone; the word was wrong.
+   */
+  it('calls the day it writes a due date, not the day it lands on', () => {
+    setup({ deadlineDay: 2 })
+
+    expect(screen.getByText(/due by/i)).toBeVisible()
+  })
+
+  it('asks for a due date when the text stated none, in those words', () => {
+    setup({ deadlineDay: null })
+
+    expect(screen.getByTestId('when-missing-a')).toHaveTextContent(/due/i)
+  })
+
   it('shows the day it will land on, in words a student recognises', () => {
     setup({ deadlineDay: 2 })
 

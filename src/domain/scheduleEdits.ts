@@ -32,6 +32,15 @@ export interface ItemFields {
   readonly dayIndex: number
   readonly startHour: number
   readonly fixed: boolean
+  /**
+   * When it is due, as against when it is scheduled.
+   *
+   * Null means no real deadline, and the kind's synthetic one applies instead -- which is
+   * what every hand-made block used to get, because this form had no way to say otherwise.
+   * A real deadline always wins over a synthetic one (`effectiveDeadline`), so setting it
+   * here is how a student overrules the app's guess about their own work.
+   */
+  readonly deadlineDay: number | null
 }
 
 const withoutItem = (schedule: Schedule, id: string): Schedule => ({

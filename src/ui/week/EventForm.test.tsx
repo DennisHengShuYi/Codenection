@@ -227,3 +227,59 @@ describe('correcting what a block is and when it happens', () => {
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ fixed: false }))
   })
 })
+
+/**
+ * The deadline, which this form could not set until now.
+ *
+ * Every other way into the week could state one -- the planner reads it out of what a
+ * student typed, the photo reader off a timetable, the calendar import off the event's own
+ * date. The one surface a student fills in by hand could not, so a block added here fell to
+ * the synthetic deadline its kind gets and there was no way to correct a wrong one.
+ */
+describe('setting when something is due', () => {
+  it('offers a due date, and defaults to none', () => {
+    setup()
+
+    expect(screen.getByTestId('deadline-day')).toHaveValue('')
+  })
+
+  it('saves the due date the student picked', async () => {
+    const props = setup()
+
+    await userEvent.type(screen.getByLabelText('What'), 'Essay')
+    await userEvent.selectOptions(screen.getByTestId('deadline-day'), '6')
+    await userEvent.click(screen.getByTestId('save-block'))
+
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ deadlineDay: 6 }))
+  })
+
+  /** Undated is the ordinary case, and has to stay sayable: most things a student types in
+   *  are not due on any particular day, and the kind's own interval covers those. */
+  it('lets a due date be taken back off', async () => {
+    const props = setup({ item: item('essay', { deadlineDay: 6 }) })
+
+    await userEvent.selectOptions(screen.getByTestId('deadline-day'), '')
+    await userEvent.click(screen.getByTestId('save-block'))
+
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ deadlineDay: null }))
+  })
+
+  it('opens on the due date a block already has', () => {
+    setup({ item: item('essay', { deadlineDay: 6 }) })
+
+    expect(screen.getByTestId('deadline-day')).toHaveValue('6')
+  })
+
+  /** Not a warning like a clash: a block after its own deadline cannot be reconciled by any
+   *  later rearrangement, so the save is held until one of the two moves. */
+  it('refuses a day that falls after the due date, and says which way round', async () => {
+    const props = setup()
+
+    await userEvent.type(screen.getByLabelText('What'), 'Essay')
+    await userEvent.selectOptions(screen.getByTestId('deadline-day'), '1')
+    await userEvent.click(screen.getByTestId('save-block'))
+
+    expect(props.onSave).not.toHaveBeenCalled()
+    expect(screen.getByText(/due before the day/i)).toBeVisible()
+  })
+})

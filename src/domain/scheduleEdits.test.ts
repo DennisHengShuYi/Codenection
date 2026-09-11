@@ -93,6 +93,7 @@ const fields = (over: Partial<ItemFields> = {}): ItemFields => ({
   hours: 2,
   dayIndex: 3,
   startHour: 14,
+  deadlineDay: null,
   fixed: false,
   ...over,
 })
@@ -123,26 +124,33 @@ describe('editing a block by hand', () => {
   })
 
   /**
-   * The test that stops the form quietly stripping protection off a nap, or clearing a
-   * deadline it never asked the student about. Everything outside `ItemFields` survives.
+   * The test that stops the form quietly stripping protection off a nap. Everything outside
+   * `ItemFields` survives.
+   *
+   * The deadline used to be part of that set and has deliberately left it: the form asks
+   * about it now, so carrying the old value through would make the field unable to change
+   * anything. What is protected here is what the form still never asks about.
    */
   it('keeps what the form never asked about', () => {
     const before = schedule([
-      item('nap', 4, {
-        protectedRest: true,
-        intensity: 0.5,
-        deadlineDay: 4,
-        seriesId: 'series-1',
-      }),
+      item('nap', 4, { protectedRest: true, intensity: 0.5, seriesId: 'series-1' }),
     ])
 
     expect(editItem(before, 'nap', fields({ dayIndex: 2 })).items[0]).toMatchObject({
       protectedRest: true,
       intensity: 0.5,
-      deadlineDay: 4,
       seriesId: 'series-1',
       dayIndex: 2,
     })
+  })
+
+  /** The other half: a deadline the student sets reaches the week, and one they clear is
+   *  cleared rather than quietly restored from what the block used to say. */
+  it('writes the deadline the form was given', () => {
+    const before = schedule([item('essay', 4, { deadlineDay: 4 })])
+
+    expect(editItem(before, 'essay', fields({ deadlineDay: 6 })).items[0]?.deadlineDay).toBe(6)
+    expect(editItem(before, 'essay', fields({ deadlineDay: null })).items[0]?.deadlineDay).toBeNull()
   })
 
   // The same stale-id case `blockSheet` already handles by closing: it happens for real.

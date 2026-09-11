@@ -20,6 +20,9 @@ export interface EventDraft {
   readonly startHour: number
   readonly hours: number
   readonly fixed: boolean
+  /** When it is due. Null is the ordinary case: most things a student adds by hand have no
+   *  date attached to them, and the kind's own interval covers those. */
+  readonly deadlineDay: number | null
 }
 
 /**
@@ -48,6 +51,7 @@ export function blankDraft(schedule: Schedule, dayIndex: number): EventDraft {
     startHour: first?.startHour ?? WAKE_HOUR,
     hours: 1,
     fixed: false,
+    deadlineDay: null,
   }
 }
 
@@ -60,6 +64,7 @@ export function draftFrom(item: ScheduledItem): EventDraft {
     startHour: item.startHour,
     hours: item.hours,
     fixed: item.fixed,
+    deadlineDay: item.deadlineDay,
   }
 }
 
@@ -68,6 +73,7 @@ export interface DraftErrors {
   readonly hours?: string
   readonly startHour?: string
   readonly dayIndex?: string
+  readonly deadlineDay?: string
 }
 
 /**
@@ -84,6 +90,7 @@ export function validate(draft: EventDraft): DraftErrors {
     hours?: string
     startHour?: string
     dayIndex?: string
+    deadlineDay?: string
   } = {}
 
   if (draft.title.trim() === '') {
@@ -108,6 +115,14 @@ export function validate(draft: EventDraft): DraftErrors {
     errors.dayIndex = 'That day is outside the fortnight.'
   }
 
+  // An error rather than a warning, unlike every clash below it: a block scheduled after
+  // its own deadline is not a tight week, it is a contradiction, and there is no later
+  // rearrangement that reconciles the two. Landing exactly on the deadline is fine -- due
+  // Friday and done Friday is the commonest way work gets done.
+  if (draft.deadlineDay !== null && draft.dayIndex > draft.deadlineDay) {
+    errors.deadlineDay = 'This is due before the day you have put it on.'
+  }
+
   return errors
 }
 
@@ -122,6 +137,7 @@ export function toFields(draft: EventDraft): ItemFields {
     dayIndex: draft.dayIndex,
     startHour: draft.startHour,
     fixed: draft.fixed,
+    deadlineDay: draft.deadlineDay,
   }
 }
 
@@ -137,7 +153,6 @@ export function candidate(draft: EventDraft, existing: ScheduledItem | null): Sc
   return {
     id: existing?.id ?? NEW_ITEM_ID,
     intensity: existing?.intensity ?? 1,
-    deadlineDay: existing?.deadlineDay ?? null,
     protectedRest: existing?.protectedRest ?? false,
     ...(existing?.seriesId === undefined ? {} : { seriesId: existing.seriesId }),
     ...toFields(draft),

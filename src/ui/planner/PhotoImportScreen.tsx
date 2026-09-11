@@ -151,7 +151,7 @@ export function PhotoImportScreen({
         {missingWhen.length > 0 && (
           <p data-testid="when-blocked" role="status" className="text-sm text-attention">
             {missingWhen.length === 1
-              ? 'One of these does not say when it happens. Pick a day for it before adding.'
+              ? 'One of these does not say when it is due. Pick a day for it before adding.'
               : `${missingWhen.length} of these do not say when they happen. Pick a day for each before adding.`}
           </p>
         )}

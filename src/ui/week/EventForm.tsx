@@ -194,6 +194,39 @@ export function EventForm({
               className={INPUT}
             />
           </Field>
+
+          {/*
+            When it is due, as against when it is scheduled above.
+            
+            The one thing this form could not say. Every other way into the week states a
+            deadline -- the planner from what a student typed, the photo reader from a
+            timetable, the calendar import from the event's own date -- so a block added by
+            hand fell to the synthetic deadline its kind gets, and a wrong one could not be
+            corrected anywhere.
+
+            "Not set" is first and is the ordinary answer: most of what a student types in is
+            not due on any particular day, and `softDeadlines` covers those by kind.
+          */}
+          <Field label="Due by" error={errors.deadlineDay}>
+            <select
+              data-testid="deadline-day"
+              value={draft.deadlineDay === null ? '' : String(draft.deadlineDay)}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  deadlineDay: event.target.value === '' ? null : Number(event.target.value),
+                })
+              }
+              className={INPUT}
+            >
+              <option value="">Not set</option>
+              {days.map((day) => (
+                <option key={day} value={day}>
+                  {dateFor(schedule, day) ?? `Day ${day}`}
+                </option>
+              ))}
+            </select>
+          </Field>
         </div>
 
         {/* §5.1's boundary, drawn where the student can see it -- the same checkbox

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { checkedInDays, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
 import { describeDeficit, explainDeficit } from '../../domain/deficitCause'
 import { paramsFor } from '../../domain/engineParams'
-import { project } from '../../engine'
+import { DEFICIT_THRESHOLD, LOAD_TYPES, project } from '../../engine'
 import { toDayInputs } from '../../optimizer'
 import type { Fix, Schedule } from '../../optimizer'
 import { Button } from '../kit/Button'
@@ -12,6 +12,7 @@ import { LOAD_TYPE_LABELS } from '../kit/labels'
 import type { EnergyPrediction } from '../../domain/predictions'
 import { scheduleView, type LoadBand } from '../../domain/scheduleView'
 import { PushToCalendar } from './PushToCalendar'
+import { ReserveTrack } from './ReserveTrack'
 
 /**
  * §4's primary surface: the whole horizon, one day expanded beneath it, and Rebalance.
@@ -186,16 +187,29 @@ export function WeekScreen(props: {
    */
   const params = paramsFor(outcomesFrom(blockLog), predictions)
   const days = toDayInputs(schedule, checkedInDays(blockLog, today, schedule.horizonDays))
+  const projection = project(schedule.start, days, params)
   const cause =
     openDay === null
       ? null
-      : explainDeficit({
-          start: schedule.start,
-          days,
-          projection: project(schedule.start, days, params),
-          params,
-          dayIndex: openDay,
-        })
+      : explainDeficit({ start: schedule.start, days, projection, params, dayIndex: openDay })
+
+  /**
+   * Where all four reserves stand on the day that is open.
+   *
+   * Computed for every day of the horizon and shown for none of them until now. The range
+   * travels with the figure because the projection is three runs at different optimism
+   * levels and `central` is the middle one -- §8.2 is explicit that this is a decision aid
+   * and never described as validated, and one hard number per day quietly drops that.
+   */
+  const standing =
+    openDay === null
+      ? null
+      : LOAD_TYPES.map((type) => ({
+          type,
+          middle: projection.central[openDay]?.[type] ?? 0,
+          best: projection.optimistic[openDay]?.[type] ?? 0,
+          worst: projection.pessimistic[openDay]?.[type] ?? 0,
+        }))
 
   return (
     <div className="flex flex-col gap-4">
@@ -274,11 +288,51 @@ export function WeekScreen(props: {
         )}
       </div>
 
+      {/* Ruling 64: the grid says what is on each day and the open day says how you stand on
+          one of them. This is the third question and the one the projection was computed
+          for -- where the fortnight is going. */}
+      <ReserveTrack
+        projection={projection}
+        dayLabel={(dayIndex) => dayLabel(schedule, dayIndex, today)}
+      />
+
       {grid !== null && openDay !== null && (
         <div className="flex flex-col gap-3">
           {/* Above the day rather than beside the mark: the mark is in a cell the size of a
               thumbnail, and this is two sentences. It also reads in the order a student
               asks the question -- they tapped the day because of the warning. */}
+          {standing !== null && (
+            <div data-testid="day-reserves" className="flex flex-col gap-1">
+              {standing.map((reserve) => (
+                <div
+                  key={reserve.type}
+                  data-testid={`reserve-${reserve.type}`}
+                  data-deficit={reserve.middle < DEFICIT_THRESHOLD}
+                  className="flex items-baseline justify-between gap-3 text-sm"
+                >
+                  <span className="text-ink">{LOAD_TYPE_LABELS[reserve.type]}</span>
+
+                  <span className="flex items-baseline gap-2 tabular-nums">
+                    <span
+                      className={
+                        reserve.middle < DEFICIT_THRESHOLD
+                          ? 'font-semibold text-attention'
+                          : 'text-ink'
+                      }
+                    >
+                      {Math.round(reserve.middle)}
+                    </span>
+                    {/* The spread, small and beside it: the figure is the middle of three
+                        runs, and showing it alone would read as a measurement. */}
+                    <span className="text-xs text-ink-soft">
+                      {Math.round(reserve.worst)}–{Math.round(reserve.best)}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
           {cause !== null && (
             <p
               data-testid="deficit-why"

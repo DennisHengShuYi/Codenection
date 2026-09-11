@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { BlockRecord } from '../../domain/blockLog'
 import { HORIZON_DAYS, LOAD_TYPES, type LoadType } from '../../engine'
+import { LOAD_TYPE_LABELS } from '../kit/labels'
 import type { Fix, Schedule, ScheduledItem } from '../../optimizer'
 import { BUSY_ABOVE_HOURS } from '../../domain/scheduleView'
 import { WeekScreen } from './WeekScreen'
@@ -483,5 +484,135 @@ describe('opening a deficit day', () => {
     await userEvent.click(screen.getByTestId('day-4'))
 
     expect(screen.queryByTestId('deficit-why')).toBeNull()
+  })
+})
+
+/**
+ * Where all four reserves stand on the day you opened.
+ *
+ * The grid says how busy a day is and warns when it is a deficit day; the reserves behind
+ * that were computed for every day of the horizon and shown for none of them. Opening a day
+ * is where a student asks "how am I on Thursday", and the answer already existed.
+ *
+ * The range travels with the figure deliberately. The projection is three runs at different
+ * optimism levels and `central` is the middle one -- §8.2 is explicit that the 21-day
+ * projection is a decision aid and never described as validated, and a single hard number
+ * per day quietly drops that.
+ */
+describe('the reserves on the day you opened', () => {
+  it('lists all four, in the words the rest of the app uses', async () => {
+    setup()
+
+    await userEvent.click(screen.getByTestId('day-4'))
+
+    const panel = await screen.findByTestId('day-reserves')
+
+    for (const label of Object.values(LOAD_TYPE_LABELS)) {
+      expect(within(panel).getByText(label)).toBeVisible()
+    }
+  })
+
+  it('shows the figure for the day that is open, not for today', async () => {
+    const heavy = Array.from({ length: 6 }, (_, dayIndex) => ({
+      id: `study-${dayIndex}`,
+      title: 'Thesis',
+      type: 'mental' as const,
+      kind: 'studyBlock' as const,
+      hours: 9,
+      intensity: 1,
+      dayIndex,
+      startHour: 9,
+      fixed: true,
+      deadlineDay: null,
+      protectedRest: false,
+    }))
+
+    setup({ ...week(), items: heavy, sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 6) })
+
+    await userEvent.click(screen.getByTestId('day-0'))
+    const early = (await screen.findByTestId('reserve-mental')).textContent ?? ''
+
+    await userEvent.click(screen.getByTestId('day-6'))
+    const later = (await screen.findByTestId('reserve-mental')).textContent ?? ''
+
+    expect(early).not.toBe(later)
+  })
+
+  /** §8.2: a decision aid, never described as validated. The spread is the honesty. */
+  it('shows how sure it is, not only the middle figure', async () => {
+    setup()
+
+    await userEvent.click(screen.getByTestId('day-8'))
+
+    expect((await screen.findByTestId('reserve-mental')).textContent ?? '').toMatch(/\d+–\d+/)
+  })
+
+  it('marks a reserve that is under the line', async () => {
+    const crushing = {
+      ...week(),
+      items: Array.from({ length: 9 }, (_, dayIndex) => ({
+        id: `study-${dayIndex}`,
+        title: 'Thesis',
+        type: 'mental' as const,
+        kind: 'studyBlock' as const,
+        hours: 9,
+        intensity: 1,
+        dayIndex,
+        startHour: 9,
+        fixed: true,
+        deadlineDay: null,
+        protectedRest: false,
+      })),
+      sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 6),
+    }
+
+    setup(crushing)
+
+    await userEvent.click(screen.getByTestId('day-8'))
+
+    expect(await screen.findByTestId('reserve-mental')).toHaveAttribute('data-deficit', 'true')
+  })
+
+  it('says nothing until a day is opened', () => {
+    setup()
+
+    expect(screen.queryByTestId('day-reserves')).toBeNull()
+  })
+})
+
+/**
+ * Where the fortnight is going, as one picture.
+ *
+ * §1.5: colour never carries meaning alone, so the four lines are named in a legend and the
+ * whole chart has a text equivalent -- a line chart is the most exclusionary thing in the
+ * app for a screen reader, and an `aria-label` saying "chart" is not access.
+ */
+describe('the reserve track', () => {
+  it('draws the fortnight under the grid', () => {
+    setup()
+
+    expect(screen.getByTestId('reserve-track')).toBeVisible()
+  })
+
+  it('names each line rather than leaving the colours to speak', () => {
+    setup()
+
+    const legend = screen.getByTestId('reserve-track-legend')
+
+    for (const label of Object.values(LOAD_TYPE_LABELS)) {
+      expect(within(legend).getByText(label)).toBeVisible()
+    }
+  })
+
+  it('carries the same reading in words', () => {
+    setup()
+
+    expect(screen.getByTestId('reserve-track-text')).toBeVisible()
+  })
+
+  it('says in words when the horizon holds', () => {
+    setup()
+
+    expect(screen.getByTestId('reserve-track-text').textContent ?? '').toMatch(/nothing|holds|no /i)
   })
 })

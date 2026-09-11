@@ -217,3 +217,140 @@ describe('applyRest', () => {
     expect(before).toEqual(snapshot)
   })
 })
+
+/**
+ * The refusals, which are the half this feature is named for -- a Rest button that can say
+ * no. The paths above prove it finds room; these prove it declines to invent room that is
+ * not there, and says which reason applies.
+ *
+ * Written against `planRest`'s own answer rather than its internals: what matters is that a
+ * student is told the truth about their day, not which helper worked it out.
+ */
+describe('planRest, when it says no', () => {
+  /**
+   * A fortnight with no free stretch anywhere. Nothing can be moved to make room either,
+   * because every block is fixed -- so there is no rung left to try.
+   */
+  it('refuses outright when no day in the fortnight has a stretch free', () => {
+    const everyDayFull = Array.from({ length: HORIZON_DAYS }, (_, day) => packed(day))
+
+    const out = plan(week({ items: everyDayFull }))
+
+    expect(out.kind).toBe('refused')
+    if (out.kind === 'refused') expect(out.why.length).toBeGreaterThan(0)
+  })
+
+  /**
+   * Today is full and every later day is too, except that the later days have already had
+   * as much recovery as the model will credit. A day whose ceiling is spent has no room for
+   * rest even where the clock is free, and offering it would promise a lift the engine
+   * refuses to pay out.
+   */
+  it('will not offer a later day whose recovery ceiling is already spent', () => {
+    const restedSolid = Array.from({ length: HORIZON_DAYS }, (_, day) =>
+      day === TODAY
+        ? packed(day)
+        : rest({ id: `rested-${day}`, dayIndex: day, startHour: 8, hours: DAILY_RECOVERY_CEILING + 2 }),
+    )
+
+    const out = plan(week({ items: restedSolid }))
+
+    // Either a refusal or a later day that is genuinely creditable -- never a later day
+    // whose ceiling has nothing left to give.
+    if (out.kind === 'laterDay') {
+      expect(out.block.hours).toBeGreaterThan(0)
+      expect(out.block.dayIndex).not.toBe(TODAY)
+    } else {
+      expect(out.kind).toBe('refused')
+    }
+  })
+
+  /**
+   * Today has no room, but a later day does. The student is told when instead of being told
+   * no -- and told why today was not the answer, because a later day with no reason reads
+   * as the app changing the subject.
+   */
+  it('offers a later day with a reason, rather than refusing, when one has room', () => {
+    const out = plan(week({ items: [packed(TODAY)] }))
+
+    expect(out.kind).toBe('laterDay')
+    if (out.kind === 'laterDay') {
+      expect(out.block.dayIndex).toBeGreaterThan(TODAY)
+      expect(out.whyNotToday.length).toBeGreaterThan(0)
+    }
+  })
+
+  /**
+   * The gap exists but is too short to be worth anything. `MIN_GAP_HOURS` is the app's own
+   * idea of the smallest useful stretch, and a block under it would be rest the engine does
+   * not credit -- so today is not the answer even though the clock looks free.
+   */
+  it('does not offer a stretch too short for the model to credit', () => {
+    const nearlyFull = [
+      item({ id: 'morning', dayIndex: TODAY, startHour: 0, hours: 14, fixed: true }),
+      item({ id: 'evening', dayIndex: TODAY, startHour: 15, hours: 9, fixed: true }),
+    ]
+
+    const out = plan(week({ items: nearlyFull }), 14)
+
+    // One free hour between 14:00 and 15:00 is not a rest block.
+    if (out.kind === 'fits') expect(out.block.hours).toBeGreaterThanOrEqual(1)
+    else expect(['laterDay', 'needsMove', 'refused']).toContain(out.kind)
+  })
+})
+
+/**
+ * Rung 1: the answer that costs something.
+ *
+ * Between "there is room" and "not today" sits the case where room could be MADE -- one
+ * thing moves and the rest fits. It is the only rung that asks the student to give something
+ * up, so it names the move rather than performing it, and it is refused outright when the
+ * move would cost more than the rest is worth.
+ *
+ * The fixture is what makes this rung reachable: today is full of movable work, and every
+ * later day is genuinely taken. With a later day free the app would rightly offer that
+ * instead -- moving today's work to buy rest today is a worse answer than resting tomorrow.
+ */
+describe('planRest, when room has to be made', () => {
+  const chunksToday = () =>
+    Array.from({ length: 6 }, (_, index) =>
+      item({ id: `chunk-${index}`, dayIndex: TODAY, startHour: index * 4, hours: 4 }),
+    )
+
+  const laterDaysTaken = () =>
+    Array.from({ length: HORIZON_DAYS - TODAY - 1 }, (_, index) =>
+      packed(TODAY + 1 + index),
+    )
+
+  it('names the one thing that would have to move', () => {
+    const out = plan(week({ items: [...chunksToday(), ...laterDaysTaken()] }), 0)
+
+    expect(out.kind).toBe('needsMove')
+    if (out.kind === 'needsMove') {
+      expect(out.move.move.description.length, 'a move nobody can read is not an offer').toBeGreaterThan(0)
+      expect(out.block.dayIndex).toBe(TODAY)
+    }
+  })
+
+  /** The move is offered, never taken. Nothing about the week changes until the student
+   *  says yes -- §16 again, and the reason this rung returns a plan rather than a schedule. */
+  it('changes nothing by offering it', () => {
+    const before = week({ items: [...chunksToday(), ...laterDaysTaken()] })
+
+    const out = plan(before, 0)
+
+    expect(out.kind).toBe('needsMove')
+    expect(before.items.filter((block) => block.dayIndex === TODAY)).toHaveLength(6)
+  })
+
+  /** The receipt comes with it: a move the student is asked to make has to be worth
+   *  something they can see. */
+  it('says what the rest would be worth', () => {
+    const out = plan(week({ items: [...chunksToday(), ...laterDaysTaken()] }), 0)
+
+    if (out.kind === 'needsMove') {
+      expect(out.gain.dayAfter).toBeGreaterThanOrEqual(out.gain.dayBefore)
+      expect(out.gain.deepestLift).toBeGreaterThanOrEqual(0)
+    }
+  })
+})

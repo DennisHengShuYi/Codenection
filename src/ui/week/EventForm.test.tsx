@@ -167,3 +167,63 @@ describe('what the form says about a clash', () => {
     expect(screen.queryByTestId('edit-warnings')).toBeNull()
   })
 })
+
+/**
+ * Every other control on the form, driven the way a student drives it.
+ *
+ * The name, the start hour and the fixed checkbox had tests; the four selects that carry
+ * what a block IS and which day it lands on did not -- so a block could have been saved
+ * with the type its dropdown showed and a different one underneath, and nothing would have
+ * failed. Found by the coverage gate rather than by review: these were the untested
+ * handlers holding the function threshold under its floor.
+ */
+describe('correcting what a block is and when it happens', () => {
+  it('changes the load type it counts against', async () => {
+    const { onSave } = setup({ item: item('essay', { title: 'Essay draft' }) })
+
+    await userEvent.selectOptions(screen.getByLabelText('Kind'), 'physical')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Essay draft', type: 'physical' }),
+    )
+  })
+
+  it('changes what the activity actually is, which is not the same question', async () => {
+    const { onSave } = setup({ item: item('essay', { title: 'Essay draft' }) })
+
+    await userEvent.selectOptions(screen.getByLabelText('Detail'), 'rest')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ kind: 'rest' }))
+  })
+
+  it('moves the block to another day', async () => {
+    const { onSave } = setup({ item: item('essay', { title: 'Essay draft' }) })
+
+    await userEvent.selectOptions(screen.getByLabelText('Day'), '5')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ dayIndex: 5 }))
+  })
+
+  /** The checkbox had a test for what it SAYS; this is what it does. Ticking it is how a
+   *  block written down loosely becomes a commitment the week has to work around. */
+  it('pins a loose block as a fixed commitment', async () => {
+    const { onSave } = setup({ item: item('essay', { title: 'Essay draft', fixed: false }) })
+
+    await userEvent.click(screen.getByTestId('fixed-block'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ fixed: true }))
+  })
+
+  it('unpins one that was fixed', async () => {
+    const { onSave } = setup({ item: item('lab', { fixed: true }) })
+
+    await userEvent.click(screen.getByTestId('fixed-block'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ fixed: false }))
+  })
+})

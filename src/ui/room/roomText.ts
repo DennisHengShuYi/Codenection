@@ -1,5 +1,5 @@
 import type { CharacterState } from './characterState'
-import { PLANT_DROOPS_BELOW, type RoomState } from './roomState'
+import type { RoomState } from './roomState'
 
 const CHARACTER_WORDS: Record<CharacterState, string> = {
   flattened: 'You are flattened right now.',
@@ -35,8 +35,32 @@ const sleepSentence = (state: RoomState): string | null => {
   return `The bed shows about ${hours} hours of sleep owed.`
 }
 
-const plantSentence = (state: RoomState): string | null =>
-  state.plantHealth < PLANT_DROOPS_BELOW ? 'The plant is drooping.' : null
+/**
+ * §45: what today puts in the room, in place of the plant that read a reserve.
+ *
+ * One sentence covering both objects, because a paragraph that lists furniture one item per
+ * sentence reads as an inventory. Said only when there is something to say.
+ */
+const todaySentence = (state: RoomState): string | null => {
+  const here: string[] = []
+  if (state.paperHeight > 0) here.push('books out on the desk')
+  if (state.exerciseWaiting > 0) here.push('a dumbbell on the floor')
+  if (state.companyWaiting > 0) here.push('people here')
+
+  if (here.length === 0) return null
+  if (here.length === 1) return `There ${here[0] === 'people here' ? 'are' : 'are'} ${here[0]}.`
+
+  return `There are ${here.slice(0, -1).join(', ')} and ${here[here.length - 1]}.`
+}
+
+/** §45: the day that does not fit, said in words. The drawing dims; a screen reader needs
+ *  the same fact stated, or the two audiences are told different things. */
+const SPILLING_ABOVE = 0
+
+const spillSentence = (state: RoomState): string | null =>
+  state.windowDark > SPILLING_ABOVE
+    ? 'The room is dim — today asks for more hours than the day has, and the difference comes out of sleep.'
+    : null
 
 const doorSentence = (state: RoomState): string | null =>
   state.doorLit ? 'The door is lit. Getting outside is the best thing available right now.' : null
@@ -62,9 +86,10 @@ export function describeRoomFully(state: RoomState): string {
   const parts = [
     CHARACTER_WORDS[state.character],
     WEATHER_WORDS[state.weather],
+    spillSentence(state),
     clutterSentence(state),
     sleepSentence(state),
-    plantSentence(state),
+    todaySentence(state),
     doorSentence(state),
   ].filter((part): part is string => part !== null)
 
@@ -77,16 +102,22 @@ export function describeRoomFully(state: RoomState): string {
  * spell out every number).
  *
  * Character and weather stay always -- the drawing cannot say either any other way. Then
- * at most one more, in priority order: the door lit, sleep debt, what is on the floor, the
- * plant. The floor is always "applicable" in the sense that it has something to say (clear
- * or not), so it is what fills the slot when nothing more urgent does.
+ * at most one more, in priority order: a day that does not fit, the door lit, sleep debt,
+ * what is on the floor, rest waiting. The floor is always "applicable" in the sense that it
+ * has something to say (clear or not), so it is what fills the slot when nothing more
+ * urgent does.
+ *
+ * §45 put the spill first. It is the only sentence here about something the student can
+ * still act on before it costs them the night -- the door is a suggestion, the floor is a
+ * fact, and sleep debt is already spent.
  */
 export function describeRoom(state: RoomState): string {
   const additional =
+    spillSentence(state) ??
     doorSentenceShort(state) ??
     sleepSentence(state) ??
     clutterItemsSentence(state) ??
-    plantSentence(state) ??
+    todaySentence(state) ??
     FLOOR_CLEAR_SENTENCE
 
   const parts = [CHARACTER_WORDS[state.character], WEATHER_WORDS[state.weather], additional].filter(

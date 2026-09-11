@@ -4,6 +4,7 @@ import { DEFAULT_PARAMS, HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
 import { askGroq } from './groq'
 import { readRequest } from './readRequest'
+import { askVision } from './vision'
 import { askWriter } from './writer'
 
 /**
@@ -192,5 +193,37 @@ describeIfKeyed('a stated weekday, with the calendar told to the model', () => {
       gym!.deadlineDay === 6 || repeatsOnThursday,
       `thursday came back as day ${gym!.deadlineDay} with repeat ${JSON.stringify(gym!.repeat)}`,
     ).toBe(true)
+  })
+})
+
+/**
+ * §44's last reader, against the real vision model.
+ *
+ * The prompt line is easy to add and impossible to verify by reading -- which the planner
+ * proved expensively: the first wording made the live model answer `null` for a stated
+ * weekday, worse than the wrong day it replaced. The photo reader now shares that corrected
+ * wording, and this is the call that says whether sharing it worked.
+ *
+ * A tiny generated timetable rather than a photograph of one: the question is whether the
+ * model counts a named weekday from the day it was told, and a 2-pixel-tall PNG cannot
+ * answer that. So this is skipped by default and run by hand when the wording changes --
+ * see the note on the test itself.
+ */
+describeIfKeyed.skip('a timetable photographed, with the calendar told to the model', () => {
+  it('counts a printed weekday forward from the real today', async () => {
+    // Supply a real photograph of a timetable at this path to run it. Kept out of the repo
+    // deliberately: a student's timetable is their own, and a fixture nobody can regenerate
+    // is worse than a test that says what it needs.
+    const photo = process.env.TIMETABLE_PHOTO ?? ''
+    expect(photo, 'set TIMETABLE_PHOTO to a data URL of a timetable').not.toBe('')
+
+    const items = await askVision(photo, apiKey, {
+      today: 0,
+      startWeekday: 5,
+      todayLabel: '11 September 2026',
+    })
+
+    console.log('VISION REPLY:', JSON.stringify(items, null, 2))
+    expect(items).not.toBeNull()
   })
 })

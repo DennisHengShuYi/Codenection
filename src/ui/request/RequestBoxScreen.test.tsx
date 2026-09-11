@@ -264,3 +264,40 @@ describe('RequestBoxScreen', () => {
     expect(screen.queryByRole('button', { name: /^send|email|message them/i })).toBeNull()
   })
 })
+
+/**
+ * The chip on the request, driven the way a student drives it.
+ *
+ * Correcting the ask and discarding it were both wired and neither was tested -- the
+ * coverage gate is what found them. Both matter more here than on the planner's chips: the
+ * whole point of this screen is that the student is priced on what was actually asked, so
+ * an edit that did not re-price, or a discard that left the old price on screen, would be
+ * the screen quietly lying about the cost of a yes.
+ */
+describe('correcting or discarding the ask', () => {
+  const read = async () => {
+    await userEvent.type(screen.getByLabelText(/what.*asked/i), 'cover my shift saturday, 3 hours')
+    await userEvent.click(screen.getByRole('button', { name: /what would this cost/i }))
+    await waitFor(() => expect(screen.getByTestId(/^chip-/)).toBeVisible())
+  }
+
+  it('re-prices when the ask is corrected, rather than keeping the first answer', async () => {
+    setup()
+    await read()
+
+    await userEvent.selectOptions(screen.getByTestId(/^when-hour-/), '9')
+
+    // The price is recomputed from the corrected item: what survives is the correction.
+    await waitFor(() => expect(screen.getByTestId(/^when-hour-/)).toHaveValue('9'))
+  })
+
+  it('clears the price with the ask when it is discarded', async () => {
+    setup()
+    await read()
+
+    await userEvent.click(screen.getByRole('button', { name: /remove/i }))
+
+    await waitFor(() => expect(screen.queryByTestId(/^chip-/)).toBeNull())
+    expect(screen.queryByRole('button', { name: /take it on/i })).toBeNull()
+  })
+})

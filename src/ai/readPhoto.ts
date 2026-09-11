@@ -1,6 +1,6 @@
 import { readImageFile } from './image'
 import { parseModelReply } from './schema'
-import type { PhotoOutcome } from './types'
+import type { Calendar, PhotoOutcome } from './types'
 
 /**
  * Why there is no fallback here, stated once so nobody adds one later thinking it was an
@@ -16,7 +16,13 @@ import type { PhotoOutcome } from './types'
 const UNAVAILABLE =
   'I could not read that photo. Reading photos needs the model to be set up — you can type it out instead, which always works.'
 
-export async function readPhoto(file: File): Promise<PhotoOutcome> {
+export async function readPhoto(
+  file: File,
+  /** §44: which real day day 0 is, so a weekday printed on a timetable lands on that
+   *  weekday. A photographed timetable is mostly weekdays, which makes this the reader
+   *  that needed the anchor most and got it last. */
+  calendar?: Calendar,
+): Promise<PhotoOutcome> {
   const image = await readImageFile(file)
   if (!image.ok) return { ok: false, reason: image.reason }
 
@@ -24,7 +30,7 @@ export async function readPhoto(file: File): Promise<PhotoOutcome> {
     const response = await fetch('/api/read-photo', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ image: image.dataUrl }),
+      body: JSON.stringify({ image: image.dataUrl, calendar }),
     })
 
     if (response.ok) {

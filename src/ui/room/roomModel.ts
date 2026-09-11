@@ -73,5 +73,5 @@ export function roomModel({ schedule, today, blockLog, predictions }: RoomModelI
   const checkedIn = checkedInDays(blockLog, today, schedule.horizonDays)
   const projection = project(schedule.start, toDayInputs(schedule, checkedIn), params)
 
-  return { state: roomStateFor(schedule.start, projection, schedule) }
+  return { state: roomStateFor(schedule.start, projection, schedule, today, blockLog) }
 }

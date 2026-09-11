@@ -1,7 +1,8 @@
 import { BLOCK_KINDS, HORIZON_DAYS } from '../engine'
 import { GROQ_VISION_MODEL } from './models'
 import { parseModelReply } from './schema'
-import { MAX_ITEMS, type ParsedItem } from './types'
+import { anchorLines } from './calendarAnchor'
+import { MAX_ITEMS, type Calendar, type ParsedItem } from './types'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
@@ -53,7 +54,27 @@ const SYSTEM_PROMPT = [
  * duplicate, and it is what makes a photographed brief produce exactly the items a typed
  * brain dump does.
  */
-export async function askVision(dataUrl: string, apiKey: string): Promise<ParsedItem[] | null> {
+/**
+ * §44: the prompt, with today's real date when the caller knows it.
+ *
+ * The same gap the planner had, in the reader that needed it most: a photographed
+ * timetable says "Tuesday" far more often than anything a student types, and this prompt
+ * described `deadlineDay` as "a day index from 0 (today)" without ever saying what today
+ * was. Shared with `groq.ts` rather than restated -- the wording was corrected against a
+ * live model once, and a second copy would not have carried the correction.
+ */
+const systemPromptFor = (calendar?: Calendar): string => {
+  const anchor = anchorLines(calendar)
+
+  return anchor === '' ? SYSTEM_PROMPT : `${SYSTEM_PROMPT} ${anchor}`
+}
+
+export async function askVision(
+  dataUrl: string,
+  apiKey: string,
+  /** §44: which real day day 0 is, so a weekday printed on a timetable lands on it. */
+  calendar?: Calendar,
+): Promise<ParsedItem[] | null> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), VISION_TIMEOUT_MS)
 
@@ -70,7 +91,7 @@ export async function askVision(dataUrl: string, apiKey: string): Promise<Parsed
         temperature: 0,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: systemPromptFor(calendar) },
           {
             role: 'user',
             content: [

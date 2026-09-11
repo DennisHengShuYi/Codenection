@@ -34,7 +34,7 @@ const week = (over: Partial<Schedule> = {}): Schedule => ({
 const TODAY = 3
 
 const plan = (schedule: Schedule, nowHour = 14) =>
-  planRest(stampSoftDeadlines(schedule, TODAY, []), DEFAULT_PARAMS, TODAY, nowHour, [])
+  planRest(stampSoftDeadlines(schedule, TODAY), DEFAULT_PARAMS, TODAY, nowHour, [])
 
 /** A day with no free stretch at all. */
 const packed = (dayIndex: number): ScheduledItem =>
@@ -170,7 +170,7 @@ describe('planRest', () => {
   })
 
   it('does not modify the week it was given', () => {
-    const schedule = stampSoftDeadlines(week({ items: [item({ dayIndex: TODAY })] }), TODAY, [])
+    const schedule = stampSoftDeadlines(week({ items: [item({ dayIndex: TODAY })] }), TODAY)
     const snapshot = JSON.stringify(schedule)
 
     planRest(schedule, DEFAULT_PARAMS, TODAY, 14, [])

@@ -8,6 +8,7 @@ import { priceRequest, type RequestCost } from '../../domain/requestCost'
 import type { EngineParams } from '../../engine'
 import type { Schedule } from '../../optimizer'
 import { Button } from '../kit/Button'
+import { LOAD_TYPE_LABELS } from '../kit/labels'
 import { Card } from '../kit/Card'
 import { Field } from '../kit/Field'
 import { Sheet } from '../kit/Sheet'
@@ -202,10 +203,16 @@ export function RequestBoxScreen({
 
             {/* Stated in reserve, the app's own unit. §2.3 says "pushes you to 105%", which is
                 committed load against capacity -- a metric this app does not have, and a second
-                percentage moving the opposite way would contradict the dial. */}
+                percentage moving the opposite way would contradict the dial.
+
+                Named rather than "you", and that is the same correction `describeDeferral`
+                carries: this figure is one reserve -- the one the request actually spends --
+                while `describeRebalance` says "your worst day goes from 41 to 44" about the
+                floor across all four. Unnamed, the two read as one number a student could
+                compare, and they are not comparable. */}
             <p data-testid="request-cost" role="status" className="text-sm">
-              Saying yes takes you from {Math.round(cost.floorBefore)} to{' '}
-              {Math.round(cost.floorAfter)} at your lowest point
+              Saying yes takes {LOAD_TYPE_LABELS[item.type]} from {Math.round(cost.floorBefore)}{' '}
+              to {Math.round(cost.floorAfter)} at its lowest
               {cost.eveningsEquivalent >= 1 &&
                 ` — about ${cost.eveningsEquivalent === 1 ? 'an evening' : `${cost.eveningsEquivalent} evenings`} of downtime`}
               .

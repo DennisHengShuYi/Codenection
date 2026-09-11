@@ -15,7 +15,7 @@ const pileUp = () =>
 
 describe('describeRebalance', () => {
   it('names the worst day before and after, in numbers', () => {
-    const text = describeRebalance(rebalance(pileUp(), DEFAULT_PARAMS, makeRng(1)), DEFAULT_PARAMS)
+    const text = describeRebalance(rebalance(pileUp(), DEFAULT_PARAMS, makeRng(1), 0), DEFAULT_PARAMS)
 
     expect(text).toMatch(/worst day/i)
     expect(text).toMatch(/\d/)
@@ -25,7 +25,7 @@ describe('describeRebalance', () => {
   // is not something a student will act on, and "optimised" is a claim the app cannot
   // support to the person who has to live with the week.
   it('never says the word optimised', () => {
-    expect(describeRebalance(rebalance(pileUp(), DEFAULT_PARAMS, makeRng(1)), DEFAULT_PARAMS)).not.toMatch(
+    expect(describeRebalance(rebalance(pileUp(), DEFAULT_PARAMS, makeRng(1), 0), DEFAULT_PARAMS)).not.toMatch(
       /optimis|optimiz/i,
     )
   })
@@ -68,7 +68,7 @@ describe('describeRebalance', () => {
   })
 
   it('does not report a floor that has not moved as if it were progress', () => {
-    const result = rebalance(pastSaving(), DEFAULT_PARAMS, makeRng(1))
+    const result = rebalance(pastSaving(), DEFAULT_PARAMS, makeRng(1), 0)
     const text = describeRebalance(result, DEFAULT_PARAMS)
 
     expect(result.worstBefore).toBe(0)
@@ -78,7 +78,7 @@ describe('describeRebalance', () => {
 
   it('says plainly when a fortnight is past rearranging', () => {
     const text = describeRebalance(
-      rebalance(pastSaving(), DEFAULT_PARAMS, makeRng(1)),
+      rebalance(pastSaving(), DEFAULT_PARAMS, makeRng(1), 0),
       DEFAULT_PARAMS,
     )
 
@@ -119,7 +119,7 @@ describe('describeRebalance', () => {
   })
 
   it('counts each kind of change it made', () => {
-    const result = rebalance(pileUp(), DEFAULT_PARAMS, makeRng(1))
+    const result = rebalance(pileUp(), DEFAULT_PARAMS, makeRng(1), 0)
     const text = describeRebalance(result, DEFAULT_PARAMS)
 
     expect(text.startsWith('I ')).toBe(true)
@@ -130,7 +130,7 @@ describe('describeRebalance', () => {
 describe('undo', () => {
   it('restores exactly the schedule the rebalance started from', () => {
     const before = pileUp()
-    const result = rebalance(before, DEFAULT_PARAMS, makeRng(1))
+    const result = rebalance(before, DEFAULT_PARAMS, makeRng(1), 0)
 
     expect(undo(result)).toEqual(before)
   })
@@ -138,7 +138,7 @@ describe('undo', () => {
   it('restores an empty schedule too', () => {
     const before = makeSchedule([])
 
-    expect(undo(rebalance(before, DEFAULT_PARAMS, makeRng(1)))).toEqual(before)
+    expect(undo(rebalance(before, DEFAULT_PARAMS, makeRng(1), 0))).toEqual(before)
   })
 })
 

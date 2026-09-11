@@ -194,13 +194,26 @@ describe('RoomShell with the room', () => {
     await waitFor(async () => expect((await repository.loadWeek())?.items).toHaveLength(0))
   })
 
-  it('deferring an errand moves it later in the saved week', async () => {
+  /**
+   * Later asks before it acts now, so this walks both presses.
+   *
+   * The first press only proposes: it scores every opening and can pass over a day that
+   * plainly had room, which is not guessable from the button's name, so the week must be
+   * untouched until the student has seen where it would go and agreed.
+   */
+  it('deferring an errand moves it later in the saved week, once confirmed', async () => {
     const repository = await renderWithErrand()
 
     await userEvent.click(screen.getByTestId('open-week'))
     await userEvent.click(await screen.findByTestId('day-2'))
     await userEvent.click(await screen.findByTestId('block-laundry'))
     await userEvent.click(await screen.findByRole('button', { name: /^later$/i }))
+
+    // Proposed, not done.
+    expect(await screen.findByTestId('confirm-later')).toBeVisible()
+    expect((await repository.loadWeek())?.items[0]?.dayIndex).toBe(2)
+
+    await userEvent.click(screen.getByTestId('confirm-later-yes'))
 
     await waitFor(async () =>
       expect((await repository.loadWeek())?.items[0]?.dayIndex).toBeGreaterThan(2),

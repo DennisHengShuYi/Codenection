@@ -24,16 +24,22 @@ const replace = (schedule: Schedule, id: string, next: ScheduledItem): Schedule 
  * Everything fixed stays put, and protected rest is not merely fixed but untouchable --
  * checked here at generation rather than only at validation, because a search that can
  * *reach* a state where rest has moved is a search that treats rest as negotiable.
+ *
+ * A block already behind the student is untouchable for a plainer reason: it happened there.
+ * Rearranging it would be rewriting what they did, and the projection reads those days as
+ * lived -- so a move in the past changes today's reserve, which is the one number every
+ * screen is built on.
  */
-const isMovable = (item: ScheduledItem): boolean => !item.fixed && !item.protectedRest
+const isMovable = (item: ScheduledItem, today: number): boolean =>
+  !item.fixed && !item.protectedRest && item.dayIndex >= today
 
-function shiftMoves(schedule: Schedule): Move[] {
+function shiftMoves(schedule: Schedule, today: number): Move[] {
   const moves: Move[] = []
 
-  for (const item of schedule.items.filter(isMovable)) {
+  for (const item of schedule.items.filter((entry) => isMovable(entry, today))) {
     for (const delta of DAY_SHIFTS) {
       const dayIndex = item.dayIndex + delta
-      if (dayIndex < 0 || dayIndex >= schedule.horizonDays) continue
+      if (dayIndex < today || dayIndex >= schedule.horizonDays) continue
       if (item.deadlineDay !== null && dayIndex > item.deadlineDay) continue
 
       const direction = delta > 0 ? 'later' : 'earlier'
@@ -52,8 +58,10 @@ function shiftMoves(schedule: Schedule): Move[] {
 }
 
 /** §2.2: errand batching, by putting one errand immediately after another. */
-function batchMoves(schedule: Schedule): Move[] {
-  const errands = schedule.items.filter((item) => isMovable(item) && item.type === 'errands')
+function batchMoves(schedule: Schedule, today: number): Move[] {
+  const errands = schedule.items.filter(
+    (item) => isMovable(item, today) && item.type === 'errands',
+  )
   const moves: Move[] = []
 
   for (const target of errands) {
@@ -90,10 +98,12 @@ function batchMoves(schedule: Schedule): Move[] {
 
 /** §5.1: rest is a scheduled object with weight, which the solver can add to a week.
  *  Inserted as protected, so once placed it cannot be moved again. */
-function restMoves(schedule: Schedule): Move[] {
+function restMoves(schedule: Schedule, today: number): Move[] {
   const moves: Move[] = []
 
-  for (let day = 0; day < schedule.horizonDays; day += 1) {
+  // From today, never from day zero. Rest proposed for last Tuesday is not an offer a
+  // student can take, and the engine would credit its recovery to a day already lived.
+  for (let day = today; day < schedule.horizonDays; day += 1) {
     /**
      * One rest block a day, and that stays a count rather than a sum of hours.
      *
@@ -118,7 +128,11 @@ function restMoves(schedule: Schedule): Move[] {
     moves.push({
       kind: 'insertRest',
       itemId: id,
-      description: `Added a rest block on day ${day}`,
+      // No day named here. The optimizer is pure and has no calendar: a raw index is the
+      // model's own counting, and `day 0` is the student's first day, not their zeroth. The
+      // sheet that shows this names the day through `domain/calendar`, which is the one place
+      // allowed to.
+      description: 'Added a rest block',
       apply: (s) => ({
         ...s,
         items: [
@@ -161,10 +175,11 @@ function restMoves(schedule: Schedule): Move[] {
  * Left movable rather than protected: seeing people is an offer, not an obligation, and
  * §1.3's gamification rule is explicit that the app must not manufacture obligations.
  */
-function socialMoves(schedule: Schedule): Move[] {
+function socialMoves(schedule: Schedule, today: number): Move[] {
   const moves: Move[] = []
 
-  for (let day = 0; day < schedule.horizonDays; day += 1) {
+  // From today, for `restMoves`' reason above.
+  for (let day = today; day < schedule.horizonDays; day += 1) {
     /**
      * One social item a day, a count rather than a sum -- see `restMoves` above for why this
      * stayed a count after being tried the other way.
@@ -182,7 +197,7 @@ function socialMoves(schedule: Schedule): Move[] {
     moves.push({
       kind: 'insertSocial',
       itemId: id,
-      description: `Made time to see someone on day ${day}`,
+      description: 'Made time to see someone',
       apply: (s) => ({
         ...s,
         items: [
@@ -217,10 +232,10 @@ function socialMoves(schedule: Schedule): Move[] {
  * what partly answers the degrees-of-freedom problem in §2.5, since no timetable takes
  * ordering away.
  */
-function reorderMoves(schedule: Schedule): Move[] {
+function reorderMoves(schedule: Schedule, today: number): Move[] {
   const moves: Move[] = []
 
-  for (const item of schedule.items.filter(isMovable)) {
+  for (const item of schedule.items.filter((entry) => isMovable(entry, today))) {
     const sameDay = schedule.items.filter(
       (other) => other.dayIndex === item.dayIndex && other.id !== item.id,
     )
@@ -271,16 +286,25 @@ export interface Candidate {
   readonly result: Schedule
 }
 
-export function candidates(schedule: Schedule, params: EngineParams): Candidate[] {
+/**
+ * @param today the day the student is on. Required rather than defaulted, because a default
+ * of zero is precisely the bug this parameter exists to end: every caller that forgot it
+ * would compile, look reasonable, and go on proposing changes to days already lived.
+ */
+export function candidates(
+  schedule: Schedule,
+  params: EngineParams,
+  today: number,
+): Candidate[] {
   const baseline = violations(schedule, params).length
 
   const out: Candidate[] = []
   for (const move of [
-    ...shiftMoves(schedule),
-    ...batchMoves(schedule),
-    ...restMoves(schedule),
-    ...socialMoves(schedule),
-    ...reorderMoves(schedule),
+    ...shiftMoves(schedule, today),
+    ...batchMoves(schedule, today),
+    ...restMoves(schedule, today),
+    ...socialMoves(schedule, today),
+    ...reorderMoves(schedule, today),
   ]) {
     const result = move.apply(schedule)
     if (violations(result, params).length <= baseline) out.push({ move, result })
@@ -289,6 +313,6 @@ export function candidates(schedule: Schedule, params: EngineParams): Candidate[
   return out
 }
 
-export function neighbours(schedule: Schedule, params: EngineParams): Move[] {
-  return candidates(schedule, params).map((candidate) => candidate.move)
+export function neighbours(schedule: Schedule, params: EngineParams, today: number): Move[] {
+  return candidates(schedule, params, today).map((candidate) => candidate.move)
 }

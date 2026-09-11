@@ -17,6 +17,7 @@
     "measure:dof": "vite-node scripts/degrees-of-freedom.ts",
     "icons": "node scripts/generate-icons.mjs",
     "measure:solve": "vite-node scripts/measure-solve.ts",
+    "seed:account": "vite-node scripts/seedDemoAccount.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "telegram:webhook": "vite-node scripts/setTelegramWebhook.ts"
   },

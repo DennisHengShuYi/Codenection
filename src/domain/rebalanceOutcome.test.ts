@@ -143,24 +143,24 @@ const improvableWeek = (): Schedule =>
 
 describe('runRebalance', () => {
   it('always reports something, even when it changed nothing', () => {
-    const outcome = runRebalance(week([]), DEFAULT_PARAMS, SEED)
+    const outcome = runRebalance(week([]), DEFAULT_PARAMS, SEED, 0)
 
     expect(outcome.report.length).toBeGreaterThan(0)
   })
 
   it('offers no fallback for a week that does not need one', () => {
-    expect(runRebalance(week([]), DEFAULT_PARAMS, SEED).fallback).toBeNull()
+    expect(runRebalance(week([]), DEFAULT_PARAMS, SEED, 0).fallback).toBeNull()
   })
 
   it('offers the single best remaining move when it cannot improve a struggling week', () => {
-    const outcome = runRebalance(stuckButFixableWeek(), DEFAULT_PARAMS, SEED)
+    const outcome = runRebalance(stuckButFixableWeek(), DEFAULT_PARAMS, SEED, 0)
 
     expect(outcome.fallback).not.toBeNull()
   })
 
   it('offers no fallback when the solver already found something to do', () => {
     // The fallback must not second-guess a real improvement `rebalance` itself found.
-    const outcome = runRebalance(improvableWeek(), DEFAULT_PARAMS, SEED)
+    const outcome = runRebalance(improvableWeek(), DEFAULT_PARAMS, SEED, 0)
 
     expect(outcome.fallback).toBeNull()
   })
@@ -170,8 +170,8 @@ describe('runRebalance', () => {
     // competing candidates and the seed has a real chance to matter -- see this file's
     // module doc on `improvableWeek` and task-6b-report.md's "reproducibility test proves
     // nothing" fix for why an empty week does not exercise this.
-    const first = runRebalance(improvableWeek(), DEFAULT_PARAMS, SEED)
-    const second = runRebalance(improvableWeek(), DEFAULT_PARAMS, SEED)
+    const first = runRebalance(improvableWeek(), DEFAULT_PARAMS, SEED, 0)
+    const second = runRebalance(improvableWeek(), DEFAULT_PARAMS, SEED, 0)
 
     expect(first.report).toBe(second.report)
   })
@@ -179,7 +179,7 @@ describe('runRebalance', () => {
 
 describe('what an outcome carries for the preview', () => {
   it('hands back every move so the student can read them one by one', () => {
-    const outcome = runRebalance(improvableWeek(), DEFAULT_PARAMS, SEED)
+    const outcome = runRebalance(improvableWeek(), DEFAULT_PARAMS, SEED, 0)
 
     expect(outcome.moves.length).toBeGreaterThan(0)
     for (const move of outcome.moves) {
@@ -191,11 +191,11 @@ describe('what an outcome carries for the preview', () => {
   it('carries the week the search started from, untouched', () => {
     const before = improvableWeek()
 
-    expect(runRebalance(before, DEFAULT_PARAMS, SEED).before).toEqual(before)
+    expect(runRebalance(before, DEFAULT_PARAMS, SEED, 0).before).toEqual(before)
   })
 
   it('describes the same solve in both tenses', () => {
-    const outcome = runRebalance(improvableWeek(), DEFAULT_PARAMS, SEED)
+    const outcome = runRebalance(improvableWeek(), DEFAULT_PARAMS, SEED, 0)
 
     expect(outcome.report).toMatch(/^I /)
     expect(outcome.proposal).toMatch(/^I'd /)
@@ -205,7 +205,7 @@ describe('what an outcome carries for the preview', () => {
   // insert a social visit and the solver takes it, so `week([])` never reaches the no-move
   // branch at all. See this file's doc on that fixture for why it genuinely has nothing.
   it('proposes nothing when there is nothing to move', () => {
-    const outcome = runRebalance(stuckButFixableWeek(), DEFAULT_PARAMS, SEED)
+    const outcome = runRebalance(stuckButFixableWeek(), DEFAULT_PARAMS, SEED, 0)
 
     expect(outcome.moves).toEqual([])
     expect(outcome.proposal).toBe(outcome.report)

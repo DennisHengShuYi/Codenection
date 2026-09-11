@@ -346,3 +346,67 @@ describe('score and the shape of the week', () => {
     expect(score(gentle, DEFAULT_PARAMS)).toBeGreaterThan(score(crushing, DEFAULT_PARAMS))
   })
 })
+
+/**
+ * §2.1 amended: a packed day is worse than a spread one, even when the student can afford it.
+ *
+ * The objective was silent about this. `stateMultiplier` only bites below a reserve of 70, so
+ * for a rested student a nine-hour day costs exactly as much per hour as a four-hour one; the
+ * crowding term counts *blocks* rather than hours, so moving one block between two days
+ * changes nothing; and nothing else looks at a day's total load at all. Measured on a real
+ * fortnight, shifting three hours off a nine-hour day onto a one-hour day changed the score by
+ * 0.0000 -- the solver could not tell the two weeks apart, so it had no reason to prefer
+ * either.
+ *
+ * The floor still comes first. §2.1 states that ordering as not up for negotiation, and this
+ * term is sized like `deficitArea` and the two pressures: a tiebreaker among weeks the model
+ * otherwise rates equally, never something that can buy a worse worst day.
+ */
+describe('a day that is too full', () => {
+  /** Spread beats stacked, at identical total hours. */
+  it('prefers the same work spread across days over piled onto one', () => {
+    const stacked = makeSchedule([
+      studyItem('a', 3, 4),
+      studyItem('b', 3, 4),
+      ...socialBaseline(),
+    ])
+    const spread = makeSchedule([
+      studyItem('a', 3, 4),
+      studyItem('b', 9, 4),
+      ...socialBaseline(),
+    ])
+
+    expect(score(spread, DEFAULT_PARAMS)).toBeGreaterThan(score(stacked, DEFAULT_PARAMS))
+  })
+
+  /** Below a comfortable day it charges nothing, so most days have no gradient at all --
+   *  `deadlinePressure` records what a term with a slope on every day costs the search. */
+  it('charges nothing for two ordinary days', () => {
+    const evenly = makeSchedule([studyItem('a', 3, 3), studyItem('b', 9, 3), ...socialBaseline()])
+    const slightly = makeSchedule([studyItem('a', 3, 4), studyItem('b', 9, 2), ...socialBaseline()])
+
+    expect(score(evenly, DEFAULT_PARAMS)).toBeCloseTo(score(slightly, DEFAULT_PARAMS), 6)
+  })
+
+  /**
+   * The ordering §2.1 says is not up for negotiation.
+   *
+   * A week with a genuinely higher worst day must win however badly arranged it is, or the
+   * solver could buy a wrecked floor with a tidy calendar.
+   */
+  it('never outranks a genuinely higher worst day', () => {
+    const packedButRested = makeSchedule([studyItem('a', 3, 5), studyItem('b', 3, 5), ...socialBaseline()])
+    const spreadButDrained = {
+      ...makeSchedule([studyItem('a', 3, 5), studyItem('b', 9, 5), ...socialBaseline()]),
+      start: { mental: 20, physical: 70, social: 70, errands: 70 },
+    }
+
+    const rested = project(packedButRested.start, toDayInputs(packedButRested, ALL_PRESENT), DEFAULT_PARAMS)
+    const drained = project(spreadButDrained.start, toDayInputs(spreadButDrained, ALL_PRESENT), DEFAULT_PARAMS)
+    expect(rested.worstFloor).toBeGreaterThan(drained.worstFloor)
+
+    expect(score(packedButRested, DEFAULT_PARAMS)).toBeGreaterThan(
+      score(spreadButDrained, DEFAULT_PARAMS),
+    )
+  })
+})

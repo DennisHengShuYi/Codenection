@@ -256,6 +256,7 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
     render(
       <BlockSheet
         model={model}
+        previewLater={() => 'This would move to Thursday.'}
         onClose={vi.fn()}
         onBack={vi.fn()}
         onLater={vi.fn()}

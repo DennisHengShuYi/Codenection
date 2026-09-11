@@ -2,7 +2,7 @@ import type { ParsedItem } from '../ai'
 import { HORIZON_DAYS } from '../engine'
 import type { EngineParams } from '../engine'
 import { smallestFixes, type Fix, type Schedule, type ScheduledItem } from '../optimizer'
-import { dateFor, WEEKDAY_NAMES } from './calendar'
+import { shortDayLabel } from './calendar'
 import { expandRecurring } from './recurrence'
 import { slotOn, type SlotNeed } from './slotFinder'
 
@@ -144,20 +144,24 @@ export function placeItems(
   return { schedule: placed, notes }
 }
 
-const WEEKDAYS = WEEKDAY_NAMES
 
 /**
- * What to call a day, in the student's terms where possible.
+ * The day a card names, with its date.
  *
- * A week saved before anchoring existed has no real dates, so it degrades to the index
- * rather than inventing a weekday -- naming the wrong day is worse than naming none.
+ * Straight through `domain/calendar.shortDayLabel`, which CLAUDE.md makes the one place a day
+ * index becomes a date or a name. `shortDayLabel` rather than `dayLabel` because these are
+ * sentences: that module already records what the heading form does inside one -- "Today, Sat
+ * 12 Sept's deadline will cost you about 4 hours of sleep" -- and "it stayed on Tomorrow, Tue
+ * 8 Sept" is the same sentence with the same seam in it. This had a private weekday table and returned "Thursday" --
+ * ambiguous the moment the horizon is longer than a week, since a fortnight holds three of
+ * them, and useless for matching against the dated grid the student is looking at. `dayLabel`
+ * also knows to say "Today" and "Tomorrow", which no date can express.
+ *
+ * A week saved before anchoring existed has no real dates, so it degrades to the index rather
+ * than inventing a weekday -- naming the wrong day is worse than naming none.
  */
-function dayName(schedule: Schedule | null, dayIndex: number): string {
-  const date = schedule === null ? null : dateFor(schedule, dayIndex)
-  if (date === null) return `day ${dayIndex}`
-
-  const weekday = WEEKDAYS[new Date(`${date}T00:00:00Z`).getUTCDay()]
-  return weekday ?? `day ${dayIndex}`
+function dayName(schedule: Schedule | null, dayIndex: number, today: number): string {
+  return schedule === null ? `day ${dayIndex}` : shortDayLabel(schedule, dayIndex, today)
 }
 
 /**
@@ -167,14 +171,174 @@ function dayName(schedule: Schedule | null, dayIndex: number): string {
  * with no explanation has lost their grip on their own week, which costs more trust than
  * the tidier schedule was ever worth.
  */
-export function describePlacement(note: PlacementNote, schedule: Schedule | null): string {
+export function describePlacement(
+  note: PlacementNote,
+  schedule: Schedule | null,
+  today: number,
+): string {
   if (!note.fitted) {
-    return `Added, but ${dayName(schedule, note.dayIndex)} has no room for ${note.title} — it is on top of something.`
+    return `Added, but ${dayName(schedule, note.dayIndex, today)} has no room for ${note.title} — it is on top of something.`
   }
 
   if (note.movedFrom === null) return 'Added.'
 
-  return `Added. ${dayName(schedule, note.movedFrom)} has no room for ${note.title}, so it went to ${dayName(schedule, note.dayIndex)}.`
+  return `Added. ${dayName(schedule, note.movedFrom, today)} has no room for ${note.title}, so it went to ${dayName(schedule, note.dayIndex, today)}.`
+}
+
+/** Small counts read better as words in a sentence. Beyond this the digit is clearer than
+ *  the word, and a day count this large is rare enough not to be worth a longer table. */
+const COUNT_WORDS = ['no', 'one', 'two', 'three', 'four', 'five'] as const
+
+const countWord = (value: number): string => COUNT_WORDS[value] ?? String(value)
+
+/**
+ * Whether the sentence is a proposal or a record.
+ *
+ * Later asks before it acts, so the same facts have to be sayable in both tenses -- the
+ * question a student approves, and the account of what was done once they have. One function
+ * takes both, because the branching (which reason is worth giving, and when none is) is the
+ * part carrying judgement, and two copies of it would drift apart.
+ */
+export type DeferralMood = 'planned' | 'done'
+
+/** What `deferItem` needs to explain itself: where the block went, and what it went past. */
+export interface DeferralNote {
+  readonly schedule: Schedule | null
+  readonly title: string
+  readonly from: number
+  /** Null when nothing had room and the block stayed where it was. */
+  readonly to: number | null
+  readonly skippedFull: number
+  readonly skippedWithRoom: number
+  /** Why it did not move. See `scheduleEdits.Deferral` -- `due` means no day was ever
+   *  examined, which is a different sentence from every day being full. */
+  readonly blocked: 'full' | 'due' | null
+  /** The lowest the block's own reserve reaches from the move onward, before and after.
+   *  Null when nothing moved and there is nothing to price. */
+  readonly floorBefore: number | null
+  readonly floorAfter: number | null
+  /**
+   * What to call the reserve the figures are about -- "Study & thinking", "People".
+   *
+   * Passed in rather than looked up. The four words live in `ui/kit/labels`, and the
+   * dependency order is one-way: this module is domain and may not reach into the interface
+   * layer. Handed down by the caller that already has both.
+   *
+   * Named at all because Rebalance's report says "your worst day goes from 41 to 44" and
+   * means the floor across all four reserves, while this means one. Same shape, different
+   * measurement -- and unnamed, the two read as one number a student could compare.
+   */
+  readonly reserveLabel: string
+  /**
+   * The hours the block would occupy on its new day -- "09:00-11:00" -- or null when nothing
+   * moved and there is no hour to name.
+   *
+   * Where in the day it lands is the half of the answer the student has not been consulted
+   * about: `slotOn` chooses the hour, not them, and it is what decides whether the move is any
+   * use. The day alone they can already see on the grid.
+   *
+   * Formatted by the caller, like `reserveLabel` above and for the same reason: the two-digit
+   * clock lives in `ui/kit/labels`, and a second copy of it here is what that module's own
+   * docstring forbids.
+   */
+  readonly whenLabel: string | null
+  /** The day the student is on, so the label can say "Today" and "Tomorrow" rather than
+   *  a date for the two days nobody names by date. */
+  readonly today: number
+}
+
+/**
+ * Below this the two days are the same week and the price is not worth stating.
+ *
+ * A whole reserve point, because the sentence prints whole numbers: a figure that reads "from
+ * 41 to 41" is one a student looks at once and stops trusting.
+ */
+const WORTH_PRICING = 1
+
+/**
+ * What Later did, and why, in one sentence.
+ *
+ * Ruling 16 applied to deferral: never silently reshuffle. `deferItem` searches forward and
+ * returns the week **unchanged** when nothing has room -- deliberately, so a caller can tell
+ * nothing happened -- and for a while nothing read that: the sheet closed either way, so
+ * pressing Later on a block with nowhere to go looked exactly like pressing it on one that
+ * moved.
+ *
+ * Naming the day fixed that half. The other half is *why that day*, and it matters more now
+ * than it did: Later used to be pure geometry, so "the next day with a gap" was a complete
+ * account of it. It now scores every opening against §2.1's objective and can pass over a day
+ * that plainly had space -- and a student watching it skip an empty Wednesday has no way to
+ * tell a decision from a bug. The obvious reading of the button is still the old behaviour.
+ *
+ * So the reason is only given when there is one. A block that moved to the very next day
+ * needs no explanation; it did what the button says.
+ *
+ * The skipped opening leads when both kinds were passed over. A full day explains itself --
+ * the student can see it is full -- where a day with space that was declined does not.
+ *
+ * The day only, never the hour, which matches `describePlacement` above. `slotOn` does choose
+ * an hour, and naming it here would mean either duplicating `ui/kit/labels`' `hourLabel` or
+ * importing the interface layer into the domain, and the dependency order is one-way. The day
+ * is what a student needs to re-find the block; the hour is on it when they open it.
+ */
+export function describeDeferral(note: DeferralNote, mood: DeferralMood): string {
+  const { schedule, title, from, to, skippedFull, skippedWithRoom, blocked } = note
+  const { floorBefore, floorAfter, reserveLabel, whenLabel, today } = note
+  const planned = mood === 'planned'
+
+  if (to === null) {
+    // The deadline, not the days. A block due on or before the day it already sits on has no
+    // later day to try, so the search examined nothing -- and "no room" there is false twice
+    // over: no day was full, and no day was looked at. It also sends the student to check a
+    // calendar that cannot explain it. One sentence for both moods, because nothing moved in
+    // either and there is no tense to change.
+    if (blocked === 'due') {
+      return `${title} is already due, so there is no later day to move it to.`
+    }
+
+    const nowhere = `There is no room for ${title} on any day it could move to`
+    return planned
+      ? `${nowhere}.`
+      : `There was no room for ${title} on any day it could move to, so it stayed on ${dayName(schedule, from, today)}.`
+  }
+
+  // The day, and the hours on it where the caller could supply them.
+  const where = dayName(schedule, to, today) + (whenLabel ? `, ${whenLabel}` : '')
+  // "This" rather than the title in the proposal: it sits inside the block's own sheet, under
+  // its name, where repeating the title reads as though a second block were involved.
+  const lead = planned ? `This would move to ${where}.` : `${title} moved to ${where}.`
+
+  /**
+   * What the move does to the reserve this block spends, in the unit `requestCost` already
+   * prices an incoming ask in -- and saying which reserve, because Rebalance's own report
+   * uses the same shape for the floor across all four.
+   *
+   * Given whichever way it goes. The search picks the best *day to move to* and never weighs
+   * that against leaving the block alone, so the day it chooses can be worse than staying --
+   * and since Later asks before acting, that is exactly the case the number exists for. A
+   * price shown only when it flatters the suggestion would be advocacy rather than reporting.
+   */
+  const priced =
+    floorBefore !== null &&
+    floorAfter !== null &&
+    Math.abs(floorAfter - floorBefore) >= WORTH_PRICING
+      ? ` ${reserveLabel} bottoms out at ${Math.round(floorAfter)} instead of ${Math.round(floorBefore)}.`
+      : ''
+
+  if (skippedWithRoom > 0) {
+    // Named rather than counted, because the specific day is the thing a student is looking
+    // at and wondering about. With several, the first one passed over is the one that
+    // prompts the question.
+    const passed = dayName(schedule, from + 1, today)
+    return `${lead} ${passed} ${planned ? 'has' : 'had'} room, but ${where} costs you less.${priced}`
+  }
+
+  if (skippedFull > 0) {
+    const days = skippedFull === 1 ? 'day' : 'days'
+    return `${lead} The ${countWord(skippedFull)} ${days} before it ${planned ? 'have' : 'had'} no room.${priced}`
+  }
+
+  return `${lead}${priced}`
 }
 
 /** How many of the ranked fixes to look through for one that actually helps. Cheap: the
@@ -211,9 +375,13 @@ export function fixThatMakesRoom(
   need: SlotNeed,
   dayIndex: number,
   params: EngineParams,
+  /** The day the student is on, so the fix offered is one they can still carry out. Separate
+   *  from `dayIndex`, which is the day being made room *on* -- usually today, but the Rest
+   *  button asks about tomorrow as readily. */
+  today: number,
 ): Fix | null {
   return (
-    smallestFixes(schedule, params, FIXES_TO_CONSIDER).find(
+    smallestFixes(schedule, params, today, FIXES_TO_CONSIDER).find(
       (fix) => slotOn(fix.move.apply(schedule), dayIndex, need) !== null,
     ) ?? null
   )

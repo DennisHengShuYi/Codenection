@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { HORIZON_DAYS } from '../engine'
+import { DEFAULT_PARAMS, HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
-import { addBlock, completeItem, deferItem, editItem, removeItem, type ItemFields } from './scheduleEdits'
+import {
+  addBlock,
+  completeItem,
+  deferItem,
+  deferralOf,
+  editItem,
+  removeItem,
+  type ItemFields,
+} from './scheduleEdits'
 
 const item = (id: string, dayIndex: number, over: Partial<ScheduledItem> = {}): ScheduledItem => ({
   id,
@@ -55,12 +63,12 @@ describe('completeItem', () => {
 
 describe('deferItem', () => {
   it('pushes the item later', () => {
-    expect(deferItem(schedule([item('a', 1)]), 'a').items[0]!.dayIndex).toBeGreaterThan(1)
+    expect(deferItem(schedule([item('a', 1)]), 'a', DEFAULT_PARAMS).items[0]!.dayIndex).toBeGreaterThan(1)
   })
 
   // Otherwise deferring becomes a way to make a deadline quietly disappear.
   it('never pushes an item past its deadline', () => {
-    const after = deferItem(schedule([item('a', 1, { deadlineDay: 2 })]), 'a')
+    const after = deferItem(schedule([item('a', 1, { deadlineDay: 2 })]), 'a', DEFAULT_PARAMS)
 
     expect(after.items[0]!.dayIndex).toBeLessThanOrEqual(2)
   })
@@ -68,21 +76,188 @@ describe('deferItem', () => {
   // An item pushed off the end vanishes from the model while still existing in the
   // student's life. On the last day there is no later day to search, so it stays put.
   it('never pushes an item off the end of the horizon', () => {
-    const after = deferItem(schedule([item('a', HORIZON_DAYS - 1)]), 'a')
+    const after = deferItem(schedule([item('a', HORIZON_DAYS - 1)]), 'a', DEFAULT_PARAMS)
 
     expect(after.items[0]!.dayIndex).toBeLessThan(HORIZON_DAYS)
   })
 
   it('does nothing for an id that is not there', () => {
-    expect(deferItem(schedule([item('a', 1)]), 'nope').items[0]!.dayIndex).toBe(1)
+    expect(deferItem(schedule([item('a', 1)]), 'nope', DEFAULT_PARAMS).items[0]!.dayIndex).toBe(1)
   })
 
   it('does not mutate the week it was given', () => {
     const before = schedule([item('a', 1)])
     const snapshot = JSON.stringify(before)
-    deferItem(before, 'a')
+    deferItem(before, 'a', DEFAULT_PARAMS)
 
     expect(JSON.stringify(before)).toBe(snapshot)
+  })
+
+  /**
+   * Later used to be pure geometry: the first day forward with a gap won, whatever that day
+   * was already carrying. So it would drop four hours of study onto the worst day of the
+   * fortnight without noticing, and the student had to run Rebalance to undo what Later had
+   * just done.
+   *
+   * It now scores every day that has room the way §2.1 scores a whole week -- floor first,
+   * then deficit days -- and takes the best. The bound is unchanged and is still the only
+   * one: `effectiveDeadline`, so nothing can be deferred past when it is actually due.
+   */
+  it('passes over an earlier opening that would cost the floor more', () => {
+    // Both days have room. Day 2 is already carrying a heavy fixed load, day 3 is clear --
+    // so the earliest opening is the expensive one, and geometry alone would take it.
+    const heavy = item('heavy', 2, { hours: 8, startHour: 8, fixed: true, type: 'mental' })
+    // Mental has to be the reserve actually setting the floor, or the comparison is about
+    // nothing: with four reserves level, isolation drains social past everything else and
+    // `worstFloor` stops responding to where a study block sits at all.
+    const week = {
+      ...schedule([item('a', 1, { hours: 3, type: 'mental' }), heavy]),
+      start: { mental: 40, physical: 90, social: 90, errands: 90 },
+    }
+
+    expect(deferItem(week, 'a', DEFAULT_PARAMS).items.find((i) => i.id === 'a')?.dayIndex).toBe(3)
+  })
+
+  /**
+   * The other half, and the one that keeps Later meaning "later".
+   *
+   * With nothing to choose between the days, a search that maximises the floor could wander
+   * to the end of the fortnight on rounding noise. Near-ties go to the earliest day, so an
+   * empty week still moves the block one day and not eleven.
+   */
+  it('takes the earliest opening when no day is meaningfully kinder', () => {
+    expect(deferItem(schedule([item('a', 1)]), 'a', DEFAULT_PARAMS).items[0]!.dayIndex).toBe(2)
+  })
+})
+
+/**
+ * Why it landed where it landed.
+ *
+ * "Essay moved to Thursday" answers where and leaves the student to guess at the rest -- and
+ * the guess they will make is the wrong one, because the obvious reading of Later is still
+ * the old behaviour: the next day with a gap. When it skips past a day that plainly had room,
+ * silence about that reads as a bug rather than a decision.
+ *
+ * The search already knows. Every day earlier than the one it chose was passed over for
+ * exactly one of two reasons, and they are different things to be told: nothing would fit, or
+ * something would have fitted and it would have cost more.
+ */
+describe('deferralOf', () => {
+  it('reports the day it came from and the day it went to', () => {
+    const outcome = deferralOf(schedule([item('a', 1)]), 'a', DEFAULT_PARAMS)
+
+    expect(outcome?.from).toBe(1)
+    expect(outcome?.to).toBe(2)
+  })
+
+  it('counts nothing skipped when it took the very next day', () => {
+    const outcome = deferralOf(schedule([item('a', 1)]), 'a', DEFAULT_PARAMS)
+
+    expect(outcome?.skippedWithRoom).toBe(0)
+    expect(outcome?.skippedFull).toBe(0)
+  })
+
+  /** Passed over because nothing would fit -- the old reason, and still a real one. */
+  it('counts the days it passed over for having no room', () => {
+    const wall = (dayIndex: number) =>
+      item(`wall-${dayIndex}`, dayIndex, { hours: 16, startHour: 8, fixed: true })
+    const outcome = deferralOf(schedule([item('a', 1), wall(2), wall(3)]), 'a', DEFAULT_PARAMS)
+
+    expect(outcome?.to).toBe(4)
+    expect(outcome?.skippedFull).toBe(2)
+    expect(outcome?.skippedWithRoom).toBe(0)
+  })
+
+  /** The new reason, and the one that needs saying out loud. */
+  it('counts a day that had room and was passed over anyway', () => {
+    const heavy = item('heavy', 2, { hours: 8, startHour: 8, fixed: true, type: 'mental' })
+    const week = {
+      ...schedule([item('a', 1, { hours: 3, type: 'mental' }), heavy]),
+      start: { mental: 40, physical: 90, social: 90, errands: 90 },
+    }
+
+    const outcome = deferralOf(week, 'a', DEFAULT_PARAMS)
+
+    expect(outcome?.to).toBe(3)
+    expect(outcome?.skippedWithRoom).toBe(1)
+  })
+
+  /** Nowhere legal at all. `to` is null rather than the day it started on, so a caller
+   *  cannot mistake "stayed put" for "moved zero days". */
+  it('reports no destination when nothing has room', () => {
+    const wall = (dayIndex: number) =>
+      item(`wall-${dayIndex}`, dayIndex, { hours: 16, startHour: 8, fixed: true })
+    const walls = Array.from({ length: HORIZON_DAYS - 2 }, (_, offset) => wall(offset + 2))
+
+    expect(deferralOf(schedule([item('a', 1), ...walls]), 'a', DEFAULT_PARAMS)?.to).toBeNull()
+  })
+
+  /**
+   * The two ways Later can come back empty-handed, which the code told apart and the sentence
+   * did not.
+   *
+   * A block whose deadline is at or before the day it sits on has no candidate day at all:
+   * the search loop runs from `dayIndex + 1` to a `latest` that is already behind it, so it
+   * never executes and zero days are examined. Reported as "nothing had room" that is simply
+   * false -- no day was full, there was no day -- and it is the common case rather than an
+   * edge one. Rhythms date from the last confirmed occurrence plus an interval, so anything
+   * scheduled further out than its interval is already overdue the moment it is stamped.
+   */
+  it('says it is the deadline, not the days, when there is no later day at all', () => {
+    const overdue = { ...item('walk', 5, { kind: 'lightExercise' }), softDeadlineDay: 2 }
+    const outcome = deferralOf(schedule([overdue]), 'walk', DEFAULT_PARAMS)
+
+    expect(outcome?.to).toBeNull()
+    expect(outcome?.blocked).toBe('due')
+    // Nothing was examined, so nothing may be reported as passed over.
+    expect(outcome?.skippedFull).toBe(0)
+  })
+
+  it('still says it is the days when days were looked at and were full', () => {
+    const wall = (dayIndex: number) =>
+      item(`wall-${dayIndex}`, dayIndex, { hours: 16, startHour: 8, fixed: true })
+    const walls = Array.from({ length: HORIZON_DAYS - 2 }, (_, offset) => wall(offset + 2))
+    const outcome = deferralOf(schedule([item('a', 1), ...walls]), 'a', DEFAULT_PARAMS)
+
+    expect(outcome?.to).toBeNull()
+    expect(outcome?.blocked).toBe('full')
+  })
+
+  /**
+   * What the move costs, in the unit the request box already prices in.
+   *
+   * Later chooses between candidate *days* and never compares them against leaving the block
+   * alone, so the day it picks can still be worse than not moving at all -- and now that it
+   * asks before acting, that is exactly the case a student needs the number for.
+   *
+   * Measured on the block's own load type rather than `worstFloor`, for `requestCost`'s
+   * reason word for word: a mental block moving between two days does not touch the social
+   * isolation that usually sets the overall floor, so on that measure every move would price
+   * as free.
+   */
+  it('prices the move on the reserve the block actually spends', () => {
+    const heavy = item('heavy', 2, { hours: 8, startHour: 8, fixed: true, type: 'mental' })
+    const week = {
+      ...schedule([item('a', 1, { hours: 3, type: 'mental' }), heavy]),
+      start: { mental: 40, physical: 90, social: 90, errands: 90 },
+    }
+
+    const outcome = deferralOf(week, 'a', DEFAULT_PARAMS)
+
+    expect(outcome?.floorBefore).toBeGreaterThan(0)
+    expect(outcome?.floorAfter).toBeGreaterThan(outcome!.floorBefore!)
+  })
+
+  it('prices nothing when there was no move to price', () => {
+    const overdue = { ...item('walk', 5, { kind: 'lightExercise' }), softDeadlineDay: 2 }
+    const outcome = deferralOf(schedule([overdue]), 'walk', DEFAULT_PARAMS)
+
+    expect(outcome?.floorBefore).toBeNull()
+    expect(outcome?.floorAfter).toBeNull()
+  })
+
+  it('has nothing to report about a block that is not there', () => {
+    expect(deferralOf(schedule([item('a', 1)]), 'nope', DEFAULT_PARAMS)).toBeNull()
   })
 })
 
@@ -255,7 +430,7 @@ describe('deferring something with only a synthetic deadline', () => {
 
     const week = schedule([{ ...walk, softDeadlineDay: 3 }, full(2)])
 
-    expect(deferItem(week, 'walk').items[0]?.dayIndex).toBe(3)
+    expect(deferItem(week, 'walk', DEFAULT_PARAMS).items[0]?.dayIndex).toBe(3)
   })
 
   it('never lands past the soft deadline, however full the days before it', () => {
@@ -265,14 +440,14 @@ describe('deferring something with only a synthetic deadline', () => {
     const week = schedule([{ ...walk, softDeadlineDay: 3 }, full(2), full(3)])
 
     // Nowhere legal at all, so it does not move rather than moving past the wall.
-    expect(deferItem(week, 'walk').items[0]?.dayIndex).toBe(1)
+    expect(deferItem(week, 'walk', DEFAULT_PARAMS).items[0]?.dayIndex).toBe(1)
   })
 
   /** A real deadline still wins over a derived one -- it is a fact about the world. */
   it('still stops at a real deadline when there is one', () => {
     const week = schedule([{ ...walk, deadlineDay: 2, softDeadlineDay: 6 }])
 
-    expect(deferItem(week, 'walk').items[0]?.dayIndex).toBeLessThanOrEqual(2)
+    expect(deferItem(week, 'walk', DEFAULT_PARAMS).items[0]?.dayIndex).toBeLessThanOrEqual(2)
   })
 
   /** Nothing stamped and nothing stated: there is no deadline to hold it to, so the horizon
@@ -283,7 +458,7 @@ describe('deferring something with only a synthetic deadline', () => {
       item(`wall-${offset + 2}`, offset + 2, { hours: 16, startHour: 8, fixed: true }),
     )
 
-    expect(deferItem(schedule([walk, ...walls]), 'walk').items[0]?.dayIndex).toBe(
+    expect(deferItem(schedule([walk, ...walls]), 'walk', DEFAULT_PARAMS).items[0]?.dayIndex).toBe(
       HORIZON_DAYS - 1,
     )
   })
@@ -314,7 +489,7 @@ describe('deferItem, looking for somewhere to put it', () => {
   it('skips a day with no room and lands on one that has some', () => {
     const week = schedule([item('a', 1), busy(2), busy(3)])
 
-    expect(deferItem(week, 'a').items[0]!.dayIndex).toBeGreaterThan(3)
+    expect(deferItem(week, 'a', DEFAULT_PARAMS).items[0]!.dayIndex).toBeGreaterThan(3)
   })
 
   it('puts it in a real opening rather than at the hour it used to be', () => {
@@ -323,7 +498,7 @@ describe('deferItem, looking for somewhere to put it', () => {
       item('taken', 2, { startHour: 9, hours: 4, fixed: true }),
     ])
 
-    const moved = deferItem(week, 'a').items[0]!
+    const moved = deferItem(week, 'a', DEFAULT_PARAMS).items[0]!
 
     const clash =
       moved.dayIndex === 2 && moved.startHour < 13 && moved.startHour + moved.hours > 9
@@ -332,7 +507,7 @@ describe('deferItem, looking for somewhere to put it', () => {
   })
 
   it('still never moves anything past its deadline', () => {
-    const after = deferItem(schedule([item('a', 1, { deadlineDay: 3 })]), 'a')
+    const after = deferItem(schedule([item('a', 1, { deadlineDay: 3 })]), 'a', DEFAULT_PARAMS)
 
     expect(after.items[0]!.dayIndex).toBeLessThanOrEqual(3)
   })
@@ -344,12 +519,12 @@ describe('deferItem, looking for somewhere to put it', () => {
   it('reports that it moved nothing when the deadline leaves no room', () => {
     const week = schedule([item('a', 3, { deadlineDay: 3 })])
 
-    expect(deferItem(week, 'a')).toBe(week)
+    expect(deferItem(week, 'a', DEFAULT_PARAMS)).toBe(week)
   })
 
   it('reports the week back unchanged for an id that is not there', () => {
     const week = schedule([item('a', 1)])
 
-    expect(deferItem(week, 'nope')).toBe(week)
+    expect(deferItem(week, 'nope', DEFAULT_PARAMS)).toBe(week)
   })
 })

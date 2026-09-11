@@ -496,11 +496,15 @@ export async function handleIntent(
         const blockLog = await store.loadBlockLog(accountId).catch(() => null)
         if (blockLog === null) return askUnavailableReply()
 
+        // The solver may only touch days the student can still act on, so it has to be told
+        // which day that is -- the same `todayFor` every other command here reads.
+        const today = todayFor(week, now)
         const predictions = await store.loadPredictions(accountId).catch(() => [])
         const outcome = runRebalance(
           week,
           paramsFor(outcomesFrom(blockLog), predictions),
           REBALANCE_SEED,
+          today,
         )
 
         return rebalanceReply(
@@ -646,7 +650,12 @@ export async function handleIntent(
     if (blockLog === null) return askUnavailableReply()
 
     const predictions = await store.loadPredictions(accountId).catch(() => [])
-    const outcome = runRebalance(week, paramsFor(outcomesFrom(blockLog), predictions), REBALANCE_SEED)
+    const outcome = runRebalance(
+      week,
+      paramsFor(outcomesFrom(blockLog), predictions),
+      REBALANCE_SEED,
+      todayFor(week, now),
+    )
     await store.saveWeek(accountId, outcome.schedule)
 
     return { text: outcome.report }

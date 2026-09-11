@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Repository } from '../data'
+import type { Repository, Session } from '../data'
+import { freshWeek } from '../domain/freshWeek'
 import { umCrunchWeek } from '../fixtures/umWeek'
 import type { Schedule } from '../optimizer'
 
@@ -16,8 +17,23 @@ export const SAVE_FAILED =
  * §3's planner exist to replace it" -- they exist now (`AddSheet`'s three ways in), and the
  * seed stayed anyway, deliberately: Ruling 14 keeps it for the demo, and it is what a visitor
  * looking around with no account is shown before they have typed anything.
+ *
+ * `session` gates which first run that is, and the gate belongs here for the reason
+ * `useProfile` states over its own: "a signed-in account is a real student, not a preview".
+ * That hook already refused to write the fabricated profile and the ~20 invented
+ * `BlockRecord`s into a live account -- but the week carried the other half of the same seed
+ * and had no gate at all, so a student signing up was shown `umCrunchWeek`'s UM timetable,
+ * its three invented assignments, and `CRUNCH_START`'s 41/44/32/55 read onto the dial as
+ * their own depletion. Half the seed was gated and half was missed.
+ *
+ * So a visitor still gets the demo fortnight and a real first run gets `freshWeek` -- empty,
+ * at full reserve, and honest about having measured nothing yet. §0 still holds either way:
+ * both are a week the room can draw, neither is a blank state.
  */
-export function useSchedule(repo: Repository): {
+export function useSchedule(
+  repo: Repository,
+  session: Session | null = null,
+): {
   schedule: Schedule | null
   setSchedule: (next: Schedule) => void
   /** Null while every write so far has landed. A sentence a student can act on otherwise. */
@@ -57,13 +73,13 @@ export function useSchedule(repo: Repository): {
       // data and far better than a screen that never resolves.
       .catch(() => null)
       .then((saved) => {
-        if (!cancelled) setLocal(saved ?? umCrunchWeek())
+        if (!cancelled) setLocal(saved ?? (session === null ? umCrunchWeek() : freshWeek()))
       })
 
     return () => {
       cancelled = true
     }
-  }, [repo])
+  }, [repo, session])
 
   /**
    * Writes the newest week, one write at a time.

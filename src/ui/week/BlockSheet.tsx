@@ -67,6 +67,7 @@ export function BlockSheet({
   onEdit,
   onRemove,
   onMicroStart,
+  previewLater,
 }: {
   readonly model: BlockSheetModel
   readonly onClose: () => void
@@ -82,12 +83,26 @@ export function BlockSheet({
   readonly onRemove: (itemId: string) => void
   /** §4.1's manual trigger: opens the ladder for this block on a page of its own. */
   readonly onMicroStart: (itemId: string) => void
+  /**
+   * Where Later would put this block, and why, as a sentence -- without moving anything.
+   *
+   * Asked for on the press rather than computed for every open sheet: answering it runs a
+   * projection of the fortnight per candidate day, and most blocks a student opens are not
+   * ones they are about to defer.
+   */
+  readonly previewLater: (itemId: string) => string
 }): JSX.Element {
   const [confirmingRemove, setConfirmingRemove] = useState(false)
+  /** The proposal Later is waiting on, or null when it has not been asked. */
+  const [laterPlan, setLaterPlan] = useState<string | null>(null)
   const { item, actions, recordedAnswer } = model
 
   const simpleHandlers: Record<SimpleAction, (itemId: string) => void> = {
-    later: onLater,
+    // Later proposes rather than acts: it now scores every opening and can pass over a day
+    // that plainly had room, so what it does is no longer guessable from the button's name.
+    // Ruling 16's rule for placement -- offered rather than taken -- applied to the one
+    // action on this sheet that rearranges the week on the student's behalf.
+    later: (itemId) => setLaterPlan(previewLater(itemId)),
   }
 
   const simpleActions = actions.filter(isSimpleAction)
@@ -179,6 +194,43 @@ export function BlockSheet({
    * nothing in particular. It replaces the body as well as the bar, so there is no way to
    * answer it by accident while looking at something else.
    */
+  /**
+   * Later's proposal, in the same shape as the removal question below.
+   *
+   * It replaces the body rather than sitting under the buttons, for that question's reason:
+   * there should be no way to answer it by accident while looking at something else. The
+   * move itself is reversible -- unlike Remove -- so the question is about consent to a
+   * rearrangement, not a safeguard against loss.
+   *
+   * With nowhere to go there is nothing to approve, so the sheet offers only a way out. A
+   * disabled "Move it" would be a button that exists to be refused.
+   */
+  if (laterPlan !== null) {
+    const nowhere = !laterPlan.includes('would move')
+
+    return (
+      <Sheet
+        title={item.title}
+        onClose={onClose}
+        onBack={() => setLaterPlan(null)}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setLaterPlan(null)}>
+              {nowhere ? 'Close' : 'Keep it here'}
+            </Button>
+            {!nowhere && (
+              <Button data-testid="confirm-later-yes" onClick={() => onLater(item.id)}>
+                Move it
+              </Button>
+            )}
+          </>
+        }
+      >
+        <p data-testid="confirm-later">{laterPlan}</p>
+      </Sheet>
+    )
+  }
+
   if (confirmingRemove) {
     return (
       <Sheet

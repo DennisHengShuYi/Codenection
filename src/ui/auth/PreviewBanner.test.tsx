@@ -23,6 +23,22 @@ describe('PreviewBanner', () => {
     expect(screen.getByText(/saved on this device only/i)).toBeVisible()
   })
 
+  /**
+   * The second half of the truth, and the half that changed.
+   *
+   * "Sign in to keep it everywhere" was accurate only while `carryOverWeek` existed to move
+   * the preview into the new account. That copy is gone, because it could not tell a week a
+   * student had built from the demo one the app seeds -- so an account now starts empty, and
+   * a banner still promising otherwise would be the same lie the old "not being saved"
+   * wording was, pointing the other way.
+   */
+  it('does not promise the preview follows them into an account', () => {
+    render(<PreviewBanner onSignIn={vi.fn()} />)
+
+    expect(screen.queryByText(/keep it everywhere/i)).toBeNull()
+    expect(screen.getByText(/starts a fresh week/i)).toBeVisible()
+  })
+
   /** The old wording is the defect, so it is asserted gone rather than merely replaced. */
   it('does not claim the week is unsaved', () => {
     render(<PreviewBanner onSignIn={vi.fn()} />)

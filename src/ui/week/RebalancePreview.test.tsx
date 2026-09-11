@@ -46,6 +46,7 @@ const setup = (over: Partial<RebalanceOutcome> = {}) => {
 
   render(
     <RebalancePreview
+      today={0}
       proposal={outcome(over)}
       onApprove={onApprove}
       onDiscard={onDiscard}

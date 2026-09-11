@@ -170,6 +170,71 @@ function neglectPressure(schedule: Schedule, params: EngineParams): number {
   return total
 }
 
+/**
+ * Hours of work in a day past which it stops being a comfortable one.
+ *
+ * Well under `dailyHoursCap`, which is 10 and is a hard constraint -- the cap says what the
+ * solver may not do, this says what it should prefer not to. Seven is a long day of real work
+ * for a student who also has classes, travel and a life, and the number is measured as well as
+ * chosen: at six, the budget fixtures in `hillClimb.test.ts` and `neglect.test.ts` went to
+ * 4,342 and 3,024 evaluations against a bound of 3,000, because their days sit right around
+ * six hours and every one of them gained a gradient. At seven they come in at 2,520 -- the
+ * term fires on days that are genuinely packed and stays silent on ordinary ones, which is
+ * both the behaviour wanted and the one the search can afford.
+ *
+ * Charging nothing below it is what keeps this affordable. `deadlinePressure` records in
+ * detail what a term with a slope on *every* day costs the search: an ordinary fortnight went
+ * from 402 evaluations and 73ms to 2,407 and 222ms. Most days sit under six hours, so most
+ * days contribute no gradient at all.
+ */
+const COMFORTABLE_DAY_HOURS = 7
+
+/**
+ * §2.1 amended: a packed day is worse than a spread one, even when the student can afford it.
+ *
+ * The objective was silent about daily load, and silent in a way that was easy to miss.
+ * `stateMultiplier` (§6.6) only bites below a reserve of 70, so for a rested student a
+ * nine-hour day costs exactly as much per hour as a four-hour one. `fragmentationOf` counts
+ * *blocks*, so moving one block between two days leaves the total unchanged -- and it rates a
+ * single nine-hour block better than three short ones, which is backwards for this question.
+ * And `dailyHoursCap` is a wall, not a slope: everything under ten hours is alike to it.
+ *
+ * Measured on a real fortnight, moving three hours off a nine-hour day onto a one-hour day
+ * changed the score by **0.0000**. The solver was not declining to level the week; it could
+ * not see the difference.
+ *
+ * Squared rather than linear on the excess, which is what makes it *level* rather than merely
+ * shave. Linear charges the same for an hour moved off a nine-hour day as off a seven-hour
+ * one, so once every day is under the threshold it stops caring how the rest is arranged.
+ * Squared keeps preferring the flatter of two weeks that are both over.
+ *
+ * Sized like `deficitArea` and the two pressures, and for the identical reason: §2.1's
+ * ordering is not up for negotiation. Moves conserve hours -- only `insertRest` and
+ * `insertSocial` add any -- so the most this term can swing on a real fortnight is a fraction
+ * of a point, well under the value of a single deficit day and far under a genuine gain in
+ * the floor.
+ */
+export const DAILY_LOAD_WEIGHT = 0.01
+
+function dailyLoad(byDay: readonly ScheduledItem[][]): number {
+  let total = 0
+
+  for (const onThisDay of byDay) {
+    let hours = 0
+    for (const item of onThisDay) if (isWork(item.kind)) hours += item.hours
+
+    // Whole hours over, not fractions of one. The difference between a 6.4-hour day and a
+    // 6.5-hour one is not a difference the model can defend, and charging for it gives the
+    // hill climber an improving move at nearly every block on nearly every day: measured, the
+    // continuous form took the budget fixtures to 4,334 and 3,028 evaluations against a bound
+    // of 3,000, which is `deadlinePressure`'s own lesson arriving a second time.
+    const excess = Math.max(0, Math.floor(hours - COMFORTABLE_DAY_HOURS))
+    total += excess * excess
+  }
+
+  return total
+}
+
 /** Rest and sleep are recovery, not load, and must not count against the daily cap or
  *  the fragmentation penalty. */
 const isWork = (kind: string): boolean => kind !== 'rest' && kind !== 'sleep'
@@ -362,6 +427,7 @@ export function score(schedule: Schedule, params: EngineParams): number {
     weights.fragmentation * fragmentationOf(byDay) -
     weights.deficitArea * projection.deficitArea -
     DEADLINE_PRESSURE_WEIGHT * deadlinePressure(schedule, params) -
-    NEGLECT_PRESSURE_WEIGHT * neglectPressure(schedule, params)
+    NEGLECT_PRESSURE_WEIGHT * neglectPressure(schedule, params) -
+    DAILY_LOAD_WEIGHT * dailyLoad(byDay)
   )
 }

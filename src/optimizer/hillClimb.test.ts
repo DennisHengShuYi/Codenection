@@ -44,7 +44,7 @@ describe('rebalance', () => {
   // nothing at all.
   it('never returns a worse schedule than it was given', () => {
     const before = pileUp()
-    const after = rebalance(before, DEFAULT_PARAMS, makeRng(1))
+    const after = rebalance(before, DEFAULT_PARAMS, makeRng(1), 0)
 
     expect(score(after.schedule, DEFAULT_PARAMS)).toBeGreaterThanOrEqual(
       score(before, DEFAULT_PARAMS) - 1e-9,
@@ -52,14 +52,14 @@ describe('rebalance', () => {
   })
 
   it('improves a schedule that piles three deadlines onto one day', () => {
-    const after = rebalance(pileUp(), DEFAULT_PARAMS, makeRng(1))
+    const after = rebalance(pileUp(), DEFAULT_PARAMS, makeRng(1), 0)
 
     expect(after.worstAfter).toBeGreaterThan(after.worstBefore)
     expect(after.moves.length).toBeGreaterThan(0)
   })
 
   it('only ever returns a valid schedule', () => {
-    expect(isValid(rebalance(pileUp(), DEFAULT_PARAMS, makeRng(7)).schedule, DEFAULT_PARAMS))
+    expect(isValid(rebalance(pileUp(), DEFAULT_PARAMS, makeRng(7), 0).schedule, DEFAULT_PARAMS))
       .toBe(true)
   })
 
@@ -67,7 +67,7 @@ describe('rebalance', () => {
   // end rather than only at the neighbour generator.
   it('never moves protected rest', () => {
     const before = makeSchedule([...pileUp().items, restItem('rest', 4, 20)])
-    const after = rebalance(before, DEFAULT_PARAMS, makeRng(3))
+    const after = rebalance(before, DEFAULT_PARAMS, makeRng(3), 0)
     const rest = after.schedule.items.find((item) => item.id === 'rest')
 
     expect(rest?.dayIndex).toBe(4)
@@ -75,15 +75,15 @@ describe('rebalance', () => {
   })
 
   it('is deterministic for a given seed', () => {
-    const a = rebalance(pileUp(), DEFAULT_PARAMS, makeRng(42))
-    const b = rebalance(pileUp(), DEFAULT_PARAMS, makeRng(42))
+    const a = rebalance(pileUp(), DEFAULT_PARAMS, makeRng(42), 0)
+    const b = rebalance(pileUp(), DEFAULT_PARAMS, makeRng(42), 0)
 
     expect(a.schedule.items).toEqual(b.schedule.items)
   })
 
   it('keeps the schedule it started from, so undo is exact', () => {
     const before = pileUp()
-    const after = rebalance(before, DEFAULT_PARAMS, makeRng(1))
+    const after = rebalance(before, DEFAULT_PARAMS, makeRng(1), 0)
 
     expect(after.before).toEqual(before)
   })
@@ -91,14 +91,14 @@ describe('rebalance', () => {
   it('does not mutate the schedule it was given', () => {
     const before = pileUp()
     const snapshot = JSON.stringify(before)
-    rebalance(before, DEFAULT_PARAMS, makeRng(1))
+    rebalance(before, DEFAULT_PARAMS, makeRng(1), 0)
 
     expect(JSON.stringify(before)).toBe(snapshot)
   })
 
   it('returns an untouched empty schedule rather than throwing', () => {
     const empty = makeSchedule([])
-    const after = rebalance(empty, DEFAULT_PARAMS, makeRng(1))
+    const after = rebalance(empty, DEFAULT_PARAMS, makeRng(1), 0)
 
     expect(isValid(after.schedule, DEFAULT_PARAMS)).toBe(true)
   })
@@ -136,7 +136,7 @@ describe('rebalance', () => {
       deadlineDay: 14 + (i % 7),
     }))
 
-    const result = rebalance(makeSchedule([...fixtures, ...movable]), DEFAULT_PARAMS, makeRng(5))
+    const result = rebalance(makeSchedule([...fixtures, ...movable]), DEFAULT_PARAMS, makeRng(5), 0)
 
     // Measured at 2,322 for this fixture and seed after the restart loop came out, and it
     // has since done its job: Ruling 20's deadline-pressure term drove this to 4,326 on a first
@@ -150,7 +150,7 @@ describe('rebalance', () => {
   })
 
   it('counts every candidate it scored, so the budget above is measuring something', () => {
-    const result = rebalance(pileUp(), DEFAULT_PARAMS, makeRng(1))
+    const result = rebalance(pileUp(), DEFAULT_PARAMS, makeRng(1), 0)
 
     expect(result.evaluations).toBeGreaterThan(result.moves.length)
   })

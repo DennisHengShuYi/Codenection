@@ -3,7 +3,7 @@ import type { ParsedItem } from '../ai'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
 import { DEFAULT_PARAMS } from '../engine'
-import { describePlacement, fixThatMakesRoom, placeItems } from './placement'
+import { describeDeferral, describePlacement, fixThatMakesRoom, placeItems } from './placement'
 import { slotOn, type SlotNeed } from './slotFinder'
 
 const empty = (): Schedule => ({
@@ -169,21 +169,23 @@ describe('describePlacement', () => {
   })
 
   it('says nothing beyond the plain fact when nothing had to move', () => {
-    expect(describePlacement(note(), null)).toBe('Added.')
+    expect(describePlacement(note(), null, 0)).toBe('Added.')
   })
 
   it('names both days when it had to go somewhere else', () => {
-    const line = describePlacement(note({ movedFrom: 2, dayIndex: 4 }), null)
+    const line = describePlacement(note({ movedFrom: 2, dayIndex: 4 }), null, 0)
 
     expect(line).toContain('day 2')
     expect(line).toContain('day 4')
   })
 
-  it('uses the real weekday when the week knows what day it is', () => {
+  it('uses the real date when the week knows what day it is', () => {
     const anchored = { ...empty(), startedOn: '2026-09-07' }
 
-    expect(describePlacement(note({ movedFrom: 1, dayIndex: 3 }), anchored)).toMatch(
-      /Tuesday|Thursday/,
+    // Dated now, not merely named: a fortnight holds three Tuesdays, and the grid the
+    // student is looking at is labelled by date.
+    expect(describePlacement(note({ movedFrom: 1, dayIndex: 3 }), anchored, 0)).toMatch(
+      /\d+ \w{3}/,
     )
   })
 
@@ -191,7 +193,7 @@ describe('describePlacement', () => {
    *  make. The student can see the day is overfull; pretending otherwise loses their trust
    *  in every other thing the app says. */
   it('says so when it could not find room at all', () => {
-    expect(describePlacement(note({ fitted: false }), null)).toMatch(/no room|does not fit|full/i)
+    expect(describePlacement(note({ fitted: false }), null, 0)).toMatch(/no room|does not fit|full/i)
   })
 })
 
@@ -222,7 +224,7 @@ describe('fixThatMakesRoom', () => {
   it('has nothing to offer when the week has nothing movable', () => {
     const walled = { ...empty(), items: [fullDay(3)] }
 
-    expect(fixThatMakesRoom(walled, need(), 3, DEFAULT_PARAMS)).toBeNull()
+    expect(fixThatMakesRoom(walled, need(), 3, DEFAULT_PARAMS, 0)).toBeNull()
   })
 
   /**
@@ -244,7 +246,7 @@ describe('fixThatMakesRoom', () => {
       ],
     }
 
-    const fix = fixThatMakesRoom(crowded, need(), 3, DEFAULT_PARAMS)
+    const fix = fixThatMakesRoom(crowded, need(), 3, DEFAULT_PARAMS, 0)
 
     if (fix !== null) {
       expect(slotOn(fix.move.apply(crowded), 3, { hours: 4, type: 'mental', kind: 'studyBlock' })).not.toBeNull()
@@ -255,7 +257,7 @@ describe('fixThatMakesRoom', () => {
     const crowded = { ...empty(), items: [{ ...fullDay(3), fixed: false, deadlineDay: 12 }] }
     const snapshot = JSON.stringify(crowded)
 
-    fixThatMakesRoom(crowded, need(), 3, DEFAULT_PARAMS)
+    fixThatMakesRoom(crowded, need(), 3, DEFAULT_PARAMS, 0)
 
     expect(JSON.stringify(crowded)).toBe(snapshot)
   })
@@ -348,5 +350,239 @@ describe('placeItems and where an item came from', () => {
     const { schedule } = placeItems(empty(), [parsed()], 0)
 
     expect(schedule.items[0]?.sourceId).toBeUndefined()
+  })
+})
+
+/**
+ * Ruling 16 again, pointed at Later.
+ *
+ * `deferItem` was made honest -- it searches forward for a day with room and returns the
+ * week *unchanged* when there is none, so a caller can tell nothing happened. Nothing was
+ * reading that: `RoomShell` set the new schedule and closed the sheet either way, so a
+ * student who pressed Later on a block with nowhere to go watched the sheet close on a
+ * button that had done nothing. Silence about a move that did not happen is the same defect
+ * as silence about one that did.
+ */
+describe('describeDeferral', () => {
+  const week = (): Schedule => ({ ...empty(), startedOn: '2026-09-07' })
+
+  const deferral = (
+    over: Partial<Parameters<typeof describeDeferral>[0]> = {},
+  ): Parameters<typeof describeDeferral>[0] => ({
+    schedule: week(),
+    title: 'Essay',
+    from: 1,
+    to: 2,
+    skippedFull: 0,
+    skippedWithRoom: 0,
+    blocked: null as 'full' | 'due' | null,
+    today: 0,
+    floorBefore: null as number | null,
+    floorAfter: null as number | null,
+    reserveLabel: 'Study & thinking',
+    ...over,
+    // Pinned after the spread: `Partial` makes every field optional, and `undefined` is not
+    // the same answer as "no time to name" -- it would print ", undefined" into the sentence.
+    whenLabel: over.whenLabel ?? null,
+  })
+
+  /** Nothing was passed over, so there is nothing to explain. The next day with room is what
+   *  a student already expects Later to do. */
+  it('names the day and stops, when it simply took the next one', () => {
+    expect(describeDeferral(deferral(), 'done')).toBe('Essay moved to Wed 9 Sept.')
+  })
+
+  /** The old reason, and still a real one. */
+  it('says the days in between had no room', () => {
+    expect(describeDeferral(deferral({ to: 4, skippedFull: 2 }), 'done')).toBe(
+      'Essay moved to Fri 11 Sept. The two days before it had no room.',
+    )
+  })
+
+  /**
+   * The reason that earns the sentence. A student watching Later skip a visibly empty
+   * Wednesday cannot tell a decision from a bug, and the obvious reading of the button is
+   * still the old behaviour -- the next day with a gap.
+   */
+  it('says an earlier day had room but would have cost more', () => {
+    expect(describeDeferral(deferral({ to: 3, skippedWithRoom: 1 }), 'done')).toBe(
+      'Essay moved to Thu 10 Sept. Wed 9 Sept had room, but Thu 10 Sept costs you less.',
+    )
+  })
+
+  /** Both kinds passed over. The one worth saying is the surprising one -- a full day
+   *  explains itself, a skipped opening does not. */
+  it('leads with the opening it passed over when it passed over both kinds', () => {
+    const said = describeDeferral(deferral({ to: 5, skippedFull: 2, skippedWithRoom: 1 }), 'done')
+
+    expect(said).toMatch(/had room, but/)
+  })
+
+  it('says it could not move, and where it stayed', () => {
+    expect(describeDeferral(deferral({ to: null, blocked: 'full' }), 'done')).toBe(
+      'There was no room for Essay on any day it could move to, so it stayed on Tomorrow.',
+    )
+  })
+
+  /**
+   * The same facts, before the move rather than after it.
+   *
+   * Later asks before it acts now, so the sentence has to exist in both tenses: a proposal a
+   * student is being asked to approve, and a record of what was done once they have. One
+   * function rather than two, because the branching -- which reason is worth giving, and
+   * when none is -- is the part with judgement in it, and two copies of that would drift.
+   */
+  it('proposes the move rather than reporting it', () => {
+    expect(describeDeferral(deferral(), 'planned')).toBe('This would move to Wed 9 Sept.')
+  })
+
+  it('gives the same reason in the present tense', () => {
+    expect(describeDeferral(deferral({ to: 3, skippedWithRoom: 1 }), 'planned')).toBe(
+      'This would move to Thu 10 Sept. Wed 9 Sept has room, but Thu 10 Sept costs you less.',
+    )
+  })
+
+  it('proposes nothing when there is nowhere to go', () => {
+    expect(describeDeferral(deferral({ to: null, blocked: 'full' }), 'planned')).toBe(
+      'There is no room for Essay on any day it could move to.',
+    )
+  })
+
+  /**
+   * The other way Later comes back empty-handed, and the one a student meets most.
+   *
+   * A block whose deadline is at or before the day it sits on has no candidate day to
+   * examine at all. Saying "no room" there is false twice over -- no day was full, and no day
+   * was looked at -- and it sends the student to check a calendar that will not explain it.
+   * The deadline is what explains it.
+   */
+  it('blames the deadline, not the days, when there was no later day to try', () => {
+    expect(describeDeferral(deferral({ to: null, blocked: 'due' }), 'planned')).toBe(
+      'Essay is already due, so there is no later day to move it to.',
+    )
+  })
+
+  it('says the same after the fact, since nothing moved either way', () => {
+    expect(describeDeferral(deferral({ to: null, blocked: 'due' }), 'done')).toBe(
+      'Essay is already due, so there is no later day to move it to.',
+    )
+  })
+
+  /**
+   * The price, in the unit the request box already speaks -- and naming which reserve it is
+   * about, which is what separates it from Rebalance's figure.
+   *
+   * Rebalance says "your worst day goes from 41 to 44" and means the floor across all four
+   * reserves at once. This is one reserve: the one the block actually spends. Same shape,
+   * different measurement, so the same words for both would invite a student to compare two
+   * numbers that are not comparable.
+   *
+   * Later never compares its candidate days against leaving the block alone, so the day it
+   * picks can be worse than not moving -- and since it asks before acting, that is precisely
+   * when a student needs the number.
+   */
+  it('says what the move does to the lowest point', () => {
+    expect(
+      describeDeferral(deferral({ floorBefore: 41.2, floorAfter: 44.8 }), 'planned'),
+    ).toBe('This would move to Wed 9 Sept. Study & thinking bottoms out at 45 instead of 41.')
+  })
+
+  it('says so plainly when the move costs rather than helps', () => {
+    expect(
+      describeDeferral(deferral({ floorBefore: 44, floorAfter: 41 }), 'planned'),
+    ).toBe('This would move to Wed 9 Sept. Study & thinking bottoms out at 41 instead of 44.')
+  })
+
+  /** Below a whole point the two days are the same week, and a figure that does not move is
+   *  a sentence a student reads once and stops trusting. */
+  it('says nothing about a price that rounds to no change', () => {
+    expect(describeDeferral(deferral({ floorBefore: 41.2, floorAfter: 41.4 }), 'planned')).toBe(
+      'This would move to Wed 9 Sept.',
+    )
+  })
+})
+
+/**
+ * A card that proposes a move has to say which day, and a weekday alone does not.
+ *
+ * "Moved to Thursday" is ambiguous the moment the fortnight is longer than a week -- there
+ * are three Thursdays in a 21-day horizon -- and it gives a student nothing to match against
+ * the dated grid they are looking at. `domain/calendar.dayLabel` is the app's one place a day
+ * index becomes a name, and it carries the date; `placement` had a private weekday table of
+ * its own, which is the fourth copy `WEEKDAY_NAMES` was consolidated to end.
+ */
+describe('the day a card names', () => {
+  const note = {
+    schedule: { ...empty(), startedOn: '2026-09-07' },
+    title: 'Essay',
+    from: 1,
+    to: 4,
+    skippedFull: 0,
+    skippedWithRoom: 0,
+    blocked: null,
+    floorBefore: null,
+    floorAfter: null,
+    reserveLabel: 'Study & thinking',
+    whenLabel: null,
+    today: 0,
+  }
+
+  it('carries the date, not only the weekday', () => {
+    expect(describeDeferral(note, 'planned')).toMatch(/\d+ \w{3}/)
+  })
+
+  /** "Tomorrow" beats a date for the day everybody names that way -- `dayLabel`'s own rule,
+   *  and the reason this goes through it rather than formatting a date here. */
+  it('says Tomorrow when that is what the day is', () => {
+    expect(describeDeferral({ ...note, to: 1, today: 0 }, 'planned')).toMatch(/Tomorrow/)
+  })
+})
+
+/**
+ * The hours as well as the day.
+ *
+ * A card that says "moved to Wed 23 Sept" and stops has told a student the half of the answer
+ * they can already see on the grid. Where in the day it lands is the half that decides whether
+ * the move is any use -- `slotOn` chooses that hour, not the student, so it is the part they
+ * have not been consulted about and the part they are being asked to approve.
+ *
+ * Formatted by the caller rather than here. The two-digit clock lives in `ui/kit/labels`
+ * beside the four reserve words, and the dependency order is one-way: a second copy of it in
+ * the domain is exactly what `kit/labels` own docstring forbids.
+ */
+describe('the time a card names', () => {
+  const note = {
+    schedule: { ...empty(), startedOn: '2026-09-07' },
+    title: 'Essay',
+    from: 1,
+    to: 4,
+    skippedFull: 0,
+    skippedWithRoom: 0,
+    blocked: null,
+    floorBefore: null,
+    floorAfter: null,
+    reserveLabel: 'Study & thinking',
+    whenLabel: '09:00-11:00',
+    today: 0,
+  }
+
+  it('names the hours it would land at, beside the day', () => {
+    expect(describeDeferral(note, 'planned')).toBe('This would move to Fri 11 Sept, 09:00-11:00.')
+  })
+
+  it('names them after the fact too', () => {
+    expect(describeDeferral(note, 'done')).toBe('Essay moved to Fri 11 Sept, 09:00-11:00.')
+  })
+
+  /** Nothing moved, so there is no hour to name -- and the day it stayed on it already had. */
+  it('names no time when nothing moved', () => {
+    expect(describeDeferral({ ...note, to: null, blocked: 'full' }, 'planned')).not.toMatch(/\d\d:\d\d/)
+  })
+
+  /** A caller with no clock to offer still gets a sentence rather than a gap. */
+  it('falls back to the day alone when no time was supplied', () => {
+    expect(describeDeferral({ ...note, whenLabel: null }, 'planned')).toBe(
+      'This would move to Fri 11 Sept.',
+    )
   })
 })

@@ -17,14 +17,6 @@ vi.mock('../../data', async (importOriginal) => ({
   createRepository: (session: unknown) => ({ kind: 'account', session }),
 }))
 
-const carryOverWeek = vi.fn()
-vi.mock('../../data/carryOver', () => ({
-  carryOverWeek: (from: unknown, to: unknown) => {
-    carryOverWeek(from, to)
-    return Promise.resolve()
-  },
-}))
-
 const scrub = vi.fn()
 vi.mock('./scrubAuthFragment', () => ({
   scrubAuthFragmentFromUrl: () => scrub(),
@@ -42,7 +34,6 @@ const signedInElsewhere = (session: unknown) => listeners.forEach((notify) => no
 beforeEach(() => {
   listeners.length = 0
   stored = null
-  carryOverWeek.mockReset()
   scrub.mockReset()
 })
 
@@ -90,43 +81,17 @@ describe('useSession, when a session arrives by redirect', () => {
     await waitFor(() => expect(scrub).toHaveBeenCalled())
   })
 
-  // Without this a student who built a week while looking around, then signed in with
-  // Google, would silently lose it -- the redirect never touches the screen that copies it.
-  it('carries the preview week into the account', async () => {
-    render(<Probe />)
-    await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('nobody'))
-
-    signedInElsewhere({ userId: 'u1', email: 'a@b.com' })
-
-    await waitFor(() => expect(carryOverWeek).toHaveBeenCalledOnce())
-    expect(carryOverWeek.mock.calls[0]?.[0]).toEqual({ kind: 'local' })
-  })
-
-  // Supabase reports the same session more than once in normal operation. Copying twice
-  // would put a preview over real data the second time.
-  it('does not carry the week over twice for the same account', async () => {
-    render(<Probe />)
-    await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('nobody'))
-
-    signedInElsewhere({ userId: 'u1', email: 'a@b.com' })
-    await waitFor(() => expect(carryOverWeek).toHaveBeenCalledOnce())
-    signedInElsewhere({ userId: 'u1', email: 'a@b.com' })
-
-    expect(carryOverWeek).toHaveBeenCalledOnce()
-  })
-
   /**
    * A session that was already there when the app opened is somebody returning, not
-   * somebody signing in. Copying then would overwrite the account's real week with
-   * whatever happened to be in browser storage, on every single load.
+   * somebody arriving back from a redirect -- so there is no token in the address to clean
+   * out, and touching it would rewrite the URL of every single load.
    */
-  it('does not carry anything over for a session restored on opening', async () => {
+  it('leaves the address alone for a session restored on opening', async () => {
     stored = { userId: 'u1', email: 'a@b.com' }
     render(<Probe />)
 
     await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('a@b.com'))
 
-    expect(carryOverWeek).not.toHaveBeenCalled()
     expect(scrub).not.toHaveBeenCalled()
   })
 
@@ -136,21 +101,7 @@ describe('useSession, when a session arrives by redirect', () => {
 
     signedInElsewhere(null)
 
-    expect(carryOverWeek).not.toHaveBeenCalled()
     expect(scrub).not.toHaveBeenCalled()
-  })
-
-  // Signing out and back in as somebody else is a real sign-in, and their preview belongs
-  // to them.
-  it('carries over again for a different account', async () => {
-    render(<Probe />)
-    await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('nobody'))
-
-    signedInElsewhere({ userId: 'u1', email: 'a@b.com' })
-    await waitFor(() => expect(carryOverWeek).toHaveBeenCalledOnce())
-    signedInElsewhere({ userId: 'u2', email: 'c@d.com' })
-
-    await waitFor(() => expect(carryOverWeek).toHaveBeenCalledTimes(2))
   })
 })
 

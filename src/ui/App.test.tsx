@@ -29,7 +29,7 @@ describe('App', () => {
   })
 
   // The banner's offer has to actually lead somewhere.
-  it('returns to the way in when the preview offers to keep the week', async () => {
+  it('returns to the way in from the preview banner', async () => {
     render(<App />)
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /look around/i })).toBeVisible(),
@@ -40,7 +40,7 @@ describe('App', () => {
     // asked for is a warning that arrives after the loss (Ruling 61).
     await waitFor(() => expect(screen.getByTestId('preview-banner')).toBeVisible())
 
-    await userEvent.click(screen.getByRole('button', { name: /create an account to keep it/i }))
+    await userEvent.click(screen.getByRole('button', { name: /create an account/i }))
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /^sign in$/i })).toBeVisible(),

@@ -50,14 +50,15 @@ function measure(name: string, schedule: Schedule): Measured {
   const params = DEFAULT_PARAMS
 
   const movable = schedule.items.filter((item) => !item.fixed && !item.protectedRest)
-  const options = neighbours(schedule, params)
+  // Unanchored fixtures: the whole fortnight is ahead, so today is day zero.
+  const options = neighbours(schedule, params, 0)
 
   const byKind = new Map<string, number>()
   for (const move of options) byKind.set(move.kind, (byKind.get(move.kind) ?? 0) + 1)
 
   const before = project(schedule.start, toDayInputs(schedule, ALL_PRESENT), params)
-  const result = rebalance(schedule, params, makeRng(SEED))
-  const fixes = smallestFixes(schedule, params)
+  const result = rebalance(schedule, params, makeRng(SEED), 0)
+  const fixes = smallestFixes(schedule, params, 0)
 
   const takenByKind = new Map<string, number>()
   for (const move of result.moves) {

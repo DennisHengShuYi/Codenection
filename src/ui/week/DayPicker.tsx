@@ -1,3 +1,4 @@
+import type { JSX } from 'react'
 import { dateFor, dayIndexFor, dayLabel, isAnchored } from '../../domain/calendar'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule } from '../../optimizer'

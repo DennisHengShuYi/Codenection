@@ -1,12 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  createLocalRepository,
-  createRepository,
-  getSession,
-  onSessionChange,
-  type Session,
-} from '../../data'
-import { carryOverWeek } from '../../data/carryOver'
+import { useCallback, useEffect, useState } from 'react'
+import { getSession, onSessionChange, type Session } from '../../data'
 import { scrubAuthFragmentFromUrl } from './scrubAuthFragment'
 
 /**
@@ -53,31 +46,27 @@ export function useSession(): {
     setSessionState((current) => (sameAccount(current, next) ? current : next))
   }, [])
 
-  /** The account whose preview week has already been copied across. Supabase reports the
-   *  same session more than once in normal operation, and copying twice would put a
-   *  preview over real data the second time. */
-  const carriedOver = useRef<string | null>(null)
 
+  /**
+   * A sign-in, whichever door it came through.
+   *
+   * This used to copy the signed-out preview into the account as well, and that is
+   * deliberately gone: **the preview is only ever a preview.** The copy could not tell a
+   * fortnight a student had actually built from the demo week the app seeds them, and
+   * `RoomShell`'s anchor effect persists that seed on the very first render -- so there was
+   * always one waiting, and every new account was born holding `umCrunchWeek`'s UM
+   * timetable over a dial reading somebody else's depletion.
+   *
+   * What it costs is real and worth stating: somebody who builds a genuine week while
+   * looking around, then signs up, now starts their account empty. That is the trade the
+   * old comment here was refusing -- and the reason to take it anyway is that the failure
+   * runs the other way. Losing a preview is an annoyance the student can see and redo;
+   * being handed a stranger's fortnight as a measurement of your own week is the app
+   * lying about the one thing it exists to report.
+   */
   const signedIn = useCallback((next: Session) => {
-    if (carriedOver.current === next.userId) {
-      setSession(next)
-      return
-    }
-
-    carriedOver.current = next.userId
     scrubAuthFragmentFromUrl()
-
-    // Not awaited before the session changes: a slow copy must not hold somebody on the
-    // sign-in screen after they have successfully signed in.
-    //
-    // The target is a fallback repository, so its read can answer from browser storage --
-    // the very place the preview lives. That is benign either way: with Supabase reachable
-    // and the account new it reads null and the copy runs, which is the case that matters;
-    // with Supabase unreachable it reads the preview back and skips, and the week is
-    // already exactly where it would have been copied to.
-    void carryOverWeek(createLocalRepository(), createRepository(next)).finally(() =>
-      setSession(next),
-    )
+    setSession(next)
   }, [setSession])
 
   useEffect(() => {
@@ -86,11 +75,9 @@ export function useSession(): {
     void getSession().then((found) => {
       if (cancelled) return
 
-      // A session that was already there is somebody returning, not somebody signing in.
-      // Marking it as carried is what stops the app copying browser storage over the
-      // account's real week on every single load.
-      if (found) carriedOver.current = found.userId
-
+      // Set directly rather than through `signedIn`: a session that was already there is
+      // somebody returning, not somebody arriving back from a redirect, so there is no
+      // token in the address to clean out.
       setSession(found)
       setLoading(false)
     })
@@ -101,9 +88,6 @@ export function useSession(): {
       if (cancelled) return
 
       if (next === null) {
-        // Forgotten on sign-out, so that signing back in -- possibly after building a new
-        // preview while signed out -- carries that preview across like any other sign-in.
-        carriedOver.current = null
         setSession(null)
         return
       }

@@ -33,6 +33,7 @@ const setup = (over: Partial<BlockSheetModel> = {}) => {
     onEdit: vi.fn(),
     onRemove: vi.fn(),
     onMicroStart: vi.fn(),
+  previewLater: () => 'This would move to Thursday.',
   }
   render(<BlockSheet model={model(over)} {...handlers} />)
   return handlers

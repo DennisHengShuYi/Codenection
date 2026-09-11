@@ -437,6 +437,21 @@ export function RoomShell({
   // A `const` arrow rather than a declaration, for `acceptItems`' reason below: declarations
   // hoist above the `today === null` guard, so TypeScript could not narrow the day away and
   // `runRebalance` would be handed a possibly-null one.
+  /**
+   * The hours a block occupies on a given day, as a card would say them.
+   *
+   * Built here rather than in `domain/placement`, which assembles the sentence: the two-digit
+   * clock lives in `kit/labels` beside the four reserve words, and the dependency order is
+   * one-way. Null where the block is not in that week -- nothing produces that today, and a
+   * time for a block that is not there would be worse than none.
+   */
+  const whenOn = (week: { items: readonly { id: string; startHour: number; hours: number }[] }, itemId: string): string | null => {
+    const item = week.items.find((entry) => entry.id === itemId)
+    return item === undefined
+      ? null
+      : `${hourLabel(item.startHour)}–${hourLabel(item.startHour + item.hours)}`
+  }
+
   const onRebalance = async () => {
     if (working) return
 
@@ -478,7 +493,7 @@ export function RoomShell({
     setSchedule(next)
 
     const moved = notes.filter((note) => note.movedFrom !== null || !note.fitted)
-    setPlacementLines(notes.map((note) => describePlacement(note, next)))
+    setPlacementLines(notes.map((note) => describePlacement(note, next, today)))
 
     // Only when something actually had to give -- a week that simply absorbed the new work
     // has nothing to offer and nothing to apologise for -- and only a move that opens room
@@ -931,6 +946,8 @@ export function RoomShell({
                 reserveLabel: LOAD_TYPE_LABELS[
                   week.items.find((entry) => entry.id === itemId)?.type ?? 'mental'
                 ],
+                whenLabel: whenOn(planned.schedule, itemId),
+                today,
               },
               'planned',
             )
@@ -966,6 +983,8 @@ export function RoomShell({
                 reserveLabel: LOAD_TYPE_LABELS[
                   week.items.find((entry) => entry.id === itemId)?.type ?? 'mental'
                 ],
+                whenLabel: whenOn(outcome.schedule, itemId),
+                today,
               },
                 'done',
               ),
@@ -1109,6 +1128,7 @@ export function RoomShell({
         <RebalancePreview
           key="rebalance"
           proposal={proposal}
+          today={today}
           onApprove={approveProposal}
           onDiscard={discardProposal}
           onBack={discardProposal}

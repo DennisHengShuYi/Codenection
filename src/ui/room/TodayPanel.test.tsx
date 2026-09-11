@@ -26,6 +26,7 @@ const row = (over: Partial<PanelRow> = {}): PanelRow => ({
     { id: 'revision', title: 'Revision', startHour: 14, hours: 2, done: false },
   ],
   drawn: true,
+  trend: null,
   ...over,
 })
 

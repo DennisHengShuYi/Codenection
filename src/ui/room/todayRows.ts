@@ -2,6 +2,7 @@ import { answeredIds, type BlockRecord } from '../../domain/blockLog'
 import { blocksOnDay } from '../../domain/dayBlocks'
 import type { ActivityKind } from '../../engine'
 import type { Schedule } from '../../optimizer'
+import { objectTrend, trendPhrase, type TrendUnit } from './objectTrend'
 
 /** One block behind a row, as the panel needs to say it. */
 export interface PanelBlock {
@@ -27,6 +28,15 @@ export interface PanelRow {
   /** Whether the room draws it. False for rest, which Ruling 45 left deliberately without an
    *  object: it is the one thing on a day that is not a duty owed to anyone. */
   readonly drawn: boolean
+  /**
+   * Where this object's load is heading over today and the next two days, in words, or null
+   * when it is flat or nothing measured it.
+   *
+   * Words rather than the arrow the reserve bars use: on a bar an up arrow means the reserve
+   * rose and that is good news, while here rising hours is bad news, and one glyph meaning
+   * opposite things two taps apart is exactly the disagreement this panel exists to avoid.
+   */
+  readonly trend: string | null
 }
 
 /**
@@ -45,27 +55,32 @@ const GROUPS: readonly {
   readonly label: string
   readonly meaning: string
   readonly kinds: readonly ActivityKind[]
+  /** What the row measures, which decides both the trend arithmetic and its wording. */
+  readonly unit: TrendUnit
   readonly counted?: boolean
   readonly drawn?: boolean
 }[] = [
-  { id: 'books', label: 'Books', meaning: 'study — the stack on the desk grows with it', kinds: ['studyBlock'] },
+  { id: 'books', label: 'Books', meaning: 'study — the stack on the desk grows with it', kinds: ['studyBlock'], unit: 'hours' },
   {
     id: 'dumbbell',
     label: 'Dumbbell',
     meaning: 'exercise, hard or light — it gets heavier, not doubled',
     kinds: ['hardExercise', 'lightExercise'],
+    unit: 'hours',
   },
   {
     id: 'people',
     label: 'People',
     meaning: 'time with people — more hours, more of them in the room',
     kinds: ['socialDraining', 'socialRestorative'],
+    unit: 'hours',
   },
   {
     id: 'boxes',
     label: 'Boxes',
     meaning: 'errands waiting — one box each',
     kinds: ['errands'],
+    unit: 'count',
     counted: true,
   },
 ]
@@ -75,6 +90,7 @@ const REST_GROUP = {
   label: 'Rest',
   meaning: 'nothing in the room draws it — rest is not a duty you owe anyone',
   kinds: ['rest'] as readonly ActivityKind[],
+  unit: 'room' as TrendUnit,
   drawn: false,
 }
 
@@ -123,6 +139,7 @@ export function panelRowsFor(
       count: blocks.length,
       blocks,
       drawn: group.drawn ?? true,
+      trend: trendPhrase(objectTrend(schedule, today, group.kinds, group.unit), group.unit),
     }
   }
 
@@ -140,6 +157,13 @@ export function panelRowsFor(
     count: 0,
     blocks: [],
     drawn: true,
+    /**
+     * No trend, ever. `sleepByDay` defaults to 7 for a night nobody answered and nothing
+     * records whether it WAS answered, so this row already cannot tell "slept seven hours"
+     * from "nobody has asked yet" -- and a direction drawn from that series would be a claim
+     * about data the app does not have.
+     */
+    trend: null,
   }
 
   return [...GROUPS.map(rowFor), bed, rowFor(REST_GROUP)]

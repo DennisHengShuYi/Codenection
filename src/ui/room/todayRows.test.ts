@@ -187,3 +187,54 @@ describe('the two rows that are not ordinary objects', () => {
     expect(rowFor(schedule, 'bed', 4)?.hours).toBe(9)
   })
 })
+
+/**
+ * Loadline's SEE bullet wants load, contributing factors AND trends per object. The number is
+ * the load, the blocks behind an opened row are the factors, and this is the third.
+ */
+describe('the trend on a row', () => {
+  it('says more is coming when the next days are heavier', () => {
+    const schedule = week([
+      block({ id: 'a', dayIndex: 0, hours: 1 }),
+      block({ id: 'b', dayIndex: 1, hours: 2 }),
+      block({ id: 'c', dayIndex: 2, hours: 4 }),
+    ])
+
+    expect(rowFor(schedule, 'books')?.trend).toBe('more coming')
+  })
+
+  it('says nothing at all on an even run of days', () => {
+    const schedule = week([
+      block({ id: 'a', dayIndex: 0, hours: 2 }),
+      block({ id: 'b', dayIndex: 1, hours: 2 }),
+      block({ id: 'c', dayIndex: 2, hours: 2 }),
+    ])
+
+    expect(rowFor(schedule, 'books')?.trend).toBeNull()
+  })
+
+  it('says nothing on a row with nothing on it', () => {
+    expect(rowFor(week(), 'dumbbell')?.trend).toBeNull()
+  })
+
+  /** Boxes count things rather than hours, so its words are about a pile rather than time. */
+  it('speaks in things on the counted row', () => {
+    const errand = (id: string, dayIndex: number) =>
+      block({ id, dayIndex, hours: 1, type: 'errands', kind: 'errands' })
+    const schedule = week([errand('a', 2), errand('b', 2)])
+
+    expect(rowFor(schedule, 'boxes')?.trend).toBe('piling up')
+  })
+
+  /**
+   * The bed carries none, ever, and this is where that is recorded.
+   *
+   * Its figure is the week's own sleep number: `sleepByDay` defaults to 7 for a night nobody
+   * answered and nothing records whether it WAS answered, so the row already cannot tell
+   * "slept seven hours" from "nobody has asked yet". A direction drawn from that series would
+   * be a claim about data the app does not have.
+   */
+  it('leaves the bed without a trend, because nothing measured it', () => {
+    expect(rowFor(week(), 'bed')?.trend).toBeNull()
+  })
+})

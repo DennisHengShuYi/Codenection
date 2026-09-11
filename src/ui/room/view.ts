@@ -85,12 +85,26 @@ export type View =
    * moment cannot be reconstructed from an address.
    */
   | { readonly kind: 'rest' }
+  /**
+   * The nights the student is aiming for.
+   *
+   * A page rather than a card, and the distinction is the point. §8's check-in asks "how much
+   * sleep last night?" once a day and then disappears -- it is about a night that already
+   * happened, and the answer teaches the model. This is where a student says what they intend,
+   * which they must be able to come back to and change; a transient card cannot be come back
+   * to at all.
+   *
+   * Top level rather than under the week, for `rest`'s reason: it is opened from the room,
+   * often by somebody who has not looked at their fortnight.
+   */
+  | { readonly kind: 'sleep' }
 
 export const ROOM: View = { kind: 'room' }
 // Not exported: `toWeek()` and `back()` are the module's whole surface for it.
 const WEEK: View = { kind: 'week' }
 const REBALANCE: View = { kind: 'rebalance' }
 const REST: View = { kind: 'rest' }
+const SLEEP: View = { kind: 'sleep' }
 
 export const toWeek = (): View => WEEK
 
@@ -105,6 +119,8 @@ export const toReserves = (): View => ({ kind: 'reserves' })
 export const toRebalance = (): View => REBALANCE
 
 export const toRest = (): View => REST
+
+export const toSleep = (): View => SLEEP
 
 export const toEditBlock = (itemId: string): View => ({ kind: 'editBlock', itemId })
 
@@ -177,6 +193,8 @@ export const toPath = (view: View): string => {
       return '/today'
     case 'rest':
       return '/rest'
+    case 'sleep':
+      return '/sleep'
   }
 }
 
@@ -236,6 +254,8 @@ export const fromPath = (path: string): View => {
   if (first === 'today' && parts.length === 1) return toToday()
 
   if (first === 'rest' && parts.length === 1) return REST
+
+  if (first === 'sleep' && parts.length === 1) return SLEEP
 
   if (first === 'add') {
     if (parts.length === 1) return toAdd()

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
-import { SLEEP_HOURS, seedSleepPlan, withSleep, withSleepHours } from './sleepPlan'
+import { SLEEP_HOURS, retargetSleep, seedSleepPlan, withSleep, withSleepHours } from './sleepPlan'
 
 const week = (hours: number): Schedule => ({
   items: [],
@@ -93,5 +93,46 @@ describe('seedSleepPlan', () => {
     seedSleepPlan(before, 9, [])
 
     expect(before.sleepByDay[0]).toBe(7)
+  })
+})
+
+/**
+ * Moving the target, without a stored list of which nights were edited.
+ *
+ * A night that diverges from the OLD target was set deliberately -- by the student on the
+ * sleep page, or by reporting what they actually slept. Either way it is theirs and a new
+ * target must not overwrite it. Deriving that from divergence rather than storing an index
+ * list also survives the fortnight rolling over, which a list of day indices would not.
+ */
+describe('retargetSleep', () => {
+  it('moves every night that still sat at the old target', () => {
+    const next = retargetSleep(week(8), 8, 9)
+
+    expect(next.sleepByDay.every((hours) => hours === 9)).toBe(true)
+  })
+
+  it('leaves a night the student set to something else', () => {
+    const next = retargetSleep(withSleepHours(week(8), 4, 5), 8, 9)
+
+    expect(next.sleepByDay[4]).toBe(5)
+    expect(next.sleepByDay[3]).toBe(9)
+  })
+
+  /**
+   * A reported night is a fact about a night that happened, and diverges from the target for
+   * the same reason an edited one does -- so it is preserved by the same rule, with nothing
+   * extra needed. A new target must never rewrite what somebody said they slept.
+   */
+  it('leaves a night that was reported rather than planned', () => {
+    const reported = withSleep(week(8), 2, 'six')
+
+    expect(retargetSleep(reported, 8, 9).sleepByDay[2]).toBe(6)
+  })
+
+  it('returns a new week', () => {
+    const before = week(8)
+    retargetSleep(before, 8, 9)
+
+    expect(before.sleepByDay[0]).toBe(8)
   })
 })

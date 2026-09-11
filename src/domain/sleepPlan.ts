@@ -78,3 +78,29 @@ export function seedSleepPlan(
     ),
   }
 }
+
+/**
+ * The whole fortnight, moved to a new target, keeping every night the student made their own.
+ *
+ * "Their own" is derived rather than stored: a night that still sits at the OLD target is one
+ * nobody has touched, and anything else was set deliberately -- on the sleep page, or by
+ * reporting what was actually slept. Both must survive a target change, and a reported night
+ * especially: rewriting it would have the app overrule somebody about a night that already
+ * happened.
+ *
+ * Derived rather than stored for a second reason too. The alternative is a list of edited day
+ * indices, and day indices are fortnight-relative -- the list would silently come to describe
+ * different nights the moment the fortnight rolled over, which is the same trap `sleepLog`
+ * avoids by keying on a date.
+ */
+export function retargetSleep(
+  schedule: Schedule,
+  fromTarget: number,
+  toTarget: number,
+): Schedule {
+  const edited = schedule.sleepByDay
+    .map((hours, index) => (hours === fromTarget ? -1 : index))
+    .filter((index) => index >= 0)
+
+  return seedSleepPlan(schedule, toTarget, edited)
+}

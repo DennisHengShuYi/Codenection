@@ -1,5 +1,6 @@
 import type { Schedule } from '../optimizer'
 import { dateFor } from './calendar'
+import { nightBite } from './nightBite'
 import { isRealSleepHours } from './sleepPlan'
 
 /**
@@ -26,6 +27,7 @@ export function assumeSleep({
   measuredHours,
   chosenByDate,
   targetHours,
+  wakeHour,
 }: {
   readonly schedule: Schedule
   readonly today: number
@@ -35,6 +37,9 @@ export function assumeSleep({
   /** Hours the student chose for the night that BEGAN on each date. */
   readonly chosenByDate: Readonly<Record<string, number>>
   readonly targetHours: number
+  /** The clock hour the student gets up, which fixes each night's bedtime and so decides what
+   *  counts as booked over it (`domain/nightBite`). */
+  readonly wakeHour: number
 }): Schedule {
   return {
     ...schedule,
@@ -54,12 +59,31 @@ export function assumeSleep({
       const planned =
         stated !== undefined && isRealSleepHours(stated) ? stated : targetHours
 
-      // Lowered, never raised. `realityCheck` refuses to correct in the generous direction
-      // for the reason it states -- that would "quietly make a heavy week look survivable,
-      // which is the opposite of what this app is for" -- and the same holds here twice over:
-      // a good week is no reason to assume somebody beats their own target, and a student who
-      // says "four hours, I am up late" knows something their history does not.
-      return measuredHours === null ? planned : Math.min(planned, measuredHours)
+      /*
+       * What is actually booked over this night, believed rather than merely announced.
+       *
+       * Three surfaces said a day would cost hours of sleep -- the forecast sentence, the
+       * week's night band, the room -- while the model went on assuming a full night. It
+       * warned and then forecast as though the warning were false.
+       *
+       * The bedtime comes from the PLANNED hours, so this is not circular: the student
+       * intended to be asleep by eleven, and work sitting over that is the bite.
+       */
+      const bitten = planned - nightBite({ schedule, dayIndex: day, wakeHour, plannedHours: planned }).hours
+
+      /*
+       * The LOWEST of the three, never the plan minus everything.
+       *
+       * `realityCheck` refuses to correct in the generous direction for the reason it states
+       * -- that would "quietly make a heavy week look survivable, which is the opposite of
+       * what this app is for" -- so nothing here raises a night. And taking the lowest rather
+       * than subtracting both causes matters: a student who habitually over-commits already
+       * has those lost hours inside their measured average, so subtracting the bite from it
+       * as well would count the same hours twice. Whichever cause is worse decides.
+       */
+      const floor = Math.max(0, Math.min(bitten, measuredHours ?? planned))
+
+      return Math.round(floor * 10) / 10
     }),
   }
 }

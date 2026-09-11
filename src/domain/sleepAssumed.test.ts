@@ -19,6 +19,7 @@ const assumed = (over: Partial<Parameters<typeof assumeSleep>[0]> = {}) =>
     measuredHours: null,
     chosenByDate: {},
     targetHours: 8,
+    wakeHour: 7,
     ...over,
   }).sleepByDay
 
@@ -104,6 +105,7 @@ describe('assumeSleep', () => {
       measuredHours: 3,
       chosenByDate: {},
       targetHours: 8,
+      wakeHour: 7,
     })
 
     expect(before.sleepByDay.every((hours) => hours === 7)).toBe(true)
@@ -122,8 +124,63 @@ describe('assumeSleep', () => {
       measuredHours: null,
       chosenByDate: { '2026-09-12': 5 },
       targetHours: 8,
+      wakeHour: 7,
     }).sleepByDay
 
     expect(nights[2]).toBe(8)
+  })
+
+  /**
+   * The bite, believed rather than merely announced.
+   *
+   * Three things said a day would cost hours of sleep -- the forecast sentence, the week's
+   * night band, and the room -- and the model went on assuming a full night. It warned and
+   * then forecast as though the warning were false, which is the one thing §7.6 exists to
+   * stop the app doing.
+   */
+  it('takes the hours something is booked over the night', () => {
+    const late = {
+      id: 'essay', title: 'Ethics essay', kind: 'studyBlock' as const, type: 'mental' as const,
+      dayIndex: 2, startHour: 22, hours: 3, intensity: 1,
+      fixed: false, deadlineDay: null, protectedRest: false,
+    }
+
+    // Bedtime is 23:00 for an eight-hour night, so two of those three hours are over it.
+    expect(assumed({ schedule: week({ items: [late] }), targetHours: 8 })[2]).toBe(6)
+  })
+
+  /**
+   * The LOWEST of the three, not the plan minus the bite.
+   *
+   * A student who habitually over-commits already has the lost sleep baked into their
+   * measured average, so subtracting the bite from it as well would count the same lost hours
+   * twice. Taking the lowest lets whichever cause is worse decide, and never stacks them.
+   */
+  it('does not count the same lost hours twice', () => {
+    const late = {
+      id: 'essay', title: 'Ethics essay', kind: 'studyBlock' as const, type: 'mental' as const,
+      dayIndex: 2, startHour: 22, hours: 2, intensity: 1,
+      fixed: false, deadlineDay: null, protectedRest: false,
+    }
+
+    // Plan 8, bite 1 -> 7. Measured 6 is lower still, so 6 wins rather than 6 minus 1.
+    expect(
+      assumed({ schedule: week({ items: [late] }), targetHours: 8, measuredHours: 6 })[2],
+    ).toBe(6)
+  })
+
+  it('leaves a night alone when nothing is booked over it', () => {
+    expect(assumed({ targetHours: 8 })[2]).toBe(8)
+  })
+
+  /** Never below none at all, however absurd the day. */
+  it('never takes a night below nothing', () => {
+    const all = {
+      id: 'all', title: 'Marathon', kind: 'studyBlock' as const, type: 'mental' as const,
+      dayIndex: 2, startHour: 8, hours: 24, intensity: 1,
+      fixed: false, deadlineDay: null, protectedRest: false,
+    }
+
+    expect(assumed({ schedule: week({ items: [all] }), targetHours: 8 })[2]).toBe(0)
   })
 })

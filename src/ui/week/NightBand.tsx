@@ -17,6 +17,18 @@ import { nightWindowLabel, type NightWindow } from '../../domain/nightWindow'
  */
 const hoursLabel = (hours: number): string => (hours === 1 ? '1 hour' : `${hours} hours`)
 
+/**
+ * One night as a screen needs it: the window it covers, and what a day will take from it.
+ *
+ * Bundled so the week can be handed one per day and derive nothing. The window is the night
+ * as PLANNED -- the bite is marked inside it rather than already subtracted from it, so the
+ * student sees what they meant to get and what is eating it.
+ */
+export interface NightOnDay {
+  readonly night: NightWindow
+  readonly lostHours: number
+}
+
 export function NightBand({
   night,
   lostHours,

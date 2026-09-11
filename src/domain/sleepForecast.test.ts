@@ -77,64 +77,90 @@ describe('squeezeOn', () => {
 })
 
 describe('sleepForecastLine', () => {
-  it('says nothing when the day fits', () => {
-    expect(sleepForecastLine(squeezeOn(week([item({ hours: 4 })]), 0), 'Thursday')).toBeNull()
+  const bite = (hours: number, blocks: readonly ScheduledItem[] = [], deadlineToday = false) => ({
+    hours,
+    blocks,
+    deadlineToday,
   })
 
-  it('names the day and the cost when a deadline drives it', () => {
-    expect(sleepForecastLine(squeezeOn(overloaded(0), 0), 'Thursday')).toBe(
-      "Thursday's deadline will cost you about 4 hours of sleep.",
+  it('says nothing when the night is untouched and the day fits', () => {
+    expect(sleepForecastLine(bite(0), squeezeOn(week([item({ hours: 4 })]), 0), 'Today')).toBeNull()
+  })
+
+  /**
+   * The certain claim, and it names the block. "Your essay runs past bedtime" is something a
+   * student can act on; "this day asks for more than it has" is arithmetic they cannot.
+   */
+  it('names the block that is actually booked over the night', () => {
+    const essay = item({ title: 'Ethics essay', startHour: 22, hours: 3 })
+
+    expect(sleepForecastLine(bite(2, [essay]), squeezeOn(week([essay]), 0), 'Today')).toBe(
+      'Today: Ethics essay runs past bedtime — about 2 hours off that night.',
     )
   })
 
-  /** An over-full day with nothing due still costs sleep, and still gets said -- without
-   *  blaming a deadline that does not exist. */
-  it('says a day is over-full without inventing a deadline', () => {
-    expect(sleepForecastLine(squeezeOn(overloaded(null), 0), 'Thursday')).toBe(
-      'Thursday asks for about 4 hours more than the day has.',
+  /** The deadline explains why it cannot simply be moved, so it is worth a clause. */
+  it('says when the block is also due', () => {
+    const essay = item({ title: 'Ethics essay', startHour: 22, hours: 3, deadlineDay: 0 })
+
+    expect(sleepForecastLine(bite(2, [essay], true), squeezeOn(week([essay]), 0), 'Today')).toBe(
+      'Today: Ethics essay is due, and runs past bedtime — about 2 hours off that night.',
+    )
+  })
+
+  it('names the biggest offender when several run late', () => {
+    const small = item({ title: 'Reading', startHour: 23, hours: 1 })
+    const big = item({ title: 'Ethics essay', startHour: 22, hours: 4 })
+
+    expect(sleepForecastLine(bite(3, [small, big]), squeezeOn(week([]), 0), 'Today')).toContain(
+      'Ethics essay',
     )
   })
 
   /**
-   * The singular branch, which exists only to stop "1 hours" reaching a student. Found by
-   * coverage rather than by thinking about it, and worth a case of its own precisely because
-   * nothing else would ever exercise it: one hour of spill is a narrow band, and the wording
-   * bug it guards against is the kind a reader notices immediately and a test never does.
+   * The inferred claim, kept but worded as an inference. Eighteen hours in a sixteen-hour day
+   * will cost sleep, but nothing is literally booked at one in the morning -- and stating that
+   * with the same certainty as a block you can point at is what made the old detector
+   * untrustworthy.
    */
-  it('says one hour in the singular', () => {
-    const oneOver = week([
-      item({ hours: 5, deadlineDay: 0 }),
+  it('falls back to the day not fitting, worded as the weaker claim', () => {
+    const crammed = week([
       item({ hours: 5 }),
       item({ hours: 5 }),
-      item({ hours: 2 }),
+      item({ hours: 5 }),
+      item({ hours: 5 }),
     ])
 
-    expect(sleepForecastLine(squeezeOn(oneOver, 0), 'Thursday')).toBe(
-      "Thursday's deadline will cost you about 1 hour of sleep.",
+    expect(sleepForecastLine(bite(0), squeezeOn(crammed, 0), 'Today')).toBe(
+      'Today asks for about 4 hours more than the day has.',
     )
   })
 
-  /** The threshold in both directions. Half an hour is a day running slightly long rather
-   *  than a night being eaten, and a test on only one side of a boundary pins nothing. */
-  it('speaks at half an hour and stays quiet below it', () => {
-    const spill = (hours: number) => week([item({ hours: 16 + hours })])
+  /** The certain claim wins when both are true: a named block beats an arithmetic remainder. */
+  it('prefers the booked block over the day not fitting', () => {
+    const essay = item({ title: 'Ethics essay', startHour: 22, hours: 5 })
+    const crammed = week([essay, item({ hours: 5 }), item({ hours: 5 }), item({ hours: 5 })])
 
-    expect(sleepForecastLine(squeezeOn(spill(0.5), 0), 'Thursday')).not.toBeNull()
-    expect(sleepForecastLine(squeezeOn(spill(0.4), 0), 'Thursday')).toBeNull()
+    expect(sleepForecastLine(bite(2, [essay]), squeezeOn(crammed, 0), 'Today')).toContain(
+      'runs past bedtime',
+    )
+  })
+
+  it('says one hour in the singular on both wordings', () => {
+    const late = item({ title: 'Reading', startHour: 23, hours: 2 })
+
+    expect(sleepForecastLine(bite(1, [late]), squeezeOn(week([]), 0), 'Today')).toContain('1 hour ')
   })
 
   /**
-   * A forecast, never a record. Nothing here writes, and the whole reason is that the app
-   * never observed the night -- so a sentence in the past tense would undo that decision in
-   * copy while the code still looked right.
+   * A forecast, never a record. Nothing here writes, and the reason is that the app never
+   * observed the night -- so a sentence in the past tense would undo that decision in copy
+   * while the code still looked right.
    */
   it('speaks about a night ahead, not one it claims to have seen', () => {
-    for (const deadline of [0, null]) {
-      const line = sleepForecastLine(squeezeOn(overloaded(deadline), 0), 'Thursday') ?? ''
+    const essay = item({ title: 'Ethics essay', startHour: 22, hours: 3 })
+    const line = sleepForecastLine(bite(2, [essay]), squeezeOn(week([essay]), 0), 'Today') ?? ''
 
-      expect(line).not.toBe('')
-      expect(line).toMatch(/will cost|asks for/)
-      expect(line).not.toMatch(/you slept|did sleep|last night/i)
-    }
+    expect(line).not.toMatch(/you slept|did sleep|last night/i)
   })
 })

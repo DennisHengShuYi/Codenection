@@ -63,7 +63,7 @@ const setup = (schedule = week(), over: Partial<Parameters<typeof WeekScreen>[0]
     <WeekScreen
       schedule={schedule}
       today={0}
-      sleepWakeHour={7}
+      nights={[]}
       working={false}
       report={null}
       onRebalance={onRebalance}
@@ -403,7 +403,7 @@ describe('WeekScreen and the calendar', () => {
       <WeekScreen
         schedule={{ ...week([item('a', 0)]), startedOn: '2026-09-11' }}
         today={0}
-        sleepWakeHour={7}
+        nights={[]}
         working={false}
         report={null}
         onRebalance={vi.fn()}

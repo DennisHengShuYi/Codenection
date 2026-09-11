@@ -6,10 +6,8 @@ import { DEFICIT_THRESHOLD, LOAD_TYPES, project } from '../../engine'
 import { toDayInputs } from '../../optimizer'
 import type { Fix, Schedule } from '../../optimizer'
 import { Button } from '../kit/Button'
-import { nightWindow } from '../../domain/nightWindow'
-import { squeezeOn } from '../../domain/sleepForecast'
 import { dayGrid } from './dayGrid'
-import { NightBand } from './NightBand'
+import { NightBand, type NightOnDay } from './NightBand'
 import { dayLabel } from '../../domain/calendar'
 import { LOAD_TYPE_LABELS } from '../kit/labels'
 import type { EnergyPrediction } from '../../domain/predictions'
@@ -87,13 +85,16 @@ export function WeekScreen(props: {
   readonly schedule: Schedule
   readonly today: number
   /**
-   * The clock hour the student gets up, which anchors the night drawn under each open day.
+   * One night per day of the fortnight, already worked out.
    *
-   * Supplied rather than read, the way every other figure on this screen is. Needed here
-   * rather than precomputed by the caller because the open day is this component's own state,
-   * so nobody outside it knows which night to build.
+   * Data rather than a wake hour this screen does the arithmetic on. Deciding what counts as
+   * booked over a night needs the student's target and any night they set, neither of which
+   * belongs on the week screen -- and the assumed figure in `schedule.sleepByDay` has the
+   * bite already taken out of it, so this screen could not recover the planned night to
+   * measure against even if it wanted to. Indexed by day, because the open day is this
+   * component's own state and nobody outside it knows which night to hand over.
    */
-  readonly sleepWakeHour: number
+  readonly nights: readonly NightOnDay[]
   readonly working: boolean
   readonly report: string | null
   /**
@@ -158,7 +159,7 @@ export function WeekScreen(props: {
     onAddBlock,
     blockLog = [],
     predictions = [],
-    sleepWakeHour,
+    nights,
   } = props
   const [openDay, setOpenDay] = useState<number | null>(null)
 
@@ -187,19 +188,13 @@ export function WeekScreen(props: {
   const grid = openDay === null ? null : dayGrid(schedule, openDay)
 
   /**
-   * The night at the end of the open day, and what that day is likely to take out of it.
+   * The night at the end of the open day.
    *
    * Under the grid rather than in it: a night is the boundary between two days, not an hour
    * inside one, which is the whole reason it does not have to be drawn twice to cross
    * midnight. `NightBand` states that at length.
    */
-  const night =
-    openDay === null
-      ? null
-      : {
-          window: nightWindow(sleepWakeHour, schedule.sleepByDay[openDay] ?? 0),
-          lostHours: squeezeOn(schedule, openDay).hours,
-        }
+  const night = openDay === null ? null : (nights[openDay] ?? null)
 
   /**
    * Why the open day is marked, or null when it is not.
@@ -446,7 +441,7 @@ export function WeekScreen(props: {
           </div>
 
           {night !== null && (
-            <NightBand night={night.window} lostHours={night.lostHours} />
+            <NightBand night={night.night} lostHours={night.lostHours} />
           )}
 
           {/* Under the grid rather than above it: this adds to the day, so it has to

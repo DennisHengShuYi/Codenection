@@ -1,5 +1,6 @@
 import { DAY_END_HOUR, WAKE_HOUR, type Schedule } from '../optimizer'
 import { blocksOnDay } from './dayBlocks'
+import type { NightBite } from './nightBite'
 
 /**
  * What an over-full day is going to cost, said before the night rather than after it.
@@ -67,20 +68,47 @@ export function squeezeOn(schedule: Schedule, dayIndex: number): SleepSqueeze {
 /**
  * The sentence, or nothing.
  *
- * Two wordings rather than one, because the two situations are different and a single wording
- * would blame a deadline that does not exist. Both are about a night still ahead: the app has
- * observed nothing, so it forecasts and never reports.
+ * Two claims of different strength, and keeping them apart is what makes either trustworthy:
  *
- * `dayLabel` is supplied rather than derived. `domain/calendar.dayLabel` is the only place a
- * day index becomes a name -- §9 puts this app at UTC+8, where a second answer to that
- * question is wrong for the first eight hours of every day.
+ * - CERTAIN -- something is booked over the night, and it can be named. `nightBite` finds it
+ *   by the clock, so the sentence points at a block a student can move.
+ * - INFERRED -- the day asks for more hours than a day holds. Something must give and sleep
+ *   usually does, but nothing is literally scheduled at one in the morning.
+ *
+ * The certain one wins when both are true: a named block beats an arithmetic remainder. And
+ * the weaker one is worded as an inference rather than stated like the strong one, which is
+ * what the volume-only detector got wrong -- it made every claim sound equally solid, so none
+ * of them could be relied on.
+ *
+ * Both are about a night still ahead. The app has observed nothing, so it forecasts and never
+ * reports.
+ *
+ * `dayLabel` is supplied rather than derived. `domain/calendar.shortDayLabel` is the only
+ * place a day index becomes a name -- §9 puts this app at UTC+8, where a second answer to
+ * that question is wrong for the first eight hours of every day.
  */
-export function sleepForecastLine(squeeze: SleepSqueeze, dayLabel: string): string | null {
-  if (squeeze.hours < WORTH_WARNING_HOURS) return null
+export function sleepForecastLine(
+  bite: NightBite,
+  squeeze: SleepSqueeze,
+  dayLabel: string,
+): string | null {
+  const cost = (hours: number): string => (hours === 1 ? '1 hour' : `${hours} hours`)
 
-  const cost = squeeze.hours === 1 ? '1 hour' : `${squeeze.hours} hours`
+  if (bite.hours >= WORTH_WARNING_HOURS) {
+    // The biggest offender, where several run late. Naming them all makes a sentence nobody
+    // reads; naming the worst one makes a move somebody can act on.
+    const worst = bite.blocks.reduce(
+      (largest, item) => (item.hours > largest.hours ? item : largest),
+      bite.blocks[0]!,
+    )
+    const due = bite.deadlineToday ? ' is due, and' : ''
 
-  return squeeze.deadlineToday
-    ? `${dayLabel}'s deadline will cost you about ${cost} of sleep.`
-    : `${dayLabel} asks for about ${cost} more than the day has.`
+    return `${dayLabel}: ${worst.title}${due} runs past bedtime — about ${cost(bite.hours)} off that night.`
+  }
+
+  if (squeeze.hours >= WORTH_WARNING_HOURS) {
+    return `${dayLabel} asks for about ${cost(squeeze.hours)} more than the day has.`
+  }
+
+  return null
 }

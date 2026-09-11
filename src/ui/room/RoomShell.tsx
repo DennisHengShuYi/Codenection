@@ -52,11 +52,13 @@ import { blockSheet } from '../week/blockActions'
 import { runRebalance, type RebalanceOutcome } from '../../domain/rebalanceOutcome'
 import { reportedNights, reportedOn } from '../../domain/sleepLog'
 import { lastNight, withSleep } from '../../domain/sleepPlan'
+import { nightBite } from '../../domain/nightBite'
 import { nightWindow, nightWindowLabel } from '../../domain/nightWindow'
 import { assumeSleep } from '../../domain/sleepAssumed'
 import { measuredNight, sleepRealityLine } from '../../domain/sleepReality'
 import { sleepForecastLine, squeezeOn } from '../../domain/sleepForecast'
 import { SleepSheet } from '../sleep/SleepSheet'
+import type { NightOnDay } from '../week/NightBand'
 import { EventForm } from '../week/EventForm'
 import { RebalancePreview } from '../week/RebalancePreview'
 import { WeekScreen } from '../week/WeekScreen'
@@ -378,6 +380,7 @@ export function RoomShell({
     measuredHours: measuredNight(sleepNights),
     chosenByDate: sleepChosenByDate,
     targetHours: sleepTarget,
+    wakeHour: sleepWakeHour,
   })
 
   // Threaded alongside `today` from the same clock read -- see the comment above this
@@ -697,10 +700,42 @@ export function RoomShell({
    * `shortDayLabel` rather than `dayLabel`, and `domain/calendar` is the only place either is
    * derived (§9): the full label reads "Today, Sat 12 Sept's deadline will cost you...".
    */
+  /** What a night was MEANT to hold, which is what fixes its bedtime. `week.sleepByDay` has
+   *  the bite already taken out of it, so it cannot answer this. */
+  const plannedNight = (dayIndex: number): number =>
+    sleepChosenByDate[dateFor(week, dayIndex) ?? ''] ?? sleepTarget
+
+  /**
+   * One night per day, for the week screen to draw.
+   *
+   * Worked out here because it needs the target and any night the student set, neither of
+   * which belongs on the week screen. The window is the night as PLANNED, with the bite
+   * marked inside it rather than subtracted from it -- so a student sees what they meant to
+   * get and what is eating it, while the model reasons from the bitten figure.
+   */
+  const sleepNightsByDay: readonly NightOnDay[] = Array.from(
+    { length: week.horizonDays },
+    (_, dayIndex) => ({
+      night: nightWindow(sleepWakeHour, plannedNight(dayIndex)),
+      lostHours: nightBite({
+        schedule: week,
+        dayIndex,
+        wakeHour: sleepWakeHour,
+        plannedHours: plannedNight(dayIndex),
+      }).hours,
+    }),
+  )
+
   const sleepForecasts: readonly string[] = Array.from(
     { length: Math.min(3, Math.max(0, week.horizonDays - today)) },
     (_, offset) =>
       sleepForecastLine(
+        nightBite({
+          schedule: week,
+          dayIndex: today + offset,
+          wakeHour: sleepWakeHour,
+          plannedHours: plannedNight(today + offset),
+        }),
         squeezeOn(week, today + offset),
         shortDayLabel(week, today + offset, today),
       ),
@@ -1051,7 +1086,7 @@ export function RoomShell({
           <WeekScreen
             schedule={week}
             today={today}
-            sleepWakeHour={sleepWakeHour}
+            nights={sleepNightsByDay}
             working={working}
             report={report}
             note={weekNote}

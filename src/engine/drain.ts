@@ -1,5 +1,6 @@
 import { carryoverAt } from './carryover'
 import { stateMultiplier } from './stateCost'
+import { LOAD_TYPES } from './types'
 import type { Activity, ActivityKind, DayInput, EngineParams, LoadType, Reserves } from './types'
 
 /**
@@ -76,6 +77,23 @@ export function drainForDay(
     physical: 0,
     social: 0,
     errands: 0,
+  }
+
+  /*
+   * §6.1 amended: a night short of the baseline costs something.
+   *
+   * Bounded by the baseline itself, so a night of none at all is the worst there is -- there
+   * is no negative sleep to charge for. Charged flat rather than through `actualCost`'s state
+   * multiplier: that multiplier prices the effort of DOING something at a given reserve, and
+   * a night that did not happen is not an activity. The compounding comes from the reserve
+   * itself falling, which makes the next day's work dearer.
+   *
+   * `params.kSleepDebt` carries the reasoning for the coefficients, including why social is
+   * zero here exactly as it is in `kSleep`.
+   */
+  const short = Math.max(0, params.sleepBaselineHours - day.sleepHours)
+  if (short > 0) {
+    for (const type of LOAD_TYPES) totals[type] += short * params.kSleepDebt[type]
   }
 
   for (const activity of day.activities) {

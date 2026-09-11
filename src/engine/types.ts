@@ -112,6 +112,9 @@ export interface EngineParams {
   readonly typeIntensity: Reserves
   /** Reserve points returned per hour of sleep above the baseline. */
   readonly kSleep: Reserves
+  /** §6.1 amended: the cost per hour a night falls short of `sleepBaselineHours`, charged as
+   *  drain. See `params.kSleepDebt` for why it is drain and not negative recovery. */
+  readonly kSleepDebt: Reserves
   /**
    * Hours of sleep that count as breaking even for this student.
    *

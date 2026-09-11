@@ -72,6 +72,34 @@ export const DEFAULT_PARAMS: EngineParams = {
   // seeing nobody -- which makes the app's answer to loneliness an early night and
   // quietly erases the isolation signal the engine exists to surface.
   kSleep: { mental: 6.0, physical: 7.0, social: 0, errands: 2.0 },
+
+  /**
+   * §6.1 amended: what a night SHORT of the baseline costs, per hour short, as drain.
+   *
+   * `max(0, sleep - 5)` floored the credit at zero, so two hours of sleep and five hours of
+   * sleep were the same thing to the model -- and a week of two-hour nights left the physical
+   * reserve flat, because nothing drained it and nothing repaid it. The model declined to
+   * have an opinion about the most damaging thing a student can do to themselves.
+   *
+   * Drain rather than negative recovery, and that is the load-bearing choice: recovery is
+   * multiplied by `efficiencyAt(reserve)`, so a negative credit would SHRINK as somebody got
+   * more depleted -- deprivation would hurt a healthy student more than an exhausted one,
+   * which is backwards. A cost belongs in drain, where the state multiplier already makes
+   * costs rise as a reserve falls (Ruling 67).
+   *
+   * Four rather than mirroring `kSleep`'s six and seven. Measured over a fortnight: at
+   * mirrored rates a two-hour night regime empties both reserves by day four, and once
+   * several sit at zero every bad week looks identical -- the model loses the resolution the
+   * spiral is supposed to show. At four, a two-hour night costs about 15 mental and 12
+   * physical on the day, which is a serious visible hit that one all-nighter recovers from.
+   *
+   * Social is zero, the same zero `kSleep` carries and for the same reason: §5.2 prescribes a
+   * person when social reserve is low and §1.2 wants isolation to read as a warning, so
+   * letting sleep move that reserve in EITHER direction makes the app's answer to loneliness
+   * a matter of bedtime. Errands is zero too -- there is no evidence behind a figure there,
+   * and an invented one would be a claim the model cannot support.
+   */
+  kSleepDebt: { mental: 4.0, physical: 4.0, social: 0, errands: 0 },
   kRest: { mental: 4.0, physical: 3.0, social: 0, errands: 2.0 },
   kSocialContact: 4.0,
 

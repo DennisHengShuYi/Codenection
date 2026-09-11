@@ -325,3 +325,30 @@ tell "slept eight hours" from "nobody has asked yet", and so what lets it compar
 
 `src/ui/sleep/SleepSheet.tsx` — the page; `src/ui/room/view.ts` — why it is an address
 
+
+## Ruling 67
+
+Recorded at the time.
+
+**Sleep deprivation is charged as drain, never as negative recovery.** A night short of §6.1's
+five-hour baseline costs the mental and physical reserves per hour short, added to `drain[d]`.
+
+The obvious alternative — dropping the `max(0, …)` so the sleep credit goes negative — is
+mechanically backwards. `recovery[d]` is multiplied by `efficiency[d]`, which falls as the
+reserve falls, so a negative credit would get *smaller* the more depleted a student was:
+deprivation would hurt a rested student more than an exhausted one, inverting §6.2's spiral
+rather than deepening it. A cost belongs in drain, where `stateMultiplier` already makes costs
+rise as a reserve falls.
+
+Charged flat rather than through `actualCost`'s state multiplier. That multiplier prices the
+effort of *doing* something at a given reserve, and a night that did not happen is not an
+activity. The compounding arrives through the reserve itself falling, which makes the next
+day's work dearer.
+
+The coefficient is 4, not `k_sleep`'s 6 and 7. Measured: at mirrored rates a two-hour night
+regime empties both reserves by day four, and once several sit at zero every bad week looks
+identical — the model loses the resolution the spiral exists to show. At 4, a two-hour night
+costs about 15 mental and 12 physical on the day, which is a serious visible hit that a single
+all-nighter recovers from.
+
+`src/engine/params.ts` — the coefficients and their reasoning; `src/engine/drain.ts` — the term

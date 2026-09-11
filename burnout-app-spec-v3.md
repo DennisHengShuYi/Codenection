@@ -304,9 +304,28 @@ Five labels surface in the UI to match the brief's wording; the taxonomy underne
 reserve[d+1] = reserve[d] − drain[d] + recovery[d] × efficiency[d]
 
 drain[d]      = Σ (task_hours × type_intensity) × estimate_bias
+                + max(0, 5 − sleep) × k_sleep_debt
 recovery[d]   = max(0, sleep − 5) × k_sleep + rest_blocks × k_rest
 efficiency[d] = 0.45 + 0.55 × (reserve[d] / 100)
 ```
+
+> **Amended 2026-09-12: a night short of the baseline now costs something.**
+>
+> As written, `max(0, sleep − 5)` floored the credit at zero, which made two hours of sleep
+> and five hours of sleep *identical* to the model. Measured over a fortnight: a week of
+> two-hour nights left the physical reserve sitting flat at its starting value, because
+> nothing drained it and nothing repaid it. The model declined to have an opinion about the
+> most damaging thing a student can do to themselves, which is the opposite of §1.2's purpose.
+>
+> The shortfall is charged as **drain**, not as negative recovery, and that is the
+> load-bearing part. Recovery is multiplied by `efficiency[d]`, so a negative credit would
+> *shrink* as a student got more depleted — deprivation would hurt a rested student more than
+> an exhausted one, inverting §6.2's entire mechanic. A cost belongs in drain. (Ruling 67.)
+>
+> `k_sleep_debt` is 4 for mental and physical and **0 for social** — the same zero `k_sleep`
+> carries, for the same reason §5.2 gives: letting sleep move the social reserve in *either*
+> direction makes the app's answer to loneliness a matter of bedtime. Errands is 0 too; there
+> is no evidence behind a figure there.
 
 ### 6.2 The mechanic that makes it real
 

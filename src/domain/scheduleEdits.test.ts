@@ -208,3 +208,51 @@ describe('adding a block by hand', () => {
     expect(addBlock(before, fields()).items[0]).toEqual(before.items[0])
   })
 })
+
+/**
+ * Ruling 62/§45: deferring undated work is no longer free.
+ *
+ * `softDeadlines`' own docstring names this function as one of the three reasons it exists
+ * -- "`scheduleEdits.deferItem` clamps undated work to the horizon edge and nothing sooner"
+ * -- and it was never changed when the feature landed. A walk could still be pushed two
+ * weeks out in one tap, which is exactly the behaviour giving every event a deadline was
+ * meant to stop.
+ */
+describe('deferring something with only a synthetic deadline', () => {
+  const walk = {
+    id: 'walk',
+    title: 'Walk',
+    type: 'physical' as const,
+    kind: 'lightExercise' as const,
+    hours: 1,
+    intensity: 1,
+    dayIndex: 1,
+    startHour: 9,
+    fixed: false,
+    deadlineDay: null,
+    protectedRest: false,
+  }
+
+  it('stops at the soft deadline rather than the end of the fortnight', () => {
+    const week = schedule([{ ...walk, softDeadlineDay: 3 }])
+
+    const after = deferItem(week, 'walk', 10)
+
+    expect(after.items[0]?.dayIndex).toBe(3)
+  })
+
+  /** A real deadline still wins over a derived one -- it is a fact about the world. */
+  it('still stops at a real deadline when there is one', () => {
+    const week = schedule([{ ...walk, deadlineDay: 2, softDeadlineDay: 6 }])
+
+    expect(deferItem(week, 'walk', 10).items[0]?.dayIndex).toBe(2)
+  })
+
+  /** Nothing stamped and nothing stated is the old behaviour, unchanged: there is no
+   *  deadline to hold it to, so the horizon edge is the only honest limit. */
+  it('falls back to the horizon when the week has never been stamped', () => {
+    const week = schedule([walk])
+
+    expect(deferItem(week, 'walk', 100).items[0]?.dayIndex).toBe(HORIZON_DAYS - 1)
+  })
+})

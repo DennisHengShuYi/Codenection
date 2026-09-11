@@ -47,9 +47,24 @@ export function Floor() {
  * The beam comes down as pressure rises, and hangs blocks as it does -- a beam alone only
  * gets thicker, which reads as architecture. Blocks read as something put there.
  */
-export function Ceiling({ pressure }: { pressure: number }) {
-  const depth = 10 + pressure * 34
-  const blocks = Math.round(pressure * 5)
+/**
+ * §47: the ceiling is furniture now.
+ *
+ * It carried pressure -- the fortnight's reserve until §45, then today's hours -- and it was
+ * the wrong shape for either. Its depth is drawn in viewBox units, so it scales with the
+ * stage: on a 390px phone the range was 13 to 57 real pixels, thinner than the controls that
+ * sit in it, while the same numbers are four times larger on a laptop. A quantity whose
+ * legibility depends on the window size is not a quantity a student can read, and clamping
+ * it to fit the controls would have pinned it near maximum on every wide screen.
+ *
+ * One fixed depth, chosen at the deep end of the old range so the bar it backs has room.
+ * What it used to say is on the clock (`dayFull`), in a shape that means it.
+ */
+const CEILING_DEPTH = 34
+
+export function Ceiling() {
+  const depth = CEILING_DEPTH
+  const blocks = 2
 
   return (
     <g data-testid="room-ceiling">

@@ -1,5 +1,5 @@
-import { MAX_IMAGE_BYTES, MAX_INPUT_LENGTH, parseBrainDump, type ParsedItem } from '../ai'
-import { dateFor, todayIndex } from '../domain/calendar'
+import { MAX_IMAGE_BYTES, MAX_INPUT_LENGTH, parseBrainDump, type Calendar, type ParsedItem } from '../ai'
+import { calendarFor, dateFor, todayIndex } from '../domain/calendar'
 import { blocksOnDay } from '../domain/dayBlocks'
 import { answeredIds, checkedInDays, outcomesFrom, type BlockAnswer, type BlockRecord } from '../domain/blockLog'
 import type { BlockOutcome } from '../domain/calibration'
@@ -10,6 +10,7 @@ import { accuracyLine, resolvePrediction } from '../domain/predictions'
 import { biasLine } from '../domain/realityCheck'
 import { runRebalance } from '../domain/rebalanceOutcome'
 import { scheduleView } from '../domain/scheduleView'
+import { stampSoftDeadlines } from '../domain/softDeadlines'
 import { withSleep } from '../ui/today/checkIn'
 import { firstAction } from '../domain/microStart'
 import { prescribe } from '../domain/prescribe'
@@ -54,6 +55,8 @@ import {
   unhandledReply,
   yesterdayUnavailableReply,
   type Reply,
+  rebalanceDeclinedReply,
+  rebalanceStaleReply,
 } from './render'
 import type { Intent } from './update'
 
@@ -239,6 +242,53 @@ async function offerParse(
  * Returns the reply rather than sending it, so every decision here is testable without a
  * network. Null means there is nothing to answer — no chat to answer to.
  */
+/**
+ * Ruling 62/§44: which real day day 0 is, for the reader this door calls.
+ *
+ * The app hands `parseBrainDump` a calendar so a stated weekday lands on that weekday; this
+ * door handed it nothing, so the model was left to guess -- and chat is where a student is
+ * most likely to say "thursday" rather than a date. A week that has never been dated yields
+ * a calendar with no label, which both readers already treat as "say nothing about today".
+ */
+/**
+ * A short, stable fingerprint of the week a proposal was made against (Ruling 62).
+ *
+ * The proposal itself cannot travel in 64 bytes of callback data, so approving it re-runs
+ * the same deterministic solve -- and this is what proves the re-run would see the same
+ * week. A week that has moved on since is refused rather than rearranged by a plan made for
+ * a different one.
+ *
+ * Not a security boundary and not trying to be: it is an accident detector, and a student
+ * cannot gain anything by forging their own week's fingerprint. Cheap enough to compute on
+ * every `/rebalance`, which is why it is a fold rather than a hash import.
+ */
+const fingerprintOf = (week: Schedule): string => {
+  const shape = week.items
+    .map((item) => `${item.id}:${item.dayIndex}:${item.startHour}:${item.hours}`)
+    .sort()
+    .join('|')
+
+  let hash = 0
+  for (let index = 0; index < shape.length; index += 1) {
+    hash = (hash * 31 + shape.charCodeAt(index)) | 0
+  }
+
+  return Math.abs(hash).toString(36)
+}
+
+const calendarOf = async (
+  store: ChatStore,
+  accountId: string,
+  now: number,
+): Promise<Calendar | undefined> => {
+  const week = await store.loadWeek(accountId).catch(() => null)
+  if (week === null) return undefined
+
+  const today = todayFor(week, now)
+
+  return calendarFor(week, today)
+}
+
 export async function handleIntent(
   intent: Intent,
   store: ChatStore,
@@ -378,6 +428,12 @@ export async function handleIntent(
        * lives in `src/domain` for exactly this reason. Two rearranging algorithms with
        * different logic would disagree, and the one that ran last would win.
        */
+      /**
+       * Ruling 62: proposes, and changes nothing. The app was made to work this way by
+       * `c81da05`, and this door went on saving the result the moment the command arrived
+       * -- the same word rearranging a student's week behind them through one door and
+       * asking first through the other.
+       */
       case 'rebalance': {
         const week = await store.loadWeek(accountId)
         const blockLog = await store.loadBlockLog(accountId).catch(() => null)
@@ -389,9 +445,12 @@ export async function handleIntent(
           paramsFor(outcomesFrom(blockLog), predictions),
           REBALANCE_SEED,
         )
-        await store.saveWeek(accountId, outcome.schedule)
 
-        return rebalanceReply(outcome.report, outcome.fallback?.move.description ?? null)
+        return rebalanceReply(
+          outcome.report,
+          outcome.fallback?.move.description ?? null,
+          fingerprintOf(week),
+        )
       }
 
       /** §2.3: a provisional yes that stopped being affordable, said out loud. */
@@ -415,7 +474,11 @@ export async function handleIntent(
         // "nothing has been kept up" and prescribe against a fiction.
         if (blockLog === null) return restUnavailableReply()
 
-        const prescription = prescribe(week, todayFor(week, now), blockLog)
+        // Ruling 62/§45: stamped first. `missedSoftDeadlines` skips any item with no
+        // stamp, and only `RoomShell` was stamping -- so this door reported nothing
+        // neglected where the screen would have shown a prescription.
+        const today = todayFor(week, now)
+        const prescription = prescribe(stampSoftDeadlines(week, today, blockLog), today, blockLog)
 
         // Null covers both "nothing has gone neglected" and "there is no room", which
         // prescribe() deliberately does not distinguish -- either way there is one honest
@@ -491,6 +554,28 @@ export async function handleIntent(
     return blockAnsweredReply(intent.answer)
   }
 
+  /**
+   * Ruling 62: the approval half. The plan is re-run rather than carried, because a whole
+   * schedule does not fit in 64 bytes of callback data -- the solve is deterministic on a
+   * fixed seed, so the same week yields the same plan. If the week has moved on since the
+   * offer, the fingerprint no longer matches and nothing is touched.
+   */
+  if (intent.kind === 'rebalanceAnswer') {
+    if (!intent.accepted) return rebalanceDeclinedReply()
+
+    const week = await store.loadWeek(accountId)
+    if (fingerprintOf(week) !== intent.fingerprint) return rebalanceStaleReply()
+
+    const blockLog = await store.loadBlockLog(accountId).catch(() => null)
+    if (blockLog === null) return askUnavailableReply()
+
+    const predictions = await store.loadPredictions(accountId).catch(() => [])
+    const outcome = runRebalance(week, paramsFor(outcomesFrom(blockLog), predictions), REBALANCE_SEED)
+    await store.saveWeek(accountId, outcome.schedule)
+
+    return { text: outcome.report }
+  }
+
   if (intent.kind === 'restAnswer') {
     if (!intent.accepted || intent.startHour === null) return discardedReply()
 
@@ -502,7 +587,8 @@ export async function handleIntent(
     // Re-derived rather than carried in the button: the prescription is deterministic for a
     // given week and what has been confirmed, and a button carrying its own payload could
     // be replayed with a different one.
-    const prescription = prescribe(week, todayFor(week, now), blockLog)
+    const today = todayFor(week, now)
+    const prescription = prescribe(stampSoftDeadlines(week, today, blockLog), today, blockLog)
     if (prescription === null) return noGapReply()
 
     await store.saveWeek(accountId, {
@@ -559,14 +645,18 @@ export async function handleIntent(
     if (text.trim() === '') return nothingUnderstoodReply()
     if (text.length > MAX_INPUT_LENGTH) return tooLongReply()
 
-    return offerParse(store, accountId, (await parseBrainDump(text)).items)
+    return offerParse(store, accountId, (await parseBrainDump(text, await calendarOf(store, accountId, now))).items)
   }
 
   if (intent.kind === 'plan') {
     // Refused before the model is called, so an oversized message cannot cost a request.
     if (intent.text.length > MAX_INPUT_LENGTH) return tooLongReply()
 
-    return offerParse(store, accountId, (await parseBrainDump(intent.text)).items)
+    return offerParse(
+      store,
+      accountId,
+      (await parseBrainDump(intent.text, await calendarOf(store, accountId, now))).items,
+    )
   }
 
   /**

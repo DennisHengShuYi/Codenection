@@ -9,7 +9,8 @@ import { Sheet } from './kit/Sheet'
 import { suggestRepeat } from '../domain/recurrence'
 import { beginConnect, readCalendar } from '../google/client'
 import { CalendarImportScreen } from './planner/CalendarImportScreen'
-import { calendarFor, dayLabelsFor } from './planner/dayLabels'
+import { calendarFor } from '../domain/calendar'
+import { dayLabelsFor } from './planner/dayLabels'
 import { PhotoImportScreen } from './planner/PhotoImportScreen'
 import { PlannerScreen } from './planner/PlannerScreen'
 import { RequestBoxScreen } from './request/RequestBoxScreen'
@@ -166,7 +167,14 @@ export function AddSheet({
       <CalendarImportScreen
         dayLabels={dayLabels}
         connected={calendarConnected}
-        onConnect={() => void beginConnect()}
+        // Ruling 63: the outcome is returned to the screen rather than discarded. This was
+        // `void beginConnect()`, which sent a refusal to the browser console and a missing
+        // session nowhere at all -- a student pressed Connect and watched nothing happen.
+        onConnect={async () => {
+          const outcome = await beginConnect()
+
+          return outcome.ok ? null : outcome.reason
+        }}
         onRead={() => readCalendar(schedule)}
         suggestRepeat={(item) => suggestRepeat(item, schedule)}
         onAccept={(items) => {

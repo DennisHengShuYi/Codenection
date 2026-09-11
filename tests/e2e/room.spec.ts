@@ -250,3 +250,114 @@ test('carries the words, the accuracy line and the live cards behind the Waiting
   await expect(page.getByRole('dialog', { name: /the week/i })).toBeVisible()
   await expect(page.getByTestId('room-stage')).toHaveAttribute('inert', '')
 })
+
+/**
+ * §46: the panel, in the two places it lives.
+ *
+ * jsdom has no viewport, so which of the two is actually VISIBLE at a given width is a
+ * question only a browser can answer -- and it is the whole design: a panel that appeared
+ * over the room on a phone would cover the character, which Ruling 55 forbids.
+ */
+test('floats the today panel beside the room on a laptop, and keeps it clear of the character', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1100, height: 800 })
+  await openApp(page)
+
+  const panel = page.getByTestId('today-panel-floating')
+  await expect(panel).toBeVisible()
+  // The button is the phone's way in and has nothing to do here, where the panel is already
+  // on screen.
+  await expect(page.getByTestId('open-today')).toBeHidden()
+
+  const panelBox = await panel.boundingBox()
+  const character = await page.getByTestId('room-character').boundingBox()
+  expect(panelBox && character, 'a measured element has no box').toBeTruthy()
+
+  // Ruling 55: nothing may be painted over the character. The panel is to the right of it.
+  expect(
+    panelBox!.x,
+    'the today panel reaches across the character',
+  ).toBeGreaterThanOrEqual(character!.x + character!.width)
+})
+
+test('opens the today panel from the control row on a phone, where there is no beside', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openApp(page)
+
+  await expect(page.getByTestId('today-panel-floating')).toBeHidden()
+
+  await page.getByTestId('open-today').click()
+
+  // Scoped to the sheet: the floating panel is still in the document at this width, hidden
+  // by CSS rather than unmounted -- `display: none` keeps it out of the accessibility tree,
+  // so a screen reader is not offered the same rows twice.
+  const sheet = page.getByRole('dialog', { name: /today/i })
+  await expect(sheet).toBeVisible()
+  await expect(sheet.getByTestId('panel-row-books')).toBeVisible()
+})
+
+/**
+ * The controls belong INSIDE the ceiling, not on the wall below it.
+ *
+ * `Ceiling` draws `10 + pressure * 34` viewBox units, which at 390px is between 13 and 57
+ * real pixels while the control row needs 56 -- so on a light day the buttons hung off the
+ * ceiling and floated on the wall. The bar carries the ceiling's own colour for that reason,
+ * and this is the check that every control actually sits within it at every width, including
+ * the ones where the row wraps.
+ */
+for (const [width, height] of VIEWPORTS) {
+  test(`keeps every control inside the ceiling band at ${width}x${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height })
+    await openApp(page)
+
+    const bar = await page.getByTestId('room-bar').boundingBox()
+    expect(bar, 'the bar has no box').not.toBeNull()
+
+    for (const id of ['open-settings', 'open-week', 'open-add', 'room-gauge']) {
+      const box = await page.getByTestId(id).boundingBox()
+      expect(box, `${id} has no box at ${width}px`).not.toBeNull()
+
+      expect(box!.y, `${id} starts above the bar at ${width}px`).toBeGreaterThanOrEqual(bar!.y - 1)
+      expect(
+        box!.y + box!.height,
+        `${id} hangs below the ceiling onto the wall at ${width}px`,
+      ).toBeLessThanOrEqual(bar!.y + bar!.height + 1)
+    }
+  })
+}
+
+/**
+ * The panel starts below the brown at the top of the room.
+ *
+ * Neither piece of brown is a fixed number of pixels: `Ceiling` is drawn in viewBox units,
+ * so it scales with the stage, and the control bar sizes itself to however many rows of
+ * controls it is holding. The panel's offset is a percentage for that reason -- and it was
+ * wrong on the first attempt, overlapping by 25px at 2560px, because the ceiling hangs
+ * blocks BELOW its own depth. Measured at the widths where the two diverge most.
+ */
+for (const [width, height] of [
+  [2560, 1440],
+  [1920, 1080],
+  [1200, 800],
+  [768, 800],
+] as const) {
+  test(`keeps the today panel clear of the ceiling at ${width}x${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height })
+    await openApp(page)
+
+    const ceiling = await page.getByTestId('room-ceiling').boundingBox()
+    const bar = await page.getByTestId('room-bar').boundingBox()
+    const panel = await page.getByTestId('today-panel-floating').boundingBox()
+    expect(ceiling && bar && panel, 'a measured element has no box').toBeTruthy()
+
+    const brownEnds = Math.max(ceiling!.y + ceiling!.height, bar!.y + bar!.height)
+
+    expect(
+      panel!.y,
+      `the today panel overlaps the brown at ${width}x${height}`,
+    ).toBeGreaterThanOrEqual(brownEnds)
+  })
+}

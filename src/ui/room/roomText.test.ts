@@ -3,7 +3,7 @@ import { describeRoom, describeRoomFully } from './roomText'
 import type { RoomState } from './roomState'
 
 const state = (over: Partial<RoomState> = {}): RoomState => ({
-  ceilingPressure: 0.2,
+  dayFull: 0.2,
   paperHeight: 0.2,
   clutter: [],
   exerciseWaiting: 0, companyWaiting: 0,

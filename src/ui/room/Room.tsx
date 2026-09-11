@@ -1,7 +1,7 @@
 import { Character } from './Character'
 import type { RoomModel } from './roomModel'
 import { describeRoomFully } from './roomText'
-import { Door, Light, Window } from './scene/Fixtures'
+import { Clock, Door, Light, Window } from './scene/Fixtures'
 import { Bed, Desk, Mirror, Phone } from './scene/Furniture'
 import { Clutter, Company, Dumbbell, Papers } from './scene/Loose'
 import { FLOOR_Y, PALETTE } from './scene/palette'
@@ -123,6 +123,7 @@ export function Room({
         {/* Back to front, so nearer things overlap what is behind them -- the depth the flat
             elevation gets instead of perspective. */}
         <Mirror />
+        <Clock full={state.dayFull} />
         <Window weather={state.weather} dark={state.windowDark} />
         <Door lit={state.doorLit} />
         <Desk />
@@ -136,7 +137,7 @@ export function Room({
 
         {/* Overhead last: the ceiling presses over everything, and the lamp's glow has to
             fall on the room rather than under it. */}
-        <Ceiling pressure={state.ceilingPressure} />
+        <Ceiling />
         <Light level={state.lightLevel} />
       </svg>
 
@@ -148,7 +149,7 @@ export function Room({
       {onOpenReserves === undefined ? (
         <div
           data-testid="room-gauge"
-          className="absolute right-2 top-2 rounded-full bg-surface/90 px-3 py-1 text-sm font-semibold text-ink-soft shadow"
+          className="absolute right-3 top-3 z-10 rounded-full bg-surface/90 px-3 py-1.5 text-sm font-semibold text-ink-soft shadow"
         >
           {percent}%
         </div>
@@ -161,7 +162,7 @@ export function Room({
           data-testid="room-gauge"
           onClick={onOpenReserves}
           aria-label={`Where your reserves stand: ${percent}%`}
-          className="absolute right-2 top-2 min-h-11 rounded-full bg-surface/90 px-3 py-1 text-sm font-semibold text-ink-soft shadow hover:text-ink focus-visible:outline focus-visible:outline-2"
+          className="absolute right-3 top-3 z-10 min-h-11 rounded-full bg-surface/90 px-3 py-1.5 text-sm font-semibold text-ink-soft shadow hover:text-ink focus-visible:outline focus-visible:outline-2"
         >
           {percent}%
         </button>

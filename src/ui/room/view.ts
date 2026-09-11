@@ -70,6 +70,9 @@ export type View =
    *  preview notice, the room in words, the accuracy line and the live cards -- behind one
    *  button, so the room is the drawing again. */
   | { readonly kind: 'notices' }
+  /** §46: what each object in the room means, and what is behind it today. Floating beside
+   *  the room from 768px; below that this address is how it opens. */
+  | { readonly kind: 'today' }
   /**
    * The Rest button's answer, held rather than applied.
    *
@@ -109,6 +112,8 @@ export const toMicroStart = (itemId: string): View => ({ kind: 'microStart', ite
 
 export const toNewBlock = (dayIndex: number): View => ({ kind: 'newBlock', dayIndex })
 export const toNotices = (): View => ({ kind: 'notices' })
+
+export const toToday = (): View => ({ kind: 'today' })
 
 /**
  * One level up: the Back button's rule (Ruling 60).
@@ -168,6 +173,8 @@ export const toPath = (view: View): string => {
       return `/week/new/${view.dayIndex}`
     case 'notices':
       return '/notices'
+    case 'today':
+      return '/today'
     case 'rest':
       return '/rest'
   }
@@ -225,6 +232,8 @@ export const fromPath = (path: string): View => {
   if (first === 'reserves' && parts.length === 1) return toReserves()
 
   if (first === 'notices' && parts.length === 1) return toNotices()
+
+  if (first === 'today' && parts.length === 1) return toToday()
 
   if (first === 'rest' && parts.length === 1) return REST
 

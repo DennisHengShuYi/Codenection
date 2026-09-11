@@ -81,7 +81,9 @@ function harness(over: Partial<ChatStore> = {}): Harness {
 const parse = vi.fn()
 vi.mock('../ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  parseBrainDump: (text: string) => parse(text),
+  // Ruling 62/§44: the calendar is forwarded, not dropped. The mock used to take only the
+  // text, which would have let the anchor go missing without a test noticing.
+  parseBrainDump: (text: string, calendar?: unknown) => parse(text, calendar),
 }))
 
 beforeEach(() => {
@@ -142,7 +144,10 @@ describe('planning', () => {
 
     const reply = await handleIntent({ kind: 'plan', chatId: 7, text: 'essay' }, h.store, 1000)
 
-    expect(parse).toHaveBeenCalledWith('essay')
+    // Ruling 62/§44: the reader is handed the calendar alongside the text now, so a stated
+    // weekday lands on that weekday rather than on a guess. The text is what this test is
+    // about; that the anchor travels is covered in `the chat door, held to what the app does`.
+    expect(parse).toHaveBeenCalledWith('essay', expect.anything())
     expect(reply?.buttons).toBeDefined()
   })
 
@@ -388,13 +393,18 @@ describe('the command surface', () => {
       expect((await handleIntent(command('day', argument), h.store, 1000))?.text).toMatch(/which day/i)
     })
 
-    it('answers /rebalance by actually rebalancing and saving the result', async () => {
+    /**
+     * Ruling 62: /rebalance says what it WOULD do. The saving half is the approval, below
+     * -- `c81da05` made the app work this way and this door had not followed.
+     */
+    it('answers /rebalance with what it would do, and saves nothing yet', async () => {
       const h = harness({ loadWeek: async () => week([studyBlock]) as never })
 
       const reply = await handleIntent(command('rebalance'), h.store, 1000)
 
       expect(reply?.text.length).toBeGreaterThan(0)
-      expect(h.saved).toHaveLength(1)
+      expect(reply?.text).toMatch(/nothing has changed/i)
+      expect(h.saved).toHaveLength(0)
     })
 
     it('answers /schedule with the whole horizon', async () => {
@@ -984,7 +994,10 @@ describe('a voice note', () => {
     const reply = await handleIntent(voice(), h.store, 1000, { transcribe })
 
     expect(transcribe).toHaveBeenCalledOnce()
-    expect(parse).toHaveBeenCalledWith('essay due friday and gym')
+    // Ruling 62/§44: the reader is handed the calendar alongside the text now, so a stated
+    // weekday lands on that weekday rather than on a guess. The text is what this test is
+    // about; that the anchor travels is covered in `the chat door, held to what the app does`.
+    expect(parse).toHaveBeenCalledWith('essay due friday and gym', expect.anything())
     expect(reply?.buttons).toBeDefined()
   })
 
@@ -1349,5 +1362,214 @@ describe('moving between the fortnight and a day', () => {
     const reply = await handleIntent({ kind: 'openDay', chatId: 7, dayIndex: 99 } as never, h.store, 1000)
 
     expect(reply?.text).toMatch(/which day/i)
+  })
+})
+
+/**
+ * Ruling 62: the chat door and the app door must answer the same question the same way.
+ *
+ * Three ways they had drifted, each of which made the bot quietly worse than the screen
+ * rather than merely smaller than it.
+ */
+describe('the chat door, held to what the app does', () => {
+  /**
+   * §44. The app tells both readers which real day day 0 is, so "gym thursday" lands on a
+   * Thursday. The chat door called `parseBrainDump` with no calendar at all, so the model
+   * was left to guess -- and a guess of Monday turns a stated Thursday into day 3. Chat is
+   * where a student is most likely to say a weekday rather than a date.
+   */
+  const command = (name: string, argument = '') =>
+    ({ kind: 'command', chatId: 7, name, argument }) as never
+
+  const dated = (items: Schedule['items'] = []): Schedule => ({
+    ...week(),
+    items,
+    startedOn: '2026-09-11',
+  })
+
+  const study = {
+    id: 'essay',
+    title: 'Essay',
+    type: 'mental' as const,
+    kind: 'studyBlock' as const,
+    hours: 2,
+    intensity: 1,
+    dayIndex: 0,
+    startHour: 9,
+    fixed: false,
+    deadlineDay: null,
+    protectedRest: false,
+  }
+
+  it('tells the reader which day today is, so a stated weekday lands on it', async () => {
+    const h = harness({ loadWeek: async () => dated() as never })
+
+    await handleIntent({ kind: 'plan', chatId: 7, text: 'gym thursday' }, h.store, 1000)
+
+    expect(parse).toHaveBeenCalledWith(
+      'gym thursday',
+      expect.objectContaining({ startWeekday: expect.any(Number) }),
+    )
+  })
+
+  /**
+   * §45's soft deadlines are stamped onto the week before anything reads them, and only
+   * `RoomShell` was doing it. `missedSoftDeadlines` skips any item with no stamp, so `/rest`
+   * reported nothing overdue where the app would have shown a prescription -- the bot
+   * disagreeing with the screen about whether the student is neglecting anything.
+   */
+  it('stamps the week before asking what is overdue', async () => {
+    const h = harness({ loadWeek: async () => dated([{ ...study, kind: 'rest' }]) as never })
+
+    const reply = await handleIntent(command('rest'), h.store, 1000)
+
+    // Either advice or an honest "nothing is neglected" -- what must not happen is the
+    // unstamped path's silent nothing, which is indistinguishable from the latter.
+    expect(reply?.text.length).toBeGreaterThan(0)
+  })
+
+  /**
+   * `c81da05` made the app propose a rebalance and change nothing until the student says
+   * yes. Chat went on saving the result immediately, so the same command rearranged a
+   * student's week behind them through one door and asked first through the other.
+   */
+  it('proposes a rebalance rather than applying it', async () => {
+    const h = harness({ loadWeek: async () => dated([study]) as never })
+
+    const reply = await handleIntent(command('rebalance'), h.store, 1000)
+
+    expect(reply?.text.length).toBeGreaterThan(0)
+    expect(h.saved, 'the week was rewritten without being approved').toHaveLength(0)
+    expect(reply?.buttons, 'nothing to approve it with').toBeDefined()
+  })
+})
+
+/**
+ * Ruling 62's approval half, which is what makes the proposal above an offer rather than a
+ * delay. The plan is re-run rather than carried: a whole schedule does not fit in 64 bytes
+ * of callback data, and the solve is deterministic on a fixed seed.
+ */
+describe('approving a rebalance', () => {
+  const study = {
+    id: 'essay',
+    title: 'Essay',
+    type: 'mental' as const,
+    kind: 'studyBlock' as const,
+    hours: 2,
+    intensity: 1,
+    dayIndex: 0,
+    startHour: 9,
+    fixed: false,
+    deadlineDay: null,
+    protectedRest: false,
+  }
+
+  const weekWith = (): Schedule => ({ ...week(), items: [study] })
+
+  const fingerprintFrom = async (h: ReturnType<typeof harness>): Promise<string> => {
+    const reply = await handleIntent(
+      { kind: 'command', chatId: 7, name: 'rebalance', argument: '' } as never,
+      h.store,
+      1000,
+    )
+    const data = reply?.buttons?.[0]?.[0]?.data ?? ''
+
+    return data.replace('rebalance:apply:', '')
+  }
+
+  it('writes the week once the student says yes', async () => {
+    const h = harness({ loadWeek: async () => weekWith() as never })
+    const fingerprint = await fingerprintFrom(h)
+
+    await handleIntent(
+      { kind: 'rebalanceAnswer', chatId: 7, fingerprint, accepted: true },
+      h.store,
+      1000,
+    )
+
+    expect(h.saved).toHaveLength(1)
+  })
+
+  it('writes nothing when the student leaves it', async () => {
+    const h = harness({ loadWeek: async () => weekWith() as never })
+
+    const reply = await handleIntent(
+      { kind: 'rebalanceAnswer', chatId: 7, fingerprint: null, accepted: false },
+      h.store,
+      1000,
+    )
+
+    expect(h.saved).toHaveLength(0)
+    expect(reply?.text).toMatch(/left as it is/i)
+  })
+
+  /**
+   * The case the fingerprint exists for. Between the offer and the tap the student added a
+   * block in the app, so the moves were worked out against a week that no longer exists --
+   * applying them anyway is the silent reshuffle §16 forbids.
+   */
+  it('refuses a plan made for a week that has since changed', async () => {
+    const h = harness({ loadWeek: async () => weekWith() as never })
+
+    const reply = await handleIntent(
+      { kind: 'rebalanceAnswer', chatId: 7, fingerprint: 'notthesameweek', accepted: true },
+      h.store,
+      1000,
+    )
+
+    expect(h.saved).toHaveLength(0)
+    expect(reply?.text).toMatch(/changed since/i)
+  })
+})
+
+/**
+ * The failure paths in Ruling 62's own code, which the happy-path tests above never reach.
+ * Both are read failures against storage, and both have to degrade rather than throw: a
+ * student typing into a chat gets an answer either way.
+ */
+describe('Ruling 62 when storage will not answer', () => {
+  const study = {
+    id: 'essay',
+    title: 'Essay',
+    type: 'mental' as const,
+    kind: 'studyBlock' as const,
+    hours: 2,
+    intensity: 1,
+    dayIndex: 0,
+    startHour: 9,
+    fixed: false,
+    deadlineDay: null,
+    protectedRest: false,
+  }
+
+  /**
+   * No week means no honest anchor, so the reader is told nothing about today rather than
+   * being handed a made-up date -- which both readers already treat as "say nothing".
+   */
+  it('reads the dump without a calendar when the week cannot be loaded', async () => {
+    const h = harness({ loadWeek: async () => Promise.reject(new Error('offline')) as never })
+
+    const reply = await handleIntent({ kind: 'plan', chatId: 7, text: 'gym' }, h.store, 1000)
+
+    expect(parse).toHaveBeenCalledWith('gym', undefined)
+    expect(reply?.text.length, 'the student still gets an answer').toBeGreaterThan(0)
+  })
+
+  /** Approving a rebalance needs the evidence the solver is tuned from. Without it the
+   *  week is left alone rather than rearranged against a fiction (Ruling 41). */
+  it('refuses to apply an approved rebalance it has no evidence for', async () => {
+    const h = harness({
+      loadWeek: async () => ({ ...week(), items: [study] }) as never,
+      loadBlockLog: async () => Promise.reject(new Error('unreadable')) as never,
+    })
+
+    const reply = await handleIntent(
+      { kind: 'rebalanceAnswer', chatId: 7, fingerprint: 'whatever', accepted: true },
+      h.store,
+      1000,
+    )
+
+    expect(h.saved).toHaveLength(0)
+    expect(reply?.text.length).toBeGreaterThan(0)
   })
 })

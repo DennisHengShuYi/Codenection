@@ -82,10 +82,12 @@ describe('beginConnect', () => {
     expect(assign).not.toHaveBeenCalled()
   })
 
+  /** Ruling 63 turned the throw into an answer: it still goes nowhere, and now it also
+   *  says why instead of surfacing in a console the student will never open. */
   it('goes nowhere when the endpoint cannot start the flow', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
 
-    await expect(beginConnect()).rejects.toThrow()
+    await expect(beginConnect()).resolves.toEqual({ ok: false, reason: expect.any(String) })
     expect(assign).not.toHaveBeenCalled()
   })
 
@@ -93,7 +95,7 @@ describe('beginConnect', () => {
   it('goes nowhere when the endpoint answers without a destination', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }))
 
-    await expect(beginConnect()).rejects.toThrow()
+    await expect(beginConnect()).resolves.toEqual({ ok: false, reason: expect.any(String) })
     expect(assign).not.toHaveBeenCalled()
   })
 })
@@ -261,5 +263,75 @@ describe('pushCalendar', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }))
 
     expect(await pushCalendar(events, 'UTC')).toEqual({ created: 0, updated: 0, removed: 0 })
+  })
+})
+
+/**
+ * Ruling 63: connecting a calendar has to say what happened.
+ *
+ * `beginConnect` threw on a refused request and returned silently when there was no token,
+ * and `AddSheet` called it as `void beginConnect()` -- so a student pressing Connect either
+ * saw nothing happen at all, or got `Uncaught (in promise) Error: could not begin` in a
+ * console they will never open. Both are the same failure: the one person who needs to know
+ * is the one not told.
+ */
+describe('what beginConnect says when it cannot', () => {
+  it('says so rather than throwing when the endpoint refuses', async () => {
+    token.mockResolvedValue('a-token')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }))
+
+    const outcome = await beginConnect()
+
+    expect(outcome.ok).toBe(false)
+    if (!outcome.ok) expect(outcome.reason.length).toBeGreaterThan(0)
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  /** A 401 is the one failure with a specific answer: sign in. Saying "something went
+   *  wrong" to somebody who simply is not signed in wastes their time. */
+  it('names signing in when that is the actual problem', async () => {
+    token.mockResolvedValue('a-token')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }))
+
+    const outcome = await beginConnect()
+
+    expect(outcome.ok).toBe(false)
+    if (!outcome.ok) expect(outcome.reason).toMatch(/sign in/i)
+  })
+
+  /** Signed out, the fetch never happens -- and that silence was the worse bug, because
+   *  nothing at all appeared to occur. */
+  it('says to sign in when there is no session to ask with', async () => {
+    token.mockResolvedValue(null)
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const outcome = await beginConnect()
+
+    expect(outcome.ok).toBe(false)
+    if (!outcome.ok) expect(outcome.reason).toMatch(/sign in/i)
+    expect(fetchSpy, 'nothing to ask with, so nothing was asked').not.toHaveBeenCalled()
+  })
+
+  it('says so when the endpoint answers without a destination', async () => {
+    token.mockResolvedValue('a-token')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }))
+
+    const outcome = await beginConnect()
+
+    expect(outcome.ok).toBe(false)
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('reports success when it is sending the student onward', async () => {
+    token.mockResolvedValue('a-token')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ url: 'https://accounts.google.com/x' }) }),
+    )
+
+    const outcome = await beginConnect()
+
+    expect(outcome.ok).toBe(true)
   })
 })

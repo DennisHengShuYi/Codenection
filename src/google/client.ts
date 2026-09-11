@@ -30,17 +30,43 @@ export const CONNECT_PATH = '/api/google-connect?begin=1'
  * seen in a genuine address bar, which is what lets somebody check the domain before handing
  * over access to their calendar.
  */
-export async function beginConnect(): Promise<void> {
+/** What happened, in words a student can be shown (Ruling 63). */
+export type ConnectOutcome = { readonly ok: true } | { readonly ok: false; readonly reason: string }
+
+const SIGN_IN_FIRST =
+  'Connecting a calendar needs an account — sign in from Settings first, then try again.'
+const UNAVAILABLE =
+  'I could not reach the calendar service just now. Try again in a moment.'
+
+/**
+ * Starts the consent flow, and says what happened when it cannot.
+ *
+ * It used to throw on a refused request and return silently with no session -- and its one
+ * caller discarded the promise, so a student pressing Connect either saw nothing happen or
+ * got `Uncaught (in promise) Error: could not begin` in a console they will never open.
+ * Both were the same failure: the one person who needed to know was the one not told.
+ *
+ * A 401 is the only failure with a specific answer, so it gets one. "Something went wrong"
+ * to somebody who is simply not signed in wastes their time.
+ */
+export async function beginConnect(): Promise<ConnectOutcome> {
   const token = await getAccessToken()
-  if (token === null) return
+  if (token === null) return { ok: false, reason: SIGN_IN_FIRST }
 
-  const response = await fetch(CONNECT_PATH, { headers: { authorization: `Bearer ${token}` } })
-  if (!response.ok) throw new Error('could not begin')
+  const response = await fetch(CONNECT_PATH, {
+    headers: { authorization: `Bearer ${token}` },
+  }).catch(() => null)
 
-  const { url } = (await response.json()) as { url?: unknown }
-  if (typeof url !== 'string') throw new Error('could not begin')
+  if (response === null) return { ok: false, reason: UNAVAILABLE }
+  if (response.status === 401) return { ok: false, reason: SIGN_IN_FIRST }
+  if (!response.ok) return { ok: false, reason: UNAVAILABLE }
+
+  const { url } = (await response.json().catch(() => ({}))) as { url?: unknown }
+  if (typeof url !== 'string') return { ok: false, reason: UNAVAILABLE }
 
   window.location.assign(url)
+
+  return { ok: true }
 }
 
 export interface CalendarImport {

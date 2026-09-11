@@ -1,4 +1,5 @@
 import { HORIZON_DAYS } from '../engine'
+import type { Calendar } from '../ai/types'
 import type { Schedule } from '../optimizer'
 
 /**
@@ -74,3 +75,39 @@ export function dayIndexFor(schedule: Schedule, date: string): number | null {
 
   return index >= 0 && index < HORIZON_DAYS ? index : null
 }
+
+/**
+ * §44: which real day the horizon's day 0 is, for the readers that need it.
+ *
+ * Both readers needed this and neither had it. The rules parser worked out a named weekday
+ * from `today % 7`, which is only right if day 0 is a Sunday; the model was told
+ * "deadlineDay is a day index from 0 (today)" and never told what today was, so a stated
+ * "thursday" could only be guessed at. Either way "gym thursday 7pm" landed on a day chosen
+ * by arithmetic rather than by the student, and §43's Day select is what finally showed it.
+ *
+ * `todayLabel` is absent for a week that has never been dated. There is nothing true to
+ * say there, and a made-up date would send the model a confident wrong answer -- the rules
+ * fall back to their old behaviour instead, which is what that week has always had.
+ */
+export function calendarFor(schedule: Schedule, today: number): Calendar {
+  const startDate = dateFor(schedule, 0)
+  const todayDate = dateFor(schedule, today)
+
+  // UTC throughout, matching `dateFor`: read in a local timezone west of Greenwich, an ISO
+  // day names the day before, and a weekday off by one is the whole bug this fixes.
+  const startWeekday =
+    startDate === null ? 0 : new Date(`${startDate}T00:00:00Z`).getUTCDay()
+
+  const todayLabel =
+    todayDate === null
+      ? undefined
+      : new Date(`${todayDate}T00:00:00Z`).toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+          timeZone: 'UTC',
+        })
+
+  return { today, startWeekday, ...(todayLabel === undefined ? {} : { todayLabel }) }
+}
+

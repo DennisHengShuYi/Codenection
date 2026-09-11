@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
-import { anchorTo, dateFor, dayIndexFor, isAnchored, todayIndex } from './calendar'
+import { anchorTo, calendarFor, dateFor, dayIndexFor, isAnchored, todayIndex } from './calendar'
 
 const week = (over: Partial<Schedule> = {}): Schedule => ({
   items: [],
@@ -145,5 +145,51 @@ describe('dayIndexFor', () => {
     const anchored = anchorTo(week(), at('2026-09-09'))
 
     expect(dayIndexFor(anchored, 'yesterday')).toBeNull()
+  })
+})
+
+/** §44's anchor, moved here with `calendarFor` itself: the Telegram door needs it as much
+ *  as the add sheet does, and a UI module is not somewhere `src/telegram` can import from. */
+const dated = (over: Partial<Schedule> = {}): Schedule => ({
+  items: [],
+  start: { mental: 70, physical: 70, social: 70, errands: 70 },
+  horizonDays: HORIZON_DAYS,
+  sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+  ...over,
+})
+
+/**
+ * §44: which real day the horizon's day 0 is, for the readers rather than for the screen.
+ *
+ * The rules parser computed a named weekday from `today % 7` -- as if day 0 were always a
+ * Sunday -- and the model was told "day 0 is today" without being told what today was. Both
+ * therefore put "gym thursday" on whatever day fell out, and §43's Day select is what
+ * finally showed the student.
+ */
+describe('the calendar handed to the readers', () => {
+  it('says which weekday day 0 actually is', () => {
+    // 2026-09-11 is a Friday.
+    expect(calendarFor(dated({ startedOn: '2026-09-11' }), 0).startWeekday).toBe(5)
+  })
+
+  it('carries today, so a named weekday counts forward from the right place', () => {
+    expect(calendarFor(dated({ startedOn: '2026-09-11' }), 3).today).toBe(3)
+  })
+
+  it('names today in words a model can anchor on', () => {
+    expect(calendarFor(dated({ startedOn: '2026-09-11' }), 0).todayLabel).toMatch(/11 September 2026/)
+  })
+
+  it('moves the label along with today', () => {
+    expect(calendarFor(dated({ startedOn: '2026-09-11' }), 3).todayLabel).toMatch(/14 September 2026/)
+  })
+
+  /**
+   * A week that has never been dated has no honest anchor, and inventing one would put a
+   * stated weekday on a day chosen by nothing. Both readers fall back to what they did
+   * before, which is the behaviour this week has always had.
+   */
+  it('offers no label for a week that has never been dated', () => {
+    expect(calendarFor(week(), 0).todayLabel).toBeUndefined()
   })
 })

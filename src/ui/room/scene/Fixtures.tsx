@@ -142,3 +142,51 @@ export function Light({ level }: { level: number }) {
     </g>
   )
 }
+
+/**
+ * §47: how much of today is already spoken for.
+ *
+ * A clock rather than the ceiling that used to carry this, because the shape means the
+ * thing: a face filling is a day filling. It pairs with the window -- the clock fills up to
+ * a full day, and the window darkens once the day runs past what the day has (§45's spill),
+ * so the two together say "full" and "more than full" without either having to say both.
+ *
+ * Drawn as a swept wedge from twelve o'clock, the direction a clock actually moves. An arc
+ * stroke would have read as a progress bar bent into a circle; a wedge reads as time gone.
+ */
+export function Clock({ full }: { full: number }) {
+  const cx = 96
+  const cy = 62
+  const radius = 13
+
+  // A full face is a full circle, which `A` cannot draw in one command -- the start and end
+  // points would be identical and the arc would vanish. Drawn as a disc instead.
+  const swept = full >= 1
+
+  const angle = full * Math.PI * 2
+  const endX = cx + radius * Math.sin(angle)
+  const endY = cy - radius * Math.cos(angle)
+  const large = full > 0.5 ? 1 : 0
+
+  return (
+    <g data-testid="room-clock">
+      <circle cx={cx} cy={cy} r={radius + 2} fill={PALETTE.linen} stroke={PALETTE.paperEdge} strokeWidth="1" />
+
+      {swept ? (
+        <circle data-testid="clock-fill" cx={cx} cy={cy} r={radius} fill={PALETTE.inkSoft} />
+      ) : (
+        full > 0 && (
+          <path
+            data-testid="clock-fill"
+            d={`M ${cx} ${cy} L ${cx} ${cy - radius} A ${radius} ${radius} 0 ${large} 1 ${endX} ${endY} Z`}
+            fill={PALETTE.inkSoft}
+          />
+        )
+      )}
+
+      {/* The hands are fixed furniture: the face is what carries the reading, and hands that
+          moved with it would be a second, worse copy of the same number. */}
+      <circle cx={cx} cy={cy} r="1.6" fill={PALETTE.ink} />
+    </g>
+  )
+}

@@ -185,9 +185,13 @@ describe('the room as today', () => {
     expect(dayState(items, 0).paperHeight).toBeGreaterThan(dayState(items, 1).paperHeight)
   })
 
-  it("puts the ceiling on today's total hours rather than the reserve", () => {
-    expect(dayState([study({ hours: 10 })]).ceilingPressure).toBeGreaterThan(
-      dayState([study({ hours: 1 })]).ceilingPressure,
+  /** §47 moved this to the clock: the ceiling's depth is drawn in viewBox units and so
+   *  means different amounts at different window sizes, which is no way to carry a number.
+   *  The reading itself is unchanged and lives in `the clock, and the ceiling that no longer
+   *  speaks` below. */
+  it("puts today's total hours on the clock rather than the reserve", () => {
+    expect(dayState([study({ hours: 10 })]).dayFull).toBeGreaterThan(
+      dayState([study({ hours: 1 })]).dayFull,
     )
   })
 
@@ -278,5 +282,45 @@ describe('the floor, which is part of today too', () => {
     const state = dayState([errandOn('today', 0), errandOn('friday', 4)])
 
     expect(state.clutter.map((box) => box.id)).toEqual(['today'])
+  })
+})
+
+/**
+ * §47: the ceiling stops meaning anything, and the day's fullness moves to a clock.
+ *
+ * §45 rebound the ceiling from the fortnight's reserve to today's hours, which was a better
+ * source for a worse home: the ceiling's depth is drawn in viewBox units, so it scales with
+ * the stage and is 13 real pixels on a phone -- too thin to hold the controls that sit in
+ * it, and too variable to read as a quantity. A clock face says "how much of today is
+ * already spoken for" directly, and it pairs with the window: the clock fills up to a full
+ * day, and the window darkens once the day runs past it.
+ */
+describe('the clock, and the ceiling that no longer speaks', () => {
+  it('fills as today fills', () => {
+    expect(dayState([study({ hours: 8 })]).dayFull).toBeGreaterThan(
+      dayState([study({ hours: 2 })]).dayFull,
+    )
+  })
+
+  it('is empty on a day with nothing on it', () => {
+    expect(dayState([]).dayFull).toBe(0)
+  })
+
+  /** Full is full. A day asking for more hours than it has does not wrap round to empty --
+   *  that overflow is the window's to say, and it already does. */
+  it('stops at full rather than wrapping', () => {
+    expect(dayState([study({ hours: 40 })]).dayFull).toBe(1)
+  })
+
+  it('reads the day it is showing, not the fortnight', () => {
+    const items = [study({ id: 'today', hours: 8, dayIndex: 0 }), study({ id: 'later', hours: 8, dayIndex: 1 })]
+
+    expect(dayState(items, 0).dayFull).toBeGreaterThan(0)
+    expect(dayState(items, 5).dayFull).toBe(0)
+  })
+
+  /** The ceiling is furniture now. It was pressure, and pressure moved to the clock. */
+  it('leaves the ceiling out of the state entirely', () => {
+    expect('ceilingPressure' in dayState([study({ hours: 8 })])).toBe(false)
   })
 })

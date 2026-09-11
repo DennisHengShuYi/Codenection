@@ -14,7 +14,12 @@ import * as google from '../google/client'
  * reach the network is `google/client.test.ts`'s question.
  */
 vi.mock('../google/client', () => ({
-  beginConnect: vi.fn().mockResolvedValue(undefined),
+  // Ruling 63: it resolves to an outcome now rather than to nothing. The mock said
+  // `undefined`, and `AddSheet` reading `.ok` off that threw asynchronously AFTER the test
+  // had passed -- so vitest reported an unhandled error rather than a failure, and it
+  // surfaced in CI rather than locally. A mock that has drifted from what it stands in for
+  // is a test asserting against a function that no longer exists.
+  beginConnect: vi.fn().mockResolvedValue({ ok: true }),
   readCalendar: vi.fn().mockResolvedValue({
     items: [
       {
@@ -250,6 +255,26 @@ describe('AddSheet and the calendar', () => {
     await userEvent.click(screen.getByTestId('calendar-connect'))
 
     expect(google.beginConnect).toHaveBeenCalledOnce()
+  })
+
+  /**
+   * Ruling 63: what the sheet does with the answer, which is the part that was missing.
+   *
+   * `beginConnect` was called as `void beginConnect()`, so a refusal reached a browser
+   * console and a student saw nothing at all. This is the wiring that carries the reason to
+   * the line the screen already had for it.
+   */
+  it('shows why the connection could not start', async () => {
+    vi.mocked(google.beginConnect).mockResolvedValueOnce({
+      ok: false,
+      reason: 'Sign in from Settings first.',
+    })
+    setup()
+
+    await userEvent.click(screen.getByTestId('add-calendar'))
+    await userEvent.click(screen.getByTestId('calendar-connect'))
+
+    expect(await screen.findByTestId('calendar-problem')).toHaveTextContent(/sign in/i)
   })
 
   /**

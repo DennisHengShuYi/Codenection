@@ -7,7 +7,7 @@ import type { RoomModel } from './roomModel'
 import type { RoomState } from './roomState'
 
 const state = (over: Partial<RoomState> = {}): RoomState => ({
-  ceilingPressure: 0.2,
+  dayFull: 0.2,
   paperHeight: 0.2,
   clutter: [],
   exerciseWaiting: 0, companyWaiting: 0,
@@ -309,5 +309,47 @@ describe('what today puts in the room', () => {
     render(<Room model={modelOf(state({ windowDark: 0 }))} frame="inline" />)
 
     expect(screen.queryByTestId('window-night')).toBeNull()
+  })
+})
+
+/**
+ * §47: the clock, which took the reading the ceiling could not carry.
+ */
+describe('the clock on the wall', () => {
+  it('hangs there whatever today looks like, because a blank wall is not a reading', () => {
+    render(<Room model={modelOf(state({ dayFull: 0 }))} frame="inline" />)
+
+    expect(screen.getByTestId('room-clock')).toBeInTheDocument()
+  })
+
+  it('shows nothing filled on an empty day', () => {
+    const { container } = render(<Room model={modelOf(state({ dayFull: 0 }))} frame="inline" />)
+
+    expect(container.querySelector('[data-testid="clock-fill"]')).toBeNull()
+  })
+
+  it('sweeps further as today fills', () => {
+    const { container: quiet } = render(<Room model={modelOf(state({ dayFull: 0.25 }))} frame="inline" />)
+    const { container: busy } = render(<Room model={modelOf(state({ dayFull: 0.75 }))} frame="inline" />)
+
+    const pathOf = (root: HTMLElement) =>
+      root.querySelector('[data-testid="clock-fill"]')?.getAttribute('d') ?? ''
+
+    expect(pathOf(quiet)).not.toBe('')
+    expect(pathOf(busy)).not.toBe(pathOf(quiet))
+  })
+
+  /**
+   * A full face is a full circle, which one `A` command cannot draw: the start and end
+   * points coincide and the arc disappears, so a completely committed day would have shown
+   * as an empty one. It is a disc at that point instead.
+   */
+  it('draws a full day as a full face rather than vanishing', () => {
+    const { container } = render(<Room model={modelOf(state({ dayFull: 1 }))} frame="inline" />)
+
+    const fill = container.querySelector('[data-testid="clock-fill"]')
+
+    expect(fill).not.toBeNull()
+    expect(fill?.tagName.toLowerCase()).toBe('circle')
   })
 })

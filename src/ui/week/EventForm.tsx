@@ -1,6 +1,6 @@
 import { useState, type JSX } from 'react'
 import { outcomesFrom, type BlockRecord } from '../../domain/blockLog'
-import { biasLineForBlock } from '../../domain/realityCheck'
+import { biasLineForBlock, paddingDetail } from '../../domain/realityCheck'
 import { titleVocabulary } from '../../domain/titleVocabulary'
 import { editWarnings } from '../../domain/editWarnings'
 import type { ItemFields } from '../../domain/scheduleEdits'
@@ -17,7 +17,15 @@ import { Field } from '../kit/Field'
 import { DayPicker } from './DayPicker'
 import { BLOCK_KIND_LABELS, hourLabel, LOAD_TYPE_LABELS } from '../kit/labels'
 import { Sheet } from '../kit/Sheet'
-import { blankDraft, candidate, draftFrom, isComplete, toFields, validate } from './eventDraft'
+import {
+  blankDraft,
+  candidate,
+  draftFrom,
+  isComplete,
+  toFields,
+  validate,
+  withHours,
+} from './eventDraft'
 
 /**
  * The day/time picker `blockActions` was waiting for.
@@ -102,6 +110,19 @@ export function EventForm({
   // Nothing to say about a block with no name yet: the narrow rungs are keyed on what it is
   // called, and a blank title matches nothing.
   const bias = draft.title.trim() === '' ? null : biasLineForBlock(outcomes, draft)
+
+  /**
+   * The corrected hours, or null when there is nothing to offer.
+   *
+   * Null once the student has taken it, so the offer does not sit there restating a figure
+   * already in the field -- and null again the moment they type their own hours over it,
+   * because `withHours` gives the agreement up and a figure they chose has not been
+   * corrected by anything.
+   */
+  const padded =
+    bias === null || draft.paddedHours
+      ? null
+      : Math.round(draft.hours * paddingDetail(outcomes, draft).padding * 2) / 2
 
   const errors = validate(draft)
   const warnings = editWarnings({ schedule, item: candidate(draft, item), params })
@@ -224,7 +245,7 @@ export function EventForm({
               min={0.5}
               step={0.5}
               value={draft.hours}
-              onChange={(event) => setDraft({ ...draft, hours: Number(event.target.value) })}
+              onChange={(event) => setDraft(withHours(draft, Number(event.target.value)))}
               className={INPUT}
             />
           </Field>
@@ -266,9 +287,32 @@ export function EventForm({
           is not making.
         */}
         {bias !== null && (
-          <p data-testid="bias-line" className="text-xs text-ink-soft">
-            {bias}
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p data-testid="bias-line" className="text-xs text-ink-soft">
+              {bias}
+            </p>
+
+            {/*
+              Offered, not applied.
+
+              Padding behind the student is right for a model and wrong for a calendar: an
+              hour the app privately thinks is two is still an hour they plan their evening
+              around. Accepting writes the corrected figure into the block, so the calendar
+              says what the work will actually take -- and sets `paddedHours`, without which
+              the model would pad the bigger number again and taking the advice would cost
+              more than ignoring it.
+            */}
+            {padded !== null && (
+              <Button
+                size="sm"
+                variant="secondary"
+                data-testid="use-padded-hours"
+                onClick={() => setDraft({ ...draft, hours: padded, paddedHours: true })}
+              >
+                Plan {padded}h instead
+              </Button>
+            )}
+          </div>
         )}
 
         {/* §5.1's boundary, drawn where the student can see it -- the same checkbox

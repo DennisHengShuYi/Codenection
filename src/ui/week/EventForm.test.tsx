@@ -415,6 +415,72 @@ describe('what it will do with the hours you typed', () => {
     expect(await screen.findByTestId('bias-line')).toHaveTextContent(/WIA3001 essay/i)
   })
 
+  /**
+   * Offered, not applied.
+   *
+   * §2.4 pads behind the student, which is right for a model and wrong for a calendar: an
+   * hour the app privately thinks is two is an hour the student still plans their evening
+   * around. The offer puts the corrected figure where they can accept it, and accepting
+   * writes it into the block -- so the calendar says what the work will actually take.
+   *
+   * Accepting must also stop the model padding it again, or taking the app's advice would
+   * cost more than ignoring it. That is `paddedHours`, and `domain/estimateBias` honours it.
+   */
+  it('offers the corrected hours rather than applying them', async () => {
+    setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+
+    // A fresh block starts at one hour, and this history runs 1.5x over.
+    expect(await screen.findByTestId('use-padded-hours')).toHaveTextContent(/1\.5/)
+    // Untouched until the student says so.
+    expect(screen.getByLabelText('Hours')).toHaveValue(1)
+  })
+
+  it('writes the corrected figure into the block when it is accepted', async () => {
+    const props = setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+    await userEvent.click(await screen.findByTestId('use-padded-hours'))
+    await userEvent.click(screen.getByTestId('save-block'))
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ hours: 1.5, paddedHours: true }),
+    )
+  })
+
+  it('stops offering once it has been taken', async () => {
+    setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+    await userEvent.click(await screen.findByTestId('use-padded-hours'))
+
+    expect(screen.queryByTestId('use-padded-hours')).toBeNull()
+  })
+
+  /** Typing over the figure is a new estimate, and a new estimate has not been corrected. */
+  it('offers again when the student types their own hours over it', async () => {
+    setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+    await userEvent.click(await screen.findByTestId('use-padded-hours'))
+    await userEvent.clear(screen.getByLabelText('Hours'))
+    await userEvent.type(screen.getByLabelText('Hours'), '2')
+
+    expect(await screen.findByTestId('use-padded-hours')).toBeVisible()
+  })
+
+  it('saves the hours the student typed when the offer is left alone', async () => {
+    const props = setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+    await userEvent.click(screen.getByTestId('save-block'))
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ hours: 1, paddedHours: false }),
+    )
+  })
+
   it('says nothing before anything has been typed', () => {
     setup({ blockLog: overran('WIA3001 essay', 5) })
 

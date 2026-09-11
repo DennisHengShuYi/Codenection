@@ -9,6 +9,7 @@ import {
   NEW_ITEM_ID,
   toFields,
   validate,
+  withHours,
   type EventDraft,
 } from './eventDraft'
 
@@ -41,6 +42,7 @@ const draft = (over: Partial<EventDraft> = {}): EventDraft => ({
   dayIndex: 3,
   startHour: 14,
   deadlineDay: null,
+  paddedHours: false,
   hours: 2,
   fixed: false,
   ...over,
@@ -87,6 +89,7 @@ describe('the draft an existing block starts from', () => {
       fixed: true,
       // Now part of what the form can change, so it is part of what the form reads back.
       deadlineDay: null,
+      paddedHours: false,
     })
   })
 })
@@ -204,5 +207,43 @@ describe('the deadline a student sets by hand', () => {
     const errors = validate({ ...blankDraft(week(), 3), title: 'Walk', deadlineDay: null })
 
     expect(errors.deadlineDay).toBeUndefined()
+  })
+})
+
+/**
+ * The hours a student agreed to after being shown the correction.
+ *
+ * §2.4 padded silently. The form offers the padded figure instead -- "your essays usually
+ * run 1.9x, plan 3.8h?" -- and accepting writes the bigger number into the block. The flag
+ * travels with it so the model charges that figure once rather than padding it again; see
+ * `domain/estimateBias`.
+ */
+describe('agreeing to the padded hours', () => {
+  it('starts as nobody having agreed to anything', () => {
+    expect(blankDraft(week(), 3).paddedHours).toBe(false)
+  })
+
+  it('remembers a block whose hours were agreed before', () => {
+    expect(draftFrom(item('essay', { paddedHours: true })).paddedHours).toBe(true)
+  })
+
+  it('saves the decision with the block', () => {
+    expect(toFields({ ...blankDraft(week(), 3), title: 'Essay', paddedHours: true }).paddedHours).toBe(
+      true,
+    )
+  })
+
+  /** Changing the hours by hand is a new estimate, and a new estimate has not been corrected
+   *  -- leaving the flag set would exempt a figure the student typed themselves. */
+  it('is given up the moment the hours are typed over', () => {
+    const agreed = { ...blankDraft(week(), 3), title: 'Essay', hours: 3.8, paddedHours: true }
+
+    expect(withHours(agreed, 2).paddedHours).toBe(false)
+  })
+
+  it('leaves the rest of the draft alone when the hours change', () => {
+    const agreed = { ...blankDraft(week(), 3), title: 'Essay', hours: 3.8, paddedHours: true }
+
+    expect(withHours(agreed, 2)).toMatchObject({ title: 'Essay', hours: 2 })
   })
 })

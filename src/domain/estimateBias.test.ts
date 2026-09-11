@@ -87,3 +87,38 @@ describe('stampEstimateBias', () => {
     expect(JSON.stringify(before)).toBe(snapshot)
   })
 })
+
+/**
+ * A block whose hours the student already agreed to.
+ *
+ * §2.4 pads silently, and the add form now offers the padded figure instead of applying it
+ * behind them: "your essays usually run 1.9x -- plan 3.8h?". Accepting writes the bigger
+ * number into the block, and without this the model would pad the bigger number again and
+ * charge 7.2h for two hours of work. Accepting the app's own suggestion would make the
+ * forecast worse than ignoring it, which is the worst outcome available.
+ *
+ * Stamped as 1 rather than left absent, and the difference is the whole point: absent means
+ * "fall back to the area-wide bias", which is padding. Only an explicit 1 says "this figure
+ * is already right".
+ */
+describe('hours the student agreed to', () => {
+  it('is charged exactly what it says, not padded again', () => {
+    const log = ran('WIA3001 essay', 5, 3)
+
+    const stamped = stampEstimateBias(week([item({ paddedHours: true })]), log)
+
+    expect(stamped.items[0]?.estimateBias).toBe(1)
+  })
+
+  it('still pads a block whose hours nobody agreed to', () => {
+    const log = ran('WIA3001 essay', 5, 3)
+
+    expect(stampEstimateBias(week([item()]), log).items[0]?.estimateBias).toBeCloseTo(1.5, 2)
+  })
+
+  /** An agreed block with no history is unchanged either way -- but it must still say so
+   *  explicitly, or a bias learned later would start padding a figure already corrected. */
+  it('says so even before there is any history to pad with', () => {
+    expect(stampEstimateBias(week([item({ paddedHours: true })]), []).items[0]?.estimateBias).toBe(1)
+  })
+})

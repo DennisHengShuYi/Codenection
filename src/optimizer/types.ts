@@ -42,6 +42,18 @@ export interface ScheduledItem {
    * to the type-wide figure wherever it is absent.
    */
   readonly estimateBias?: number
+  /**
+   * The student was shown §2.4's correction for this work and accepted it, so `hours` is
+   * already the corrected figure.
+   *
+   * Persisted, unlike `estimateBias` above -- it records something the student did rather
+   * than a reading of the log, and a decision they made must survive the week being saved.
+   *
+   * Without it, accepting the app's own suggestion would be worse than ignoring it: the
+   * bigger number would be padded again, and two hours of work agreed at 3.8 would be
+   * charged as 7.2.
+   */
+  readonly paddedHours?: boolean
   /** Stronger than `fixed`. §5.1 calls structurally protected recovery the most
    *  important design decision in the app: the optimizer cannot move protected rest, and
    *  cannot schedule anything over it either. */

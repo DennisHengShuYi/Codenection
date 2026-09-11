@@ -26,6 +26,12 @@ export function stampEstimateBias(
   return {
     ...schedule,
     items: schedule.items.map((item) => {
+      // Hours the student was shown the correction for and accepted. Stamped as an explicit
+      // 1 rather than left absent, and the difference is the whole point: absent falls back
+      // to the area-wide bias, which is padding. Only a 1 says "this figure is already
+      // right" -- without it, taking the app's advice would cost more than ignoring it.
+      if (item.paddedHours === true) return { ...item, estimateBias: 1 }
+
       const bias = paddingForItem(outcomes, item)
 
       // Left off rather than written as 1. The two mean different things to `drain`: absent

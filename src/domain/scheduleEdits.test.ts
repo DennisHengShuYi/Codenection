@@ -265,6 +265,7 @@ const fields = (over: Partial<ItemFields> = {}): ItemFields => ({
   title: 'Essay draft',
   type: 'mental',
   kind: 'studyBlock',
+  paddedHours: false,
   hours: 2,
   dayIndex: 3,
   startHour: 14,

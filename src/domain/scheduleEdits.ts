@@ -41,6 +41,15 @@ export interface ItemFields {
    * here is how a student overrules the app's guess about their own work.
    */
   readonly deadlineDay: number | null
+  /**
+   * Whether `hours` is a figure the student accepted from §2.4 rather than one they
+   * estimated themselves.
+   *
+   * Saved with the block because it records a decision, not a reading: the model charges
+   * these hours once instead of padding them again, and without that, taking the app's own
+   * advice would cost more than ignoring it.
+   */
+  readonly paddedHours: boolean
 }
 
 const withoutItem = (schedule: Schedule, id: string): Schedule => ({

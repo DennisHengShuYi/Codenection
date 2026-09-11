@@ -23,6 +23,9 @@ export interface EventDraft {
   /** When it is due. Null is the ordinary case: most things a student adds by hand have no
    *  date attached to them, and the kind's own interval covers those. */
   readonly deadlineDay: number | null
+  /** Whether `hours` is a figure the student accepted from §2.4 rather than one they
+   *  estimated. The model charges it once instead of padding it again. */
+  readonly paddedHours: boolean
 }
 
 /**
@@ -52,6 +55,7 @@ export function blankDraft(schedule: Schedule, dayIndex: number): EventDraft {
     hours: 1,
     fixed: false,
     deadlineDay: null,
+    paddedHours: false,
   }
 }
 
@@ -65,6 +69,7 @@ export function draftFrom(item: ScheduledItem): EventDraft {
     hours: item.hours,
     fixed: item.fixed,
     deadlineDay: item.deadlineDay,
+    paddedHours: item.paddedHours ?? false,
   }
 }
 
@@ -138,7 +143,20 @@ export function toFields(draft: EventDraft): ItemFields {
     startHour: draft.startHour,
     fixed: draft.fixed,
     deadlineDay: draft.deadlineDay,
+    paddedHours: draft.paddedHours,
   }
+}
+
+/**
+ * The hours, changed by hand.
+ *
+ * Typing over the figure gives up the agreement that came with it: a number the student
+ * chose has not been corrected by anything, and leaving the flag set would exempt their own
+ * estimate from §2.4 for the life of the block. Here rather than inline in the form so the
+ * rule is one line with a reason rather than two setters that can drift.
+ */
+export function withHours(draft: EventDraft, hours: number): EventDraft {
+  return { ...draft, hours, paddedHours: false }
 }
 
 /**

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
-import { blocksOnDay } from './dayBlocks'
+import { blocksOnDay, hasHappened } from './dayBlocks'
 
 const block = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
   id: 'b1',
@@ -86,5 +86,54 @@ describe('blocksOnDay', () => {
     blocksOnDay(schedule, 0)
 
     expect(schedule.items[0]?.startHour).toBe(19)
+  })
+})
+
+/**
+ * Whether a block has actually happened, which is the one precondition on asking how it went.
+ *
+ * The rule lived inside `ui/today/checkIn.blockToAsk` and nowhere else, so only the today
+ * card obeyed it. Telegram's `/today` asked about the first unanswered block on the day
+ * whatever the hour, and `/day` asked about days still ahead -- "Did the essay happen?"
+ * about an 8pm block at 2pm, or about next Tuesday. An answer to that is not a measurement,
+ * and it feeds estimate bias, which is the number behind the app's published accuracy.
+ *
+ * `checkIn.ts` already wrote down why the clock must be a required argument: "an optional
+ * clock is one a caller forgets to pass". One rule, here, for every caller.
+ */
+describe('hasHappened', () => {
+  const block = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
+    id: 'essay',
+    title: 'Essay',
+    type: 'mental',
+    kind: 'studyBlock',
+    hours: 2,
+    intensity: 1,
+    dayIndex: 3,
+    startHour: 20,
+    fixed: false,
+    deadlineDay: null,
+    protectedRest: false,
+    ...over,
+  })
+
+  it('is true for any day already behind us', () => {
+    expect(hasHappened(block({ dayIndex: 2 }), 3, 9)).toBe(true)
+  })
+
+  it('is false for any day still ahead, however late in the day it is', () => {
+    expect(hasHappened(block({ dayIndex: 4 }), 3, 23)).toBe(false)
+  })
+
+  it('is false for a block later today', () => {
+    expect(hasHappened(block({ dayIndex: 3, startHour: 20, hours: 2 }), 3, 14)).toBe(false)
+  })
+
+  it('is false while a block on today is still running', () => {
+    expect(hasHappened(block({ dayIndex: 3, startHour: 13, hours: 2 }), 3, 14)).toBe(false)
+  })
+
+  it('is true once a block on today has finished', () => {
+    expect(hasHappened(block({ dayIndex: 3, startHour: 13, hours: 2 }), 3, 15)).toBe(true)
   })
 })

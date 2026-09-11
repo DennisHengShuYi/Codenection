@@ -135,6 +135,18 @@ export interface ChatServices {
  */
 const todayFor = (week: Schedule, now: number): number => todayIndex(week, new Date(now)) ?? 0
 
+/**
+ * Where the student is in the fortnight and in the day, for `blocksReply`.
+ *
+ * The hour is the student's own, from the same `Date` every other reading here comes from.
+ * Without it the bot asked how an 8pm block went at 9am -- and `/day` asked about days that
+ * had not arrived -- while the today card, which has always had a clock, asked neither.
+ */
+const nowFor = (week: Schedule, now: number): { today: number; hour: number } => ({
+  today: todayFor(week, now),
+  hour: new Date(now).getHours(),
+})
+
 /** §2.1's search takes its randomness as a parameter. The same seed the app uses, so a
  *  student who rebalances in chat and then in the app is not shown two different weeks. */
 const REBALANCE_SEED = 20260908
@@ -354,7 +366,12 @@ export async function handleIntent(
 
       case 'today': {
         const week = await store.loadWeek(accountId)
-        return blocksReply('today', blocksOnDay(week, todayFor(week, now)), await answeredSoFar(week))
+        return blocksReply(
+          'today',
+          blocksOnDay(week, todayFor(week, now)),
+          await answeredSoFar(week),
+          nowFor(week, now),
+        )
       }
 
       case 'yesterday': {
@@ -366,7 +383,12 @@ export async function handleIntent(
         // later trust.
         if (today === null || today < 1) return yesterdayUnavailableReply()
 
-        return blocksReply('yesterday', blocksOnDay(week, today - 1), await answeredSoFar(week))
+        return blocksReply(
+          'yesterday',
+          blocksOnDay(week, today - 1),
+          await answeredSoFar(week),
+          nowFor(week, now),
+        )
       }
 
       /**
@@ -436,7 +458,12 @@ export async function handleIntent(
           return needDayReply(week.horizonDays)
         }
 
-        return blocksReply('today', blocksOnDay(week, asked), await answeredSoFar(week))
+        return blocksReply(
+          'today',
+          blocksOnDay(week, asked),
+          await answeredSoFar(week),
+          nowFor(week, now),
+        )
       }
 
       /**
@@ -726,6 +753,7 @@ export async function handleIntent(
       'today',
       blocksOnDay(week, intent.dayIndex),
       answeredIds(blockLog),
+      nowFor(week, now),
       { replacing: true },
     )
   }

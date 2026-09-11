@@ -230,7 +230,15 @@ export function blocksReply(
   // worth sending -- they asked what was on it -- but there is nothing left to ask, and
   // inventing a question would record an answer about a block nobody has lived.
   if (ask === undefined) {
-    return { text: [heading, '', ...listed].join('\n') }
+    // The way back travels with this branch too. Dropping it barely showed while the only
+    // way in was a day where everything had already been answered, and became a dead end
+    // the moment "nothing has happened yet" started reaching it -- which is most days
+    // opened from the fortnight.
+    return {
+      text: [heading, '', ...listed].join('\n'),
+      ...navigation,
+      ...(backRow.length === 0 ? {} : { buttons: backRow }),
+    }
   }
 
   return {

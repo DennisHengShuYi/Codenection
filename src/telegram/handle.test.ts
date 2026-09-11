@@ -301,8 +301,14 @@ describe('the command surface', () => {
    * ever, while every other block on the day stayed unreachable from chat.
    */
   describe('/today and what has already been answered', () => {
-    const second = { ...studyBlock, id: 'b2', title: 'Stats problem set' }
-    const bothBlocks = () => week([studyBlock, second]) as never
+    // Early enough to have finished by the harness's clock. The bot asks only about blocks
+    // that have actually happened now -- `domain/dayBlocks.hasHappened`, the same rule the
+    // today card has always used -- so a fixture at 09:00 checked at 08:00 is a block with
+    // nothing to say about it yet, and this test is about which block gets asked rather than
+    // about when.
+    const early = { ...studyBlock, startHour: 5, hours: 1 }
+    const second = { ...early, id: 'b2', title: 'Stats problem set' }
+    const bothBlocks = () => week([early, second]) as never
 
     const logFor = (blockId: string): BlockRecord[] => [
       { blockId, type: 'mental', plannedHours: 2, dayIndex: 0, answer: 'right', answeredAt: 1 },
@@ -660,7 +666,9 @@ describe('the bot and the card produce the same outcome', () => {
 
     // The bot's own path: the exact buttons /yesterday would send, and the exact callback
     // Telegram sends back for a press on "Took longer".
-    const reply = blocksReply('yesterday', [block])
+    // Yesterday, so the hour does not matter: everything on a day already behind us has
+    // happened.
+    const reply = blocksReply('yesterday', [block], [], { today: block.dayIndex + 1, hour: 9 })
     const pressed = reply.buttons?.flat().find((button) => button.label === 'Took longer')
     if (pressed === undefined) throw new Error('no "Took longer" button was offered')
 

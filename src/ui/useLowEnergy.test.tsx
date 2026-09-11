@@ -109,4 +109,34 @@ describe('useLowEnergy', () => {
     await settled('off')
     expect(screen.getByTestId('active')).toHaveTextContent('false')
   })
+
+  /**
+   * Regression. This hook spread its own cached snapshot of the settings blob, so any field
+   * written to that blob after the hook loaded was silently dropped on the next toggle.
+   *
+   * Latent while settings held only a mode and a calibration profile -- `useProfile` happens
+   * to re-read before writing, so the collision needed two writers and one of them was safe.
+   * It became reachable the moment sleep began writing the same blob: a student could state a
+   * sleep target, switch how much the interface shows, and lose the target with nothing said.
+   */
+  it('does not drop a field written to settings after it loaded', async () => {
+    let stored: StoredSettings = { ...DEFAULT_SETTINGS }
+    const repo = stubRepo({
+      loadSettings: async () => stored,
+      saveSettings: async (next: StoredSettings) => {
+        stored = next
+      },
+    })
+
+    render(<Probe repo={repo} floor={12} />)
+    await settled('auto')
+
+    // Something else writes the blob, the way `useProfile.setProfile` does.
+    stored = { ...stored, sleepTargetHours: 9 }
+
+    await userEvent.click(screen.getByRole('button', { name: 'off' }))
+
+    await settled('off')
+    await waitFor(() => expect(stored.sleepTargetHours).toBe(9))
+  })
 })

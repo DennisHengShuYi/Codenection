@@ -65,8 +65,15 @@ const utcMidnight = (iso: string): number | null => {
  *
  * Assembled from parts rather than formatted, so the result is `YYYY-MM-DD` regardless of
  * what order a locale would have chosen to print.
+ *
+ * Exported because tests need it. Several derived a date with `toISOString().split('T')[0]`
+ * -- the very call this replaced -- and one of them broke the first night the two disagreed:
+ * `RoomShell.prediction.test.tsx` stored a prediction for the UTC date and then looked for
+ * today's check-in card, which the app was placing on the local date, a day later. A test
+ * computing the app's own notion of today a second way is the same defect as a screen doing
+ * it, and it fails once a night rather than never.
  */
-const isoDateOf = (moment: Date, timeZone?: string): string => {
+export const isoDateOf = (moment: Date, timeZone?: string): string => {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,
     year: 'numeric',

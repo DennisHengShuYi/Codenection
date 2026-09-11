@@ -1,4 +1,5 @@
 import { Character } from './Character'
+import { ReserveGauge } from './ReserveGauge'
 import type { RoomModel } from './roomModel'
 import { describeRoomFully } from './roomText'
 import { Clock, Door, Light, Window } from './scene/Fixtures'
@@ -38,6 +39,17 @@ import { Ceiling, Floor, Wall } from './scene/Walls'
  * interchangeable -- `fill` only means anything inside a positioned, screen-sized parent.
  */
 export type RoomFrame = 'inline' | 'fill'
+
+/**
+ * The gauge's box, shared by both variants so they cannot drift apart in size or position.
+ *
+ * 44px square because that is the minimum touch target and the ring is drawn to fill it. A
+ * solid `surface` disc under the ring rather than the old `surface/90`: the room's wall is a
+ * mid-brown and a translucent disc let it through, which is what left the number sitting at
+ * roughly the contrast of the wall behind it.
+ */
+const GAUGE_BOX =
+  'absolute right-3 top-3 z-10 grid h-11 w-11 place-items-center rounded-full bg-surface shadow'
 
 export function Room({
   model,
@@ -147,11 +159,8 @@ export function Room({
           them in document order -- placed first, the gauge rendered correctly and was
           hidden behind the room's own opaque wall rect. */}
       {onOpenReserves === undefined ? (
-        <div
-          data-testid="room-gauge"
-          className="absolute right-3 top-3 z-10 rounded-full bg-surface/90 px-3 py-1.5 text-sm font-semibold text-ink-soft shadow"
-        >
-          {percent}%
+        <div data-testid="room-gauge" className={GAUGE_BOX}>
+          <ReserveGauge percent={percent} />
         </div>
       ) : (
         /* Ruling 59: the same readout, now the door to the full one. Named for where it
@@ -162,9 +171,9 @@ export function Room({
           data-testid="room-gauge"
           onClick={onOpenReserves}
           aria-label={`Where your reserves stand: ${percent}%`}
-          className="absolute right-3 top-3 z-10 min-h-11 rounded-full bg-surface/90 px-3 py-1.5 text-sm font-semibold text-ink-soft shadow hover:text-ink focus-visible:outline focus-visible:outline-2"
+          className={`${GAUGE_BOX} transition-shadow hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 motion-reduce:transition-none`}
         >
-          {percent}%
+          <ReserveGauge percent={percent} />
         </button>
       )}
     </section>

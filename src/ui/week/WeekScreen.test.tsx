@@ -616,3 +616,45 @@ describe('the reserve track', () => {
     expect(screen.getByTestId('reserve-track-text').textContent ?? '').toMatch(/nothing|holds|no /i)
   })
 })
+
+/**
+ * Which day is open, visibly.
+ *
+ * The cell already carried `aria-expanded`, so a screen reader has always known which day
+ * was open -- and a sighted student had nothing: the grid looks identical whichever day you
+ * tapped, and the panel below it names a date you have to read to check. That is §1.5's rule
+ * arriving from the other side, since an accessible name is not a visual pairing.
+ */
+describe('the day that is open', () => {
+  it('is marked out from the rest', async () => {
+    setup()
+
+    await userEvent.click(screen.getByTestId('day-4'))
+
+    expect(screen.getByTestId('day-4')).toHaveAttribute('data-open', 'true')
+  })
+
+  it('leaves every other day unmarked', async () => {
+    setup()
+
+    await userEvent.click(screen.getByTestId('day-4'))
+
+    expect(screen.getByTestId('day-5')).toHaveAttribute('data-open', 'false')
+  })
+
+  it('moves the mark when another day is opened', async () => {
+    setup()
+
+    await userEvent.click(screen.getByTestId('day-4'))
+    await userEvent.click(screen.getByTestId('day-5'))
+
+    expect(screen.getByTestId('day-4')).toHaveAttribute('data-open', 'false')
+    expect(screen.getByTestId('day-5')).toHaveAttribute('data-open', 'true')
+  })
+
+  it('marks nothing while the grid is closed', () => {
+    setup()
+
+    expect(screen.getByTestId('day-4')).toHaveAttribute('data-open', 'false')
+  })
+})

@@ -236,8 +236,21 @@ export function WeekScreen(props: {
                 // it rather than setting a persisted on/off state, so `aria-expanded` is
                 // the correct role for a screen reader -- `aria-pressed` would misreport it.
                 aria-expanded={openDay === cell.dayIndex}
+                // The visible half of `aria-expanded`. A screen reader has always known
+                // which day was open; a sighted student had nothing, since the grid looks
+                // identical whichever cell was tapped and the panel below only names a date
+                // you have to read to check. §1.5's rule, arriving from the other side: an
+                // accessible name is not a visual pairing.
+                data-open={openDay === cell.dayIndex}
                 onClick={() => setOpenDay(cell.dayIndex)}
-                className={`flex min-h-11 w-full flex-col items-center justify-center gap-1 rounded-lg border border-line p-2 text-xs aspect-square md:aspect-auto ${BAND_SHADE[cell.band]}`}
+                className={`flex min-h-11 w-full flex-col items-center justify-center gap-1 rounded-lg border p-2 text-xs aspect-square md:aspect-auto ${BAND_SHADE[cell.band]} ${
+                  openDay === cell.dayIndex
+                    ? // Drawn with the border the cell already had rather than an outline or a
+                      // ring: a ring sits outside the box and would overlap its neighbours in
+                      // a grid this tight at 320px.
+                      'border-ink shadow-sm'
+                    : 'border-line'
+                }`}
               >
                 {/* Terser than the spoken name above deliberately: this is one of
                     twenty-one squares in a grid that has to hold at 320px, and "Today, Sat

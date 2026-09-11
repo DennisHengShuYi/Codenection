@@ -366,3 +366,87 @@ describe('messageIdOf', () => {
     expect(messageIdOf(update)).toBeNull()
   })
 })
+
+/**
+ * The callbacks that carry their whole answer in the button.
+ *
+ * §24's navigation and §8's check-in deliberately keep nothing between one message and the
+ * next -- the day index, the energy, the sleep bucket all travel in the callback data. That
+ * makes this function the only thing standing between a webhook anyone can post to and a
+ * write into a student's week, and none of these five shapes was being read by a test.
+ *
+ * Each pairs a well-formed callback with a malformed one, because a parser that accepts
+ * everything and a parser that accepts the right things look identical from the happy path
+ * alone.
+ */
+describe('readUpdate, on the callbacks that carry their own answer', () => {
+  it('reads a day the student tapped open', () => {
+    expect(readUpdate({ callback_query: { message: { chat }, data: 'open:5' } })).toEqual({
+      kind: 'openDay',
+      chatId: 4242,
+      dayIndex: 5,
+    })
+  })
+
+  it('refuses a day index that is not a number', () => {
+    expect(readUpdate({ callback_query: { message: { chat }, data: 'open:tuesday' } }).kind).toBe(
+      'unhandled',
+    )
+  })
+
+  it('reads the way back to the fortnight', () => {
+    expect(readUpdate({ callback_query: { message: { chat }, data: 'back:schedule' } })).toEqual({
+      kind: 'backToSchedule',
+      chatId: 4242,
+    })
+  })
+
+  /** §2.3: a provisional yes writes to the student's own week and sends nothing to anybody. */
+  it('reads a provisional yes, and keeps the ask it belongs to', () => {
+    expect(readUpdate({ callback_query: { message: { chat }, data: 'takeon:ask-7' } })).toEqual({
+      kind: 'takeOn',
+      chatId: 4242,
+      askId: 'ask-7',
+    })
+  })
+
+  it('reads an energy answer as a number', () => {
+    expect(readUpdate({ callback_query: { message: { chat }, data: 'energy:60' } })).toEqual({
+      kind: 'energyAnswer',
+      chatId: 4242,
+      energy: 60,
+    })
+  })
+
+  /** Four digits is not a percentage. The bound belongs here rather than downstream,
+   *  because this is the boundary the value crosses. */
+  it('refuses an energy figure outside the shape it expects', () => {
+    expect(readUpdate({ callback_query: { message: { chat }, data: 'energy:1000' } }).kind).toBe(
+      'unhandled',
+    )
+  })
+
+  it('reads each of the four sleep buckets', () => {
+    for (const bucket of ['under5', 'six', 'seven', 'eightPlus']) {
+      expect(readUpdate({ callback_query: { message: { chat }, data: `sleep:${bucket}` } })).toEqual({
+        kind: 'sleepAnswer',
+        chatId: 4242,
+        bucket,
+      })
+    }
+  })
+
+  it('refuses a sleep bucket it does not have', () => {
+    expect(readUpdate({ callback_query: { message: { chat }, data: 'sleep:nine' } }).kind).toBe(
+      'unhandled',
+    )
+  })
+})
+
+/** A photo array is webhook data too: anything can post one, and it is read for a file id
+ *  that is then handed to Telegram's own API. */
+describe('readUpdate, on a photo that is not one', () => {
+  it('does not treat a photo field that is not a list as a photo', () => {
+    expect(readUpdate({ message: { chat, photo: 'not-a-list' } }).kind).not.toBe('photo')
+  })
+})

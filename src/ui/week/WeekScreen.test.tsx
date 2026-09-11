@@ -63,6 +63,7 @@ const setup = (schedule = week(), over: Partial<Parameters<typeof WeekScreen>[0]
     <WeekScreen
       schedule={schedule}
       today={0}
+      sleepWakeHour={7}
       working={false}
       report={null}
       onRebalance={onRebalance}
@@ -402,6 +403,7 @@ describe('WeekScreen and the calendar', () => {
       <WeekScreen
         schedule={{ ...week([item('a', 0)]), startedOn: '2026-09-11' }}
         today={0}
+        sleepWakeHour={7}
         working={false}
         report={null}
         onRebalance={vi.fn()}
@@ -580,42 +582,14 @@ describe('the reserves on the day you opened', () => {
   })
 })
 
+
 /**
- * Where the fortnight is going, as one picture.
+ * The chart that used to live under the grid is gone, and its tests with it.
  *
- * §1.5: colour never carries meaning alone, so the four lines are named in a legend and the
- * whole chart has a text equivalent -- a line chart is the most exclusionary thing in the
- * app for a screen reader, and an `aria-label` saying "chart" is not access.
+ * It drew four lines across the fortnight with no time axis, so a reader could see a reserve
+ * sliding and not when -- the figure belongs in the square the date is already in, which is
+ * what `the reserve on each day` below covers.
  */
-describe('the reserve track', () => {
-  it('draws the fortnight under the grid', () => {
-    setup()
-
-    expect(screen.getByTestId('reserve-track')).toBeVisible()
-  })
-
-  it('names each line rather than leaving the colours to speak', () => {
-    setup()
-
-    const legend = screen.getByTestId('reserve-track-legend')
-
-    for (const label of Object.values(LOAD_TYPE_LABELS)) {
-      expect(within(legend).getByText(label)).toBeVisible()
-    }
-  })
-
-  it('carries the same reading in words', () => {
-    setup()
-
-    expect(screen.getByTestId('reserve-track-text')).toBeVisible()
-  })
-
-  it('says in words when the horizon holds', () => {
-    setup()
-
-    expect(screen.getByTestId('reserve-track-text').textContent ?? '').toMatch(/nothing|holds|no /i)
-  })
-})
 
 /**
  * Which day is open, visibly.
@@ -656,5 +630,36 @@ describe('the day that is open', () => {
     setup()
 
     expect(screen.getByTestId('day-4')).toHaveAttribute('data-open', 'false')
+  })
+})
+
+/**
+ * The reserve on each cell, where the date already is.
+ *
+ * A chart under the grid carried this and asked the reader to map a line back onto a date,
+ * with no time axis to do it by. The figure belongs in the square the date is in.
+ */
+describe('the reserve on each day', () => {
+  it('shows a figure on every cell', () => {
+    setup()
+
+    for (let dayIndex = 0; dayIndex < HORIZON_DAYS; dayIndex += 1) {
+      expect(screen.getByTestId(`day-${dayIndex}`)).toHaveTextContent(/\d+%/)
+    }
+  })
+
+  it('says what the figure is in the cell’s spoken name, not only as a bare number', () => {
+    setup()
+
+    expect(screen.getByTestId('day-3')).toHaveAttribute(
+      'aria-label',
+      expect.stringMatching(/reserve/i),
+    )
+  })
+
+  it('no longer draws the chart it replaces', () => {
+    setup()
+
+    expect(screen.queryByTestId('reserve-track')).toBeNull()
   })
 })

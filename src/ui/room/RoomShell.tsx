@@ -586,7 +586,7 @@ export function RoomShell({
   // rest of the chain. It used to open the block sheet, which was one hop short of the
   // thing the card was offering.
   const stuckItem = week.items.find(
-    (item) => item.id !== stuckDismissedId && isStuck(item, Math.max(0, today - item.dayIndex)),
+    (item) => item.id !== stuckDismissedId && isStuck(item, { today, nowHour }),
   )
   const blockForToday = blockToAsk({ schedule: week, today, nowHour, blockLog })
 
@@ -1036,6 +1036,7 @@ export function RoomShell({
           <WeekScreen
             schedule={week}
             today={today}
+            sleepWakeHour={sleepWakeHour}
             working={working}
             report={report}
             note={weekNote}

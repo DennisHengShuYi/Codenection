@@ -263,3 +263,56 @@ test('reads the fortnight off the sleep the student actually gets', async ({ pag
    */
   expect(await horizon()).toContain('sleep owed')
 })
+
+/**
+ * The night, drawn under the day it ends.
+ *
+ * This is the answer to a night crossing midnight: it is not laid on the day's hour axis at
+ * all, so there is nothing to split across two columns. `sleepByDay[d]` already means the
+ * night at the end of day d, so the band belongs to that day and is drawn once.
+ */
+test('draws the night under the day, not across two of them', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await seed(page, {
+    week: { ...anchoredWeek(), sleepByDay: Array.from({ length: 21 }, () => 8) },
+    settings: { lowEnergyOverride: 'off', sleepWakeHour: 7 },
+  })
+
+  await page.getByTestId('open-week').click()
+  await page.getByTestId('day-3').click()
+
+  const band = page.getByTestId('night-band')
+
+  // One band for one night, on the day that night ends -- not a half in each column.
+  await expect(band).toHaveCount(1)
+  await expect(band).toContainText('23:00 → 07:00')
+  await expect(band).toContainText('8 hours')
+})
+
+/** The forecast's sentence, with a picture behind it at last. */
+test('marks the hours an over-committed day will take from the night', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const crammed = Array.from({ length: 4 }, (_, index) => ({
+    id: `cram-${index}`,
+    title: 'Ethics essay',
+    type: 'mental',
+    kind: 'studyBlock',
+    hours: 5,
+    intensity: 1,
+    dayIndex: 3,
+    startHour: 8 + index,
+    fixed: false,
+    deadlineDay: 3,
+    protectedRest: false,
+  }))
+
+  await seed(page, {
+    week: { ...anchoredWeek(crammed), sleepByDay: Array.from({ length: 21 }, () => 8) },
+    settings: { lowEnergyOverride: 'off', sleepWakeHour: 7 },
+  })
+
+  await page.getByTestId('open-week').click()
+  await page.getByTestId('day-3').click()
+
+  await expect(page.getByTestId('night-lost')).toContainText('4 hours')
+})

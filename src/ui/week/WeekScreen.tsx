@@ -6,13 +6,15 @@ import { DEFICIT_THRESHOLD, LOAD_TYPES, project } from '../../engine'
 import { toDayInputs } from '../../optimizer'
 import type { Fix, Schedule } from '../../optimizer'
 import { Button } from '../kit/Button'
+import { nightWindow } from '../../domain/nightWindow'
+import { squeezeOn } from '../../domain/sleepForecast'
 import { dayGrid } from './dayGrid'
+import { NightBand } from './NightBand'
 import { dayLabel } from '../../domain/calendar'
 import { LOAD_TYPE_LABELS } from '../kit/labels'
 import type { EnergyPrediction } from '../../domain/predictions'
 import { scheduleView, type LoadBand } from '../../domain/scheduleView'
 import { PushToCalendar } from './PushToCalendar'
-import { ReserveTrack } from './ReserveTrack'
 
 /**
  * §4's primary surface: the whole horizon, one day expanded beneath it, and Rebalance.
@@ -84,6 +86,14 @@ const TYPE_HUE: Record<string, string> = {
 export function WeekScreen(props: {
   readonly schedule: Schedule
   readonly today: number
+  /**
+   * The clock hour the student gets up, which anchors the night drawn under each open day.
+   *
+   * Supplied rather than read, the way every other figure on this screen is. Needed here
+   * rather than precomputed by the caller because the open day is this component's own state,
+   * so nobody outside it knows which night to build.
+   */
+  readonly sleepWakeHour: number
   readonly working: boolean
   readonly report: string | null
   /**
@@ -148,6 +158,7 @@ export function WeekScreen(props: {
     onAddBlock,
     blockLog = [],
     predictions = [],
+    sleepWakeHour,
   } = props
   const [openDay, setOpenDay] = useState<number | null>(null)
 
@@ -174,6 +185,21 @@ export function WeekScreen(props: {
   const hasFixedLoad = schedule.items.some((item) => item.fixed && !item.protectedRest)
 
   const grid = openDay === null ? null : dayGrid(schedule, openDay)
+
+  /**
+   * The night at the end of the open day, and what that day is likely to take out of it.
+   *
+   * Under the grid rather than in it: a night is the boundary between two days, not an hour
+   * inside one, which is the whole reason it does not have to be drawn twice to cross
+   * midnight. `NightBand` states that at length.
+   */
+  const night =
+    openDay === null
+      ? null
+      : {
+          window: nightWindow(sleepWakeHour, schedule.sleepByDay[openDay] ?? 0),
+          lostHours: squeezeOn(schedule, openDay).hours,
+        }
 
   /**
    * Why the open day is marked, or null when it is not.
@@ -222,7 +248,11 @@ export function WeekScreen(props: {
 
       <ul className="grid grid-cols-3 gap-2 md:grid-cols-7">
         {cells.map((cell) => {
-          const parts = [dayLabel(schedule, cell.dayIndex, today), BAND_LABEL[cell.band]]
+          const parts = [
+            dayLabel(schedule, cell.dayIndex, today),
+            BAND_LABEL[cell.band],
+            `reserve ${Math.round(cell.reserve)}%`,
+          ]
           if (cell.deficit) parts.push('deficit')
           if (cell.unconfirmed) parts.push('not confirmed')
 
@@ -259,6 +289,16 @@ export function WeekScreen(props: {
                     because "Day 1" is the first day to everyone but the array. */}
                 <span>{cell.date ?? `Day ${cell.dayIndex + 1}`}</span>
                 <span aria-hidden="true">{BAND_GLYPH[cell.band]}</span>
+
+                {/* Where the day leaves you, from the same projection the ⚠ is read from.
+                    The mean of the four -- and the mark beside it is computed from the
+                    floor, so a cell can read 67% and still be marked: one reserve empty
+                    beside three healthy ones is the case the floor catches and the mean
+                    hides. Hidden from assistive technology because the cell's own spoken
+                    name already carries it in words. */}
+                <span aria-hidden="true" className="tabular-nums text-ink-soft">
+                  {Math.round(cell.reserve)}%
+                </span>
                 {cell.deficit && <span aria-hidden="true">⚠</span>}
                 {/* §4: the confirmation prompt discoverable from the overview, not only from
                     the card -- quiet on purpose, so the deficit ⚠ above stays the louder
@@ -300,14 +340,6 @@ export function WeekScreen(props: {
           </p>
         )}
       </div>
-
-      {/* Ruling 64: the grid says what is on each day and the open day says how you stand on
-          one of them. This is the third question and the one the projection was computed
-          for -- where the fortnight is going. */}
-      <ReserveTrack
-        projection={projection}
-        dayLabel={(dayIndex) => dayLabel(schedule, dayIndex, today)}
-      />
 
       {grid !== null && openDay !== null && (
         <div className="flex flex-col gap-3">
@@ -394,6 +426,10 @@ export function WeekScreen(props: {
               </button>
             ))}
           </div>
+
+          {night !== null && (
+            <NightBand night={night.window} lostHours={night.lostHours} />
+          )}
 
           {/* Under the grid rather than above it: this adds to the day, so it has to
               follow the day it is about -- unlike Rebalance, which acts on the whole

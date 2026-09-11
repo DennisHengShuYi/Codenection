@@ -153,3 +153,28 @@ describe('a bar with nothing measuring its direction', () => {
     }
   })
 })
+
+/**
+ * The five bars do not describe the same stretch of time, and nothing said so.
+ *
+ * The four reserve bars are one instant -- the reserve entering today. The density bar is
+ * committed hours across the whole horizon. They sat in one list, in one visual language,
+ * with one kind of bar, so "People 32" and "How packed the days are 76" read as two figures
+ * about the same period. They are a snapshot and a fortnight.
+ *
+ * Carried as data rather than as a caption the view invents, so the text equivalent and the
+ * drawing cannot come to describe different periods.
+ */
+describe('the stretch of time a bar covers', () => {
+  it('marks the four reserve bars as a reading taken now', () => {
+    for (const bar of barsFor(healthy).filter((entry) => entry.key !== 'schedule')) {
+      expect(bar.span).toBe('now')
+    }
+  })
+
+  it('marks the density bar as covering the horizon it actually measures', () => {
+    const density = barsFor(healthy).find((bar) => bar.key === 'schedule')
+
+    expect(density?.span).toBe('horizon')
+  })
+})

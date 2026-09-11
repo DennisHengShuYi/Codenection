@@ -12,12 +12,22 @@ export type { Trend } from './trend'
 
 export type BarStatus = 'healthy' | 'stretched' | 'critical'
 
+export type BarSpan = 'now' | 'horizon'
+
 export interface DomainBar {
   readonly key: string
   readonly label: string
   readonly value: number
   readonly ceiling: number
   readonly status: BarStatus
+  /**
+   * The stretch of time this bar's value covers.
+   *
+   * `now` is a reading taken at one instant -- the reserve entering today. `horizon` is a
+   * figure over the whole projection. Both sit in one list, so without this a student reads
+   * a snapshot and a fortnight as though they were the same kind of number.
+   */
+  readonly span: BarSpan
   /** Null where nothing measures a direction. The four reserve bars read theirs off the
    *  projection; the density bar has no such reading, and §1.5 makes an unmeasured claim a
    *  lie told to a screen reader rather than a harmless default. */
@@ -102,6 +112,9 @@ export function domainBars(
       value,
       ceiling: CEILING,
       status,
+      // The reserve as it stands, not a period: `RoomShell` hands these in from the
+      // projection's entering-today reading.
+      span: 'now' as const,
       trend: trendOf(projection.central.map((day) => day[type])),
       warning: warningFor(type, value, status),
     }
@@ -124,6 +137,9 @@ export function domainBars(
           : density > DENSITY_STRETCHED_ABOVE
             ? 'stretched'
             : 'healthy',
+      // Committed hours across every day handed in, not today's -- which is why it needs
+      // saying out loud beside four bars that are a single instant.
+      span: 'horizon' as const,
       // Nothing projects how packed a future day will be, so there is no direction to
       // report. It read 'flat' before, which drew a "steady" glyph and announced "steady".
       trend: null,

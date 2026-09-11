@@ -1,5 +1,5 @@
-import type { Projection } from '../../engine'
-import type { DomainBar, Trend } from './domainBars'
+import { HORIZON_DAYS, type Projection } from '../../engine'
+import type { BarSpan, DomainBar, Trend } from './domainBars'
 
 /** Words rather than the glyphs the bars show. An arrow character read aloud by a screen
  *  reader is noise. */
@@ -33,9 +33,23 @@ export function describeDial(
   // clamps to 100 -- so "you are at 100% capacity this week" was what this told a perfectly
   // rested student, with the sense exactly inverted. `RequestBoxScreen` had already written
   // down that load-against-capacity is "a metric this app does not have".
-  const parts: string[] = [`You have about ${Math.round(capacity)}% of your reserve left this week.`]
+  // "This week" was doing the same work the bars were: naming a period for a number that
+  // is one instant -- the reserve entering today, before the day has been lived. The four
+  // reserve bars below quote that same moment; the fifth quotes the whole horizon.
+  const parts: string[] = [
+    `You started today with about ${Math.round(capacity)}% of your reserve left.`,
+  ]
+
+  let spoken: BarSpan | null = null
 
   for (const bar of bars) {
+    // Once per group, where the span changes -- the same boundary the drawing heads, said
+    // in the same order, so the two cannot describe different periods.
+    if (bar.span !== spoken) {
+      parts.push(bar.span === 'now' ? 'Where today started:' : `Across the next ${HORIZON_DAYS} days:`)
+      spoken = bar.span
+    }
+
     // A bar with no measured direction says its value and stops. Reading "steady" for
     // something nothing measured is worse here than anywhere else: this text IS the dial
     // for a screen reader, so an invented word is indistinguishable from a real reading.

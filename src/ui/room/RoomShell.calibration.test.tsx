@@ -217,8 +217,10 @@ describe('RoomShell with a block to confirm', () => {
     await userEvent.click(screen.getByTestId('sleep-under5'))
 
     await waitFor(async () => expect((await repository.loadWeek())?.sleepByDay[2]).toBe(4.5))
-    // Not tonight, which has not happened.
-    expect((await repository.loadWeek())?.sleepByDay[3]).toBe(7)
+    // Not tonight, which has not happened. Asserted as "not last night's figure" rather
+    // than as a number, because the nights from today onward are derived now
+    // (`domain/sleepAssumed`) and no longer the fixture's own.
+    expect((await repository.loadWeek())?.sleepByDay[3]).not.toBe(4.5)
   })
 
   it('dismissing the today card with "Not now" hides it without answering anything', async () => {

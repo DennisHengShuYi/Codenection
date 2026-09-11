@@ -91,8 +91,9 @@ test('asks for a target and tonight, and nothing else', async ({ page }) => {
   await expect(page.locator('input[type="number"]')).toHaveCount(2)
 })
 
-/** Refused in the field and refused again by `withSleepHours`, so nothing a student can type
- *  reaches a model that computes recovery from it. */
+/** Refused in the field, and refused again by `domain/sleepAssumed` when it reads the stored
+ *  figure back -- so nothing a student can type reaches a model that computes recovery from
+ *  it, whichever way it got into the store. */
 test('says why a figure it cannot use was not taken', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openApp(page)
@@ -217,4 +218,48 @@ test('warns that an over-committed day will cost tonight', async ({ page }) => {
   await expect(page.getByTestId('sleep-forecast').first()).toContainText(
     'will cost you about 4 hours',
   )
+})
+
+/**
+ * The seven-night average drives the FORECAST, which is the point of the whole feature.
+ *
+ * A student who plans eight hours and sleeps four had their fortnight projected off eight, so
+ * the window said the horizon was clear on sleep they do not get. Asserted through the room's
+ * weather rather than its gauge: the gauge reads the reserve entering today, which is built
+ * from days already past and which `assumeSleep` deliberately leaves alone. What moves is
+ * what is coming.
+ */
+test('reads the fortnight off the sleep the student actually gets', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+
+  const horizon = async (): Promise<string> =>
+    (await page.getByTestId('room-scene').getAttribute('aria-label')) ?? ''
+
+  // The same empty week twice, once with nothing reported and once with a short week behind
+  // it. Four hours is below the credit floor, so those nights give nothing back at all.
+  await seed(page, { week: anchoredWeek(), settings: { lowEnergyOverride: 'off' } })
+  // Nothing reported, so the fortnight is assumed at the eight-hour default and the room has
+  // no sleep debt to report at all.
+  expect(await horizon()).not.toContain('sleep owed')
+
+  await seed(page, {
+    week: anchoredWeek(),
+    settings: {
+      lowEnergyOverride: 'off',
+      sleepTargetHours: 8,
+      sleepNights: [
+        { isoDate: isoDaysAgo(2), hours: 4, answeredAt: 1 },
+        { isoDate: isoDaysAgo(1), hours: 4, answeredAt: 2 },
+        { isoDate: isoDaysAgo(0), hours: 4, answeredAt: 3 },
+      ],
+    },
+  })
+
+  /*
+   * The room now reads the fortnight off four-hour nights rather than the eight-hour target,
+   * so it reports a debt it could not see before. Asserted here rather than on the window's
+   * weather because an empty week drains too slowly for the deficit day to move -- the
+   * difference this proves is that the assumption reached the model at all.
+   */
+  expect(await horizon()).toContain('sleep owed')
 })

@@ -74,9 +74,16 @@ describe('the sleep page', () => {
     expect(await screen.findByTestId('sleep-target')).toBeVisible()
   })
 
-  /** The reason the fixed choices went: a student who sleeps five and a half hours had no way
-   *  to say so, and no set of buttons narrow enough for this sheet ever would. */
-  it('takes a figure no fixed set of choices would have offered', async () => {
+  /**
+   * The target is a durable preference now, not a rewrite of the week.
+   *
+   * It used to move the week directly, and only nights sitting exactly at the OLD target
+   * counted as untouched -- so a week that arrived from a fixture or an import never moved at
+   * all, and the target looked decorative. The nights ahead are derived from it on every
+   * render instead (`domain/sleepAssumed`), which is both the fix and why nothing is written
+   * to the week here.
+   */
+  it('remembers a typed target, including one no fixed set of choices would have offered', async () => {
     const { repository } = await openRoom()
     await userEvent.click(screen.getByTestId('open-sleep'))
 
@@ -86,9 +93,31 @@ describe('the sleep page', () => {
     await userEvent.tab()
 
     await waitFor(async () => {
-      const saved = await repository.loadWeek()
-      expect(saved?.sleepByDay.every((hours) => hours === 6.5)).toBe(true)
+      expect((await repository.loadSettings()).sleepTargetHours).toBe(6.5)
     })
+    // Tonight follows the target while the student has not spoken about tonight itself.
+    await waitFor(() => expect(screen.getByTestId('sleep-tonight')).toHaveValue(6.5))
+  })
+
+  /**
+   * Tonight is the student's own figure for one night, kept apart from what the app assumes.
+   * The two were one field, and one field cannot be both -- the page would either show them
+   * their number or let the projection reason from an honest one, never both.
+   */
+  it('remembers tonight on its own, without moving the target', async () => {
+    const { repository } = await openRoom()
+    await userEvent.click(screen.getByTestId('open-sleep'))
+
+    const tonight = await screen.findByTestId('sleep-tonight')
+    await userEvent.clear(tonight)
+    await userEvent.type(tonight, '4')
+    await userEvent.tab()
+
+    await waitFor(async () => {
+      const chosen = (await repository.loadSettings()).sleepChosenByDate ?? {}
+      expect(Object.values(chosen)).toEqual([4])
+    })
+    expect(screen.getByTestId('sleep-target')).toHaveValue(8)
   })
 
   /** Validated at the boundary as well as in the field: `withSleepHours` refuses it too, so
@@ -107,47 +136,7 @@ describe('the sleep page', () => {
     expect(await repository.loadWeek()).toEqual(before)
   })
 
-  it('moves every unedited night when the target changes', async () => {
-    const { repository } = await openRoom()
-    await userEvent.click(screen.getByTestId('open-sleep'))
 
-    const target = await screen.findByTestId('sleep-target')
-    await userEvent.clear(target)
-    await userEvent.type(target, '9')
-    // Committed on leaving the field: a half-typed number is a whole valid one, so "1" on the
-    // way to "12" must never reach the week.
-    await userEvent.tab()
-
-    await waitFor(async () => {
-      const saved = await repository.loadWeek()
-      expect(saved?.sleepByDay.every((hours) => hours === 9)).toBe(true)
-    })
-  })
-
-  /**
-   * Tonight is the one night the page still asks about, and it is the student overruling the
-   * target for that night only -- so the rest of the fortnight must not follow it.
-   *
-   * The next three nights used to be typed too. They asked for something nobody can answer:
-   * on Saturday you do not know what you will sleep on Monday. Those nights still matter to
-   * the projection, which is why the page now SAYS what it assumes instead of asking.
-   */
-  it('sets tonight without moving the rest of the fortnight', async () => {
-    const { repository } = await openRoom()
-    await userEvent.click(screen.getByTestId('open-sleep'))
-
-    const tonight = await screen.findByTestId('sleep-tonight')
-    await userEvent.clear(tonight)
-    await userEvent.type(tonight, '6')
-    await userEvent.tab()
-
-    await waitFor(async () => {
-      const saved = await repository.loadWeek()
-      // Anchored three days back, so today is day 3.
-      expect(saved?.sleepByDay[3]).toBe(6)
-      expect(saved?.sleepByDay.filter((hours) => hours === 6)).toHaveLength(1)
-    })
-  })
 
   /**
    * The live defect the durable log fixes.

@@ -20,7 +20,8 @@ function stubRepo(over: Partial<Repository> = {}): Repository {
 
 /** A window onto the hook, since a hook cannot be asserted on directly. */
 function Probe({ repo }: { repo: Repository }) {
-  const { targetHours, hasTarget, nights, setTarget, reportNight, problem } = useSleepPlan(repo)
+  const { targetHours, hasTarget, nights, chosenByDate, setTarget, setChosen, reportNight, problem } =
+    useSleepPlan(repo)
 
   return (
     <div>
@@ -29,6 +30,12 @@ function Probe({ repo }: { repo: Repository }) {
       <span data-testid="nights">{nights.map((n) => `${n.isoDate}:${n.hours}`).join(',')}</span>
       <span data-testid="problem">{problem ?? ''}</span>
       <button onClick={() => setTarget(9)}>target 9</button>
+      <span data-testid="chosen">
+        {Object.entries(chosenByDate)
+          .map(([date, hours]) => `${date}:${hours}`)
+          .join(',')}
+      </span>
+      <button onClick={() => setChosen('2026-09-12', 5.5)}>choose tonight</button>
       <button onClick={() => reportNight('2026-09-12', 'six')}>report six</button>
       <button onClick={() => reportNight('2026-09-12', 'eightPlus')}>report eight</button>
     </div>
@@ -180,5 +187,38 @@ describe('useSleepPlan', () => {
 
     await target(DEFAULT_SLEEP_HOURS)
     expect(screen.getByTestId('stated')).toHaveTextContent('false')
+  })
+
+  /**
+   * A night the student spoke about, kept apart from what the app assumes.
+   *
+   * The two were one field, and one field cannot be both: the page would either show the
+   * student their own figure or let the projection reason from an honest one, never both.
+   * `domain/sleepAssumed` derives the second from this.
+   */
+  it('remembers a night the student chose, and persists it', async () => {
+    const saveSettings = vi.fn().mockResolvedValue(undefined)
+    render(<Probe repo={stubRepo({ saveSettings })} />)
+    await target(DEFAULT_SLEEP_HOURS)
+
+    await userEvent.click(screen.getByRole('button', { name: 'choose tonight' }))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('chosen')).toHaveTextContent('2026-09-12:5.5'),
+    )
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ sleepChosenByDate: { '2026-09-12': 5.5 } }),
+      ),
+    )
+  })
+
+  it('loads the nights already chosen', async () => {
+    const repo = stubRepo({
+      loadSettings: async () => ({ ...DEFAULT_SETTINGS, sleepChosenByDate: { '2026-09-11': 4 } }),
+    })
+    render(<Probe repo={repo} />)
+
+    await waitFor(() => expect(screen.getByTestId('chosen')).toHaveTextContent('2026-09-11:4'))
   })
 })

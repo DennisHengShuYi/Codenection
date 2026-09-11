@@ -56,6 +56,19 @@ export interface StoredSettings {
    * default sitting in its place.
    */
   readonly sleepNights?: readonly SleepNight[]
+  /**
+   * Hours the student chose for the night that BEGAN on each date.
+   *
+   * Separate from `Schedule.sleepByDay` because that field holds what the app *assumes*, and
+   * one field cannot be both: the page could either show a student their own figure or let
+   * the projection reason from an honest one, never both. `domain/sleepAssumed` derives the
+   * second from this and the reported log.
+   *
+   * Keyed by date rather than day index, for `sleepNights`' reason: a fortnight rolls over,
+   * and an index would silently come to describe a different night. Entries age out of
+   * relevance on their own -- once a night is past, what was reported about it is what counts.
+   */
+  readonly sleepChosenByDate?: Readonly<Record<string, number>>
 }
 
 export const DEFAULT_SETTINGS: StoredSettings = {

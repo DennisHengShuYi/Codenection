@@ -8,11 +8,10 @@ import { SAVE_FAILED } from './useSchedule'
 /**
  * The student's stated sleep target, and the nights they have reported.
  *
- * Both live on the settings blob rather than in the week, because both have to survive the
- * fortnight rolling over -- `Schedule.sleepByDay` does not. The week is the PLAN and is owned
- * by `useSchedule`; this hook owns the two durable facts behind it, and the caller composes
- * them (`domain/sleepPlan.retargetSleep`, `withSleepHours`). Keeping the composition out of
- * here is what stops this hook needing to know about a week at all.
+ * All of it lives on the settings blob rather than in the week, because all of it has to
+ * survive the fortnight rolling over -- `Schedule.sleepByDay` does not. That field holds what
+ * the app ASSUMES, which `domain/sleepAssumed` derives from these facts on every render; this
+ * hook owns the facts and knows nothing about a week.
  *
  * Every write re-reads the blob before saving, following `useProfile.setProfile`. Spreading a
  * cached snapshot is precisely the defect just fixed in `useLowEnergy`, and this hook writes
@@ -30,7 +29,12 @@ export function useSleepPlan(repo: Repository): {
    */
   hasTarget: boolean
   nights: readonly SleepNight[]
+  /** Hours the student chose for the night that began on each date. What the page shows; what
+   *  the app assumes is derived from it by `domain/sleepAssumed`. */
+  chosenByDate: Readonly<Record<string, number>>
   setTarget: (hours: number) => void
+  /** Records a night the student spoke about, keyed by the date it began. */
+  setChosen: (isoDate: string, hours: number) => void
   reportNight: (isoDate: string, bucket: SleepBucket) => void
   /** Null while every write has landed. A sentence a student can act on otherwise -- the
    *  convention `useSchedule`, `useBlockLog` and `useLowEnergy` share. */
@@ -38,6 +42,7 @@ export function useSleepPlan(repo: Repository): {
 } {
   const [target, setStoredTarget] = useState<number | null>(null)
   const [nights, setNights] = useState<readonly SleepNight[]>([])
+  const [chosen, setChosen] = useState<Readonly<Record<string, number>>>({})
   const [problem, setProblem] = useState<string | null>(null)
 
   useEffect(() => {
@@ -53,6 +58,7 @@ export function useSleepPlan(repo: Repository): {
         if (cancelled) return
         setStoredTarget(saved.sleepTargetHours ?? null)
         setNights(saved.sleepNights ?? [])
+        setChosen(saved.sleepChosenByDate ?? {})
       })
 
     return () => {
@@ -75,6 +81,12 @@ export function useSleepPlan(repo: Repository): {
     targetHours: target ?? DEFAULT_SLEEP_HOURS,
     hasTarget: target !== null,
     nights,
+    chosenByDate: chosen,
+    setChosen: (isoDate: string, hours: number) => {
+      const next = { ...chosen, [isoDate]: hours }
+      setChosen(next)
+      write({ sleepChosenByDate: next })
+    },
     setTarget: (hours: number) => {
       setStoredTarget(hours)
       write({ sleepTargetHours: hours })

@@ -78,42 +78,87 @@ export async function signState(
   return `${payload}.${await sign(payload, secret)}`
 }
 
+/** Which check refused, for a server log and never for a screen. */
+export type StateRefusal =
+  /** Not two non-empty dot-separated parts: never something this app produced. */
+  | 'malformed'
+  /** The HMAC did not verify. Overwhelmingly a `GOOGLE_STATE_SECRET` that differs between
+   *  the deployment that signed the link and the one handling the callback -- which no
+   *  student can press their way out of, and which looks identical to an expiry on screen. */
+  | 'signature'
+  /** Verified, but not the JSON we write: our own encoding changed under a half-rolled
+   *  deploy. The signature proves we produced it, so this is not an attack. */
+  | 'shape'
+  /** Past `STATE_LIFETIME_MS`. The only one of the five that a student fixes by pressing
+   *  Connect again, which is what the sentence they are shown tells them to do. */
+  | 'expired'
+  /** Issued after `now`. A clock that disagrees between the two halves of the round trip,
+   *  or one that went backwards -- not a link to honour either way. */
+  | 'future'
+
+export type StateReading =
+  | { readonly ok: true; readonly accountId: string }
+  | { readonly ok: false; readonly reason: StateRefusal }
+
+/**
+ * The account a state was signed for, and -- when there is none -- which check refused.
+ *
+ * The reason exists so an operator can tell a misconfigured deployment from a student who
+ * left a tab open, because those two produce the same sentence on screen and only one of
+ * them is a bug. It must never reach a response body: which part of a defence somebody
+ * tripped is information about the defence, and telling them apart is how somebody probing
+ * it learns which part to work on. `api/google-connect.ts` logs it and says the same
+ * sentence it always said.
+ */
+export async function inspectState(
+  state: string,
+  secret: string,
+  now: number = Date.now(),
+): Promise<StateReading> {
+  const refused = (reason: StateRefusal): StateReading => ({ ok: false, reason })
+
+  const parts = state.split('.')
+  if (parts.length !== 2) return refused('malformed')
+
+  const [payload, signature] = parts as [string, string]
+  if (payload === '' || signature === '') return refused('malformed')
+
+  // Verified before it is read. Parsing first would mean acting on unauthenticated bytes,
+  // which is the whole thing this is here to prevent.
+  if (!matches(signature, await sign(payload, secret))) return refused('signature')
+
+  try {
+    const claim = JSON.parse(fromBase64Url(payload)) as { a?: unknown; t?: unknown }
+    if (typeof claim.a !== 'string' || typeof claim.t !== 'number') return refused('shape')
+
+    // Both directions. A clock that has gone backwards must not resurrect an old link, and
+    // a link from the future is a signal something is wrong rather than something to honour.
+    const age = now - claim.t
+    if (age < 0) return refused('future')
+    if (age > STATE_LIFETIME_MS) return refused('expired')
+
+    return { ok: true, accountId: claim.a }
+  } catch {
+    // Anything that is not the JSON we wrote, which -- given the signature verified -- means
+    // our own encoding changed rather than an attack.
+    return refused('shape')
+  }
+}
+
 /**
  * The account a state was signed for, or null.
  *
- * Null for every failure, deliberately, and the caller says only that the connection could
- * not be completed. Which check failed -- a bad signature, an expired link, a malformed
- * value -- is information about the defence, and telling somebody probing it apart is how
- * they learn which part to work on.
+ * Null for every failure, deliberately: the caller says only that the connection could not
+ * be completed, and this is the shape that makes saying anything else impossible. Callers
+ * that need to *log* which check refused reach for `inspectState` instead, and still show
+ * the one sentence.
  */
 export async function readState(
   state: string,
   secret: string,
   now: number = Date.now(),
 ): Promise<string | null> {
-  const parts = state.split('.')
-  if (parts.length !== 2) return null
+  const reading = await inspectState(state, secret, now)
 
-  const [payload, signature] = parts as [string, string]
-  if (payload === '' || signature === '') return null
-
-  // Verified before it is read. Parsing first would mean acting on unauthenticated bytes,
-  // which is the whole thing this is here to prevent.
-  if (!matches(signature, await sign(payload, secret))) return null
-
-  try {
-    const claim = JSON.parse(fromBase64Url(payload)) as { a?: unknown; t?: unknown }
-    if (typeof claim.a !== 'string' || typeof claim.t !== 'number') return null
-
-    // Both directions. A clock that has gone backwards must not resurrect an old link, and
-    // a link from the future is a signal something is wrong rather than something to honour.
-    const age = now - claim.t
-    if (age < 0 || age > STATE_LIFETIME_MS) return null
-
-    return claim.a
-  } catch {
-    // Anything that is not the JSON we wrote, which -- given the signature verified -- means
-    // our own encoding changed rather than an attack. Still nothing to act on.
-    return null
-  }
+  return reading.ok ? reading.accountId : null
 }

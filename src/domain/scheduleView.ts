@@ -2,7 +2,7 @@ import { answeredIds, checkedInDays, outcomesFrom, type BlockRecord } from './bl
 import { dateFor } from './calendar'
 import { paramsFor } from './engineParams'
 import type { EnergyPrediction } from './predictions'
-import { DEFICIT_THRESHOLD, HORIZON_DAYS, overallReserve, project } from '../engine'
+import { DEFICIT_THRESHOLD, floorReserve, HORIZON_DAYS, project } from '../engine'
 import { toDayInputs, type Schedule } from '../optimizer'
 
 /**
@@ -80,7 +80,12 @@ export function scheduleView({
       date: dateFor(schedule, dayIndex),
       band: bandFor(hours),
       hours,
-      deficit: reserves !== undefined && overallReserve(reserves) < DEFICIT_THRESHOLD,
+      // On the floor, not the mean -- the same test `projection.firstDeficitDay` applies
+      // (`engine/projection.ts`), so the grid's marks, the dial's crossing sentence, the
+      // room's weather and the optimizer's objective all mean one thing by "deficit". This
+      // read the mean, which is strictly laxer: a day the dial called a crossing could
+      // render unmarked here, because mental at 5 beside errands at 90 averages fine.
+      deficit: reserves !== undefined && floorReserve(reserves) < DEFICIT_THRESHOLD,
       // A day still ahead cannot have been lived, so asking about it would be asking a
       // student to report the future.
       unconfirmed: dayIndex <= today && onDay.some((item) => !alreadyAsked(item.id)),

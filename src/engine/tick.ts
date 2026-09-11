@@ -1,6 +1,6 @@
 import { applyCoupling } from './coupling'
 import { drainForDay } from './drain'
-import { recoveryEfficiency } from './efficiency'
+import { efficiencyAt } from './efficiency'
 import { FULL_RESERVE } from './params'
 import { recoveryForDay } from './recovery'
 import { LOAD_TYPES, type DayInput, type EngineParams, type LoadType, type Reserves } from './types'
@@ -19,16 +19,28 @@ const clamp = (value: number): number => Math.min(FULL_RESERVE, Math.max(0, valu
  * starts, the less tonight's rest gives back (§6.2), so a bad week compounds instead of
  * levelling off. Computing efficiency after the drain would soften exactly the effect
  * the app exists to show.
+ *
+ * And from each reserve's *own* start-of-day level, so a collapsed mental reserve slows
+ * mental recovery without discounting what a rested body still gets back. `next` is a
+ * separate object from `reserves`, so no partially-updated value can leak into a later
+ * type's efficiency -- the day-start guarantee holds per type as well as overall.
+ *
+ * Note what that removes. Reading efficiency off the mean made it a second, undeclared
+ * coupling channel: one empty reserve pulled every reserve's recovery down at an implicit
+ * weight of a quarter each, far larger than anything in §6.3's matrix, whose biggest entry
+ * is 0.12. `applyCoupling` below is now the only path by which one reserve's deficit
+ * reaches another, which is where §6.3 always said that decision lived.
  */
 export function tick(reserves: Reserves, day: DayInput, params: EngineParams): Reserves {
   const drain = drainForDay(day, reserves, params)
   const recovery = recoveryForDay(day, params)
-  const efficiency = recoveryEfficiency(reserves)
 
   const next: Record<LoadType, number> = { mental: 0, physical: 0, social: 0, errands: 0 }
 
   for (const type of LOAD_TYPES) {
-    next[type] = clamp(reserves[type] - drain[type] + recovery[type] * efficiency)
+    next[type] = clamp(
+      reserves[type] - drain[type] + recovery[type] * efficiencyAt(reserves[type]),
+    )
   }
 
   return applyCoupling(next)

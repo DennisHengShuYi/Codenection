@@ -37,7 +37,7 @@ export {
   STATE_COST_SLOPE,
 } from './params'
 
-export { floorReserve, overallReserve, recoveryEfficiency } from './efficiency'
+export { efficiencyAt, floorReserve, overallReserve } from './efficiency'
 export { carryoverAt } from './carryover'
 export { actualCost, stateMultiplier } from './stateCost'
 export { drainForDay, fragmentation } from './drain'

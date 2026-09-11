@@ -76,10 +76,25 @@ describe('roomModel', () => {
       protectedRest: false,
     })
 
-    // Heavy enough that 20 consecutive UNANSWERED days push the fortnight into deficit by
-    // day 7 (a storm), while the same 20 days all ANSWERED never cross the threshold at
-    // all (clear) -- a real, numerically-verified divergence, not an assumption.
+    /**
+     * Heavy enough that 20 consecutive UNANSWERED days push the fortnight into deficit by
+     * day 7 (a storm), while the same 20 days all ANSWERED never cross the threshold at
+     * all (clear) -- a real, numerically-verified divergence, not an assumption.
+     *
+     * `start` is calibrated and was re-derived when §6.2/§6.6 went per-type: at 70, mental
+     * now drains at its own depleted efficiency rather than one held up by the other three,
+     * so the answered fortnight crosses too and reads `clouding`. At 85 the answered branch
+     * never crosses and the silent one crosses inside `STORM_WITHIN_DAYS`.
+     *
+     * This one is inherently narrow, because it pins two categorical thresholds at once --
+     * "crosses within seven days" against "never crosses" -- so every neighbouring value of
+     * `start` or `intensity` flips one side or the other. Re-derive it by sweeping the pair
+     * through `roomModel` itself and reading `state.weather`; reconstructing the projection
+     * by hand gets a different answer, because `roomModel` runs the student's own
+     * `paramsFor(outcomesFrom(blockLog))` rather than `DEFAULT_PARAMS`.
+     */
     const heavySchedule = week({
+      start: { mental: 85, physical: 85, social: 85, errands: 85 },
       items: Array.from({ length: 20 }, (_, day) => heavyMentalDay(`i${day}`, day)),
     })
 

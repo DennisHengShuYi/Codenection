@@ -68,8 +68,21 @@ export interface RequestCost {
    * lie about the model, and one a student would eventually catch.
    */
   readonly eveningsEquivalent: number
-  /** False when taking it on drops the floor into deficit. §2.3's "warn before accepting",
-   *  expressed as something the model can actually answer. */
+  /**
+   * False when taking it on drops **the affected reserve's** floor into deficit. §2.3's
+   * "warn before accepting", expressed as something the model can actually answer.
+   *
+   * Measured on `floorAfter` above, so it is per-type for the same reason that is: scored
+   * against the projection's `worstFloor` this would answer the same for a one-hour ask and
+   * a twenty-hour one, because the overall floor is usually social isolation three weeks
+   * out and a mental request never reaches it. A warning that cannot see the size of what
+   * it is warning about is not a warning.
+   *
+   * So the three fields deliberately differ, and it is worth being plain about which is
+   * which: `firstDeficitDay*` is the *crossing*, on the true floor across all four types,
+   * because that is what "deficit" means to the dial and the room. `floorBefore`/`After`
+   * and this are the *price*, on the one reserve being spent.
+   */
   readonly absorbable: boolean
 }
 
@@ -146,8 +159,10 @@ export function priceRequest(
   const perEvening = params.kSocialContact * EVENING_HOURS
 
   return {
-    // The crossing stays on the true floor across all four types, because that is what
-    // "deficit" already means to the dial and the room. Only the *price* is per-type.
+    // These two only. The crossing stays on the true floor across all four types, because
+    // that is what "deficit" already means to the dial, the room and the week grid. The
+    // *price* below -- both floors, and `absorbable` with them -- is per-type; see the
+    // field docs for why the two must not be reconciled onto one aggregate.
     firstDeficitDayBefore: firstDeficitDay(before),
     firstDeficitDayAfter: firstDeficitDay(after),
     floorBefore,

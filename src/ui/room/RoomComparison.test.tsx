@@ -25,7 +25,7 @@ const modelOf = (over: Partial<Schedule> = {}) =>
   })
 
 const state = (character: RoomState['character']): RoomState => ({
-  ceilingPressure: 0.2,
+  dayFull: 0.2,
   paperHeight: 0.2,
   clutter: [],
   exerciseWaiting: 0, companyWaiting: 0,

@@ -47,6 +47,9 @@ import { LiveCards } from './LiveCards'
 import { roomModel } from './roomModel'
 import { describeRoom } from './roomText'
 import { Room } from './Room'
+import { TodayPanel } from './TodayPanel'
+import { panelRowsFor } from './todayRows'
+import { PALETTE } from './scene/palette'
 import {
   ROOM,
   toAdd,
@@ -59,6 +62,7 @@ import {
   toReserves,
   toRest,
   toSettings,
+  toToday,
   toWeek,
 } from './view'
 import { useUrlView } from './useUrlView'
@@ -495,6 +499,13 @@ export function RoomShell({
    * notification count must never do. The preview notice is not counted because it is not
    * behind the button at all: it sits on the room, under the controls.
    */
+  /**
+   * §46: what each object means and what is behind it today. Derived from the same week the
+   * furniture is bound from, so the legend cannot teach a vocabulary the room does not
+   * speak.
+   */
+  const panelRows = panelRowsFor(week, today, blockLog)
+
   const noticeCount = cards.length
   const noticeLabel =
     noticeCount === 0
@@ -768,6 +779,12 @@ export function RoomShell({
         </Sheet>
       )}
 
+      {view.kind === 'today' && (
+        <Sheet key="today" title="Today" onClose={closeToRoom}>
+          <TodayPanel rows={panelRows} />
+        </Sheet>
+      )}
+
       {view.kind === 'settings' && (
         <Sheet
           key="settings"
@@ -918,7 +935,22 @@ export function RoomShell({
             even where its empty box reaches across the gauge it cannot swallow the press.
             That last one is not belt and braces: the row's transparent box intercepting the
             gauge is exactly how `dial.spec.ts` failed at 320 and 390. */}
-        <div className="pointer-events-none absolute inset-x-2 top-2 flex flex-wrap items-center gap-2 pr-14 [&>*]:pointer-events-auto">
+        <div data-testid="room-bar"
+          /**
+           * The controls sit INSIDE the ceiling, which means the bar has to carry the
+           * ceiling's own colour rather than relying on the drawing to be deep enough.
+           *
+           * `Ceiling` draws `10 + pressure * 34` viewBox units, which at 390px scales to
+           * between 13 and 57 real pixels -- and the row needs 56 of them. So on a light day
+           * the buttons hung off the ceiling onto the wall. Clamping the drawing instead
+           * would have forced a max-pressure ceiling on every wide screen, because the same
+           * unit is four times bigger there.
+           *
+           * The cost, stated: the ceiling can never LOOK shallower than this bar. Pressure
+           * still reads above it, and a bar of controls floating on a wall read worse.
+           */
+          style={{ backgroundColor: PALETTE.ink }}
+          className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-center gap-2.5 px-3 py-3 pr-16 [&>*]:pointer-events-auto">
           {settingsButton}
           {/*
             First in the row, and outside `!lowEnergy` -- both deliberate.
@@ -961,12 +993,53 @@ export function RoomShell({
             </Button>
           )}
 
+          {/* §46: only below 768px. Above it the panel is already beside the room, and a
+              button that opens what is visibly open is furniture with nothing to do. */}
+          <Button
+            variant="secondary"
+            data-testid="open-today"
+            onClick={() => setView(toToday())}
+            className="md:hidden"
+          >
+            Today
+          </Button>
+
           <Button data-testid="open-add" aria-label="Add something" onClick={() => setView(toAdd())}>
             +
           </Button>
         </div>
 
-        {/* The one thing that does NOT go behind the `Waiting` button (Ruling 61). A student
+        {/* §46: the panel, floating over the wall from 768px up.
+          
+          A SIBLING of the stage, never a child of the drawing: the `<svg>` carries
+          `role="img"`, which hides its whole subtree from the accessibility tree, so a row
+          rendered inside it would be a button no screen reader could find. That is also why
+          the panel is the control surface and the drawing stayed a picture -- §3's tap
+          targets are still gone.
+
+          Hidden below 768px, where `open-today` opens the same rows in a sheet instead: the
+          room is full-bleed there and a panel over it would cover the character, which
+          Ruling 55 and four viewport tests forbid.
+
+          It starts below the brown at the top, which is the taller of two things and neither
+          is a fixed number of pixels. `Ceiling` draws 34 of the viewBox's 260 units and hangs
+          7 more below it in blocks, so the brown really ends at 41/260 -- 15.8% of the
+          drawing's height, not the 13% its depth alone suggests. Measured rather than
+          reasoned: the first attempt used the depth and overlapped by 25px on a 2560 screen.
+          Where the drawing is limited by WIDTH instead it is smaller still, so 17% of the
+          stage clears it either way. The `max()` handles the other one: on a short window
+          that percentage can come out under the control bar's own height, so it never starts
+          above 5.5rem. Bottom-anchored rather than
+          height-capped, so a long day scrolls inside it instead of growing into the floor. */}
+      <aside
+        data-testid="today-panel-floating"
+        aria-label="Today"
+        className="pointer-events-none absolute bottom-3 right-3 top-[max(17%,5.5rem)] hidden w-64 overflow-y-auto rounded-2xl border border-line bg-surface/90 p-2 shadow-lg backdrop-blur-sm md:block [&>*]:pointer-events-auto"
+      >
+        <TodayPanel rows={panelRows} />
+      </aside>
+
+      {/* The one thing that does NOT go behind the `Waiting` button (Ruling 61). A student
             who does not know their week is not being saved will lose it, and a warning about
             losing work that has to be pressed for is a warning that arrives after the loss.
 

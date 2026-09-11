@@ -47,8 +47,19 @@ export interface ClutterBox {
 }
 
 export interface RoomState {
-  /** 0..1. How far the ceiling has come down. */
-  readonly ceilingPressure: number
+  /**
+   * §47: 0..1, how much of today is already spoken for -- drawn as a clock face filling.
+   *
+   * This was the ceiling's job, and the ceiling was the wrong home for it. Its depth is
+   * drawn in viewBox units, so it scales with the stage: 13 real pixels on a phone and four
+   * times that on a laptop, which is too thin to hold the controls that sit in it and too
+   * variable to read as a quantity at all. A clock says the same thing in a shape that
+   * means it.
+   *
+   * Clamped at full, deliberately. A day asking for more hours than it has does not wrap
+   * round to empty -- the overflow is the window's to say, and it already does.
+   */
+  readonly dayFull: number
   /** 0..1. How high the paper has stacked. */
   readonly paperHeight: number
   readonly clutter: readonly ClutterBox[]
@@ -121,10 +132,8 @@ export function roomStateFor(
   const sleepDebt = Math.max(0, SLEEP_DEBT_BASELINE - averageSleep)
 
   return {
-    // §45: pressure, unchanged in meaning and rebound to its source. It read the
-    // fortnight's overall reserve; it reads how full today is, so it belongs to the day
-    // like the rest of the furniture.
-    ceilingPressure: clamp01(day.totalHours / WAKING_HOURS),
+    // §47: the same reading, in the object that can actually carry it.
+    dayFull: clamp01(day.totalHours / WAKING_HOURS),
 
     // §45: the desk stacks with the study still ahead today, rather than with the mental
     // reserve. Answered blocks are put away -- nothing is counted up (§1.3).

@@ -2,7 +2,7 @@ import { answeredIds, type BlockRecord } from '../../domain/blockLog'
 import { blocksOnDay } from '../../domain/dayBlocks'
 import type { ActivityKind } from '../../engine'
 import type { Schedule } from '../../optimizer'
-import { objectTrend, trendPhrase, type TrendUnit } from './objectTrend'
+import { objectTrend, sleepTrend, trendPhrase, type TrendUnit } from './objectTrend'
 
 /** One block behind a row, as the panel needs to say it. */
 export interface PanelBlock {
@@ -29,8 +29,11 @@ export interface PanelRow {
    *  object: it is the one thing on a day that is not a duty owed to anyone. */
   readonly drawn: boolean
   /**
-   * Where this object's load is heading over today and the next two days, in words, or null
-   * when it is flat or nothing measured it.
+   * Where this object is heading, in words, or null when it is flat or nothing measured it.
+   *
+   * Over today and the next two days for every row that reads the schedule. The bed is the
+   * exception and reads the nights the student reported, looking backward, because a schedule
+   * is a plan and the only honest evidence about a night is what was said about it afterwards.
    *
    * Words rather than the arrow the reserve bars use: on a bar an up arrow means the reserve
    * rose and that is good news, while here rising hours is bad news, and one glyph meaning
@@ -114,6 +117,16 @@ export function panelRowsFor(
   schedule: Schedule,
   today: number,
   blockLog: readonly BlockRecord[],
+  /**
+   * The nights the student has actually reported, oldest first
+   * (`domain/sleepLog.reportedNights`).
+   *
+   * Defaulted to empty only until the shell threads it -- an empty log is exactly the state
+   * in which the bed says nothing, so a caller that has not been updated yet behaves as it
+   * always did rather than claiming something. Ruling 51 applies here as it does to
+   * `blockLog`, and this default goes when the room is wired up.
+   */
+  reportedNights: readonly number[] = [],
 ): readonly PanelRow[] {
   // `blocksOnDay` rather than a filter of its own -- it already orders by start hour, which
   // is what a list of a day has to do anyway, and Ruling 45's `dayLoad` shares the same answer.
@@ -158,12 +171,19 @@ export function panelRowsFor(
     blocks: [],
     drawn: true,
     /**
-     * No trend, ever. `sleepByDay` defaults to 7 for a night nobody answered and nothing
-     * records whether it WAS answered, so this row already cannot tell "slept seven hours"
-     * from "nobody has asked yet" -- and a direction drawn from that series would be a claim
-     * about data the app does not have.
+     * A direction at last, and from the reported nights rather than from `sleepByDay`.
+     *
+     * This row carried no trend for one stated reason: `sleepByDay` defaults to a plausible
+     * figure for a night nobody answered and nothing recorded whether it WAS answered, so the
+     * row could not tell "slept seven hours" from "nobody has asked yet", and a direction
+     * drawn from it would have been a claim about data the app did not have.
+     * `domain/sleepLog` removes exactly that -- and only that, which is why `sleepTrend` still
+     * says nothing until three nights have actually been answered.
+     *
+     * `sleep` rather than `hours` as the unit: on this row rising is GOOD news, and "easing
+     * off" about somebody's sleep would read as reassurance about the thing going wrong.
      */
-    trend: null,
+    trend: trendPhrase(sleepTrend(reportedNights), 'sleep'),
   }
 
   return [...GROUPS.map(rowFor), bed, rowFor(REST_GROUP)]

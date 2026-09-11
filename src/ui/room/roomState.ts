@@ -128,6 +128,22 @@ export function roomStateFor(
   today: number,
   /** Ruling 45: what the student has answered, so a block that is done is put away. */
   blockLog: readonly BlockRecord[],
+  /**
+   * The night the student says they are aiming for, when they have said.
+   *
+   * What `RESTED_NIGHT_HOURS` below has been waiting for: that constant is a population norm
+   * and its own docstring records the consequence -- "for a student who needs nine hours the
+   * bed under-reports" -- and that the fix "wants the same calibration the engine's side is
+   * waiting on, not a constant swapped here". This is that calibration, stated rather than
+   * inferred.
+   *
+   * Optional, and the fallback is deliberately `RESTED_NIGHT_HOURS` rather than
+   * `DEFAULT_SLEEP_HOURS`. Those answer different questions: 8 is the night the app assumes
+   * when nobody has told it, 7 is the line below which somebody counts as short. Falling back
+   * to 8 would wilt the bed for every student who had never opened the sleep page, which is a
+   * claim about them the app has no basis for making.
+   */
+  sleepTargetHours?: number,
 ): RoomState {
   const day = dayLoadFor(schedule, today, blockLog)
 
@@ -147,7 +163,7 @@ export function roomStateFor(
       ? RESTED_NIGHT_HOURS
       : schedule.sleepByDay.reduce((sum, hours) => sum + hours, 0) / schedule.sleepByDay.length
 
-  const sleepDebt = Math.max(0, RESTED_NIGHT_HOURS - averageSleep)
+  const sleepDebt = Math.max(0, (sleepTargetHours ?? RESTED_NIGHT_HOURS) - averageSleep)
 
   return {
     // Ruling 47: the same reading, in the object that can actually carry it.

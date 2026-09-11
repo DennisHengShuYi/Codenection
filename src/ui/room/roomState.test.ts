@@ -324,3 +324,44 @@ describe('the clock, and the ceiling that no longer speaks', () => {
     expect('ceilingPressure' in dayState([study({ hours: 8 })])).toBe(false)
   })
 })
+
+/**
+ * Sleep debt against the student rather than against a population.
+ *
+ * `RESTED_NIGHT_HOURS`' own docstring asked for exactly this: it is a population norm and
+ * fixed, so "for a student who needs nine hours the bed under-reports", which "wants the same
+ * calibration the engine's side is waiting on". A stated target is that calibration arriving.
+ */
+describe('roomStateFor and a stated sleep target', () => {
+  const withTarget = (sleepHours: number, targetHours?: number) => {
+    const week = schedule([], sleepHours)
+
+    return roomStateFor(
+      healthy,
+      project(healthy, toDayInputs(week, ALL_PRESENT), DEFAULT_PARAMS),
+      week,
+      0,
+      [],
+      targetHours,
+    )
+  }
+
+  it('measures the shortfall against a target the student stated', () => {
+    expect(withTarget(7, 9).sleepDebt).toBeCloseTo(2)
+  })
+
+  /**
+   * And falls back to the population norm when nobody stated one -- NOT to
+   * `DEFAULT_SLEEP_HOURS`. Those answer different questions: 8 is the night the app assumes
+   * when it has not been told, 7 is the line below which a student counts as short.
+   * Conflating them would wilt the bed for every student who had never opened the page, which
+   * is a claim about them the app has no basis for.
+   */
+  it('keeps the population norm when nobody stated a target', () => {
+    expect(withTarget(7).sleepDebt).toBe(0)
+  })
+
+  it('still reports a shortfall against a low target when the nights are lower', () => {
+    expect(withTarget(4, 6).sleepDebt).toBeCloseTo(2)
+  })
+})

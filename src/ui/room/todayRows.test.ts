@@ -238,3 +238,48 @@ describe('the trend on a row', () => {
     expect(rowFor(week(), 'bed')?.trend).toBeNull()
   })
 })
+
+/**
+ * The bed, once nights have actually been answered.
+ *
+ * This row carried `trend: null` unconditionally, for one stated reason: it could not tell
+ * "slept eight hours" from "nobody has asked yet", so a direction drawn from `sleepByDay`
+ * would have been a claim about data the app did not have. `domain/sleepLog` removes exactly
+ * that reason -- and only that one, which is why the silence still holds without it.
+ */
+describe('the bed row and reported nights', () => {
+  it('says nothing when no night has been answered', () => {
+    expect(panelRowsFor(week(), 0, [], []).find((row) => row.id === 'bed')?.trend).toBeNull()
+  })
+
+  /** The shared evidence floor, same as everywhere else the app speaks about a student: two
+   *  points make a line out of a coincidence. */
+  it('says nothing on fewer nights than the app speaks on', () => {
+    expect(
+      panelRowsFor(week(), 0, [], [8, 5]).find((row) => row.id === 'bed')?.trend,
+    ).toBeNull()
+  })
+
+  /**
+   * Rising is GOOD news here, which is why the bed has its own wording rather than the hours
+   * vocabulary the study and exercise rows use. "Easing off" on a row about sleep would read
+   * as reassurance about the thing going wrong.
+   */
+  it('says nights are getting longer when they are', () => {
+    expect(panelRowsFor(week(), 0, [], [5, 6.5, 8]).find((row) => row.id === 'bed')?.trend).toBe(
+      'getting longer',
+    )
+  })
+
+  it('says nights are getting shorter when they are', () => {
+    expect(panelRowsFor(week(), 0, [], [8, 6.5, 5]).find((row) => row.id === 'bed')?.trend).toBe(
+      'getting shorter',
+    )
+  })
+
+  it('says nothing when reported nights are steady', () => {
+    expect(
+      panelRowsFor(week(), 0, [], [7, 7, 7]).find((row) => row.id === 'bed')?.trend,
+    ).toBeNull()
+  })
+})

@@ -6,10 +6,12 @@ const state = (over: Partial<RoomState> = {}): RoomState => ({
   ceilingPressure: 0.2,
   paperHeight: 0.2,
   clutter: [],
-  plantHealth: 0.8,
+  exerciseWaiting: 0, companyWaiting: 0,
+  windowDark: 0,
   sleepDebt: 0,
   weather: 'clear',
   lightLevel: 0.8,
+  reserve: 0.7,
   doorLit: false,
   character: 'steady',
   ...over,
@@ -23,7 +25,11 @@ const worstCaseState = (): RoomState =>
     weather: 'storm',
     clutter: [{ id: 'a', title: 'Laundry', dayIndex: 1 }],
     sleepDebt: 3,
-    plantHealth: 0.1,
+    // §45: the worst case now includes a day that does not fit and rest still waiting on
+    // it -- the point of this fixture is that every sentence the room can say is applicable
+    // at once, so the two new ones belong in it.
+    exerciseWaiting: 0.5, companyWaiting: 0.5,
+    windowDark: 0.6,
     doorLit: true,
   })
 
@@ -48,8 +54,12 @@ describe('describeRoom', () => {
     expect(text).toMatch(/laundry/i)
   })
 
-  it('says the floor is clear when it is', () => {
-    expect(describeRoom(state())).toMatch(/nothing waiting|floor is clear/i)
+  /** §45: "clear" now means the floor AND the day -- the slot is only free to say the floor
+   *  is clear when today put nothing in the room either. */
+  it('says the floor is clear when it is, and today put nothing out', () => {
+    const empty = state({ paperHeight: 0, exerciseWaiting: 0, companyWaiting: 0 })
+
+    expect(describeRoom(empty)).toMatch(/nothing waiting|floor is clear/i)
   })
 
   it('mentions sleep debt when there is some', () => {
@@ -60,8 +70,20 @@ describe('describeRoom', () => {
     expect(describeRoom(state())).not.toMatch(/sleep/i)
   })
 
-  it('mentions the plant when it is drooping', () => {
-    expect(describeRoom(state({ plantHealth: 0.2 }))).toMatch(/plant/i)
+  /** §45: the plant is gone; what today actually put in the room took its place. */
+  it('names what today put in the room', () => {
+    expect(describeRoom(state({ exerciseWaiting: 0.5 }))).toMatch(/dumbbell/i)
+    expect(describeRoom(state({ companyWaiting: 0.5 }))).toMatch(/people/i)
+    expect(describeRoom(state({ paperHeight: 0.5 }))).toMatch(/books/i)
+  })
+
+  /**
+   * §45's darkness, said in words. The drawing dims and a screen reader has to be told the
+   * same fact -- a binding that reaches the picture and not the paragraph tells the two
+   * audiences different things, and only one of them can tell.
+   */
+  it('says when the day does not fit inside itself', () => {
+    expect(describeRoom(state({ windowDark: 0.6 }))).toMatch(/dim|sleep|hours/i)
   })
 
   it('says when the door is worth taking', () => {
@@ -75,7 +97,7 @@ describe('describeRoom', () => {
    */
   it('does not scold, even at the worst', () => {
     const text = describeRoom(
-      state({ character: 'flattened', sleepDebt: 3, weather: 'storm', plantHealth: 0.1 }),
+      state({ character: 'flattened', sleepDebt: 3, weather: 'storm', exerciseWaiting: 0, companyWaiting: 0, windowDark: 0 }),
     )
 
     expect(text).not.toMatch(/should|failed|behind|lazy|streak|neglect/i)
@@ -103,16 +125,27 @@ describe('describeRoom', () => {
     expect(loud).toMatch(/storm/i)
   })
 
-  it('picks door lit over sleep debt, clutter and the plant, in priority order', () => {
+  /**
+   * §45 put the spill at the top of the chain. It is the only sentence here about something
+   * the student can still act on before it costs them the night: the door is a suggestion,
+   * the floor is a fact, and sleep debt is already spent.
+   */
+  it('picks the day that does not fit over the door, sleep debt and the floor, in priority order', () => {
     const text = describeRoom(worstCaseState())
 
+    expect(text).toMatch(/dim|comes out of sleep/i)
+    expect(text).not.toMatch(/door is lit|laundry/i)
+  })
+
+  it('falls back to the door when the day does fit', () => {
+    const text = describeRoom({ ...worstCaseState(), windowDark: 0 })
+
     expect(text).toMatch(/door is lit/i)
-    expect(text).not.toMatch(/sleep|laundry|drooping/i)
   })
 
   it('falls back to sleep debt when the door is not lit', () => {
     const text = describeRoom(
-      state({ sleepDebt: 2, clutter: [{ id: 'a', title: 'Laundry', dayIndex: 1 }], plantHealth: 0.1 }),
+      state({ sleepDebt: 2, clutter: [{ id: 'a', title: 'Laundry', dayIndex: 1 }], exerciseWaiting: 0, companyWaiting: 0, windowDark: 0 }),
     )
 
     expect(text).toMatch(/sleep/i)
@@ -133,7 +166,8 @@ describe('describeRoomFully', () => {
     expect(text).toMatch(/storm/i)
     expect(text).toMatch(/laundry/i)
     expect(text).toMatch(/sleep/i)
-    expect(text).toMatch(/drooping/i)
+    expect(text).toMatch(/dumbbell|people|books/i)
+    expect(text).toMatch(/dim|does not fit|comes out of sleep/i)
     expect(text).toMatch(/door is lit/i)
   })
 

@@ -90,6 +90,84 @@ function deadlinePressure(schedule: Schedule, params: EngineParams): number {
   return total
 }
 
+/**
+ * What it costs to neglect something nothing was making you do.
+ *
+ * Health, relationships and rest have no due date, which is why they always lose:
+ * `deadlinePressure` above skips every undated item and its own comment says the
+ * consequence out loud -- undated work costs nothing to defer. `domain/softDeadlines` gives
+ * those items a synthetic deadline; this is the term that makes one mean something.
+ *
+ * Sized like `DEADLINE_PRESSURE_WEIGHT` and for the same reason: a tiebreaker, never a
+ * fourth objective. It is charged against *more* items than that term is -- every undated
+ * one, where that one skips them all -- so it is if anything more important that it stay
+ * small enough never to outrank a real gain in the floor.
+ */
+export const NEGLECT_PRESSURE_WEIGHT = 0.005
+
+/**
+ * How overdue something may get before the model stops counting further.
+ *
+ * A hard deadline in the past is a constraint violation and `constraints.ts` owns it. A
+ * soft one in the past is the *normal* case -- it is what "you have not seen anyone in nine
+ * days" is -- so lateness has to keep costing, and rise with the days.
+ *
+ * Rising without bound is the danger. §2.1's ordering is stated below as not up for
+ * negotiation: the solver may never trade a genuinely higher worst day for a better
+ * arranged week. An uncapped lateness term would eventually exceed any floor difference and
+ * invert exactly that, buying a wrecked worst day with three weeks of unwashed laundry.
+ *
+ * Small, and measured rather than chosen. `deadlinePressure`'s sparseness argument is that
+ * "due tomorrow" and "due in a week" differ in kind while "due in five days" and "due in
+ * six" do not. The same holds on the other side of the line: one day late and two days late
+ * differ in kind; nine days late and ten do not.
+ *
+ * Set at 14 first, and the budget test caught it: a fortnight of undated work took the
+ * search to **4,769 evaluations** against a 3,000 bound -- squarely the 4,326 that comment
+ * records for §20's own first attempt, and for exactly the same reason. Saturating slowly
+ * leaves a gradient on every late item, so the climber can always find one more fractional
+ * improvement and grinds on chasing it.
+ *
+ * Saturating here means items more than a day late are all equally late to the *solver*.
+ * Nothing is lost by that: `missedSoftDeadlines` still reports the true `daysLate`, which is
+ * what the student is actually shown.
+ *
+ * The cap and the weight are set together, and the weight is what keeps the ordering safe.
+ * `DEADLINE_PRESSURE_WEIGHT`'s pressure never exceeds 2, so its worst per-item charge is
+ * `consequence x 2 x 0.008`. This one reaches 3, so its weight is set lower to land in the
+ * same place. Raising one without the other is how a laundry backlog buys a wrecked worst
+ * day.
+ */
+export const MAX_NEGLECT = 3
+
+/**
+ * §20's argument, pointed at the things it left out.
+ *
+ * Deliberately sparse in exactly the way `deadlinePressure` is, and the comment there is
+ * the measurement that justifies it: a smooth falloff gives the hill climber a fractional
+ * improvement at every item on every week and it grinds on chasing them.
+ *
+ * Items carrying a real `deadlineDay` are skipped rather than added to. They are already
+ * charged, and charging them twice would double-count one effect -- dated work would look
+ * twice as urgent as it is, which is the opposite of what this is for.
+ */
+function neglectPressure(schedule: Schedule, params: EngineParams): number {
+  let total = 0
+
+  for (const item of schedule.items) {
+    if (item.deadlineDay !== null) continue
+    if (item.softDeadlineDay === undefined) continue
+
+    const buffer = item.softDeadlineDay - item.dayIndex
+    if (buffer > NO_BUFFER_LEFT_DAYS) continue
+
+    const pressure = Math.min(NO_BUFFER_LEFT_DAYS + 1 - buffer, MAX_NEGLECT)
+    total += consequenceOf(item, params) * pressure
+  }
+
+  return total
+}
+
 /** Rest and sleep are recovery, not load, and must not count against the daily cap or
  *  the fragmentation penalty. */
 const isWork = (kind: string): boolean => kind !== 'rest' && kind !== 'sleep'
@@ -277,6 +355,7 @@ export function score(schedule: Schedule, params: EngineParams): number {
     DEFICIT_DAY_WEIGHT * projection.deficitDays -
     weights.fragmentation * fragmentationOf(byDay) -
     weights.deficitArea * projection.deficitArea -
-    DEADLINE_PRESSURE_WEIGHT * deadlinePressure(schedule, params)
+    DEADLINE_PRESSURE_WEIGHT * deadlinePressure(schedule, params) -
+    NEGLECT_PRESSURE_WEIGHT * neglectPressure(schedule, params)
   )
 }

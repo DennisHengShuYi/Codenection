@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { ParsedItem } from '../../ai'
+import type { Calendar, ParsedItem } from '../../ai'
 import { Button } from '../kit/Button'
 import { Field } from '../kit/Field'
 import { Sheet } from '../kit/Sheet'
@@ -24,6 +24,7 @@ export function PhotoImportScreen({
   onBack,
   onClose,
   dayLabels,
+  calendar,
 }: {
   onAccept: (items: readonly ParsedItem[]) => void
   /** §37, as `PlannerScreen` takes it: a timetable photo is the likeliest place a repeating
@@ -37,6 +38,9 @@ export function PhotoImportScreen({
   onClose: () => void
   /** §43: the horizon's days in a student's words, for the chip's "when" question. */
   dayLabels: readonly string[]
+  /** §44: which real day day 0 is, so a weekday printed on a timetable lands on that
+   *  weekday rather than on a day the model guessed at. */
+  calendar: Calendar
 }) {
   const [items, setItems] = useState<ParsedItem[] | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -63,7 +67,7 @@ export function PhotoImportScreen({
       const image = await readImageFile(file)
       if (image.ok) setPreview(image.dataUrl)
 
-      const outcome = await readPhoto(file)
+      const outcome = await readPhoto(file, calendar)
       if (outcome.ok) {
         setItems(outcome.items.map((item) => ({ ...item, repeat: item.repeat ?? suggestRepeat(item) })))
       }

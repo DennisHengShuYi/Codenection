@@ -155,3 +155,55 @@ describe('askVision', () => {
     expect(body).not.toContain('sleep')
   })
 })
+
+/**
+ * §44, extended to the photo reader.
+ *
+ * The planner and the request box were told what today is so that a stated weekday means
+ * something; this prompt has the same `deadlineDay is a day index from 0 (today)` line and
+ * was never given the same anchor. A photographed timetable says "Tuesday" more often than
+ * anything a student types, so it is the reader that needed it most and got it last.
+ */
+describe('the photo reader, told what today is', () => {
+  const calendar = { today: 0, startWeekday: 5, todayLabel: '11 September 2026' }
+
+  const promptFrom = (body: string): string => {
+    const sent = JSON.parse(body) as { messages: { role: string; content: unknown }[] }
+    const system = sent.messages.find((message) => message.role === 'system')
+
+    return String(system?.content ?? '')
+  }
+
+  it('puts the real date in the prompt when it is given one', async () => {
+    let body = ''
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init: RequestInit) => {
+        body = String(init.body)
+        return Promise.resolve(reply(good))
+      }),
+    )
+
+    await askVision(PHOTO, 'test-key-not-real', calendar)
+
+    expect(promptFrom(body)).toMatch(/11 September 2026/)
+    expect(promptFrom(body)).toMatch(/Friday/)
+  })
+
+  /** A week with no anchor has nothing true to say, and a made-up date would be a
+   *  confident wrong answer -- so the prompt is exactly what it always was. */
+  it('says nothing about today when it is given no calendar', async () => {
+    let body = ''
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init: RequestInit) => {
+        body = String(init.body)
+        return Promise.resolve(reply(good))
+      }),
+    )
+
+    await askVision(PHOTO, 'test-key-not-real')
+
+    expect(promptFrom(body)).not.toMatch(/Day 0 is/)
+  })
+})

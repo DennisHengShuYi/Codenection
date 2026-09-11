@@ -92,9 +92,13 @@ test('draws the room without turning any of it back into a control', async ({ pa
   // zero controls whether or not any existed -- a guard that cannot fail.
   await expect(scene.locator('button, a, [role="button"], [role="link"]')).toHaveCount(0)
 
-  // And the behavioural half, the exact inverse of the deleted assertion: the plant was
-  // what `opens an object when it is tapped` drove, and tapping it now opens nothing.
-  await scene.getByTestId('room-plant').click()
+  // And the behavioural half, the exact inverse of the deleted assertion: `opens an object
+  // when it is tapped` drove a piece of furniture, and tapping one now opens nothing.
+  //
+  // The bed rather than the plant, which §45 retired along with the reserve it read. A
+  // permanent object on purpose -- the objects today puts in the room come and go with the
+  // day, so a test that tapped one would pass or fail on what the seed happened to contain.
+  await scene.getByTestId('room-bed').click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.getByTestId('sheet')).toHaveCount(0)
 })

@@ -224,6 +224,43 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
    * and social sit at 70 -- above `prescribe`'s PRESCRIBE_BELOW of 40 -- so `recovery`, which
    * outranks `stuck`, does not apply. With no commitments, `lapsed` cannot apply either.
    */
+  /**
+   * A student who has kept up with themselves and is still stuck on one chore.
+   *
+   * `recovery` outranks `stuck` in §3's card precedence, and it fires on neglect now rather
+   * than on a low reserve -- so without these the room would show the recovery card and this
+   * file would be testing a route it does not mean to. Short blocks in the recent past,
+   * confirmed in the log, which is what actually restarts a rhythm's clock: a plan is not
+   * evidence.
+   */
+  const KEPT_UP = (['rest', 'lightExercise', 'hardExercise', 'socialRestorative'] as const).map(
+    (kind, index) => ({
+      id: `kept-${kind}`,
+      title: kind,
+      type: (kind === 'socialRestorative' ? 'social' : kind === 'rest' ? 'mental' : 'physical') as
+        | 'social'
+        | 'mental'
+        | 'physical',
+      kind,
+      hours: 0.5,
+      intensity: 1,
+      dayIndex: 3,
+      startHour: 7 + index,
+      fixed: false,
+      deadlineDay: null,
+      protectedRest: false,
+    }),
+  )
+
+  const KEPT_UP_LOG = KEPT_UP.map((block) => ({
+    blockId: block.id,
+    type: block.type,
+    plannedHours: block.hours,
+    dayIndex: block.dayIndex,
+    answer: 'right' as const,
+    answeredAt: 0,
+  }))
+
   const drainedWithStuckTask = async (label: string) => {
     counter += 1
     const repository = createLocalRepository(`${label}-${counter}`)
@@ -244,6 +281,7 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
           deadlineDay: null,
           protectedRest: false,
         },
+        ...KEPT_UP,
       ],
       start: { mental: 70, physical: 70, social: 70, errands: 10 },
       horizonDays: HORIZON_DAYS,
@@ -251,7 +289,7 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
       startedOn,
     })
 
-    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+    render(<RoomShell repository={repository} blockLog={KEPT_UP_LOG} onAnswerBlock={vi.fn()} />)
 
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
     // The premise, asserted rather than assumed. If precedence or the trigger ever changes

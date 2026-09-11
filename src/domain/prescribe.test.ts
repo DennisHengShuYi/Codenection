@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { HORIZON_DAYS } from '../engine'
+import { HORIZON_DAYS, type BlockKind } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
 import { freeSlotOn, prescribe } from './prescribe'
+import { RHYTHM_KINDS } from './softDeadlines'
 
 const item = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
   id: 'a',
@@ -29,12 +30,41 @@ const week = (over: Partial<Schedule> = {}): Schedule => ({
   ...over,
 })
 
-const low = (type: 'mental' | 'physical' | 'social') => ({
-  mental: type === 'mental' ? 15 : 70,
-  physical: type === 'physical' ? 15 : 70,
-  social: type === 'social' ? 15 : 70,
-  errands: 70,
-})
+const TYPE_OF: Record<string, 'mental' | 'physical' | 'social'> = {
+  rest: 'mental',
+  lightExercise: 'physical',
+  hardExercise: 'physical',
+  socialRestorative: 'social',
+}
+
+/**
+ * Parked at the far end of the horizon.
+ *
+ * Enough to stop a rhythm reading as absent -- `missedSoftDeadlines` only reports one with
+ * nothing scheduled at or after today -- while never eating the gap on today, which is a
+ * separate thing several of these tests measure.
+ */
+const PARKED_DAY = HORIZON_DAYS - 1
+
+const parked = (kind: BlockKind): ScheduledItem =>
+  item({ id: kind, kind, type: TYPE_OF[kind] ?? 'mental', dayIndex: PARKED_DAY, startHour: 20, hours: 1 })
+
+/** A fortnight where exactly one rhythm is being neglected. */
+const onlyNeglecting = (kind: BlockKind, over: Partial<Schedule> = {}): Schedule =>
+  week({
+    ...over,
+    items: [
+      ...RHYTHM_KINDS.filter((other) => other !== kind).map(parked),
+      ...(over.items ?? []),
+    ],
+  })
+
+/** Everything kept up, so nothing is overdue at all. */
+const keepingUp = (over: Partial<Schedule> = {}): Schedule =>
+  week({ ...over, items: [...RHYTHM_KINDS.map(parked), ...(over.items ?? [])] })
+
+/** Far enough past every interval that an absent rhythm is unambiguously overdue. */
+const LATE = 9
 
 describe('freeSlotOn', () => {
   it('reports a usable slot when the day is empty', () => {
@@ -86,24 +116,24 @@ describe('prescribe', () => {
    * Silence is a real answer. Advice offered to someone who is fine is advice ignored when
    * they are not.
    */
-  it('says nothing when nothing is low', () => {
-    expect(prescribe(week())).toBeNull()
+  it('says nothing when nothing is overdue', () => {
+    expect(prescribe(keepingUp(), 0, [])).toBeNull()
   })
 
   /**
    * §5.2's matching, which is the point of the unit. The engine already refuses to let sleep
    * cure loneliness; this is that same conviction pointed at the advice instead of the maths.
    */
-  it('prescribes a person when social is low', () => {
-    const out = prescribe(week({ start: low('social') }))
+  it('prescribes a person when seeing people is what is overdue', () => {
+    const out = prescribe(onlyNeglecting('socialRestorative'), LATE, [])
 
     expect(out?.type).toBe('social')
     expect(out?.kind).toBe('socialRestorative')
     expect(out?.title).toMatch(/someone|person|friend/i)
   })
 
-  it('prescribes movement when physical is low', () => {
-    const out = prescribe(week({ start: low('physical') }))
+  it('prescribes movement when moving is what is overdue', () => {
+    const out = prescribe(onlyNeglecting('lightExercise'), LATE, [])
 
     expect(out?.type).toBe('physical')
     expect(out?.title).toMatch(/walk|move|outside/i)
@@ -115,11 +145,10 @@ describe('prescribe', () => {
    *
    * The check is for a suggestion to *use* something, rather than for the word "screen" at
    * all -- the first version of this test failed on the copy "no screen", which is the
-   * advice being asked for rather than a violation of it. A regex that cannot tell "avoid a
-   * screen" from "look at a screen" is not testing the thing it claims to.
+   * advice being asked for rather than a violation of it.
    */
-  it('prescribes real downtime when mental is low, not another screen', () => {
-    const out = prescribe(week({ start: low('mental') }))
+  it('prescribes real downtime when stopping is overdue, not another screen', () => {
+    const out = prescribe(onlyNeglecting('rest'), LATE, [])
 
     expect(out?.type).toBe('mental')
     expect(out?.kind).toBe('rest')
@@ -128,13 +157,37 @@ describe('prescribe', () => {
 
   // The positive half: it does not merely avoid suggesting a screen, it says to put it down.
   it('tells a depleted student to get off the screen rather than leaving it ambiguous', () => {
-    expect(prescribe(week({ start: low('mental') }))?.title).toMatch(/no screen|off.*screen/i)
+    expect(prescribe(onlyNeglecting('rest'), LATE, [])?.title).toMatch(/no screen|off.*screen/i)
   })
 
-  it('answers the lowest reserve when more than one is low', () => {
-    expect(prescribe(week({ start: { mental: 12, physical: 18, social: 19, errands: 70 } }))?.type).toBe(
-      'mental',
-    )
+  /**
+   * The trigger, restated. It used to be the emptiest reserve; it is the longest neglect
+   * now, so that "your social reserve is low" and "you have not seen anyone in nine days"
+   * cannot arrive on the same day as two separate pieces of news.
+   */
+  it('answers the longest-running neglect when more than one is overdue', () => {
+    // Nothing scheduled at all, so every rhythm is absent. Rest has the shortest interval,
+    // so by day 9 it has gone furthest past its own deadline.
+    expect(prescribe(week(), LATE, [])?.kind).toBe('rest')
+  })
+
+  it('stops prescribing a rhythm the student confirmed they kept up', () => {
+    const walked = item({
+      id: 'walked',
+      kind: 'lightExercise',
+      type: 'physical',
+      dayIndex: 8,
+      hours: 1,
+      startHour: 7,
+    })
+
+    // Overdue on paper, and confirmed done. A block that happened is not a miss, however
+    // late it sat -- which is what stops the app nagging about something already handled.
+    const out = prescribe(onlyNeglecting('lightExercise', { items: [walked] }), LATE, [
+      { blockId: 'walked', type: 'physical', plannedHours: 1, dayIndex: 8, answer: 'right', answeredAt: 0 },
+    ])
+
+    expect(out).toBeNull()
   })
 
   /**
@@ -142,15 +195,19 @@ describe('prescribe', () => {
    * the type is the guarantee, this test is what explains why it is shaped that way.
    */
   it('returns exactly one thing, never a list', () => {
-    const out = prescribe(week({ start: low('social') }))
+    const out = prescribe(onlyNeglecting('socialRestorative'), LATE, [])
 
     expect(Array.isArray(out)).toBe(false)
     expect(out).not.toBeNull()
   })
 
   it('sizes the suggestion to the gap that actually exists', () => {
-    const roomy = prescribe(week({ start: low('physical') }))
-    const packed = prescribe(week({ start: low('physical'), items: [item({ hours: 14 })] }))
+    const roomy = prescribe(onlyNeglecting('lightExercise'), LATE, [])
+    const packed = prescribe(
+      onlyNeglecting('lightExercise', { items: [item({ dayIndex: LATE, hours: 14 })] }),
+      LATE,
+      [],
+    )
 
     expect(packed?.hours).toBeLessThanOrEqual(roomy?.hours ?? 0)
   })
@@ -160,25 +217,35 @@ describe('prescribe', () => {
    * recovery the model refuses to pay out.
    */
   it('never suggests a block longer than the engine will credit', () => {
-    expect(prescribe(week({ start: low('mental') }))?.hours).toBeLessThanOrEqual(3)
+    expect(prescribe(onlyNeglecting('rest'), LATE, [])?.hours).toBeLessThanOrEqual(3)
   })
 
   it('says nothing when there is no real gap to put it in', () => {
-    const packedDay = week({ start: low('mental'), items: [item({ startHour: 0, hours: 24 })] })
+    const packedDay = onlyNeglecting('rest', {
+      items: [item({ dayIndex: LATE, startHour: 0, hours: 24 })],
+    })
 
-    expect(prescribe(packedDay)).toBeNull()
+    expect(prescribe(packedDay, LATE, [])).toBeNull()
   })
 
   /**
-   * `ADVICE` has no entry for errands on purpose (see the comment above it), but the old
-   * implementation let that absence suppress advice for the *next* lowest reserve too --
-   * a student whose errands reserve happened to be emptiest got no card at all, even though
-   * mental was also below threshold and has real advice.
+   * `ADVICE` has no entry for errands on purpose (see the comment above it), and that
+   * absence must not suppress advice for whatever is next-most neglected.
    */
-  it('falls through when the emptiest reserve has no advice of its own', () => {
-    const flat = week({ start: { mental: 25, physical: 70, social: 70, errands: 22 } })
+  it('falls through when the worst neglect has no advice of its own', () => {
+    const chore = item({
+      id: 'chore',
+      kind: 'errands',
+      type: 'errands',
+      dayIndex: LATE,
+      hours: 1,
+      startHour: 7,
+      softDeadlineDay: -50,
+    })
 
-    expect(prescribe(flat)?.kind).toBe('rest')
+    // The errand has run longer than anything else and has no advice of its own. Something
+    // still has to be said.
+    expect(prescribe(week({ items: [chore] }), LATE, [])?.kind).toBe('rest')
   })
 
   /**
@@ -186,19 +253,21 @@ describe('prescribe', () => {
    * regardless of where that hour actually was, so the card could land on top of a class.
    */
   it('schedules into the gap it found rather than always at 16:00', () => {
-    const busyAfternoon = week({ start: low('mental'), items: [item({ startHour: 15, hours: 4 })] })
+    const busyAfternoon = onlyNeglecting('rest', {
+      items: [item({ dayIndex: LATE, startHour: 15, hours: 4 })],
+    })
 
-    expect(prescribe(busyAfternoon)?.startHour).not.toBe(16)
+    expect(prescribe(busyAfternoon, LATE, [])?.startHour).not.toBe(16)
   })
 
-  it('offers nothing when the day has no free hour', () => {
-    const packedDay = week({ start: low('mental'), items: [item({ startHour: 0, hours: 24 })] })
-
-    expect(prescribe(packedDay)).toBeNull()
+  it('places it on today rather than on day zero', () => {
+    // `today` used to be unavailable here, so day 0 stood in for "now". It is a real
+    // argument now, and advice landing on a day already gone is worse than no advice.
+    expect(prescribe(onlyNeglecting('rest'), LATE, [])?.dayIndex).toBe(LATE)
   })
 
   it('places it on a real day within the horizon', () => {
-    const out = prescribe(week({ start: low('social') }))
+    const out = prescribe(onlyNeglecting('socialRestorative'), LATE, [])
 
     expect(out?.dayIndex).toBeGreaterThanOrEqual(0)
     expect(out?.dayIndex).toBeLessThan(HORIZON_DAYS)

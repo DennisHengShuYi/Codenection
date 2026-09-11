@@ -20,6 +20,7 @@ import { resolveConfirmation, summarise, type PendingDump } from './brainDump'
 import {
   askReply,
   askUnavailableReply,
+  restUnavailableReply,
   askUnreadableReply,
   blockAnsweredReply,
   blocksReply,
@@ -408,11 +409,17 @@ export async function handleIntent(
 
       case 'rest': {
         const week = await store.loadWeek(accountId)
-        const prescription = prescribe(week)
+        const blockLog = await store.loadBlockLog(accountId).catch(() => null)
+        // Ruling 41 again: the evidence is a required argument, so a caller that cannot
+        // read it says so rather than quietly passing an empty log, which would read as
+        // "nothing has been kept up" and prescribe against a fiction.
+        if (blockLog === null) return restUnavailableReply()
 
-        // Null covers both "nothing is low enough to need this" and "there is no room",
-        // which prescribe() deliberately does not distinguish -- either way there is one
-        // honest answer and it is not a suggestion.
+        const prescription = prescribe(week, todayFor(week, now), blockLog)
+
+        // Null covers both "nothing has gone neglected" and "there is no room", which
+        // prescribe() deliberately does not distinguish -- either way there is one honest
+        // answer and it is not a suggestion.
         return prescription === null ? noGapReply() : restReply(prescription)
       }
 
@@ -489,10 +496,13 @@ export async function handleIntent(
 
     const week = await store.loadWeek(accountId)
 
+    const blockLog = await store.loadBlockLog(accountId).catch(() => null)
+    if (blockLog === null) return restUnavailableReply()
+
     // Re-derived rather than carried in the button: the prescription is deterministic for a
-    // given week and reserves, and a button carrying its own payload could be replayed with
-    // a different one.
-    const prescription = prescribe(week)
+    // given week and what has been confirmed, and a button carrying its own payload could
+    // be replayed with a different one.
+    const prescription = prescribe(week, todayFor(week, now), blockLog)
     if (prescription === null) return noGapReply()
 
     await store.saveWeek(accountId, {

@@ -1,4 +1,5 @@
 import { MAX_IMAGE_BYTES } from '../src/ai/types'
+import { readCalendar } from '../src/ai/calendarAnchor'
 import { askVision } from '../src/ai/vision'
 
 /** Declared rather than inferred, matching api/plan.ts: the two runtimes take different
@@ -34,8 +35,11 @@ export default async function handler(request: Request): Promise<Response> {
   if (!apiKey) return new Response('Photo reading unavailable', { status: 503 })
 
   let image: unknown
+  let calendar: unknown
   try {
-    image = ((await request.json()) as { image?: unknown }).image
+    const body = (await request.json()) as { image?: unknown; calendar?: unknown }
+    image = body.image
+    calendar = body.calendar
   } catch {
     return new Response('Bad request', { status: 400 })
   }
@@ -50,7 +54,10 @@ export default async function handler(request: Request): Promise<Response> {
     return new Response('Image too large', { status: 413 })
   }
 
-  const items = await askVision(image, apiKey)
+  // §44: validated at the boundary rather than trusted, like the image above it -- anyone
+  // can POST here and this goes into a prompt. The same validator `api/plan.ts` uses, so
+  // the two endpoints cannot come to disagree about what a calendar is.
+  const items = await askVision(image, apiKey, readCalendar(calendar))
   if (items === null) return new Response('Photo reading unavailable', { status: 503 })
 
   return new Response(JSON.stringify({ items }), {

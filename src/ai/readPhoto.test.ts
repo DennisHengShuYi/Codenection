@@ -82,3 +82,46 @@ describe('readPhoto', () => {
     if (outcome.ok) expect(outcome.items).toEqual([])
   })
 })
+
+/**
+ * §44: the anchor has to reach the endpoint, not just exist in the prompt.
+ *
+ * A prompt line that is never given a calendar is a fix that does nothing, and the photo
+ * reader is where a stated weekday matters most -- a timetable is mostly weekdays.
+ */
+describe('the calendar sent with a photo', () => {
+  const calendar = { today: 2, startWeekday: 5, todayLabel: '13 September 2026' }
+
+  it('travels with the image', async () => {
+    let body = ''
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init: RequestInit) => {
+        body = String(init.body)
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ items: [] }) })
+      }),
+    )
+
+    await readPhoto(photo(), calendar)
+
+    expect(JSON.parse(body).calendar).toEqual(calendar)
+  })
+
+  /** Optional, because two callers have no dated week to offer. The request goes anyway and
+   *  the reader behaves exactly as it did before anyone thought to send one. */
+  it('is left out when the caller has none', async () => {
+    let body = ''
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init: RequestInit) => {
+        body = String(init.body)
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ items: [] }) })
+      }),
+    )
+
+    await readPhoto(photo())
+
+    expect(JSON.parse(body).calendar).toBeUndefined()
+    expect(JSON.parse(body).image).toBeTruthy()
+  })
+})

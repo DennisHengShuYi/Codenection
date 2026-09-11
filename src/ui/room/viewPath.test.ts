@@ -11,6 +11,7 @@ import {
   toPath,
   toNotices,
   toRebalance,
+  toRest,
   toReserves,
   toSettings,
   toWeek,
@@ -40,6 +41,7 @@ const TABLE: readonly { readonly path: string; readonly view: View }[] = [
   { path: '/add/photo', view: toAdd('photo') },
   { path: '/add/type', view: toAdd('type') },
   { path: '/add/request', view: toAdd('request') },
+  { path: '/rest', view: toRest() },
 ]
 
 describe('the address a view is written to', () => {

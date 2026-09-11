@@ -197,6 +197,7 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         onBack={vi.fn()}
         onClose={vi.fn()}
         dayLabels={['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep']}
+        calendar={{ today: 0, startWeekday: 5, todayLabel: '11 September 2026' }}
       />,
     )
 

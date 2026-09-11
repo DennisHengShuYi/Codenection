@@ -14,6 +14,25 @@ export interface ScheduledItem {
   readonly fixed: boolean
   /** Latest dayIndex this may occupy. Null means undated. */
   readonly deadlineDay: number | null
+  /**
+   * Latest dayIndex this SHOULD occupy, when nothing says it must.
+   *
+   * Health, relationships and rest have no due date, which is why they always lose:
+   * `objective.deadlinePressure` says so itself -- "undated work has no deadline to be late
+   * for and costs nothing". This is the synthetic one that lets them compete.
+   *
+   * Soft, and emphatically not `deadlineDay`. `constraints.violations` treats a missed
+   * `deadlineDay` as a hard rejection no amount of gain can buy past, so a synthetic
+   * deadline stored there would invalidate a student's whole fortnight the first time they
+   * went a day longer than usual without stopping. The thing that makes this useful -- that
+   * it can be missed, repeatedly, at a rising cost -- is what `deadlineDay` is defined to
+   * forbid.
+   *
+   * Absent on items that carry a real `deadlineDay`: those are already charged, and
+   * charging them twice would double-count one effect. Also absent on weeks saved before
+   * this existed, which is what makes it optional. `domain/softDeadlines` owns it.
+   */
+  readonly softDeadlineDay?: number
   /** Stronger than `fixed`. §5.1 calls structurally protected recovery the most
    *  important design decision in the app: the optimizer cannot move protected rest, and
    *  cannot schedule anything over it either. */

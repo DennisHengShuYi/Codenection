@@ -32,9 +32,24 @@ const week = (over: Partial<Schedule> = {}): Schedule => ({
   ...over,
 })
 
-/** Low enough to prescribe, high enough that §1.5's low-energy screen does not take over --
- *  otherwise the test would exercise the one-card cap instead of this one. */
-const socialLow = () => week({ start: { mental: 70, physical: 70, social: 25, errands: 70 } })
+/**
+ * A fortnight nine days old with nothing kept up in it.
+ *
+ * The trigger is neglect rather than a low reserve now -- see `prescribe` -- so the fixture
+ * has to be a week that has actually been running. Anchored to a real date because
+ * `todayIndex` reads one, and on day zero nothing can be overdue yet.
+ *
+ * Reserves stay comfortable on purpose: it keeps §1.5's low-energy screen from taking over,
+ * and it is the case worth covering -- somebody whose numbers look fine while they have not
+ * stopped, moved or seen anyone in over a week.
+ */
+const daysAgo = (days: number): string => {
+  const then = new Date()
+  then.setUTCDate(then.getUTCDate() - days)
+  return then.toISOString().split('T')[0] ?? ''
+}
+
+const neglected = () => week({ startedOn: daysAgo(9) })
 
 let counter = 0
 
@@ -55,14 +70,14 @@ const renderHome = async (schedule: Schedule) => {
 }
 
 describe('RoomShell with recovery', () => {
-  it('suggests one thing when a reserve is low', async () => {
-    await renderHome(socialLow())
+  it('suggests one thing when something has gone neglected', async () => {
+    await renderHome(neglected())
 
     expect(screen.getByTestId('recovery-card')).toBeVisible()
   })
 
   // Advice offered to somebody who is fine is advice ignored when they are not.
-  it('suggests nothing when nothing is low', async () => {
+  it('suggests nothing on a fortnight with nothing overdue yet', async () => {
     await renderHome(week())
 
     expect(screen.queryByTestId('recovery-card')).toBeNull()
@@ -70,7 +85,7 @@ describe('RoomShell with recovery', () => {
 
   // Beside the room rather than instead of it: the card offers, the room stays.
   it('sits beside the room rather than instead of it', async () => {
-    await renderHome(socialLow())
+    await renderHome(neglected())
 
     expect(screen.getByTestId('recovery-card')).toBeVisible()
     expect(screen.getByTestId('room-scene')).toBeVisible()
@@ -82,7 +97,7 @@ describe('RoomShell with recovery', () => {
    * only path in the app that creates protected rest, and it must land both flags, not one.
    */
   it('accepting puts protected, fixed rest in the saved week', async () => {
-    const { repository } = await renderHome(socialLow())
+    const { repository } = await renderHome(neglected())
 
     await userEvent.click(screen.getByRole('button', { name: /put it in my week/i }))
 
@@ -93,7 +108,7 @@ describe('RoomShell with recovery', () => {
   })
 
   it('"not today" hides the card immediately', async () => {
-    await renderHome(socialLow())
+    await renderHome(neglected())
 
     await userEvent.click(screen.getByRole('button', { name: /not today/i }))
 
@@ -107,7 +122,7 @@ describe('RoomShell with recovery', () => {
    * from one nobody ever touched.
    */
   it('"not today" writes nothing durable -- the stored week is untouched', async () => {
-    const { repository } = await renderHome(socialLow())
+    const { repository } = await renderHome(neglected())
     const before = await repository.loadWeek()
 
     await userEvent.click(screen.getByRole('button', { name: /not today/i }))
@@ -124,7 +139,7 @@ describe('RoomShell with recovery', () => {
    * (writing it into the week, or keeping it in a module-level variable) would fail this.
    */
   it('offers the same advice again once the app is reopened', async () => {
-    const { repository } = await renderHome(socialLow())
+    const { repository } = await renderHome(neglected())
 
     await userEvent.click(screen.getByRole('button', { name: /not today/i }))
     await waitFor(() => expect(screen.queryByTestId('recovery-card')).toBeNull())

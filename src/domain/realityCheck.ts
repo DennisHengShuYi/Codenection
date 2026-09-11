@@ -1,6 +1,7 @@
-import type { LoadType } from '../engine'
+import type { ActivityKind, LoadType } from '../engine'
 import type { BlockOutcome } from './calibration'
 import { MIN_SAMPLES_TO_SPEAK } from './evidence'
+import { sameFamily, taskKeyOf } from './taskKey'
 
 /**
  * Enough blocks to call something a bias rather than a bad week.
@@ -73,4 +74,68 @@ export function biasLine(outcomes: readonly BlockOutcome[], type: LoadType): str
   if (padding < WORTH_SAYING) return null
 
   return `You underestimate ${IN_THEIR_WORDS[type]} by about ${Math.round(padding * 10) / 10}×. We pad it automatically.`
+}
+
+/**
+ * How much evidence each rung of the ladder needs before it speaks.
+ *
+ * Narrower buckets fill more slowly, so each rung asks for more than the one below it --
+ * replacing a working correction with a narrower claim should need more behind it than
+ * making the first one. The type level stays at `MIN_SAMPLES` for the opposite reason: it is
+ * the safety net, and raising it would leave a new student with no correction at all while
+ * the narrow buckets fill.
+ */
+const MIN_SAMPLES_FOR_KIND = 4
+const MIN_SAMPLES_FOR_TASK = 5
+
+/** What the ladder needs to know about the block being priced. */
+export interface TaskLike {
+  readonly type: LoadType
+  readonly kind: ActivityKind
+  readonly title: string
+}
+
+/** The ratio, or null when there is not enough behind it to be worth saying. */
+function ratioOf(history: readonly BlockOutcome[], atLeast: number): number | null {
+  if (history.length < atLeast) return null
+
+  const planned = history.reduce((total, outcome) => total + outcome.plannedHours, 0)
+  const actual = history.reduce((total, outcome) => total + outcome.actualHours, 0)
+  if (planned === 0) return null
+
+  return Math.min(MAX_PADDING, Math.max(1, actual / planned))
+}
+
+/**
+ * §2.4's padding for one block, from the narrowest bucket that has earned it.
+ *
+ *     this exact work (5+)  ->  this kind of activity (4+)  ->  this area of life (3+)  ->  1
+ *
+ * The narrow rungs are what let the app say something true about *your essays* rather than
+ * about "study and writing" -- a student whose essays run 3x over and whose lab reports land
+ * on time was being told one averaged number about both.
+ *
+ * A rung that has not earned its place falls through rather than going quiet, so adding
+ * these can only sharpen what was already said, never silence it.
+ *
+ * Kind guards the task rung, because containment alone would merge "Run" with "Run errands":
+ * one is light exercise and the other is life admin, and they have nothing to teach each
+ * other. See `taskKey.sameFamily`.
+ */
+export function paddingForItem(outcomes: readonly BlockOutcome[], block: TaskLike): number {
+  const usable = outcomes.filter((outcome) => outcome.plannedHours > 0)
+  const key = taskKeyOf(block.title)
+
+  const sameKind = usable.filter((outcome) => outcome.kind === block.kind)
+
+  const family = sameKind.filter(
+    (outcome) => outcome.title !== undefined && sameFamily(taskKeyOf(outcome.title), key),
+  )
+
+  return (
+    ratioOf(family, MIN_SAMPLES_FOR_TASK) ??
+    ratioOf(sameKind, MIN_SAMPLES_FOR_KIND) ??
+    ratioOf(relevant(usable, block.type), MIN_SAMPLES) ??
+    1
+  )
 }

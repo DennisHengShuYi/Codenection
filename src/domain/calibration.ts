@@ -1,4 +1,4 @@
-import type { LoadType } from '../engine'
+import type { ActivityKind, LoadType } from '../engine'
 import type { EnergyPrediction } from './predictions'
 
 /** One block, as planned and as it actually went. §7.9's two taps produce these, and §2.4
@@ -7,6 +7,16 @@ export interface BlockOutcome {
   readonly type: LoadType
   readonly plannedHours: number
   readonly actualHours: number
+  /**
+   * What the block was, for the two narrower rungs of §2.4's ladder.
+   *
+   * Both optional: a record written before they were kept, or by a path that never had
+   * them, is still evidence at the rungs that do not need them. `paddingForItem` reads them
+   * and falls through when they are absent, which is the same thing it does when a bucket
+   * is simply too thin.
+   */
+  readonly kind?: ActivityKind
+  readonly title?: string
 }
 
 /**

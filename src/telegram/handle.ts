@@ -16,7 +16,7 @@ import { SLEEP_HOURS, withSleep } from '../ui/today/checkIn'
 import { firstAction } from '../domain/microStart'
 import { prescribe } from '../domain/prescribe'
 import { scheduleRecovery } from '../domain/scheduleRecovery'
-import { overallReserve, project, type LoadType } from '../engine'
+import { overallReserve, project, type ActivityKind, type LoadType } from '../engine'
 import { toDayInputs, type Schedule } from '../optimizer'
 import { tooLongToTranscribe } from './audio'
 import { resolveConfirmation, summarise, type PendingDump } from './brainDump'
@@ -244,6 +244,9 @@ export interface ChatStore {
 export interface BlockAnswerInput {
   readonly blockId: string
   readonly type: LoadType
+  /** §2.4's narrow rungs, read off the week rather than carried through the callback. */
+  readonly kind?: ActivityKind
+  readonly title?: string
   readonly plannedHours: number
   readonly dayIndex: number
   readonly answer: BlockAnswer
@@ -599,11 +602,20 @@ export async function handleIntent(
   }
 
   if (intent.kind === 'blockAnswer') {
+    // §2.4's narrower rungs need what the block was and what it was called. Neither fits in
+    // 64 bytes of callback data beside everything already there, so they are read back off
+    // the week by id rather than carried -- and left absent when the block has since gone,
+    // which costs the answer its two narrow rungs and nothing else.
+    const answered = (await store.loadWeek(accountId)).items.find(
+      (item) => item.id === intent.blockId,
+    )
+
     await store.recordBlockAnswer(
       accountId,
       {
         blockId: intent.blockId,
         type: intent.type,
+        ...(answered === undefined ? {} : { kind: answered.kind, title: answered.title }),
         plannedHours: intent.plannedHours,
         dayIndex: intent.dayIndex,
         answer: intent.answer,

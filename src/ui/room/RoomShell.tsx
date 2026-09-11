@@ -470,6 +470,11 @@ export function RoomShell({
     onAnswerBlock({
       blockId: item.id,
       type: item.type,
+      // §2.4's narrower rungs: what it was and what the student called it, both already in
+      // hand here. Without them every answer is evidence about "study and writing" and
+      // nothing about this essay.
+      kind: item.kind,
+      title: item.title,
       plannedHours: item.hours,
       dayIndex: item.dayIndex,
       answer,

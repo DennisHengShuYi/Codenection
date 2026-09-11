@@ -1,5 +1,5 @@
 import type { BlockOutcome } from './calibration'
-import type { LoadType } from '../engine'
+import type { ActivityKind, LoadType } from '../engine'
 
 /**
  * §8b: what was scheduled, and what became of it.
@@ -39,11 +39,28 @@ export interface BlockRecord {
   readonly dayIndex: number
   readonly answer: BlockAnswer
   readonly answeredAt: number
+  /**
+   * What the block was, for §2.4's narrower rungs -- `paddingForItem` learns about *your
+   * essays* rather than about "study and writing" from these.
+   *
+   * The title is kept rather than the bucket derived from it. A bucket written down here
+   * would freeze that grouping for ever, and `taskKey`'s rules are guesses worth sharpening;
+   * kept as a title, improving them regroups a whole semester of past answers.
+   *
+   * Both optional, so a record written before they existed -- or by a path that has neither
+   * in hand -- is still evidence at the rungs that do not need them.
+   */
+  readonly kind?: ActivityKind
+  readonly title?: string
 }
 
 export function outcomesFrom(log: readonly BlockRecord[]): readonly BlockOutcome[] {
   return log.map((entry) => ({
     type: entry.type,
+    // Carried through rather than dropped: the ladder's two narrow rungs read these, and an
+    // outcome that loses them is evidence demoted to the type level for no reason.
+    ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+    ...(entry.title === undefined ? {} : { title: entry.title }),
     plannedHours: entry.plannedHours,
     // Rounded to two decimal places rather than left as a raw float product: this value
     // gets summed and compared repeatedly downstream (paddingFor, projections), and an

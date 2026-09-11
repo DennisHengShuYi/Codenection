@@ -64,3 +64,35 @@ describe('checkedInDays', () => {
     expect(checkedInDays([], 3, 21)).toHaveLength(21)
   })
 })
+
+/**
+ * What a record keeps so §2.4's narrower rungs have anything to read.
+ *
+ * The title is stored rather than the bucket derived from it, deliberately: a bucket written
+ * down at answer time freezes that grouping for ever, and `taskKey`'s rules are guesses we
+ * will want to sharpen. Kept as the title, the day those rules improve, a whole semester of
+ * past answers regroups with them.
+ *
+ * Both optional. A record written before this existed, or by a path with neither to hand, is
+ * still evidence at the rungs that do not need them.
+ */
+describe('what an outcome carries beyond the hours', () => {
+  it('keeps the title the student typed', () => {
+    const log = [record({ title: 'WIA3001 essay' })]
+
+    expect(outcomesFrom(log)[0]?.title).toBe('WIA3001 essay')
+  })
+
+  it('keeps what kind of work it was', () => {
+    const log = [record({ kind: 'hardExercise' })]
+
+    expect(outcomesFrom(log)[0]?.kind).toBe('hardExercise')
+  })
+
+  it('carries neither when the record has neither', () => {
+    const outcome = outcomesFrom([record()])[0]
+
+    expect(outcome?.title).toBeUndefined()
+    expect(outcome?.kind).toBeUndefined()
+  })
+})

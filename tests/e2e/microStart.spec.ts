@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { answerEveryChipDay } from './chipDay'
 
 /**
  * §4.1's ladder in a real browser.
@@ -35,9 +36,7 @@ async function openTheBlock(page: Page) {
 
   // §43: an item that does not say when it happens cannot be added, so the day is answered
   // on the chip first -- the same press a student makes.
-  for (const select of await page.getByTestId(/^when-day-/).all()) {
-    await select.selectOption(String(DEFAULT_DAY))
-  }
+  await answerEveryChipDay(page, DEFAULT_DAY)
 
   await page.getByRole('button', { name: /add these/i }).click()
   await expect(page.getByTestId('room-scene')).toBeVisible()

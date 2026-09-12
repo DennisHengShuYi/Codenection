@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { phraseInsight } from './insight'
+import { INSIGHT_REQUEST_TIMEOUT_MS, phraseInsight } from './insight'
 
 /**
  * The one rule this layer exists to keep: the facts are the domain's, and the model only
@@ -72,6 +72,27 @@ describe('phraseInsight', () => {
     vi.mocked(fetch).mockResolvedValue(ok({ lines: ['a'] }))
 
     expect(await phraseInsight(COMPUTED)).toEqual(COMPUTED)
+  })
+
+  /**
+   * A stalled connection never rejects. Every answer already falls back, but a request that
+   * simply hangs would leave the promise unsettled -- and the block above this would hold a
+   * `setState` free to land minutes later over wording the student has long since read.
+   */
+  it('gives up on a request that never answers, and keeps the computed wording', async () => {
+    vi.useFakeTimers()
+    vi.mocked(fetch).mockImplementation(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+        }),
+    )
+
+    const pending = phraseInsight(COMPUTED)
+    await vi.advanceTimersByTimeAsync(INSIGHT_REQUEST_TIMEOUT_MS + 1)
+
+    expect(await pending).toEqual(COMPUTED)
+    vi.useRealTimers()
   })
 
   it('does not call out at all when there is nothing to phrase', async () => {

@@ -273,3 +273,82 @@ describe('prescribe', () => {
     expect(out?.dayIndex).toBeLessThan(HORIZON_DAYS)
   })
 })
+
+/**
+ * Which neglected thing to answer first, when several are overdue.
+ *
+ * The Reserves sheet put these side by side and the disagreement became impossible to miss:
+ * "People is your thinnest, at 43" directly above "Worth doing: stop and do nothing". Both
+ * lines were right and they were answering different questions -- the first asks which
+ * reserve is lowest, the second asked only which rhythm had gone longest unkept.
+ *
+ * This does NOT reinstate reserve-driven prescribing, which the docstring above records
+ * being deliberately removed: what is neglected still comes entirely from
+ * `missedSoftDeadlines`, and a reserve can never conjure a prescription for a rhythm that
+ * is being kept. It breaks the tie among things already overdue, which is the one place a
+ * reserve level says something the rhythm cannot.
+ */
+describe('which neglect to answer first', () => {
+  const bothNeglected = (over: Partial<Schedule> = {}): Schedule =>
+    week({
+      ...over,
+      items: [
+        ...RHYTHM_KINDS.filter(
+          (other) => other !== 'rest' && other !== 'socialRestorative',
+        ).map(parked),
+        ...(over.items ?? []),
+      ],
+    })
+
+  it('answers the thinnest reserve, where that reserve is one of the neglected ones', () => {
+    const prescription = prescribe(bothNeglected(), LATE, [], {
+      mental: 70,
+      physical: 70,
+      social: 43,
+      errands: 81,
+    })
+
+    expect(prescription?.type).toBe('social')
+  })
+
+  it('answers the other one when the thinnest reserve is the one being kept up', () => {
+    const prescription = prescribe(bothNeglected(), LATE, [], {
+      mental: 43,
+      physical: 70,
+      social: 70,
+      errands: 81,
+    })
+
+    expect(prescription?.type).toBe('mental')
+  })
+
+  /**
+   * Errands has no advice of its own, deliberately -- telling somebody who is flat to do a
+   * chore is advice nobody follows. The thinnest reserve having nothing to say must not
+   * silence the advice for whatever else is overdue, which is the same defect the `find`
+   * above this was written to stop.
+   */
+  it('still says something when the thinnest reserve has no advice to give', () => {
+    const prescription = prescribe(bothNeglected(), LATE, [], {
+      mental: 70,
+      physical: 70,
+      social: 70,
+      errands: 12,
+    })
+
+    expect(prescription).not.toBeNull()
+  })
+
+  /** A reserve cannot conjure a prescription for a rhythm that is being kept. */
+  it('prescribes nothing for a thin reserve whose rhythm is up to date', () => {
+    expect(
+      prescribe(keepingUp(), LATE, [], { mental: 70, physical: 70, social: 8, errands: 70 }),
+    ).toBeNull()
+  })
+
+  /** The bot calls this without reserves and its two call sites must agree with each other,
+   *  so the old ordering has to survive exactly as it was. */
+  it('falls back to the most overdue when no reserves are given', () => {
+    expect(prescribe(onlyNeglecting('socialRestorative'), LATE, [])?.type).toBe('social')
+  })
+})

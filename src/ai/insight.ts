@@ -1,6 +1,18 @@
 import { parseInsightReply } from './insightSchema'
 
 /**
+ * How long the browser waits before keeping the wording it already has.
+ *
+ * Longer than `insightWriter`'s eight-second bound on the Groq call, deliberately: that
+ * bound is inside the function, so cutting the browser off first would abandon a request the
+ * server was about to answer. This is the outer limit on the whole round trip, and it exists
+ * because a stalled connection never rejects -- every *answer* already falls back, but a
+ * request that simply hangs would leave the promise unsettled and a `setState` free to land
+ * minutes later, rewriting a block the student has long since read.
+ */
+export const INSIGHT_REQUEST_TIMEOUT_MS = 10_000
+
+/**
  * The Reserves sheet's insight block, phrased by the model where there is one.
  *
  * Returns the computed lines unchanged on every failure -- no endpoint, no key, no network,
@@ -15,9 +27,13 @@ import { parseInsightReply } from './insightSchema'
 export async function phraseInsight(lines: readonly string[]): Promise<readonly string[]> {
   if (lines.length === 0) return lines
 
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), INSIGHT_REQUEST_TIMEOUT_MS)
+
   try {
     const response = await fetch('/api/insight', {
       method: 'POST',
+      signal: controller.signal,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ lines }),
     })
@@ -26,6 +42,12 @@ export async function phraseInsight(lines: readonly string[]): Promise<readonly 
 
     return parseInsightReply((await response.json()) as unknown, lines.length) ?? lines
   } catch {
+    // A refusal, no endpoint, no network, a body that is not JSON, or the abort above. Every
+    // one of them is the same answer: the reading the student already has.
     return lines
+  } finally {
+    // Cleared whichever way this ended, so a resolved request does not leave a timer holding
+    // the process open in tests or firing an abort at a controller nobody is listening to.
+    clearTimeout(timeout)
   }
 }

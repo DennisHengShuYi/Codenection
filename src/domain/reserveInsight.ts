@@ -128,7 +128,14 @@ export function reserveInsight({
           dayIndex: projection.firstDeficitDay,
         })
 
-  const prescription = prescribe(schedule, today, blockLog)
+  /*
+   * The reserve entering today is handed on, so the action answers the reserve this block
+   * has just named. Without it the two disagreed on screen -- "People is your thinnest, at
+   * 43" above "Worth doing: stop and do nothing" -- because `prescribe` ordered by how long
+   * a rhythm had gone unkept and nothing else. It is a tie-break there, never a source: a
+   * thin reserve still cannot conjure advice for a rhythm that is being kept.
+   */
+  const prescription = prescribe(schedule, today, blockLog, reserves)
 
   return {
     notes,

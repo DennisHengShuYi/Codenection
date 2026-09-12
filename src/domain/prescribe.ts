@@ -1,4 +1,11 @@
-import { USEFUL_REST_HOURS, type ActivityKind, type LoadType } from '../engine'
+import {
+  floorReserve,
+  LOAD_TYPES,
+  USEFUL_REST_HOURS,
+  type ActivityKind,
+  type LoadType,
+  type Reserves,
+} from '../engine'
 import type { Schedule } from '../optimizer'
 import { blocksOnDay } from './dayBlocks'
 import { DAY_END_HOUR, gapsOn, MIN_GAP_HOURS, WAKE_HOUR, type FreeSlot } from './slotFinder'
@@ -115,14 +122,43 @@ export function prescribe(
   schedule: Schedule,
   today: number,
   blockLog: readonly BlockRecord[],
+  /**
+   * The reserve entering today, where the caller has it: a tie-break, and nothing more.
+   *
+   * What is neglected still comes entirely from `missedSoftDeadlines` -- a reserve can never
+   * conjure a prescription for a rhythm that is being kept, which is what the paragraphs
+   * above are about. This decides only which of SEVERAL overdue things to answer first, and
+   * that is the one question a rhythm cannot answer: "you have not walked in nine days" and
+   * "you have not seen anyone in eight" are equally true, and the reserve levels say which
+   * one is actually costing the student something.
+   *
+   * The Reserves sheet is what made this visible. It put "People is your thinnest, at 43"
+   * directly above "Worth doing: stop and do nothing" -- both lines correct, answering
+   * different questions, and reading as an app not listening to itself.
+   *
+   * Optional because the Telegram doors call this without a projection to hand, and their
+   * two call sites must agree with each other or a tapped button re-derives a different
+   * prescription than the one it offered. Absent, the ordering is exactly what it was.
+   */
+  reserves?: Reserves,
 ): Prescription | null {
-  // Already sorted most-neglected-first. `find` rather than `[0]` so the worst miss having
-  // no advice of its own -- errands, deliberately -- never silently suppresses advice for
-  // whatever is next. That was a real defect under the old reserve ordering and it would
+  // Already sorted most-neglected-first. Filtered rather than `find`-ed so the worst miss
+  // having no advice of its own -- errands, deliberately -- never silently suppresses advice
+  // for whatever is next. That was a real defect under the old reserve ordering and it would
   // have survived the change unexamined.
-  const miss = missedSoftDeadlines(schedule, today, blockLog).find(
+  const overdue = missedSoftDeadlines(schedule, today, blockLog).filter(
     (candidate) => ADVICE[candidate.type] !== undefined,
   )
+
+  // The thinnest reserve where it is one of the overdue ones, the longest-neglected
+  // otherwise. `floorReserve` rather than a scan of the four, because §2.1's "burnout is a
+  // floor problem" is the reason this tie-break exists at all.
+  const thinnest =
+    reserves === undefined
+      ? undefined
+      : LOAD_TYPES.find((type) => reserves[type] === floorReserve(reserves))
+
+  const miss = overdue.find((candidate) => candidate.type === thinnest) ?? overdue[0]
   if (!miss) return null
 
   const advice = ADVICE[miss.type]

@@ -105,12 +105,6 @@ export function RestPreview({
             {summaryOf(plan.block, plan.gain, today)}
           </p>
 
-          {plan.kind === 'laterDay' && (
-            <p data-testid="rest-why" className="mt-2 text-sm text-ink-soft">
-              {plan.whyNotToday}
-            </p>
-          )}
-
           {/* Named individually, never merely counted. §2.1's rule that a change you cannot
               see is a change you cannot consent to applies with more force here, because
               this move is being made to buy the student time off rather than to fix their

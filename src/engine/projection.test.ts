@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { overallReserve } from './efficiency'
 import { DEFAULT_PARAMS } from './params'
 import { project, type Projection } from './projection'
 import type { DayInput, Reserves } from './types'
@@ -183,6 +184,25 @@ describe('project', () => {
    * here carries identical load and sleep, so the *only* difference between these two
    * projections is the length of the run at the one day that has any work on it.
    */
+  /**
+   * The day the silence is actually measured on, rather than wherever the fortnight happens
+   * to bottom out.
+   *
+   * Both of these used to read `worstOverall`, which worked only because three reserves
+   * raced from 80 to full on the empty days and left day 20 -- the one day carrying any load
+   * -- as the lowest mean on the horizon. Cutting `kSleep` to a third stopped that race, so
+   * the lowest mean moved to day 0, the starting state, which is identical in every one of
+   * these fixtures and before any silence begins. One test then failed and the other passed
+   * comparing 81.850 against 81.850, which is the worse of the two outcomes.
+   *
+   * The mechanism never changed: day 20 still reads 83.786 against 83.165 for a two-day and
+   * a five-day silence, exactly as it did before. So this names the day instead of hoping the
+   * minimum lands on it -- a stricter test than the one it replaces, and one that cannot go
+   * quietly green again if a coefficient moves.
+   */
+  const silenceReading = (projection: Projection): number =>
+    overallReserve(projection.central[20] as Reserves)
+
   it('stops compounding the silence once the run reaches its cap', () => {
     const emptyThenHeavy = (checkInOn: number | null) =>
       horizon((i) => ({
@@ -195,7 +215,7 @@ describe('project', () => {
     // Twenty-one days: far past it, and uncapped this would be 2.68x rather than 1.88x.
     const farPastCap = project(healthy, emptyThenHeavy(null), DEFAULT_PARAMS)
 
-    expect(farPastCap.worstOverall).toBeCloseTo(justOverCap.worstOverall)
+    expect(silenceReading(farPastCap)).toBeCloseTo(silenceReading(justOverCap))
   })
 
   /** The cap must not flatten the gradient §6.5 is actually about -- a two-day gap still
@@ -210,7 +230,7 @@ describe('project', () => {
     const twoDays = project(healthy, emptyThenHeavy(19), DEFAULT_PARAMS)
     const fiveDays = project(healthy, emptyThenHeavy(16), DEFAULT_PARAMS)
 
-    expect(fiveDays.worstOverall).toBeLessThan(twoDays.worstOverall)
+    expect(silenceReading(fiveDays)).toBeLessThan(silenceReading(twoDays))
   })
 
   it('forgives a gap once the user checks in again', () => {
@@ -244,5 +264,117 @@ describe('project', () => {
     project(healthy, horizon(heavy), DEFAULT_PARAMS)
 
     expect(JSON.stringify(DEFAULT_PARAMS)).toBe(before)
+  })
+})
+
+/**
+ * §6.1's coefficients, measured against the thing they exist to show.
+ *
+ * `kSleep.mental` was 6.0 against a study hour's 1.0, so one hour of sleep repaid six hours
+ * of work. A student sleeping eight hours banked +18 mental a day and spent nine on a hard
+ * day of study, ending every day up -- and because reserves clamp at 100, the surplus was
+ * thrown away and the bar sat flat at full.
+ *
+ * Measured across a grid of sleep against workload, every combination at seven hours' sleep
+ * or more ended the fortnight at exactly 100, including ten hours of study every weekday.
+ * The model was not saying the week was survivable; it could not see the week at all.
+ *
+ * So the test is the property rather than a figure: more work has to end worse than less
+ * work. A number here would be a second way of writing the coefficient down, and would pass
+ * again the moment somebody changed it.
+ */
+describe('workload is visible in the projection', () => {
+  const studyDay = (dayIndex: number, hours: number): DayInput =>
+    day(dayIndex, {
+      activities: [{ kind: 'studyBlock', type: 'mental', hours, intensity: 1, startHour: 9 }],
+      sleepHours: 8,
+      // Seeing somebody twice a week, so this measures workload rather than loneliness.
+      ...(dayIndex % 3 === 0
+        ? {
+            activities: [
+              { kind: 'studyBlock' as const, type: 'mental' as const, hours, intensity: 1, startHour: 9 },
+              { kind: 'socialRestorative' as const, type: 'social' as const, hours: 2, intensity: 1, startHour: 19 },
+            ],
+          }
+        : {}),
+    })
+
+  const fortnightOf = (hours: number): Projection =>
+    project(
+      healthy,
+      Array.from({ length: 21 }, (_, dayIndex) => studyDay(dayIndex, hours)),
+      DEFAULT_PARAMS,
+    )
+
+  it('ends a heavy fortnight lower than a light one', () => {
+    const light = fortnightOf(2).central.at(-1)!.mental
+    const heavyish = fortnightOf(8).central.at(-1)!.mental
+
+    expect(heavyish).toBeLessThan(light)
+  })
+
+  // The clamp is what hid the difference, so a light week sitting at exactly full is the
+  // state this is guarding against rather than an incidental detail.
+  it('does not pin a heavy fortnight at full reserve', () => {
+    expect(fortnightOf(8).central.at(-1)!.mental).toBeLessThan(100)
+  })
+
+  /**
+   * The property that makes the difference above possible at all: a week has a level it
+   * settles at, and the student arrives there from either direction.
+   *
+   * Without it the model is bistable rather than graded. Drain rises as a student depletes
+   * (§6.6) and recovery rose as they filled, so both directions reinforced and the middle was
+   * a knife edge that pushed away from itself: measured on one identical seven-hour week,
+   * starting at 65 climbed to 100 and starting at 60 fell to 40. Every student ended at one
+   * end or the other, which is why four bars out of five sat flat at full.
+   *
+   * `headroomAt` is the term that answers it, and it answers a different question from
+   * §6.2's spiral rather than softening it. §6.2 says recovery is less effective the more
+   * depleted you are, and that is untouched. This says there is less left to give back the
+   * closer to full you already are -- which is not a claim about depletion at all.
+   *
+   * Asserted as convergence rather than against a figure, because the figure is the
+   * coefficients written down a second time.
+   */
+  it('settles a week at the same level from above and from below', () => {
+    const atLevel = (mental: number) =>
+      project(
+        { mental, physical: 90, social: 90, errands: 90 },
+        Array.from({ length: 21 }, (_, dayIndex) => studyDay(dayIndex, 6)),
+        DEFAULT_PARAMS,
+      ).central.at(-1)!.mental
+
+    const fromAbove = atLevel(95)
+    const fromBelow = atLevel(60)
+
+    expect(fromBelow).toBeCloseTo(fromAbove, 0)
+    // And that shared level is a real middle, not either end.
+    expect(fromAbove).toBeGreaterThan(50)
+    expect(fromAbove).toBeLessThan(100)
+  })
+
+  /**
+   * §6.2's spiral survives the term above, which is the thing worth guarding.
+   *
+   * A settling point that a student always returns to would be a model that cannot show
+   * burnout -- exactly the linear tracker §1.2 rejects, arriving by a new route. A week that
+   * is genuinely too much still has to run away downward.
+   */
+  it('still crashes a fortnight that is genuinely too much', () => {
+    const brutal = Array.from({ length: 21 }, (_, dayIndex) =>
+      day(dayIndex, {
+        activities: [
+          { kind: 'studyBlock' as const, type: 'mental' as const, hours: 4, intensity: 1, startHour: 9 },
+          { kind: 'studyBlock' as const, type: 'mental' as const, hours: 3, intensity: 1, startHour: 14 },
+          { kind: 'studyBlock' as const, type: 'mental' as const, hours: 3, intensity: 1, startHour: 18 },
+        ],
+        sleepHours: 5,
+        venueChanges: 2,
+        daysToNearestDeadline: 2,
+      }),
+    )
+
+    expect(project(healthy, brutal, DEFAULT_PARAMS).central.at(-1)!.mental).toBe(0)
   })
 })

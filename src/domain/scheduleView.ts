@@ -2,6 +2,7 @@ import { answeredIds, checkedInDays, outcomesFrom, type BlockRecord } from './bl
 import { dateFor } from './calendar'
 import { paramsFor } from './engineParams'
 import type { EnergyPrediction } from './predictions'
+import type { SleepNight } from './sleepLog'
 import { DEFICIT_THRESHOLD, floorReserve, HORIZON_DAYS, overallReserve, project } from '../engine'
 import { toDayInputs, type Schedule } from '../optimizer'
 
@@ -58,6 +59,10 @@ export interface ScheduleViewInput {
   /** §8.1's resolved predictions, for the learned recovery coefficients. Optional and
    *  defaulting to empty, exactly as `blockLog` is. */
   readonly predictions?: readonly EnergyPrediction[]
+  /** §8b's reported nights, for how much sleep is enough for this student. Optional and
+   *  defaulting to empty, exactly as the two above are -- and threaded for the same reason
+   *  they are: the week grid and the room must not run two different models. */
+  readonly nights?: readonly SleepNight[]
 }
 
 const bandFor = (hours: number): LoadBand =>
@@ -68,10 +73,11 @@ export function scheduleView({
   today,
   blockLog = [],
   predictions = [],
+  nights = [],
 }: ScheduleViewInput): readonly DayCell[] {
   // Same reason `roomModel` takes these: the week grid and the room must not run two
   // different models over one fortnight.
-  const params = paramsFor(outcomesFrom(blockLog), predictions)
+  const params = paramsFor(outcomesFrom(blockLog), predictions, nights)
   // §6.5/§8b: the same signal `roomModel.ts` threads into its own projection, so the week
   // overview's deficit marks and the room's dial agree about what "silent" means instead
   // of reading one fortnight two different ways.

@@ -1,4 +1,9 @@
-import { EFFICIENCY_FLOOR, EFFICIENCY_SPAN, FULL_RESERVE } from './params'
+import {
+  EFFICIENCY_FLOOR,
+  EFFICIENCY_SPAN,
+  FULL_RESERVE,
+  RECOVERY_HEADROOM_SPAN,
+} from './params'
 import { LOAD_TYPES, type Reserves } from './types'
 
 /**
@@ -59,4 +64,29 @@ export function floorReserve(reserves: Reserves): number {
 export function efficiencyAt(reserve: number): number {
   const ratio = reserve / FULL_RESERVE
   return EFFICIENCY_FLOOR + EFFICIENCY_SPAN * ratio
+}
+
+/**
+ * How much of a day's recovery there is room to land, given how full this reserve already is.
+ *
+ * The companion to `efficiencyAt` above and a different claim from it, which is the only
+ * reason both can exist without one undoing the other. §6.2 is about how *well* a depleted
+ * student converts rest; this is about how much is *missing to convert into*. A student at 95
+ * has five points of room and cannot be handed eighteen however efficient they are, and the
+ * clamp that used to absorb that surplus threw away the difference between a week that barely
+ * covered its costs and one that covered them three times over.
+ *
+ * Flat at 1 below `FULL_RESERVE - RECOVERY_HEADROOM_SPAN`, so it is silent across the whole
+ * depleted range and cannot soften the spiral. It only bites approaching full, which is where
+ * the runaway was.
+ *
+ * What it buys is a settling level: above it recovery shrinks and drain wins, below it
+ * recovery grows and drain loses, so a given week converges on a reserve from either
+ * direction instead of running to one end. `projection.test.ts` asserts that convergence, and
+ * asserts beside it that a genuinely impossible fortnight still crashes -- a model where
+ * everything settles would be the linear tracker §1.2 exists to reject.
+ */
+export function headroomAt(reserve: number): number {
+  const missing = FULL_RESERVE - reserve
+  return Math.min(1, Math.max(0, missing / RECOVERY_HEADROOM_SPAN))
 }

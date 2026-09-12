@@ -10,8 +10,8 @@ const microStart: MicroStart = {
   minutes: 8,
 }
 
-const setup = (data: MicroStart | null = microStart) => {
-  const props = { microStart: data, onStarted: vi.fn(), onDismiss: vi.fn() }
+const setup = (data: MicroStart | null = microStart, title = 'Ethics essay') => {
+  const props = { microStart: data, title, onStarted: vi.fn(), onDismiss: vi.fn() }
   render(<MicroStartCard {...props} />)
   return props
 }
@@ -20,10 +20,27 @@ const setup = (data: MicroStart | null = microStart) => {
 describe('MicroStartCard', () => {
   it('renders nothing when there is nothing to suggest', () => {
     const { container } = render(
-      <MicroStartCard microStart={null} onStarted={vi.fn()} onDismiss={vi.fn()} />,
+      <MicroStartCard microStart={null} title="Ethics essay" onStarted={vi.fn()} onDismiss={vi.fn()} />,
     )
 
     expect(container).toBeEmptyDOMElement()
+  })
+
+  /**
+   * Which block this is about, said on the card.
+   *
+   * "Stuck on this one?" over a first move names no task, and the room can hold several
+   * blocks -- so a student reading "Put your kit on" had to work out for themselves which of
+   * today's items the app was talking about. Asking somebody who cannot start a task to
+   * first identify the task is the deliberation this card exists to remove.
+   *
+   * The title rather than the kind: the student typed "Gym", and their own word for it is
+   * the one they will recognise.
+   */
+  it('names the block it is about', () => {
+    setup(microStart, 'Gym')
+
+    expect(screen.getByText('Gym')).toBeInTheDocument()
   })
 
   it('shows the one action', () => {

@@ -55,6 +55,7 @@ export function SleepSheet({
   targetHours,
   tonightHours,
   realityLine,
+  enoughLine,
   forecasts,
   wakeHour,
   tonightWindow,
@@ -75,6 +76,15 @@ export function SleepSheet({
    * know which reason applies.
    */
   readonly realityLine: string | null
+  /**
+   * What this student's own nights say about how much sleep is enough for them, or nothing.
+   *
+   * Separate from `realityLine` rather than folded into it. That one compares the plan with
+   * what happened; this one is a claim about the student, and the two are measured from
+   * different evidence and go quiet independently. One merged sentence would have to wait for
+   * both.
+   */
+  readonly enoughLine: string | null
   /** Days whose load will come out of a night, each sentence already naming its own day, so
    *  this component derives nothing and cannot disagree with the room about a date. */
   readonly forecasts: readonly string[]
@@ -184,6 +194,15 @@ export function SleepSheet({
       {realityLine !== null && (
         <p data-testid="sleep-reality" className="mt-3 text-sm text-ink-soft">
           {realityLine}
+        </p>
+      )}
+
+      {/* Under the target field for the same reason the line above it is: a claim about how
+          much sleep this student needs, sitting above the field, would colour the figure being
+          chosen rather than inform it. */}
+      {enoughLine !== null && (
+        <p data-testid="sleep-enough" className="mt-2 text-sm text-ink-soft">
+          {enoughLine}
         </p>
       )}
 

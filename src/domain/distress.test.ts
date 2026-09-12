@@ -69,6 +69,45 @@ describe('isDistressed', () => {
     expect(isDistressed(points(...run))).toBe(true)
   })
 
+  /**
+   * "In a row" means in a row, which the card says out loud to the student.
+   *
+   * `energyHistory` keeps only the days that were answered, so four low answers spread over
+   * two weeks -- with silence in between -- arrived here looking exactly like four
+   * consecutive low days. The card then told somebody they had said they were running low
+   * four days in a row when they had not, and a message this heavy has to be true in the
+   * words it uses.
+   *
+   * Erring toward not firing is the right direction here, as it is for a break in the run:
+   * a student who skipped three days has not given the app enough to make this claim about
+   * them.
+   */
+  it('does not read four scattered answers as four days in a row', () => {
+    const scattered: EnergyPoint[] = [
+      { date: '2026-09-01', value: low() },
+      { date: '2026-09-05', value: low() },
+      { date: '2026-09-06', value: low() },
+      { date: '2026-09-07', value: low() },
+    ]
+
+    expect(isDistressed(scattered)).toBe(false)
+  })
+
+  /** The run itself is what must be unbroken. Silence before it is just a student who had
+   *  not started answering yet, and holding that against them would mean never firing for
+   *  anybody who came to the app late. */
+  it('fires on a real run even when the days before it were skipped', () => {
+    const real: EnergyPoint[] = [
+      { date: '2026-09-01', value: low() },
+      { date: '2026-09-10', value: low() },
+      { date: '2026-09-11', value: low() },
+      { date: '2026-09-12', value: low() },
+      { date: '2026-09-13', value: low() },
+    ]
+
+    expect(isDistressed(real)).toBe(true)
+  })
+
   it('says nothing at all about a student who has never answered', () => {
     expect(isDistressed([])).toBe(false)
   })

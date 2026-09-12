@@ -413,6 +413,17 @@ One screen, four taps. Sets every prior.
 > `DEFAULT_PARAMS`, and §8's sleep row is what makes that defensible. §7.4's day-0
 > calibration layer depended on this and is therefore partial too. The parameter's own
 > docstring in `engine/types.ts` says so at the point a reader would assume otherwise.
+>
+> **Half of it now is measured, from evidence the painter was never needed for.**
+> `EngineParams.enoughSleepHours` -- where sleep stops paying back -- is learned per student by
+> `domain/sleepEnough`, which pairs the nights they reported (`domain/sleepLog`) against how
+> those days actually went (§8.1's resolved predictions) and compares the two halves of their
+> own sleep. That is a measurement of behaviour already recorded rather than a form, which is
+> why it arrived without this section being built.
+>
+> `sleepBaselineHours` -- the other end of the same window, where sleep *starts* paying -- is
+> still the population figure, and this section is still the plan for it. The two are not
+> interchangeable and must not be collapsed into one.
 
 Prefilled hour grid, three days, tap only what is wrong. Roughly 20 seconds.
 
@@ -425,7 +436,8 @@ Cells cycle: free → study → work → errands → rest → social → sleep.
 | Parameter | Derived from | Used for |
 |---|---|---|
 | Max focus run | Longest unbroken study block | Optimizer sizes blocks to this |
-| Baseline sleep | Mean of sleep blocks | Sets `k_sleep` |
+| Baseline sleep | Mean of sleep blocks | Sets `k_sleep`. **Still unmeasured**: `sleepBaselineHours` is the population 5 |
+| Enough sleep | Reported nights against resolved predictions, split at the student's own median night | Caps what `k_sleep` credits. **Built**, as `domain/sleepEnough` -- and not from the painter |
 | Peak hours | When study blocks cluster | Deep work scheduled here |
 | Current load shape | Whole grid | Initial projection |
 

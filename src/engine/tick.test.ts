@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_PARAMS } from './params'
+import { DEFAULT_PARAMS, ENOUGH_SLEEP_HOURS, SLEEP_BASELINE_HOURS } from './params'
 import { applyCoupling, recoveryForDay, tick } from './tick'
 import type { Activity, DayInput, Reserves } from './types'
 
@@ -243,5 +243,61 @@ describe('tick', () => {
     tick(healthy, input, DEFAULT_PARAMS)
 
     expect(JSON.stringify(input)).toBe(before)
+  })
+})
+
+/**
+ * §6.1 amended again: sleep stops paying somewhere.
+ *
+ * Recovery treated sleep as linear forever -- nine hours beat eight, twelve beat nine, with no
+ * point at which more stopped helping. So "enough" was not a thing the model could hold, and no
+ * amount of learning would have produced it.
+ *
+ * It also earns its place on its own. §5.1 already caps REST per block for exactly this
+ * reasoning -- "a 12-hour scroll session is not recovery, and the model must not count it as
+ * neutral free time" -- and sleep had no equivalent, so a student recorded as sleeping twelve
+ * hours was credited seven hours of recovery.
+ */
+describe('recoveryForDay and the ceiling on sleep', () => {
+  const mentalFor = (sleepHours: number, params = DEFAULT_PARAMS) =>
+    recoveryForDay(day({ sleepHours }), params).mental
+
+  it('credits a night below the ceiling exactly as it always did', () => {
+    expect(mentalFor(7)).toBeCloseTo((7 - SLEEP_BASELINE_HOURS) * DEFAULT_PARAMS.kSleep.mental)
+  })
+
+  /** The boundary, where a `min` is likeliest to be written one hour out. */
+  it('credits a night exactly at the ceiling in full', () => {
+    expect(mentalFor(ENOUGH_SLEEP_HOURS)).toBeCloseTo(
+      (ENOUGH_SLEEP_HOURS - SLEEP_BASELINE_HOURS) * DEFAULT_PARAMS.kSleep.mental,
+    )
+  })
+
+  it('credits a night past the ceiling only up to it', () => {
+    expect(mentalFor(ENOUGH_SLEEP_HOURS + 2)).toBe(mentalFor(ENOUGH_SLEEP_HOURS))
+  })
+
+  it('credits twelve hours the same as nine, not seven hours worth', () => {
+    expect(mentalFor(12)).toBe(mentalFor(ENOUGH_SLEEP_HOURS))
+  })
+
+  /**
+   * The credit is a window now -- a floor at the baseline and a ceiling above it -- and adding
+   * the second bound is exactly the moment the first gets broken.
+   */
+  it('still credits nothing below the baseline', () => {
+    expect(mentalFor(3)).toBe(0)
+    expect(mentalFor(0)).toBe(0)
+  })
+
+  it('leaves the social reserve at nothing, as sleep always has', () => {
+    expect(recoveryForDay(day({ sleepHours: 12 }), DEFAULT_PARAMS).social).toBe(0)
+  })
+
+  /** A personal ceiling is the point of the parameter; the default is only where it starts. */
+  it('honours a ceiling learned for this student', () => {
+    const theirs = { ...DEFAULT_PARAMS, enoughSleepHours: 7 }
+
+    expect(mentalFor(9, theirs)).toBe(mentalFor(7, theirs))
   })
 })

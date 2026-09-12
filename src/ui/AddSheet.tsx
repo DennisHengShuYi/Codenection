@@ -1,6 +1,7 @@
 import type { ParsedItem } from '../ai'
 import type { BlockRecord } from '../domain/blockLog'
 import type { EnergyPrediction } from '../domain/predictions'
+import type { SleepNight } from '../domain/sleepLog'
 import type { EngineParams } from '../engine'
 import type { Schedule } from '../optimizer'
 import type { AddWay } from './room/view'
@@ -78,6 +79,7 @@ export function AddSheet({
   today,
   blockLog,
   predictions,
+  reportedNights = [],
   sleepTargetHours,
   onAcceptItems,
   onAcceptRequest,
@@ -98,6 +100,9 @@ export function AddSheet({
   /** §8.1's resolved predictions, forwarded to the request path so both rooms it draws run
    *  the model the rest of the app runs rather than the population one. */
   readonly predictions: readonly EnergyPrediction[]
+  /** §8b's reported nights, forwarded for `predictions`' reason: both rooms the request path
+   *  draws must run the same learned model the room itself does. */
+  readonly reportedNights?: readonly SleepNight[]
   /** The student's stated sleep target, forwarded to the request path so the room it draws
    *  measures a shortfall against the same figure the room screen does. */
   readonly sleepTargetHours?: number
@@ -212,6 +217,7 @@ export function AddSheet({
         today={today}
         blockLog={blockLog}
         predictions={predictions}
+        reportedNights={reportedNights}
         sleepTargetHours={sleepTargetHours}
         onAccept={(item) => {
           onAcceptRequest(item)

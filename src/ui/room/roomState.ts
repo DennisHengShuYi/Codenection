@@ -29,6 +29,13 @@ const MAX_CLUTTER_BOXES = 6
  * painter was to measure it, and §11 records that nothing does), while this is a population
  * norm and fixed. For a student who needs nine hours the bed under-reports. That wants the
  * same calibration the engine's side is waiting on, not a constant swapped here.
+ *
+ * Part of that calibration now exists and is deliberately NOT read here. `domain/sleepEnough`
+ * learns `EngineParams.enoughSleepHours` -- where sleep stops paying back -- and that is a
+ * third question again, not this one: a student can be a night down and still be past the
+ * point where more sleep buys them anything. What this constant waits on is where sleep
+ * starts paying, which remains unmeasured. The caller already passes `sleepTargetHours` for
+ * the student who has stated one, which is the honest answer available today.
  */
 const RESTED_NIGHT_HOURS = 7
 

@@ -16,7 +16,7 @@ import { checkedInDays, type BlockRecord } from './blockLog'
 import { fixThatMakesRoom } from './placement'
 import { roomForRest } from './recoveryCeiling'
 import { scheduleRecovery } from './scheduleRecovery'
-import { slotOn, type SlotNeed } from './slotFinder'
+import { type SlotNeed } from './slotFinder'
 import { missedSoftDeadlines } from './softDeadlines'
 
 /**
@@ -111,14 +111,14 @@ export type RestPlan =
       readonly move: Fix
       readonly gain: RestGain
     }
-  /** Not today, but here is when. */
-  | {
-      readonly kind: 'laterDay'
-      readonly block: RestBlock
-      readonly gain: RestGain
-      readonly whyNotToday: string
-    }
-  /** Nowhere in the fortnight, and why. */
+  /**
+   * Not today, and why.
+   *
+   * There is no "here is a later day" answer any more, and its absence is the design. §5's
+   * Rest is pressed by somebody who is tired *now*; rest three days out is a plan rather than
+   * a stop, and offering one answers a question the student did not ask. The week screen is
+   * where a future rest gets scheduled.
+   */
   | { readonly kind: 'refused'; readonly why: string }
 
 const projectionOf = (
@@ -242,43 +242,68 @@ function noWorse(
  * The block that would go on today, starting no earlier than now.
  *
  * Deliberately not `slotOn`, which prefers `REST_HOUR` of 20:00. That is the right answer
- * for planning rest and the wrong one for a student who is flat at two in the afternoon.
- * Rung 2 uses `slotOn` precisely because rung 2 *is* planning.
+ * for *planning* rest and the wrong one for a student who is flat at two in the afternoon.
+ * Nothing here plans any more -- the later-day rung that did is gone -- so this is the only
+ * placement rule left, and "no earlier than now" is the whole of it.
  */
 function restNowOn(
   schedule: Schedule,
   dayIndex: number,
   nowHour: number,
   ceilingRoom: number,
+  /**
+   * How good a placement is, higher being better. Optional because rung 1 asks the same
+   * question about a week it has just rearranged, where the comparison is between that
+   * week's openings rather than against anything else.
+   */
+  worth?: (block: RestBlock) => number,
 ): RestBlock | null {
+  const options: RestBlock[] = []
+
   for (const gap of gapsOn(schedule, dayIndex)) {
     const start = Math.max(gap.startHour, nowHour)
     const available = gap.startHour + gap.hours - start
     if (available < MIN_GAP_HOURS) continue
 
     const hours = Math.min(available, USEFUL_REST_HOURS, ceilingRoom)
-    if (hours < MIN_GAP_HOURS) return null
+    if (hours < MIN_GAP_HOURS) continue
 
-    return { dayIndex, startHour: start, hours }
+    /**
+     * Two candidates per gap: as soon as it opens, and as late as it still fits.
+     *
+     * The earliest is what a student pressing Rest at two in the afternoon usually means.
+     * The latest is the one that matters to the model: §6.6's residue decays, so rest
+     * pressed up against the work that follows it is worth more than the same rest hours
+     * earlier in the same gap. Stepping through every hour between them would be a search
+     * for a difference the model cannot defend -- these are the two ends that mean
+     * something.
+     */
+    const latest = gap.startHour + gap.hours - hours
+
+    options.push({ dayIndex, startHour: start, hours })
+    if (latest > start) options.push({ dayIndex, startHour: latest, hours })
   }
 
-  return null
+  const first = options[0]
+  if (first === undefined) return null
+  if (worth === undefined) return first
+
+  /**
+   * The opening that does the most good, not the earliest one.
+   *
+   * §6.6 leaves a positive residue on the hours after rest -- `CROSS_EFFECT.rest` is
+   * `mental +0.15`, halving every two hours -- so rest taken shortly before the day's hard
+   * work makes that work cheaper, while rest after it has nothing left to subsidise.
+   * Measured on a day with a three-hour essay at 14:00, the same two-hour rest is worth
+   * about half a reserve point more at noon than at six.
+   *
+   * Ties keep the earliest: `gapsOn` is in order and `reduce` holds the incumbent on
+   * equality, so a student who wants to stop *now* is never told to wait for a better hour
+   * that is not actually better.
+   */
+  return options.reduce((best, option) => (worth(option) > worth(best) + EPSILON ? option : best))
 }
 
-/** The block that would go on a later day, at the hour rest actually wants. */
-function restLaterOn(schedule: Schedule, dayIndex: number): RestBlock | null {
-  const ceilingRoom = roomForRest(schedule, dayIndex)
-  if (ceilingRoom < MIN_GAP_HOURS) return null
-
-  const widest = gapsOn(schedule, dayIndex).reduce((best, gap) => Math.max(best, gap.hours), 0)
-  const hours = Math.min(widest, USEFUL_REST_HOURS, ceilingRoom)
-  if (hours < MIN_GAP_HOURS) return null
-
-  const slot = slotOn(schedule, dayIndex, REST_NEED(hours))
-  if (slot === null) return null
-
-  return { dayIndex, startHour: slot.startHour, hours }
-}
 
 const CEILING_REACHED =
   'Today has had as much recovery as the model will credit, so more of it would not buy anything.'
@@ -304,7 +329,12 @@ export function planRest(
 
   // Rung 0: it already fits.
   if (roomToday >= MIN_GAP_HOURS) {
-    const block = restNowOn(schedule, today, nowHour, roomToday)
+    // Scored by what the fortnight is worth after it, which is the same measure the student
+    // is shown as the gain -- so the hour chosen and the number reported cannot disagree.
+    const block = restNowOn(schedule, today, nowHour, roomToday, (option) =>
+      gainOf(schedule, withRest(schedule, option), params, today, blockLog, option.dayIndex)
+        .dayAfter,
+    )
 
     if (block !== null) {
       return { kind: 'fits', block, gain: gainOf(schedule, withRest(schedule, block), params, today, blockLog, block.dayIndex) }
@@ -320,24 +350,8 @@ export function planRest(
   const whyNotToday = rungOne(schedule, params, today, nowHour, blockLog, roomToday)
   if (typeof whyNotToday !== 'string') return whyNotToday
 
-  // Rung 2: the earliest later day with room.
-  for (let day = today + 1; day < schedule.horizonDays; day += 1) {
-    const block = restLaterOn(schedule, day)
-    if (block === null) continue
-
-    return {
-      kind: 'laterDay',
-      block,
-      gain: gainOf(schedule, withRest(schedule, block), params, today, blockLog, block.dayIndex),
-      whyNotToday,
-    }
-  }
-
-  // Rung 3: nowhere.
-  return {
-    kind: 'refused',
-    why: `${whyNotToday} No other day in the fortnight has room either.`,
-  }
+  // Rung 2: no. Today cannot take it, and a later day is not what was asked for.
+  return { kind: 'refused', why: whyNotToday }
 }
 
 /**
@@ -362,7 +376,9 @@ function rungOne(
   if (fix === null) return NO_ROOM_TODAY
 
   const moved = fix.move.apply(schedule)
-  const block = restNowOn(moved, today, nowHour, roomForRest(moved, today))
+  const block = restNowOn(moved, today, nowHour, roomForRest(moved, today), (option) =>
+    gainOf(moved, withRest(moved, option), params, today, blockLog, option.dayIndex).dayAfter,
+  )
   if (block === null) return NO_ROOM_TODAY
 
   const after = withRest(moved, block)

@@ -7,6 +7,7 @@ const props = (over: Partial<Parameters<typeof SleepSheet>[0]> = {}) => ({
   targetHours: 8,
   tonightHours: 8,
   realityLine: null,
+  enoughLine: null,
   forecasts: [],
   wakeHour: 7,
   tonightWindow: '23:00 → 07:00',
@@ -156,6 +157,49 @@ describe('SleepSheet', () => {
     render(<SleepSheet {...props({ realityLine: null })} />)
 
     expect(screen.queryByTestId('sleep-reality')).toBeNull()
+  })
+
+  /**
+   * What this student's own nights say about how much sleep is enough for them.
+   *
+   * A second, separate sentence rather than more words on `realityLine`: that one compares
+   * the plan with what happened, and this one is a claim about the student. Merging them
+   * would make one sentence that goes quiet whenever either half has nothing to say.
+   */
+  describe('how much sleep is enough for this student', () => {
+    it('shows the figure the app has learned', () => {
+      render(
+        <SleepSheet
+          {...props({ enoughLine: 'Your own nights suggest about 7 hours is enough for you.' })}
+        />,
+      )
+
+      expect(screen.getByTestId('sleep-enough')).toHaveTextContent('about 7 hours')
+    })
+
+    /** Absence again, and for the reason above it: an empty element still takes space and is
+     *  still announced. */
+    it('renders no element at all while nothing has been measured', () => {
+      render(<SleepSheet {...props({ enoughLine: null })} />)
+
+      expect(screen.queryByTestId('sleep-enough')).toBeNull()
+    })
+
+    /**
+     * Under the target field, not above it. Above, it colours the figure being chosen rather
+     * than informing it -- the reason `realityLine` already sits where it does, asserted here
+     * rather than trusted to survive a future reshuffle of the sheet.
+     */
+    it('sits below the target field', () => {
+      render(
+        <SleepSheet {...props({ enoughLine: 'Your own nights suggest about 7 hours is enough.' })} />,
+      )
+
+      const target = screen.getByTestId('sleep-target')
+      const enough = screen.getByTestId('sleep-enough')
+
+      expect(target.compareDocumentPosition(enough)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    })
   })
 
   it('lists the days that will cost a night, each naming its own day', () => {

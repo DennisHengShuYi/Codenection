@@ -1,5 +1,4 @@
 import type { JSX } from 'react'
-import type { ScheduledItem } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { Card } from '../kit/Card'
 import { SLEEP_HOURS, type SleepBucket } from './checkIn'
@@ -48,7 +47,6 @@ const SLEEP_LABELS: Record<SleepBucket, string> = {
  * by making it presuppose an ending it cannot verify.
  */
 export function TodayCard(props: {
-  readonly block: ScheduledItem | null
   readonly askEnergy: boolean
   readonly askSleep: boolean
   /**
@@ -74,7 +72,6 @@ export function TodayCard(props: {
   readonly onDismiss: () => void
 }): JSX.Element | null {
   const {
-    block,
     askEnergy,
     askSleep,
     sleepRealityLine = null,
@@ -83,13 +80,11 @@ export function TodayCard(props: {
     onSleep,
     onDismiss,
   } = props
-  const askBlock = block !== null
-
   // §7.6, and only for the block actually on the card: a bias quoted about some other load
   // type is one the student cannot connect to anything in front of them. Null when there
   // is nothing measured worth saying, which is most of the first week.
 
-  if (!askEnergy && !askSleep && !askBlock) {
+  if (!askEnergy && !askSleep) {
     return null
   }
 
@@ -117,7 +112,7 @@ export function TodayCard(props: {
         </fieldset>
       )}
 
-      {askEnergy && (askSleep || askBlock) && <hr className="border-line" />}
+      {askEnergy && askSleep && <hr className="border-line" />}
 
       {askSleep && (
         <fieldset className="flex flex-col gap-2">

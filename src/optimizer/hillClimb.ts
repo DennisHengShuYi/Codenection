@@ -12,6 +12,33 @@ const MAX_ITERATIONS = 200
  *  an improvement and does not spin the loop to its iteration cap. */
 const EPSILON = 1e-9
 
+/**
+ * How much a single move must be worth before it is worth asking somebody to make it.
+ *
+ * In reserve points, the unit the objective is already in. Floating-point slack was the only
+ * bar before this, which was the right bar while the model had a flat plateau at full reserve
+ * and only genuinely consequential moves scored at all. `headroomAt` ended the plateau: a
+ * week now settles at a level instead of pinning, so nearly every rearrangement moves the
+ * score by *something* and the climber could always find one more fractional improvement to
+ * chase. Measured, the two budget fixtures went to 8,164 and 7,586 evaluations against a
+ * bound of 3,000 -- which is the lesson `objective.deadlinePressure` records twice in its own
+ * comments, arriving a third time from the model rather than from a penalty term.
+ *
+ * §2.2 is what sets the figure rather than the runtime: "a student will do one thing; they
+ * will not follow a nine-change reshuffle", which is why `smallestFixes` exists at all. A
+ * rebalance proposing nineteen changes to an ordinary fortnight has the same problem, and a
+ * move worth a fiftieth of a reserve point is not one a student should be asked to rearrange
+ * their week for.
+ *
+ * Measured at 0.02, 0.05, 0.1 and 0.25. At 0.02 the ordinary fortnight is unchanged at 2,663
+ * evaluations and nineteen moves, so it does not answer the problem. At 0.25 the week comes
+ * back visibly worse for six moves. 0.05 puts an ordinary solve at 1,028 evaluations and
+ * eight moves -- a plan somebody might actually follow, at very close to the cost the search
+ * had before the model gained a gradient -- for 2.5 points of score, which is the price of
+ * not proposing the eleven changes that were each worth almost nothing.
+ */
+const MIN_GAIN = 0.05
+
 // No check-in data exists for a schedule under exploration -- `ALL_PRESENT` names that.
 const worstOf = (schedule: Schedule, params: EngineParams): number =>
   summarise(schedule.start, toDayInputs(schedule, ALL_PRESENT), params).worstFloor
@@ -48,7 +75,7 @@ function climb(
       const candidateScore = score(candidate.result, params)
       evaluations += 1
 
-      if (candidateScore > bestScore + EPSILON) {
+      if (candidateScore > bestScore + MIN_GAIN) {
         best = candidate
         bestScore = candidateScore
       }

@@ -220,6 +220,27 @@ export function createStore(client: SupabaseClient): ChatStore {
     },
 
     /**
+     * §8b's reported nights, from the same blob and for the same reason.
+     *
+     * Empty on failure, exactly as `loadPredictions` above: `paramsFor` falls back to the
+     * population figure for how much sleep is enough, which is what the app opens on anyway.
+     * A separate read rather than one shared query because each command loads only what it
+     * needs, and the row is small.
+     */
+    async loadSleepNights(accountId) {
+      const { data } = await client
+        .from('user_state')
+        .select('settings')
+        .eq('id', accountId)
+        .maybeSingle()
+
+      const settings = data?.settings as { sleepNights?: unknown } | null
+      const nights = settings?.sleepNights
+
+      return Array.isArray(nights) ? (nights as SleepNight[]) : []
+    },
+
+    /**
      * Writes §8.1's predictions back after a check-in answered in chat.
      *
      * Reads the row and merges into it rather than upserting a whole settings blob: the app

@@ -24,10 +24,30 @@ const briefFor = (item: ScheduledItem) => ({
   hours: item.hours,
 })
 
+/**
+ * How long the browser waits for a chain before taking the one it already has.
+ *
+ * Longer than `ladderWriter`'s eight-second bound on the Groq call, deliberately: that bound
+ * is inside the function, so cutting the browser off first would abandon a request the
+ * server was about to answer. This is the outer limit on the whole round trip.
+ *
+ * It exists because a stalled connection never rejects. Every *answer* already fell back --
+ * a refusal, a 503, a body that is not JSON -- but a request that simply hangs left the
+ * promise unsettled, `MicroStartPage` on "Working out where to start." and a student who
+ * cannot begin a task reading a sentence about not being able to begin it. Waiting
+ * indefinitely for the better half of an either/or is the wrong trade when the other half is
+ * written out in the domain and needs no network at all.
+ */
+export const LADDER_REQUEST_TIMEOUT_MS = 10_000
+
 const askEndpoint = async (payload: object): Promise<Rung[] | null> => {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), LADDER_REQUEST_TIMEOUT_MS)
+
   try {
     const response = await fetch('/api/micro-start', {
       method: 'POST',
+      signal: controller.signal,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
     })
@@ -36,9 +56,14 @@ const askEndpoint = async (payload: object): Promise<Rung[] | null> => {
 
     return parseLadderReply((await response.json()) as unknown)
   } catch {
-    // No endpoint, no network, or a body that is not JSON. Every one of them is the same
-    // answer to the caller, and none of them is an error a stuck student needs to read.
+    // No endpoint, no network, a body that is not JSON, or the abort above. Every one of
+    // them is the same answer to the caller, and none of them is an error a stuck student
+    // needs to read.
     return null
+  } finally {
+    // Cleared whichever way this ended, so a resolved request does not leave a timer holding
+    // the process open in tests or firing an abort at a controller nobody is listening to.
+    clearTimeout(timeout)
   }
 }
 

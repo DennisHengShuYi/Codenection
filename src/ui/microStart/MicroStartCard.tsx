@@ -13,10 +13,19 @@ import { Card } from '../kit/Card'
  */
 export function MicroStartCard({
   microStart,
+  title,
   onStarted,
   onDismiss,
 }: {
   microStart: MicroStart | null
+  /**
+   * What the student called the block this is about.
+   *
+   * Passed in rather than read off `MicroStart`, which carries an id and a move and is also
+   * what the Telegram bot renders -- where the task is already the thing the student just
+   * typed, so a title on the type would be dead weight on that side.
+   */
+  title: string
   onStarted: (microStart: MicroStart) => void
   onDismiss: () => void
 }) {
@@ -31,6 +40,12 @@ export function MicroStartCard({
     >
       <div>
         <h2 className="text-base font-medium">Stuck on this one?</h2>
+        {/* The block's own name, under the question and above the move. A card that named
+            no task made a student holding three of today's items work out which one was
+            being talked about -- which is deliberation, and this card exists to remove it. */}
+        <p data-testid="micro-start-title" className="text-sm font-medium">
+          {title}
+        </p>
         <p className="text-sm">{microStart.action}</p>
         <p className="text-sm text-ink-soft">{microStart.minutes} minutes. That is the whole ask.</p>
       </div>

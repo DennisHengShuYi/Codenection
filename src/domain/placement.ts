@@ -5,6 +5,7 @@ import { smallestFixes, type Fix, type Schedule, type ScheduledItem } from '../o
 import { shortDayLabel } from './calendar'
 import { expandRecurring } from './recurrence'
 import { slotOn, type SlotNeed } from './slotFinder'
+import { effectiveDeadline } from './softDeadlines'
 
 /**
  * Where an undated item goes when nothing says otherwise, counted from today.
@@ -380,9 +381,41 @@ export function fixThatMakesRoom(
    *  button asks about tomorrow as readily. */
   today: number,
 ): Fix | null {
-  return (
-    smallestFixes(schedule, params, today, FIXES_TO_CONSIDER).find(
-      (fix) => slotOn(fix.move.apply(schedule), dayIndex, need) !== null,
-    ) ?? null
+  const opensRoom = smallestFixes(schedule, params, today, FIXES_TO_CONSIDER).filter(
+    (fix) => slotOn(fix.move.apply(schedule), dayIndex, need) !== null,
   )
+  if (opensRoom.length === 0) return null
+
+  /**
+   * How long this block could wait, as things stand.
+   *
+   * `effectiveDeadline`, so a synthetic deadline counts: undated work is not infinitely
+   * patient, and treating it as such is what `softDeadlines` exists to stop.
+   *
+   * A move that has no block in the week -- `insertRest` and `insertSocial` add one rather
+   * than displacing one -- costs nobody their deadline, so it reads as maximally slack and
+   * is preferred over disturbing anything.
+   */
+  const slackOf = (fix: Fix): number => {
+    const item = schedule.items.find((entry) => entry.id === fix.move.itemId)
+    if (item === undefined) return HORIZON_DAYS
+
+    return (effectiveDeadline(item) ?? HORIZON_DAYS) - item.dayIndex
+  }
+
+  /**
+   * The slackest of the moves that work, not the first.
+   *
+   * `smallestFixes` ranks by days out of deficit, then depth, then floor gain, and nothing in
+   * that measure knows how soon a block is due -- deliberately, because aligning it with
+   * `score` would stop this fallback firing at all. So urgency was a hard bound and never a
+   * preference: a deadline could not be crossed, but an essay due tomorrow was as likely to
+   * be chosen as next week's laundry.
+   *
+   * It matters most for the Rest button, which moves something to buy a student time off:
+   * reaching for the most urgent thing on the day is the one choice that turns a rest into a
+   * debt. `reduce` keeps the incumbent on a tie, so among equally slack moves the ranking
+   * above still decides.
+   */
+  return opensRoom.reduce((best, fix) => (slackOf(fix) > slackOf(best) ? fix : best))
 }

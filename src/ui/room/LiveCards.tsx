@@ -1,9 +1,8 @@
-import type { Commitment } from '../../optimizer'
 import type { MicroStart } from '../../domain/microStart'
 import type { ScheduledItem } from '../../optimizer'
 import type { SleepBucket } from '../today/checkIn'
 import { DistressCard } from '../distress/DistressCard'
-import { LapsedNotice } from '../request/LapsedNotice'
+import { OverfullCard } from '../overfull/OverfullCard'
 import { MicroStartCard } from '../microStart/MicroStartCard'
 import { TodayCard } from '../today/TodayCard'
 import type { CardId } from './cardPrecedence'
@@ -16,12 +15,15 @@ import type { CardId } from './cardPrecedence'
 export function LiveCards({
   cards,
   onDistressDismiss,
-  lapsedCommitments,
-  onLapsedDismiss,
+  overfullDayLabel,
+  overfullCandidates,
+  overfullDropped,
+  onOverfullDrop,
+  onOverfullDismiss,
   stuckMicroStart,
+  stuckTitle,
   onStuckStart,
   onStuckDismiss,
-  blockForToday,
   askEnergy,
   askSleep,
   sleepRealityLine,
@@ -32,12 +34,19 @@ export function LiveCards({
 }: {
   readonly cards: readonly CardId[]
   readonly onDistressDismiss: () => void
-  readonly lapsedCommitments: readonly Commitment[]
-  readonly onLapsedDismiss: () => void
+  /** Already in words, from `domain/calendar.dayLabel`. */
+  readonly overfullDayLabel: string
+  readonly overfullCandidates: readonly ScheduledItem[]
+  /** What was just dropped, when it was a provisional yes. Null otherwise. */
+  readonly overfullDropped: string | null
+  readonly onOverfullDrop: (itemId: string) => void
+  readonly onOverfullDismiss: () => void
   readonly stuckMicroStart: MicroStart | null
+  /** What the student called the block the card is about, so it names the work and not just
+   *  the move. Empty when there is no stuck block, which is when the card renders nothing. */
+  readonly stuckTitle: string
   readonly onStuckStart: () => void
   readonly onStuckDismiss: () => void
-  readonly blockForToday: ScheduledItem | null
   readonly askEnergy: boolean
   readonly askSleep: boolean
   /** §7.6's Reality Check for sleep, forwarded to `TodayCard`. Optional for the same
@@ -54,13 +63,23 @@ export function LiveCards({
     switch (id) {
       case 'distress':
         return <DistressCard key="distress" onDismiss={onDistressDismiss} />
-      case 'lapsed':
-        return <LapsedNotice key="lapsed" commitments={lapsedCommitments} onDismiss={onLapsedDismiss} />
+      case 'overfull':
+        return (
+          <OverfullCard
+            key="overfull"
+            dayLabel={overfullDayLabel}
+            candidates={overfullCandidates}
+            droppedTitle={overfullDropped}
+            onDrop={onOverfullDrop}
+            onDismiss={onOverfullDismiss}
+          />
+        )
       case 'stuck':
-        return stuckMicroStart === null ? null : (
+        return (
           <MicroStartCard
             key="stuck"
             microStart={stuckMicroStart}
+            title={stuckTitle}
             onStarted={onStuckStart}
             onDismiss={onStuckDismiss}
           />
@@ -69,7 +88,6 @@ export function LiveCards({
         return (
           <TodayCard
             key="today"
-            block={blockForToday}
             askEnergy={askEnergy}
             askSleep={askSleep}
             sleepRealityLine={sleepRealityLine}

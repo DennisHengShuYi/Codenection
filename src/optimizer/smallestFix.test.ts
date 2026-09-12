@@ -45,9 +45,22 @@ describe('smallestFixes', () => {
    * §2.2 is written for -- and the app's answer to someone in crisis became silence.
    * Ranking on days out of deficit keeps the advice coming.
    */
+  /*
+   * Eight-hour days rather than nine, since `headroomAt` gave the model a settling level.
+   *
+   * The fixture starts at 80 and used to race to full on the early days before the crunch
+   * bit, so the student met it with a fortnight of buffer behind them. They no longer do, and
+   * at nine hours a day on five hours' sleep the week is now so far gone that all 21 days sit
+   * in deficit and no single move lifts one out -- which is the model being right rather than
+   * a fix worth reporting.
+   *
+   * Eight keeps every property this test is about: `worstBefore` is still 0, the student is
+   * still bottomed out, and there are still seventeen days in deficit. It is a crisis a single
+   * move can measurably dent, which is the case §2.2 is written for.
+   */
   it('still finds fixes for a student who has already bottomed out', () => {
     const crisis = makeSchedule(
-      Array.from({ length: 21 }, (_, d) => studyItem(`c${d}`, d, 9)),
+      Array.from({ length: 21 }, (_, d) => studyItem(`c${d}`, d, 8)),
       5,
     )
 

@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLocalRepository } from '../../data'
+import { createLocalRepository, DEFAULT_SETTINGS, type StoredSettings } from '../../data'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule } from '../../optimizer'
 import { RoomShell } from './RoomShell'
@@ -43,11 +43,20 @@ const weekWithErrand = (): Schedule => ({
 
 let counter = 0
 
-const renderShell = async (over?: Partial<Schedule>, onAnswerBlock = vi.fn()) => {
+const renderShell = async (
+  over?: Partial<Schedule>,
+  onAnswerBlock = vi.fn(),
+  /** Settings to seed, for the tests that need a night already reported so the check-in
+   *  card has nothing of its own left to ask. */
+  settings?: Partial<StoredSettings>,
+) => {
   counter += 1
   const repository = createLocalRepository(`notices-${counter}`)
   await repository.clear()
   await repository.saveWeek({ ...weekWithErrand(), ...over })
+  if (settings !== undefined) {
+    await repository.saveSettings({ ...DEFAULT_SETTINGS, ...settings })
+  }
 
   render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={onAnswerBlock} />)
   await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
@@ -292,5 +301,62 @@ describe('answering from the list', () => {
     const asked = screen.getAllByText(/how much of it happened/i)
     expect(asked).toHaveLength(1)
     expect(list).toContainElement(asked[0] as HTMLElement)
+  })
+
+  /**
+   * The card asks for an energy reading and last night's sleep. Neither is about a block --
+   * the block question left this card when the list started answering in place -- so an
+   * unanswered block is no longer a reason for the card to exist.
+   *
+   * It went on being one: `showTodayCard` still counted `blockForToday`, so a student with
+   * nothing to say about their energy or their sleep met an empty check-in card sitting
+   * above the very list that was already asking about the block.
+   */
+  it('raises no check-in card when only a block is outstanding', async () => {
+    // Last night already reported, so the card's own two questions are both answered and the
+    // unanswered block is all that is left.
+    await renderShell(lived(), vi.fn(), {
+      sleepNights: [{ isoDate: daysAgo(0), hours: 7, answeredAt: Date.now() }],
+    })
+
+    await userEvent.click(screen.getByTestId('open-notices'))
+    await screen.findByTestId('pending-checkins')
+
+    expect(screen.queryByRole('region', { name: /today's check-in/i })).toBeNull()
+  })
+
+  /**
+   * The one card here that proposes rather than reports, and it earns that by when it comes.
+   *
+   * §4.1's trigger is the block's own slot, so this arrives at the moment the student is
+   * meant to be doing the thing rather than at an hour the app picked. Somebody sitting in a
+   * slot they cannot start is the case §4.1 exists for, and it names the block so a room
+   * holding several of today's items does not leave them working out which one is meant.
+   */
+  it('raises the micro-start card for the block whose slot it is', async () => {
+    // A block running right now is what `microStart.isStuck` fires on -- its own slot, not
+    // its age.
+    await renderShell({
+      items: [
+        {
+          id: 'essay',
+          title: 'Ethics essay',
+          type: 'mental',
+          kind: 'studyBlock',
+          hours: 24,
+          intensity: 1,
+          dayIndex: 0,
+          startHour: 0,
+          fixed: false,
+          deadlineDay: null,
+          protectedRest: false,
+        },
+      ],
+    })
+
+    await userEvent.click(screen.getByTestId('open-notices'))
+
+    expect(await screen.findByTestId('micro-start')).toBeInTheDocument()
+    expect(screen.getByTestId('micro-start-title')).toHaveTextContent('Ethics essay')
   })
 })

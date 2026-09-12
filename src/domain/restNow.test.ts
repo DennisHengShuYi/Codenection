@@ -97,19 +97,19 @@ describe('planRest, when the day is at its recovery ceiling', () => {
       ),
     })
 
-  it('offers a later day instead of stacking more onto today', () => {
-    // The brake. Pressing Rest again and again cannot keep filling one day, because past
-    // the ceiling the model stops believing the recovery it would be crediting.
+  /**
+   * The brake. Pressing Rest again and again cannot keep filling one day, because past the
+   * ceiling the model stops believing the recovery it would be crediting.
+   *
+   * It used to answer this by offering a later day. That is not an answer to the question
+   * the button asks: §5's Rest is pressed by somebody who is tired *now*, and rest three days
+   * out is a plan, not a stop. Saying no is the honest reply, and the reason goes with it.
+   */
+  it('refuses rather than offering a day the student is not tired on', () => {
     const out = plan(atCeiling())
 
-    expect(out.kind).toBe('laterDay')
-    expect(out.kind === 'laterDay' && out.block.dayIndex).toBeGreaterThan(TODAY)
-  })
-
-  it('says why today was not the answer', () => {
-    const out = plan(atCeiling())
-
-    expect(out.kind === 'laterDay' && out.whyNotToday).toMatch(/recovery|already/i)
+    expect(out.kind).toBe('refused')
+    expect(out.kind === 'refused' && out.why).toMatch(/recovery|already/i)
   })
 
   it('never offers a block that would push a day past the ceiling', () => {
@@ -124,18 +124,19 @@ describe('planRest, when the day is at its recovery ceiling', () => {
 })
 
 describe('planRest, when today has no room', () => {
-  it('falls to a later day when nothing can open one today', () => {
+  it('refuses when nothing can open room today', () => {
     // Today is immovable wall to wall, so no single move can make space on it.
     const out = plan(week({ items: [packed(TODAY)] }))
 
-    expect(out.kind).toBe('laterDay')
-    expect(out.kind === 'laterDay' && out.block.dayIndex).toBeGreaterThan(TODAY)
+    expect(out.kind).toBe('refused')
   })
 
-  it('picks the earliest later day with room, not merely a day with room', () => {
-    const out = plan(week({ items: [packed(TODAY), packed(TODAY + 1)] }))
+  /** Tomorrow being free is no comfort to somebody who is tired today, so it is not offered
+   *  and not mentioned. */
+  it('offers no later day even when one is wide open', () => {
+    const out = plan(week({ items: [packed(TODAY)] }))
 
-    expect(out.kind === 'laterDay' && out.block.dayIndex).toBe(TODAY + 2)
+    expect(out.kind === 'refused' && out.why).not.toMatch(/tomorrow|another day|later/i)
   })
 
   it('refuses when no day in the fortnight has room', () => {
@@ -255,29 +256,24 @@ describe('planRest, when it says no', () => {
 
     const out = plan(week({ items: restedSolid }))
 
-    // Either a refusal or a later day that is genuinely creditable -- never a later day
-    // whose ceiling has nothing left to give.
-    if (out.kind === 'laterDay') {
-      expect(out.block.hours).toBeGreaterThan(0)
-      expect(out.block.dayIndex).not.toBe(TODAY)
-    } else {
-      expect(out.kind).toBe('refused')
-    }
+    // A refusal, not a later day whose ceiling has nothing left to give. There is no later
+    // day answer at all now -- today or no.
+    expect(out.kind).toBe('refused')
   })
 
   /**
-   * Today has no room, but a later day does. The student is told when instead of being told
-   * no -- and told why today was not the answer, because a later day with no reason reads
-   * as the app changing the subject.
+   * Today has no room and a later day does, and it is still a refusal -- with the reason
+   * today failed, because a bare no reads as the app having nothing to say.
+   *
+   * This used to answer with the later day. §5's Rest is pressed by somebody tired now, so
+   * a day three out is a plan rather than a stop, and offering one answers a question the
+   * student did not ask. Scheduling a future rest is the week screen's job.
    */
-  it('offers a later day with a reason, rather than refusing, when one has room', () => {
+  it('refuses with a reason when today has no room, however open a later day is', () => {
     const out = plan(week({ items: [packed(TODAY)] }))
 
-    expect(out.kind).toBe('laterDay')
-    if (out.kind === 'laterDay') {
-      expect(out.block.dayIndex).toBeGreaterThan(TODAY)
-      expect(out.whyNotToday.length).toBeGreaterThan(0)
-    }
+    expect(out.kind).toBe('refused')
+    expect(out.kind === 'refused' && out.why.length).toBeGreaterThan(0)
   })
 
   /**
@@ -295,7 +291,7 @@ describe('planRest, when it says no', () => {
 
     // One free hour between 14:00 and 15:00 is not a rest block.
     if (out.kind === 'fits') expect(out.block.hours).toBeGreaterThanOrEqual(1)
-    else expect(['laterDay', 'needsMove', 'refused']).toContain(out.kind)
+    else expect(['needsMove', 'refused']).toContain(out.kind)
   })
 })
 
@@ -352,5 +348,38 @@ describe('planRest, when room has to be made', () => {
       expect(out.gain.dayAfter).toBeGreaterThanOrEqual(out.gain.dayBefore)
       expect(out.gain.deepestLift).toBeGreaterThanOrEqual(0)
     }
+  })
+})
+
+/**
+ * Which opening, when several fit.
+ *
+ * §6.6 gives rest a positive residue on the hours after it -- `CROSS_EFFECT.rest` is
+ * `mental +0.15`, halving every two hours -- so rest taken before the day's hard work makes
+ * that work cheaper, and rest taken after it has nothing left to help. Measured on one day
+ * with a three-hour essay at 14:00, the same two-hour rest is worth about half a reserve
+ * point more at noon than at six.
+ *
+ * It used to take the first gap after now and stop looking, which is the earliest rather than
+ * the best. Earliest still wins a tie, because somebody who wants to stop now should not be
+ * told to wait for a better hour.
+ */
+describe('planRest, choosing between openings', () => {
+  const essay = item({ id: 'essay', dayIndex: TODAY, startHour: 14, hours: 3 })
+
+  it('rests close before the day work rather than first thing', () => {
+    // Free 8-12, the essay 14-17, free 17-24. The earliest opening is 08:00; the one that
+    // actually helps the essay is the late morning.
+    const morningWall = item({ id: 'early', dayIndex: TODAY, startHour: 0, hours: 8, fixed: true })
+    const out = plan(week({ items: [morningWall, essay] }), 8)
+
+    expect(out.kind).toBe('fits')
+    expect(out.kind === 'fits' && out.block.startHour).toBeGreaterThan(8)
+  })
+
+  it('still takes the earliest opening when no hour is better than another', () => {
+    const out = plan(week(), 9)
+
+    expect(out.kind === 'fits' && out.block.startHour).toBe(9)
   })
 })

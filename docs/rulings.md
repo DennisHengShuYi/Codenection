@@ -388,3 +388,73 @@ A test pins that as an inequality rather than trusting the weight to stay small.
 
 `src/optimizer/objective.ts` — the term; `src/optimizer/types.ts` — why the bedtime is stamped
 rather than derived
+
+## Ruling 69
+
+**A threshold cannot be learned by nudging it, so how much sleep is enough gets its own
+estimator rather than a fifth row in `recoveryLearning`.**
+
+`domain/recoveryLearning` already learns four figures from §8.1's prediction residuals, and the
+obvious home for a fifth was beside them. It cannot go there, and the reason is structural
+rather than a matter of tidiness.
+
+That learner works by finite difference: bump a coefficient by 20%, re-run the projection,
+and see how far the claim moved. `PredictionBasis` stores that sensitivity at prediction time,
+and a sample whose sensitivity falls under `MIN_SENSITIVITY` is discarded as unattributable.
+The module's own docstring already refuses `socialFloorHoursPerDay` on exactly this ground —
+a threshold's derivative is zero everywhere except a cliff, so a finite difference reads either
+nothing or nonsense.
+
+For a ceiling on sleep credit it is worse than zero-most-of-the-time, and worse in one
+direction only. Nudging the ceiling UPWARD changes the projection not at all for any student
+whose nights already sit below it — which is most students, most fortnights. Every one of
+those samples measures zero sensitivity and is thrown away. So the learner could only ever
+observe evidence that pushes the figure up, and "seven hours is enough for me" is a correction
+DOWN. A learner that can only move one way is not a learner.
+
+What identifies a threshold is a comparison, not a derivative. `domain/sleepEnough` splits the
+student's reported nights at their own median, takes the mean residual on each side, and asks
+whether the longer nights landed systematically worse than the shorter ones did. If they did,
+the app has been crediting sleep this student does not benefit from and the ceiling comes down
+toward the split; if they landed better, it goes up past the longest night on record.
+
+The split is at the student's own median rather than a fixed hour, which keeps the two groups
+balanced whatever their sleep looks like — five-and-six-hour nights get a comparison and so do
+eight-and-ten-hour ones. Both sides must clear `MIN_SAMPLES_TO_SPEAK`, which is what silences
+the app for a student whose sleep never varies: there is no comparison to make, so the
+population figure stands, by the same mechanism every other unmeasured parameter is silent.
+
+The evidence bar is two-sided, and the second side was missing at first. Both groups must clear
+`MIN_SAMPLES_TO_SPEAK`, AND their mean nights must sit at least `MIN_GROUP_SEPARATION_HOURS`
+apart. The sample floor alone is not enough because a median split ALWAYS produces two groups:
+measured on the first implementation, three nights of 7.4 hours against three of 7.6 cleared
+the floor, got compared, and produced "about 7.9 hours is enough for you" out of twelve minutes
+of variation and three ordinary bad days. Residuals absorb exams, colds and arguments along
+with sleep, so two groups that are the same night twice will still differ. An hour, because
+below it there is no plausible reading on which the difference is about sleep at all.
+
+That makes the estimator rarer, which is the right direction. It exists for the student whose
+nights genuinely swing between five and nine, not for one whose sleep is a flat line with
+rounding on it.
+
+What is NOT solved, and cannot be solved in code: the residual is confounded. It measures
+everything about a day, and sleep is one input among many. Three pairs a side is a floor, not a
+statistical claim, and the honest mitigations are the strict bar, the residual cap and the
+clamp rather than a test.
+
+Two habits are copied from `recoveryScales` with their reasoning rather than invented. Residuals
+are clamped into a believable band before averaging, so a day sixty points from its claim —
+a day that went wrong for reasons no sleep model explains — cannot rewrite what this student
+needs every night. And the result is clamped to what a night could believably be for anybody.
+
+It reaches the engine through `paramsFor`, the same single door as the other two learners, and
+is assigned rather than multiplied because it arrives already in hours.
+
+The app says the figure and acts on it. It does NOT rewrite the target the student stated: a
+measurement about somebody is not licence to edit what they told you. A test in
+`RoomShell.sleep.test.tsx` keeps those apart, because the code that would do the second is one
+line from the code that does the first.
+
+`src/domain/sleepEnough.ts` — the estimator; `src/engine/params.ts` — why the population
+figure is nine rather than eight (it leaves room to learn downward); `src/engine/recovery.ts`
+— where the ceiling binds

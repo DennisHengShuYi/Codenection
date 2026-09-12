@@ -1,5 +1,5 @@
 import { useEffect, useState, type JSX } from 'react'
-import { advance, currentRung, isComplete, type Ladder } from '../../domain/ladder'
+import { advance, currentRung, isComplete, ruleLadder, type Ladder } from '../../domain/ladder'
 import type { ScheduledItem } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { Sheet } from '../kit/Sheet'
@@ -69,14 +69,26 @@ export function MicroStartPage({
     // Loaded on demand, matching `PlannerScreen` and `RequestBoxScreen`. A static import
     // here pulls the whole `ai` module -- zod, every schema, every parser -- into the main
     // bundle for a page most opens never reach, and the build says so out loud.
+    const use = (next: Ladder) => {
+      if (cancelled) return
+
+      setBuilt(next)
+      onLadder(next)
+    }
+
     void import('../../ai')
       .then(({ buildLadder }) => buildLadder(item))
-      .then((outcome) => {
-        if (cancelled) return
-
-        setBuilt(outcome.ladder)
-        onLadder(outcome.ladder)
-      })
+      .then((outcome) => use(outcome.ladder))
+      // `buildLadder` resolves to the rule chain for every answer it does not like, so this
+      // is not that path -- it is the chain generator failing to arrive at all: the dynamic
+      // import rejecting on a bad chunk, a stale service worker handing back HTML where a
+      // module was asked for, a browser that went offline mid-load.
+      //
+      // Without it the rejection was unhandled and `open` stayed null for the lifetime of
+      // the page, so somebody who cannot start a task was shown "Working out where to
+      // start." for ever, with no steps under it and nothing to press. The rules' chain is
+      // right here and needs no network, which makes waiting the only wrong answer.
+      .catch(() => use(ruleLadder(item)))
 
     return () => {
       cancelled = true

@@ -47,7 +47,45 @@ export function isDistressed(history: readonly EnergyPoint[]): boolean {
   if (history.length < DISTRESS_RUN) return false
 
   // The tail only. `energyHistory` is oldest-first, so this is the most recent run.
-  return history
-    .slice(-DISTRESS_RUN)
-    .every((point) => point.value <= DISTRESS_AT_OR_BELOW)
+  const run = history.slice(-DISTRESS_RUN)
+
+  if (!run.every((point) => point.value <= DISTRESS_AT_OR_BELOW)) return false
+
+  return isConsecutive(run)
+}
+
+/** One day, in milliseconds. */
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Whether these answers are on consecutive calendar days.
+ *
+ * `energyHistory` keeps only the days that were answered and drops the silence between
+ * them, so four low answers scattered across a fortnight reached the check looking exactly
+ * like four low days running. The card then told a student they had said they were running
+ * low four days in a row when they had not -- and the whole standing of this card is that it
+ * only ever repeats what the student actually said.
+ *
+ * Skipped days now break the run, which errs toward not firing. That is the right direction
+ * for a message this heavy, and it matches how a single good day is already treated: the
+ * app would rather stay quiet than make a claim it cannot support.
+ *
+ * Compared as UTC midnights, which is safe here in a way a *clock* read would not be: these
+ * are two `YYYY-MM-DD` strings being measured against each other, not a moment being turned
+ * into somebody's today. §9's rule is about the latter, and `domain/calendar` remains the
+ * only place that conversion happens.
+ */
+function isConsecutive(run: readonly EnergyPoint[]): boolean {
+  return run.every((point, index) => {
+    if (index === 0) return true
+
+    const previous = run[index - 1]
+    if (previous === undefined) return false
+
+    const gap = Date.parse(`${point.date}T00:00:00Z`) - Date.parse(`${previous.date}T00:00:00Z`)
+
+    // NaN from an unparseable date fails this comparison, which is the answer we want: a
+    // date this function cannot read is not a day it can vouch for being next in a run.
+    return gap === DAY_MS
+  })
 }

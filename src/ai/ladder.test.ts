@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ruleLadder, type Ladder } from '../domain/ladder'
 import type { ScheduledItem } from '../optimizer'
-import { buildLadder, replaceRung } from './ladder'
+import { buildLadder, LADDER_REQUEST_TIMEOUT_MS, replaceRung } from './ladder'
 
 const item: ScheduledItem = {
   id: 'b1',
@@ -147,5 +147,48 @@ describe('replaceRung', () => {
 
     expect(await replaceRung(item, finished)).toEqual(finished)
     expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * A request that never settles, which is the one failure the old code could not survive.
+ *
+ * `askEndpoint` caught a rejected fetch and a bad body, so every *answer* fell back to the
+ * rule chain. A stalled connection is not an answer: it never rejects, so the promise never
+ * settled, `MicroStartPage` never left "Working out where to start." and a student stuck on
+ * a task sat looking at a sentence about being stuck. The endpoint's own eight-second bound
+ * lives server-side and cannot help here -- it bounds the Groq call inside the function, not
+ * the browser's wait on the function.
+ *
+ * The fallback was always meant to be a genuine equal rather than an apology, so waiting
+ * indefinitely for the better half of an either/or is the wrong trade when the other half is
+ * sitting in the domain, already written.
+ */
+describe('when the request never settles', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('falls back to the rule chain rather than waiting for good', async () => {
+    // Never resolves and never rejects, exactly like a connection that has stalled.
+    vi.mocked(fetch).mockImplementation(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          ;(init?.signal as AbortSignal | undefined)?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError')),
+          )
+        }) as Promise<Response>,
+    )
+
+    const pending = buildLadder(item)
+    await vi.advanceTimersByTimeAsync(LADDER_REQUEST_TIMEOUT_MS + 1)
+    const outcome = await pending
+
+    expect(outcome.source).toBe('fallback')
+    expect(outcome.ladder.rungs).toEqual(ruleLadder(item).rungs)
   })
 })

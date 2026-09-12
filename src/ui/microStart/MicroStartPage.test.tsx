@@ -225,3 +225,52 @@ describe('MicroStartPage', () => {
     expect(await screen.findByText('Ethics essay')).toBeInTheDocument()
   })
 })
+
+/**
+ * The page must never be able to sit on "Working out where to start." for good.
+ *
+ * The generator was a bare `.then()` chain with no `.catch()`, so anything that *rejected*
+ * -- the dynamic `import('../../ai')` failing, a chunk served as HTML by a stale service
+ * worker, a browser offline mid-load -- left `open` null for the lifetime of the page. The
+ * sheet then showed a student who cannot start a task a sentence about working out where to
+ * start, with no steps under it and nothing to press.
+ *
+ * The rule chain needs no network at all, so there is no failure worth showing instead of
+ * it.
+ *
+ * In its own block with its own module registry: `vi.doMock` rewrites what a later dynamic
+ * import resolves to, and left in place it answered for every other test in this file.
+ */
+describe('when the chain generator cannot even be loaded', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
+    vi.resetModules()
+    vi.doMock('../../ai', () => {
+      throw new Error('chunk failed to load')
+    })
+  })
+
+  afterEach(() => {
+    vi.doUnmock('../../ai')
+    vi.resetModules()
+    vi.unstubAllGlobals()
+  })
+
+  it('still shows a step rather than working it out for ever', async () => {
+    const { MicroStartPage: Page } = await import('./MicroStartPage')
+
+    render(
+      <Page
+        item={item}
+        ladder={null}
+        onLadder={vi.fn()}
+        onDone={vi.fn()}
+        onBack={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByTestId('rung-action')).toBeInTheDocument()
+    expect(screen.queryByTestId('ladder-working')).toBeNull()
+  })
+})

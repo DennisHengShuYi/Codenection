@@ -52,9 +52,24 @@ describe('work placed in the night', () => {
     )
   })
 
+  /**
+   * Measured as the difference each block makes against the same block in the afternoon,
+   * rather than by comparing the two schedules outright.
+   *
+   * Those two schedules do not hold the same amount of work -- two hours against one -- and
+   * comparing them directly only ever worked because nothing else in the score could see the
+   * difference. §1.2's isolation charge now scales with how demanding a day was, so it can,
+   * and the raw comparison was off by exactly the hour between them.
+   *
+   * Subtracting a same-sized daytime baseline cancels everything that is about the amount of
+   * work and leaves only what bedtime cost, which is what this test was always about.
+   */
   it('charges only the part that is after bedtime', () => {
-    const straddling = score(week([block(22)], 23), DEFAULT_PARAMS)
-    const wholly = score(week([block(23, { hours: 1 })], 23), DEFAULT_PARAMS)
+    const nightCostOf = (item: ScheduledItem, daytime: ScheduledItem): number =>
+      score(week([daytime], 23), DEFAULT_PARAMS) - score(week([item], 23), DEFAULT_PARAMS)
+
+    const straddling = nightCostOf(block(22), block(14))
+    const wholly = nightCostOf(block(23, { hours: 1 }), block(14, { hours: 1 }))
 
     expect(straddling).toBeCloseTo(wholly, 6)
   })

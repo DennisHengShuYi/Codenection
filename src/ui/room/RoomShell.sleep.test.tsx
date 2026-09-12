@@ -161,6 +161,101 @@ describe('the sleep page', () => {
 
     await waitFor(() => expect(screen.queryByTestId('sleep-six')).toBeNull())
   })
+
+  /**
+   * Learning how much sleep is enough for THIS student, and saying so.
+   *
+   * Needs both evidence streams at once -- reported nights beside resolved predictions -- so
+   * it can only be asserted at this level. `domain/sleepEnough` proves the estimate; this
+   * proves the two streams actually reach it from where they durably live, which are two
+   * different places in settings.
+   */
+  describe('how much sleep is enough for this student', () => {
+    /** A fortnight where every night above six bought this student nothing: the long nights
+     *  land twelve points worse than the app claimed, the short ones land exactly on it. */
+    const learnable = () => {
+      const nights = []
+      const predictions = []
+
+      for (let index = 0; index < 8; index += 1) {
+        const long = index % 2 === 0
+        const isoDate = daysAgo(index + 1)
+        nights.push({ isoDate, hours: long ? 8 : 5, answeredAt: index })
+        predictions.push({ forDate: isoDate, predicted: 60, reported: long ? 48 : 60 })
+      }
+
+      return { nights, predictions }
+    }
+
+    const openWithEvidence = async (over: Partial<Schedule> = {}) => {
+      counter += 1
+      const repository = createLocalRepository(`sleep-enough-${counter}`)
+      await repository.clear()
+      await repository.saveWeek(week(over))
+
+      const { nights, predictions } = learnable()
+      const settings = await repository.loadSettings()
+      await repository.saveSettings({
+        ...settings,
+        sleepTargetHours: 8,
+        sleepNights: nights,
+        calibration: {
+          ...(settings.calibration ?? { predictions: [] }),
+          predictions,
+        } as NonNullable<typeof settings.calibration>,
+      })
+
+      render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
+      await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
+      await userEvent.click(screen.getByTestId('open-sleep'))
+
+      return repository
+    }
+
+    it('says what a student own nights suggest about how much is enough', async () => {
+      await openWithEvidence()
+
+      expect(await screen.findByTestId('sleep-enough')).toHaveTextContent('Your own nights suggest')
+    })
+
+    /**
+     * The load-bearing one. The decision was that the app SAYS the figure and ACTS on it --
+     * acts meaning the projection credits sleep only up to the learned figure, not that the
+     * student's own stated target is edited underneath them. This test is the only thing
+     * keeping those apart, because the code that would do the second is one line from the
+     * code that does the first.
+     */
+    it('does not rewrite the target the student stated', async () => {
+      const repository = await openWithEvidence()
+
+      expect(await screen.findByTestId('sleep-target')).toHaveValue(8)
+      expect((await repository.loadSettings()).sleepTargetHours).toBe(8)
+    })
+
+    /**
+     * §1.5: withheld in low-energy mode, while the page itself stays reachable.
+     *
+     * A measured statement about the student's own habits is exactly what the reduced
+     * interface exists to hold back -- the same reason the reserve breakdown and the reality
+     * line are withheld. The model still uses the figure; only the sentence goes.
+     */
+    it('withholds the sentence from a depleted student, without closing the page', async () => {
+      await openWithEvidence({ start: { mental: 8, physical: 9, social: 7, errands: 10 } })
+
+      expect(await screen.findByTestId('sleep-target')).toBeVisible()
+      expect(screen.queryByTestId('sleep-enough')).toBeNull()
+    })
+
+    /** Says nothing at all for a student it has learned nothing about -- checked by absence,
+     *  the same way the sheet's own test does. */
+    it('says nothing before there is evidence', async () => {
+      await openRoom()
+      await userEvent.click(screen.getByTestId('open-sleep'))
+
+      await screen.findByTestId('sleep-target')
+      expect(screen.queryByTestId('sleep-enough')).toBeNull()
+    })
+  })
 })
 
 /**

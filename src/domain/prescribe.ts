@@ -1,5 +1,4 @@
 import {
-  floorReserve,
   LOAD_TYPES,
   USEFUL_REST_HOURS,
   type ActivityKind,
@@ -10,7 +9,7 @@ import type { Schedule } from '../optimizer'
 import { blocksOnDay } from './dayBlocks'
 import { DAY_END_HOUR, gapsOn, MIN_GAP_HOURS, WAKE_HOUR, type FreeSlot } from './slotFinder'
 import type { BlockRecord } from './blockLog'
-import { missedSoftDeadlines } from './softDeadlines'
+import { missedSoftDeadlines, type SoftDeadlineMiss } from './softDeadlines'
 
 /** Past this the engine credits nothing, so a longer suggestion would promise recovery the
  *  model refuses to pay out. Imported rather than restated: `engine/index.ts` exports it
@@ -123,7 +122,7 @@ export function prescribe(
   today: number,
   blockLog: readonly BlockRecord[],
   /**
-   * The reserve entering today, where the caller has it: a tie-break, and nothing more.
+   * The reserve entering today, where the caller has it: an ORDERING, and nothing more.
    *
    * What is neglected still comes entirely from `missedSoftDeadlines` -- a reserve can never
    * conjure a prescription for a rhythm that is being kept, which is what the paragraphs
@@ -150,15 +149,28 @@ export function prescribe(
     (candidate) => ADVICE[candidate.type] !== undefined,
   )
 
-  // The thinnest reserve where it is one of the overdue ones, the longest-neglected
-  // otherwise. `floorReserve` rather than a scan of the four, because §2.1's "burnout is a
-  // floor problem" is the reason this tie-break exists at all.
-  const thinnest =
-    reserves === undefined
-      ? undefined
-      : LOAD_TYPES.find((type) => reserves[type] === floorReserve(reserves))
+  /*
+   * The reserves in the order they need answering, thinnest first.
+   *
+   * Walked all the way down rather than checked once against the floor. The lowest reserve
+   * often has nothing overdue -- because something is already booked for it, which is the
+   * app working -- and falling straight back to days-late at that point threw away an
+   * ordering already in hand. Rest goes overdue after one day and the other rhythms after
+   * three or four, so days-late is a race rest wins almost every time: that is how "stop and
+   * do nothing" kept appearing under a headline about a reserve with nothing to do with
+   * resting.
+   */
+  const byNeed = reserves === undefined ? [] : [...LOAD_TYPES].sort((a, b) => reserves[a] - reserves[b])
 
-  const miss = overdue.find((candidate) => candidate.type === thinnest) ?? overdue[0]
+  // Days-late underneath, for a caller that gave no reserves: the Telegram doors, whose two
+  // call sites must agree with each other or a tapped button re-derives a different
+  // prescription than the one it offered.
+  const miss =
+    byNeed.reduce<SoftDeadlineMiss | undefined>(
+      (found, type) => found ?? overdue.find((candidate) => candidate.type === type),
+      undefined,
+    ) ?? overdue[0]
+
   if (!miss) return null
 
   const advice = ADVICE[miss.type]

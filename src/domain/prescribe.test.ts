@@ -352,3 +352,54 @@ describe('which neglect to answer first', () => {
     expect(prescribe(onlyNeglecting('socialRestorative'), LATE, [])?.type).toBe('social')
   })
 })
+
+/**
+ * When the lowest reserve is already answered, the next-lowest is the question -- not
+ * whichever rhythm happens to have gone longest unkept.
+ *
+ * Falling back to days-late threw away an ordering the app had already worked out. Rest goes
+ * overdue after a single day and the other rhythms after three or four, so days-late is a
+ * race rest wins almost every time -- which is how "stop and do nothing" kept turning up
+ * under a headline about a reserve that had nothing to do with resting.
+ */
+describe('walking down the reserves', () => {
+  /** Company is being kept up; stopping and moving are both overdue. */
+  const restAndMovingOverdue = (): Schedule =>
+    week({
+      items: RHYTHM_KINDS.filter(
+        (kind) => kind !== 'rest' && kind !== 'lightExercise' && kind !== 'hardExercise',
+      ).map(parked),
+    })
+
+  it('answers the second-lowest when the lowest has nothing overdue', () => {
+    // People is thinnest and already in hand, so the question is Body & movement at 55 --
+    // not rest, which is merely the thing that went overdue first.
+    const prescription = prescribe(restAndMovingOverdue(), LATE, [], {
+      mental: 80,
+      physical: 55,
+      social: 43,
+      errands: 90,
+    })
+
+    expect(prescription?.type).toBe('physical')
+  })
+
+  it('keeps walking down when the second-lowest is answered too', () => {
+    const prescription = prescribe(restAndMovingOverdue(), LATE, [], {
+      mental: 61,
+      physical: 90,
+      social: 43,
+      errands: 55,
+    })
+
+    // People and Life admin are out -- one kept up, one with no advice to give -- and
+    // Body & movement is the healthiest thing on the list. What is left is stopping.
+    expect(prescription?.type).toBe('mental')
+  })
+
+  /** The bot still calls this without reserves, and its two doors must agree with each
+   *  other, so the days-late ordering has to survive untouched underneath. */
+  it('falls back to the most overdue when it is given no reserves at all', () => {
+    expect(prescribe(restAndMovingOverdue(), LATE, [])?.type).toBe('mental')
+  })
+})

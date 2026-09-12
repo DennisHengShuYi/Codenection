@@ -199,6 +199,45 @@ const timeOf = (lower: string): number | null => {
   return null
 }
 
+/**
+ * The name, once the parser has taken what it understood out of it.
+ *
+ * "badminton at 3pm tuesday" became a chip called "badminton at 3pm tuesday", with 15:00 in
+ * its Time field and Tuesday in its Due by -- both read correctly, and both left in the name
+ * as well. Said twice, and the second time in the one field §2.4 groups answers by: "badminton
+ * at 3pm tuesday" and "badminton at 5pm thursday" are two buckets neither of which ever fills,
+ * so Reality Check can never learn what badminton actually costs this student.
+ *
+ * Only what was actually taken. These are the same expressions `timeOf` and `deadlineOf`
+ * match, and nothing beyond them: a title trimmed on a guess is a name the student did not
+ * choose and cannot find again. A leading "at" or "on" goes with the thing it introduced,
+ * because "badminton at" is not a name either.
+ *
+ * The fragment is kept whole where there would be nothing left of it -- "tuesday 3pm" is a
+ * poor name and an empty one is worse.
+ */
+const WHEN_PHRASES: readonly RegExp[] = [
+  // The two `timeOf` reads, with the preposition that introduced them.
+  /\b(?:at|from)?\s*\d{1,2}(?:[.:]\d{2})?\s*(?:am|pm)\b/gi,
+  /\b(?:at|from)?\s*\d{1,2}:\d{2}\b/gi,
+]
+
+function nameWithoutWhen(fragment: string): string {
+  let name = fragment
+
+  for (const phrase of WHEN_PHRASES) name = name.replace(phrase, ' ')
+
+  // `deadlineOf` matches a weekday name anywhere in the fragment, so the same names come
+  // out -- with "on" where it introduced one.
+  for (const day of WEEKDAYS) {
+    name = name.replace(new RegExp(`\\b(?:on\\s+)?${day}\\b`, 'gi'), ' ')
+  }
+
+  const tidied = name.replace(/\s+/g, ' ').replace(/^[\s,–-]+|[\s,–-]+$/g, '')
+
+  return tidied === '' ? fragment : tidied
+}
+
 let counter = 0
 
 /**
@@ -224,7 +263,7 @@ export function parseWithRules(text: string, today = 0, startWeekday = 0): Parse
 
       return {
         id: `rule-${counter}`,
-        title: fragment,
+        title: nameWithoutWhen(fragment),
         type,
         kind,
         hours: hoursOf(lower),

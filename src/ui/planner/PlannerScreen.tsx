@@ -155,6 +155,7 @@ export function PlannerScreen({
                 item={item}
                 schedule={schedule}
                 today={today}
+                vocabulary={vocabulary}
                 onChange={(next) =>
                   setItems(items.map((existing) => (existing.id === next.id ? next : existing)))
                 }

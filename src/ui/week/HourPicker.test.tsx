@@ -21,8 +21,16 @@ import { HourPicker } from './HourPicker'
  * the prop between characters, and the test ends up asserting against the hour it started
  * with. This is how a consumer holds it, so it is how the test holds it.
  */
-function Harness({ start = 9, onChange }: { start?: number; onChange: (hour: number) => void }) {
-  const [hour, setHour] = useState(start)
+function Harness({
+  start = 9,
+  onChange,
+}: {
+  start?: number
+  onChange: (hour: number | null) => void
+}) {
+  // `HourPicker` reports `number | null` so an optional one can say "any time"; this harness
+  // drives the required form, where null never arrives, but the types have to admit it.
+  const [hour, setHour] = useState<number | null>(start)
 
   return (
     <Field label="Starts at">
@@ -115,5 +123,106 @@ describe('HourPicker', () => {
     const { input } = pick()
 
     expect(input.className).toMatch(/min-h-11/)
+  })
+})
+
+/**
+ * Fenced to the day the app actually schedules.
+ *
+ * The list is the platform's -- Chrome draws a time input's picker as a scrolling column --
+ * so the only honest way to shorten it is to have fewer hours to show. `WAKE_HOUR` and
+ * `DAY_END_HOUR` are the window `gapsOn` already walks: nothing is ever placed before 08:00,
+ * so offering 03:00 was offering an hour the app would not schedule into.
+ *
+ * A fence rather than a refusal. An hour outside it can still arrive from a block that is
+ * already in the week -- imported from a calendar, or set before this fence existed -- and
+ * the field has to show that block's real hour rather than silently move it.
+ */
+describe('the hours it offers', () => {
+  it('starts at the hour the app wakes up', () => {
+    const { input } = pick()
+
+    expect(input).toHaveAttribute('min', '08:00')
+  })
+
+  it('stops at the last hour it can schedule into', () => {
+    const { input } = pick()
+
+    expect(input).toHaveAttribute('max', '23:00')
+  })
+
+  /** A block already sitting at 02:00 is a fact about the week, not a value to argue with. */
+  it('still shows an hour from outside the window', () => {
+    const { input } = pick(vi.fn(), 2)
+
+    expect(input).toHaveValue('02:00')
+  })
+})
+
+/**
+ * "Any time" as a real answer, said by leaving the clock blank.
+ *
+ * `ItemChip`'s time was a `<select>` whose first option was "Any time" -- which is a genuine
+ * third answer (an essay due Friday has a day and no hour, and pinning one takes away the
+ * freedom the rebalancer needs) and the reason that control could not simply become a clock.
+ * A time input can be empty, so it can: blank means any time, exactly as `DayPicker`'s
+ * `optional` means no day.
+ *
+ * Only where the caller says so. A block on the week must start somewhere, and a form that
+ * let its hour be cleared would be offering a state the model cannot hold.
+ */
+describe('an hour that need not be given', () => {
+  const optional = (onChange = vi.fn(), start: number | null = 9) => {
+    function Optional() {
+      const [hour, setHour] = useState<number | null>(start)
+
+      return (
+        <Field label="Time">
+          <HourPicker
+            optional
+            value={hour}
+            onChange={(next) => {
+              setHour(next)
+              onChange(next)
+            }}
+          />
+        </Field>
+      )
+    }
+
+    render(<Optional />)
+
+    return { onChange, input: screen.getByLabelText('Time') }
+  }
+
+  it('shows nothing at all when no hour was given', () => {
+    const { input } = optional(vi.fn(), null)
+
+    expect(input).toHaveValue('')
+  })
+
+  it('gives the hour back to the app when the field is cleared', () => {
+    const { onChange, input } = optional()
+
+    fireEvent.change(input, { target: { value: '' } })
+
+    expect(onChange).toHaveBeenCalledWith(null)
+  })
+
+  it('still reports a real hour', () => {
+    const { onChange, input } = optional()
+
+    fireEvent.change(input, { target: { value: '14:00' } })
+
+    expect(onChange).toHaveBeenLastCalledWith(14)
+  })
+
+  /** The required form must not offer a state the week cannot hold. */
+  it('says nothing when a required hour is cleared', () => {
+    const { onChange, input } = pick()
+
+    fireEvent.change(input, { target: { value: '' } })
+
+    expect(onChange).not.toHaveBeenCalled()
   })
 })

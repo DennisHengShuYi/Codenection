@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Calendar, ParsedItem } from '../../ai'
 import { Button } from '../kit/Button'
 import { Field } from '../kit/Field'
+import type { KnownTitle } from '../../domain/titleVocabulary'
 import type { Schedule } from '../../optimizer'
 import { Sheet } from '../kit/Sheet'
 import { ItemChip } from './ItemChip'
@@ -26,6 +27,7 @@ export function PhotoImportScreen({
   onClose,
   schedule,
   today,
+  vocabulary = [],
   calendar,
 }: {
   onAccept: (items: readonly ParsedItem[]) => void
@@ -41,6 +43,14 @@ export function PhotoImportScreen({
   /** Ruling 43: the horizon's days in a student's words, for the chip's "when" question. */
   schedule: Schedule
   today: number
+  /**
+   * The names this student already uses, forwarded to the chips.
+   *
+   * §2.4's narrow rungs group answers by title, and Reality Check needs three answers under
+   * the SAME name before it can pad that particular work. Correcting a name by hand is where
+   * a second spelling gets typed, so the names in use are offered there.
+   */
+  vocabulary?: readonly KnownTitle[]
   /** Ruling 44: which real day day 0 is, so a weekday printed on a timetable lands on that
    *  weekday rather than on a day the model guessed at. */
   calendar: Calendar
@@ -139,7 +149,8 @@ export function PhotoImportScreen({
               {items.map((item) => (
                 <ItemChip
                   schedule={schedule}
-                today={today}
+                  today={today}
+                  vocabulary={vocabulary}
                   key={item.id}
                   item={item}
                   onChange={(next) =>

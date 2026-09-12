@@ -1,3 +1,4 @@
+import { DAY_END_HOUR, WAKE_HOUR } from '../../optimizer'
 import { hourLabel } from '../kit/labels'
 
 /**
@@ -21,11 +22,25 @@ import { hourLabel } from '../kit/labels'
 export function HourPicker({
   value,
   onChange,
+  optional = false,
   className = '',
   ...rest
 }: {
-  readonly value: number
-  readonly onChange: (hour: number) => void
+  readonly value: number | null
+  readonly onChange: (hour: number | null) => void
+  /**
+   * Whether "no hour" is an answer, said by leaving the clock blank.
+   *
+   * `ItemChip`'s time was a `<select>` whose first option was "Any time", and that is a
+   * genuine third answer rather than a missing one: an essay due Friday has a day and no
+   * hour, and pinning one takes away the freedom the rebalancer needs to place it. A time
+   * input can be empty, so it can say that too -- exactly as `DayPicker`'s own `optional`
+   * means no day.
+   *
+   * Off by default, because a block on the week must start somewhere: a form that let its
+   * hour be cleared would be offering a state the model cannot hold.
+   */
+  readonly optional?: boolean
   readonly className?: string
 } & Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
@@ -37,7 +52,22 @@ export function HourPicker({
       // Hours. Without it the spinner steps in minutes and the picker offers times this app
       // cannot hold.
       step={3600}
-      value={hourLabel(value)}
+      /*
+       * Fenced to the day the app actually schedules, and that is what shortens the list.
+       *
+       * The picker is the platform's -- Chrome draws a time input's as a scrolling column --
+       * so there is no styling this shorter. There are only fewer hours to show. These are
+       * the bounds `gapsOn` already walks: nothing is ever placed before `WAKE_HOUR`, so
+       * offering 03:00 was offering an hour the app would not schedule into.
+       *
+       * A fence rather than a refusal. `value` is not clamped, because a block already at
+       * 02:00 -- imported from a calendar, or set before this fence existed -- is a fact
+       * about the week, and a field that silently moved it would be lying about the week to
+       * tidy its own list.
+       */
+      min={hourLabel(WAKE_HOUR)}
+      max={hourLabel(DAY_END_HOUR - 1)}
+      value={value === null ? '' : hourLabel(value)}
       onChange={(event) => {
         /*
          * Matched before it is parsed, and that is not belt and braces.
@@ -49,7 +79,13 @@ export function HourPicker({
          * one moves a block under somebody mid-keystroke.
          */
         const said = /^(\d{2}):(\d{2})$/.exec(event.target.value)
-        if (said === null) return
+
+        if (said === null) {
+          // Blank is an answer where the caller allows one, and nothing at all where it does
+          // not -- the same fork `DayPicker` makes for a day nobody has chosen.
+          if (optional && event.target.value === '') onChange(null)
+          return
+        }
 
         const hour = Number(said[1])
         if (hour < 0 || hour > 23) return

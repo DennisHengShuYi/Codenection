@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ParsedItem } from '../../ai'
 import { Button } from '../kit/Button'
+import type { KnownTitle } from '../../domain/titleVocabulary'
 import type { Schedule } from '../../optimizer'
 import { Sheet } from '../kit/Sheet'
 import { ItemChip } from './ItemChip'
@@ -29,6 +30,7 @@ export function CalendarImportScreen({
   onClose,
   schedule,
   today,
+  vocabulary = [],
   suggestRepeat = () => null,
 }: {
   /** Whether this student has already granted calendar access. */
@@ -54,6 +56,14 @@ export function CalendarImportScreen({
   /** The week the chips are being added to, so each one can pick its day on a calendar. */
   readonly schedule: Schedule
   readonly today: number
+  /**
+   * The names this student already uses, forwarded to the chips.
+   *
+   * §2.4's narrow rungs group answers by title, and Reality Check needs three answers under
+   * the SAME name before it can pad that particular work. Correcting a name by hand is where
+   * a second spelling gets typed, so the names in use are offered there.
+   */
+  readonly vocabulary?: readonly KnownTitle[]
   readonly suggestRepeat?: (item: ParsedItem) => ParsedItem['repeat']
 }) {
   const [items, setItems] = useState<ParsedItem[] | null>(null)
@@ -191,6 +201,7 @@ export function CalendarImportScreen({
                 item={item}
                 schedule={schedule}
                 today={today}
+                vocabulary={vocabulary}
                 onChange={(next) =>
                   setItems(items.map((existing) => (existing.id === next.id ? next : existing)))
                 }

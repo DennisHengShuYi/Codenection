@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { ParsedItem } from '../../ai'
-import { ACTIVITY_KINDS } from '../../engine'
+import { ACTIVITY_KINDS, type ActivityKind } from '../../engine'
 import { ItemChip } from './ItemChip'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule } from '../../optimizer'
@@ -35,8 +35,12 @@ const item = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   ...over,
 })
 
-const setup = (over: Partial<ParsedItem> = {}, schedule: Schedule = WEEK) => {
-  const props = { item: item(over), onChange: vi.fn(), onRemove: vi.fn(), schedule, today: 0 }
+const setup = (
+  over: Partial<ParsedItem> = {},
+  schedule: Schedule = WEEK,
+  vocabulary: readonly { title: string; kind: ActivityKind }[] = [],
+) => {
+  const props = { item: item(over), onChange: vi.fn(), onRemove: vi.fn(), schedule, today: 0, vocabulary }
   render(<ItemChip {...props} />)
   return props
 }
@@ -262,10 +266,10 @@ describe('the chip saying when', () => {
     expect(screen.getByRole('option', { name: /day 3/i })).toBeInTheDocument()
   })
 
-  it('shows the stated time', () => {
+  it('shows the stated time on a clock', () => {
     setup({ deadlineDay: 2, startHour: 9 })
 
-    expect(screen.getByTestId('when-hour-a')).toHaveValue('9')
+    expect(screen.getByTestId('when-hour-a')).toHaveValue('09:00')
   })
 
   it('lets the day be corrected on the calendar', () => {
@@ -284,10 +288,10 @@ describe('the chip saying when', () => {
     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ deadlineDay: 3 }))
   })
 
-  it('lets the time be corrected', async () => {
+  it('lets the time be corrected', () => {
     const props = setup({ deadlineDay: 2, startHour: 9 })
 
-    await userEvent.selectOptions(screen.getByTestId('when-hour-a'), '14')
+    fireEvent.change(screen.getByTestId('when-hour-a'), { target: { value: '14:00' } })
 
     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ startHour: 14 }))
   })
@@ -297,12 +301,20 @@ describe('the chip saying when', () => {
    * no hour, and forcing one would pin it -- taking away the optimizer's freedom to place
    * it, which is the whole reason the week can be rebalanced at all.
    */
-  it('lets the time be given back to the app', async () => {
+  it('lets the time be given back to the app', () => {
     const props = setup({ deadlineDay: 2, startHour: 9 })
 
-    await userEvent.selectOptions(screen.getByTestId('when-hour-a'), '')
+    // Blank is the answer now, where it used to be the first of twenty-five options. The
+    // help line beside the field says so, so it is not a thing to be discovered.
+    fireEvent.change(screen.getByTestId('when-hour-a'), { target: { value: '' } })
 
     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ startHour: null }))
+  })
+
+  it('says so in words, rather than leaving blank to be discovered', () => {
+    setup({ deadlineDay: 2, startHour: 9 })
+
+    expect(screen.getByText(/blank for any time/i)).toBeVisible()
   })
 
   /**
@@ -347,16 +359,107 @@ describe('an item that repeats', () => {
 
   /** The hour is still the student's to see and correct: "every Tuesday" says which days,
    *  never what time. */
-  it('keeps the time editable on a repeating item', async () => {
+  it('keeps the time editable on a repeating item', () => {
     const props = setup({
       deadlineDay: null,
       startHour: 9,
       repeat: { weekdays: [2], untilDay: null },
     })
 
-    expect(screen.getByTestId('when-hour-a')).toHaveValue('9')
+    expect(screen.getByTestId('when-hour-a')).toHaveValue('09:00')
 
-    await userEvent.selectOptions(screen.getByTestId('when-hour-a'), '10')
+    fireEvent.change(screen.getByTestId('when-hour-a'), { target: { value: '10:00' } })
     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ startHour: 10 }))
+  })
+})
+
+/**
+ * The names this student already uses, offered on the chip too.
+ *
+ * §2.4's narrow rungs group answers by title, so "gym" and "Gym session" are two buckets
+ * neither of which ever fills -- and Reality Check needs three answers under the SAME name
+ * before it can pad that particular work. The manual add form has offered the names in use
+ * since that landed; the chips did not, which is the half a student actually meets: every
+ * one of the four ways in produces a chip, and correcting a name by hand is exactly where a
+ * second spelling gets typed.
+ */
+describe('the names already in use', () => {
+  const KNOWN = [
+    { title: 'WIA3001 essay', kind: 'studyBlock' as const },
+    { title: 'Badminton', kind: 'lightExercise' as const },
+  ]
+
+  it('offers them as suggestions on the name field', () => {
+    setup({}, WEEK, KNOWN)
+
+    const list = document.getElementById(`known-${'a'}`)
+
+    expect(list).not.toBeNull()
+    expect([...(list?.querySelectorAll('option') ?? [])].map((o) => o.getAttribute('value'))).toEqual([
+      'WIA3001 essay',
+      'Badminton',
+    ])
+  })
+
+  it('points the field at them', () => {
+    setup({}, WEEK, KNOWN)
+
+    expect(screen.getByLabelText('What')).toHaveAttribute('list', 'known-a')
+  })
+
+  /** A suggestion is not a constraint. A name that is genuinely new must need no escape
+   *  hatch, which is what a `<datalist>` on a plain text box gives for free. */
+  /** The chip is controlled by the screen around it, so typing character by character only
+   *  ever reports the first one back -- the value is set here, which is what proves the field
+   *  is free text rather than a list. */
+  it('still takes a name nobody has used before', () => {
+    const props = setup({}, WEEK, KNOWN)
+
+    fireEvent.change(screen.getByLabelText('What'), { target: { value: 'Kayaking' } })
+
+    expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ title: 'Kayaking' }))
+  })
+
+  it('offers nothing where nothing has been measured yet', () => {
+    setup()
+
+    expect(document.getElementById('known-a')?.querySelectorAll('option')).toHaveLength(0)
+  })
+})
+
+/**
+ * Where the controls sit.
+ *
+ * Remove was in the middle of the row, beside Time, reached by a thumb on its way to the
+ * hour -- and the row it sat in aligned to the bottom, so the Time field's help line pushed
+ * its label clear of the others and it read as belonging to nothing.
+ */
+describe('the shape of the chip', () => {
+  it('keeps Remove out of the field row', () => {
+    setup()
+
+    const row = screen.getByLabelText('Hours').closest('div')?.parentElement
+
+    expect(row).not.toBeNull()
+    expect(within(row as HTMLElement).queryByRole('button', { name: /remove/i })).toBeNull()
+  })
+
+  it('puts Remove last, after everything it could remove', () => {
+    setup()
+
+    const chip = screen.getByTestId('chip-a')
+    const remove = within(chip).getByRole('button', { name: /remove/i })
+
+    expect(chip.lastElementChild).toContainElement(remove)
+  })
+
+  /** Labels line up when the fields under them are different heights, which they are the
+   *  moment one of them carries a help line. */
+  it('lines the fields up by their labels', () => {
+    setup()
+
+    const row = screen.getByLabelText('Hours').closest('div')?.parentElement
+
+    expect(row?.className).toMatch(/items-start/)
   })
 })

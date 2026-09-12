@@ -249,3 +249,56 @@ describe('a named weekday, against the real calendar', () => {
     expect(parseWithRules('read chapter 3', 0, FRIDAY)[0]?.deadlineDay).toBeNull()
   })
 })
+
+/**
+ * The name is what is left once the parser has taken what it understood.
+ *
+ * "badminton at 3pm tuesday" became a chip called "badminton at 3pm tuesday" -- with 15:00
+ * in its Time field and Tuesday in its Due by, because the parser read both and then left
+ * them in the title as well. Said twice, and the second time in the one field §2.4 groups
+ * answers by: "badminton at 3pm tuesday" and "badminton at 5pm thursday" are two buckets
+ * that never fill, so Reality Check can never learn what badminton costs this student.
+ *
+ * Only what was actually taken. A word this parser did not read stays in the name, because
+ * a title trimmed on a guess is a name the student did not choose and cannot find again.
+ */
+describe('the name it gives a fragment', () => {
+  const titleOf = (text: string): string => parseWithRules(text)[0]?.title ?? ''
+
+  it('drops a time it has already read', () => {
+    expect(titleOf('badminton at 3pm')).toBe('badminton')
+  })
+
+  it('drops a day it has already read', () => {
+    expect(titleOf('badminton tuesday')).toBe('badminton')
+  })
+
+  it('drops both, in either order', () => {
+    expect(titleOf('badminton at 3pm tuesday')).toBe('badminton')
+    expect(titleOf('badminton tuesday at 3pm')).toBe('badminton')
+  })
+
+  it('drops a clock time as well as a meridiem one', () => {
+    expect(titleOf('badminton at 15:00')).toBe('badminton')
+  })
+
+  /** The whole point: the same activity written two ways becomes one name, which is the
+   *  bucket Reality Check needs three answers in. */
+  it('gives the same name to the same thing said differently', () => {
+    expect(titleOf('badminton at 3pm tuesday')).toBe(titleOf('badminton at 5pm thursday'))
+  })
+
+  it('keeps a name that says nothing about when', () => {
+    expect(titleOf('badminton')).toBe('badminton')
+  })
+
+  /** A name made only of when would be nothing at all, and a chip with no name is worse
+   *  than one named clumsily. */
+  it('keeps the fragment when there would be nothing left of it', () => {
+    expect(titleOf('tuesday 3pm')).toBe('tuesday 3pm')
+  })
+
+  it('leaves a word it did not read where it is', () => {
+    expect(titleOf('badminton with sam at 3pm')).toBe('badminton with sam')
+  })
+})

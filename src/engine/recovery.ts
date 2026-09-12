@@ -18,7 +18,20 @@ export const USEFUL_REST_HOURS = 3
  * move the number it is prescribed for.
  */
 export function recoveryForDay(day: DayInput, params: EngineParams): Reserves {
-  const sleepCredit = Math.max(0, day.sleepHours - params.sleepBaselineHours)
+  /*
+   * §6.1 amended: a window rather than a floor.
+   *
+   * `max(0, sleep - baseline)` alone treated sleep as linear forever, so twelve hours was
+   * credited as seven hours of recovery and "enough" was not something the model could hold.
+   * The ceiling is the same judgement §5.1 already makes about a single overlong rest block --
+   * past a point it is not recovery and must not be counted as though it were.
+   *
+   * The floor is untouched by this. Capping the upside leaves the downside exactly as it was,
+   * which is the conservative direction: a short night still credits nothing and still costs
+   * through `kSleepDebt`.
+   */
+  const creditedHours = Math.min(day.sleepHours, params.enoughSleepHours)
+  const sleepCredit = Math.max(0, creditedHours - params.sleepBaselineHours)
 
   // One pass rather than two filter-and-reduce chains. This runs 21 times per projection
   // and the optimizer evaluates thousands of projections per solve, so the intermediate

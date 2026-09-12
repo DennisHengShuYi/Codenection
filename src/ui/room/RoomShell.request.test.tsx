@@ -10,8 +10,9 @@ import { RoomShell } from './RoomShell'
 /**
  * The request box, split across two owners now. Pricing and drafting a reply moved into
  * the `+` sheet's third way in (§6) -- the request box was never a separate feature, just
- * one of three shapes for "something arrives". A lapsed commitment moved onto the room
- * screen as a live card (§3's precedence), reachable without a tap.
+ * one of three shapes for "something arrives". What is left here is accepting a request and
+ * the provisional yes it writes; what became of that yes when a week could no longer hold it
+ * is no longer a card, and the note at the foot of this file says where it went.
  *
  * The endpoint is stubbed unreachable, so the parser and the drafts both run their
  * rule-based paths.
@@ -79,73 +80,17 @@ describe('RoomShell with the request box', () => {
   })
 })
 
-describe('RoomShell with a lapsed commitment', () => {
-  /**
-   * §2.3's auto-expiry, at the surface it actually appears on now: a live card on the room
-   * screen, reachable with no tap.
-   *
-   * 25 rather than something lower: it sits in the gap between §1.5's low-energy threshold
-   * of 20 and the deficit line at 30, so this fixture does not also exercise the
-   * low-energy trimming and mask the assertion this test is actually about.
-   */
-  it('surfaces a lapsed commitment when the app opens', async () => {
-    counter += 1
-    const repository = createLocalRepository(`request-lapsed-${counter}`)
-    await repository.clear()
-    await repository.saveWeek(
-      week({
-        start: { mental: 25, physical: 25, social: 25, errands: 25 },
-        commitments: [
-          { id: 'c1', title: 'Committee meeting', reviewDay: -1, itemId: 'added-1' },
-        ],
-      }),
-    )
-
-    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
-    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one is
-    // the press a student makes.
-    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
-    await userEvent.click(screen.getByTestId('open-notices'))
-
-    expect(await screen.findByTestId('lapsed-notice')).toHaveTextContent('Committee meeting')
-  })
-
-  it('does not surface one the reserve can still hold', async () => {
-    counter += 1
-    const repository = createLocalRepository(`request-not-lapsed-${counter}`)
-    await repository.clear()
-    await repository.saveWeek(
-      week({
-        commitments: [{ id: 'c1', title: 'Committee meeting', reviewDay: -1, itemId: 'added-1' }],
-      }),
-    )
-
-    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
-
-    await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
-    expect(screen.queryByTestId('lapsed-notice')).toBeNull()
-  })
-
-  it('dismissing it is not answering it, but does clear it from the screen', async () => {
-    counter += 1
-    const repository = createLocalRepository(`request-dismiss-${counter}`)
-    await repository.clear()
-    await repository.saveWeek(
-      week({
-        start: { mental: 25, physical: 25, social: 25, errands: 25 },
-        commitments: [{ id: 'c1', title: 'Committee meeting', reviewDay: -1, itemId: 'added-1' }],
-      }),
-    )
-
-    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
-    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one is
-    // the press a student makes.
-    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
-    await userEvent.click(screen.getByTestId('open-notices'))
-    await screen.findByTestId('lapsed-notice')
-
-    await userEvent.click(screen.getByRole('button', { name: /got it/i }))
-
-    await waitFor(() => expect(screen.queryByTestId('lapsed-notice')).toBeNull())
-  })
-})
+/**
+ * The lapsed-commitment card used to be tested here, and its behaviour is gone rather than
+ * moved.
+ *
+ * Its trigger was a seven-day timer on a request-box acceptance: it could never appear for a
+ * student who had not used the request box, it lapsed every due commitment at once because
+ * nothing could tell which one tipped the week, and the deficit that fired it might sit
+ * nowhere near the thing being withdrawn. The slot it held now belongs to the overfull day,
+ * which asks the question that timer was reaching for -- covered in
+ * `RoomShell.overfull.test.tsx`.
+ *
+ * What survived is the withdrawal message, in `domain/withdrawal.ts` and its own test: the
+ * card's trigger was wrong, its sentence was not.
+ */

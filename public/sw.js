@@ -9,7 +9,12 @@
 // worker that cached the shell first and stored cross-origin and error responses, so an
 // existing v1 cache can hold an index.html naming deleted bundles. Renaming is the only way
 // to be rid of it on a browser that already has one.
-const CACHE = 'codenection-v2'
+// v3 evicts v2 for the same kind of reason: v2 stored same-origin API responses, so an
+// existing v2 cache holds a consent URL whose `state` expired ten minutes after it was
+// written. The rule below stops new ones being written, but only renaming clears the one a
+// browser already has -- and without this line the calendar stays broken for exactly the
+// people who already tried to connect one.
+const CACHE = 'codenection-v3'
 const SHELL = ['/', '/index.html']
 
 self.addEventListener('install', (event) => {
@@ -46,6 +51,24 @@ self.addEventListener('fetch', (event) => {
   // must always come from the network.
   const url = new URL(event.request.url)
   if (url.origin !== self.location.origin) return
+
+  // This app's own API, left entirely to the browser.
+  //
+  // The rule above names the hazard -- a cache-first worker serves a stored API response
+  // ahead of the network forever -- but it only covered cross-origin reads, and the
+  // functions in `api/` are served from this very origin on Vercel. So the reasoning
+  // applied and the check did not.
+  //
+  // What that cost: `/api/google-connect?begin=1` answers with a consent URL carrying a
+  // `state` signed at that moment and good for ten minutes. Cached, every later press
+  // replayed the first press's state, and connecting a calendar failed with "that link has
+  // expired" from ten minutes after the first attempt onwards -- for good, and unaffected
+  // by signing out, because this cache is keyed by origin rather than by session.
+  //
+  // Returning rather than handling it: there is no offline answer worth giving for a live
+  // read, and a fallback shell served where JSON was expected is worse than a failed fetch
+  // the caller already knows how to report.
+  if (url.pathname.startsWith('/api/')) return
 
   // Navigations are network-first, and must stay that way. index.html names the hashed
   // asset files the build produced, and every build produces different names -- so a shell

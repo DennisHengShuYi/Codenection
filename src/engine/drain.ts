@@ -50,6 +50,40 @@ function deadlineDrain(daysToNearestDeadline: number | null, weight: number): nu
 }
 
 /**
+ * How much more isolating a day is for having been a demanding one.
+ *
+ * §1.2 amended. The isolation charge was flat, so social fell at the same rate whether the
+ * student did two hours of work in a fortnight or fifty -- the one reserve that moved, moving
+ * like a metronome rather than like a life. A heavy day is precisely when somebody cancels on
+ * a friend, and the model said nothing about it.
+ *
+ * A multiplier on `isolationDrainPerDay` rather than a term of its own, and that is the
+ * design rather than a shortcut. `isolation` is one of the four coefficients
+ * `domain/recoveryLearning` identifies per student; a new parameter standing beside it would
+ * be one the app had no means of learning, and §7 is explicit that population priors are
+ * there to be calibrated. Folding the load into the learnable coefficient keeps it one
+ * number that evidence can still move.
+ *
+ * Measured against `dailyHoursCap` because that is already this codebase's answer to "a day
+ * this long is the most the model will permit", so a day at the cap is the most isolating
+ * there is and costs double. Bounded there too: without the ceiling an OCR import dropping
+ * twenty hours on one day would charge a fortnight's isolation to a Tuesday.
+ */
+const ISOLATION_LOAD_CEILING = 2
+
+function isolationLoadScale(
+  activities: readonly Activity[],
+  params: EngineParams,
+): number {
+  let hours = 0
+  for (const activity of activities) {
+    if (isDraining(activity)) hours += activity.hours
+  }
+
+  return Math.min(ISOLATION_LOAD_CEILING, 1 + hours / params.dailyHoursCap)
+}
+
+/**
  * §6.4. Per-type drain for a single day.
  *
  * Each activity costs `hours × intensity × typeIntensity × estimateBias`, scaled by the
@@ -131,7 +165,7 @@ export function drainForDay(
   }
 
   if (socialHours < params.socialFloorHoursPerDay) {
-    totals.social += params.isolationDrainPerDay
+    totals.social += params.isolationDrainPerDay * isolationLoadScale(day.activities, params)
   }
 
   return totals
@@ -208,7 +242,14 @@ export function drainSources(
   }
 
   if (socialHours < params.socialFloorHoursPerDay) {
-    add('isolation', 'social', params.isolationDrainPerDay)
+    // Scaled exactly as `drainForDay` scales it. `drain.test.ts` binds the two: if the
+    // itemised sources stop summing to what was charged, the explanation is describing a day
+    // the projection never simulated.
+    add(
+      'isolation',
+      'social',
+      params.isolationDrainPerDay * isolationLoadScale(day.activities, params),
+    )
   }
 
   return [...byKind.values()]

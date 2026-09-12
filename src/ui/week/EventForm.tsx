@@ -124,6 +124,34 @@ export function EventForm({
       ? null
       : Math.round(draft.hours * paddingDetail(outcomes, draft).padding * 2) / 2
 
+  /**
+   * Whether the correction has been put to the student and is waiting on an answer.
+   *
+   * The line used to sit under the fields, appearing and disappearing as the title was
+   * typed -- which reads as the app reacting to keystrokes rather than to the work, on a
+   * form already carrying a day, an hour, a deadline and a warning. As a step on the way out
+   * it is asked once, about a block that is finished, and it needs an answer before anything
+   * is written.
+   */
+  const [asking, setAsking] = useState(false)
+
+  /**
+   * Whether it has already been put to them for this block.
+   *
+   * The parent closes the sheet when `onSave` fires, so in practice the question is asked
+   * and gone. This is what makes that a consequence rather than the mechanism: a caller that
+   * keeps the form open must not be handed the same question again on the next press, which
+   * would be a dialog that will not let somebody leave.
+   */
+  const [asked, setAsked] = useState(false)
+
+  /** Answered, either way: the question is finished with before anything is written. */
+  const answer = (fields: ItemFields): void => {
+    setAsking(false)
+    setAsked(true)
+    onSave(fields)
+  }
+
   const errors = validate(draft)
   const warnings = editWarnings({ schedule, item: candidate(draft, item), params })
   const note = pinnedNote(item)
@@ -141,16 +169,63 @@ export function EventForm({
       onClose={onClose}
       onBack={onBack}
       actions={
-        <Button
-          data-testid="save-block"
-          disabled={!isComplete(errors)}
-          onClick={() => onSave(toFields(draft))}
-        >
-          Save
-        </Button>
+        asking ? (
+          <>
+            {/* Refusing is a real answer and saves what they typed. §2.4 still pads it
+                behind them -- what they are refusing is the change to their calendar, not
+                the model's correction, which they need not know about at all. */}
+            <Button
+              variant="secondary"
+              data-testid="keep-typed-hours"
+              onClick={() => answer(toFields(draft))}
+            >
+              Keep {draft.hours}h
+            </Button>
+
+            {/*
+              Accepting writes the corrected figure into the block, so the calendar says what
+              the work will actually take -- and sets `paddedHours`, without which the model
+              would pad the bigger number again and taking the advice would cost more than
+              ignoring it. Saved from the draft in hand rather than through `setDraft`, which
+              would not have landed by the time this handler returns.
+            */}
+            <Button
+              data-testid="use-padded-hours"
+              onClick={() =>
+                answer(toFields({ ...draft, hours: padded ?? draft.hours, paddedHours: true }))
+              }
+            >
+              Plan {padded}h
+            </Button>
+          </>
+        ) : (
+          <Button
+            data-testid="save-block"
+            disabled={!isComplete(errors)}
+            onClick={() =>
+              padded === null || asked ? onSave(toFields(draft)) : setAsking(true)
+            }
+          >
+            Save
+          </Button>
+        )
       }
     >
-      <div className="flex flex-col gap-3">
+      {asking && (
+        <div data-testid="padding-ask" className="flex flex-col gap-3">
+          <p className="text-sm text-ink">
+            {draft.title} — you have put down {draft.hours}h.
+          </p>
+
+          {/* The rung that applies to THIS block, because that is what the engine charges.
+              A line quoting the area average would describe a correction it is not making. */}
+          <p data-testid="bias-line" className="text-sm text-ink-soft">
+            {bias}
+          </p>
+        </div>
+      )}
+
+      <div className={asking ? 'hidden' : 'flex flex-col gap-3'}>
         <Field label="What" error={errors.title}>
           {/*
             What this student has called things before, offered while they type.
@@ -273,47 +348,6 @@ export function EventForm({
             onChange={(deadlineDay) => setDraft({ ...draft, deadlineDay })}
           />
         </div>
-
-        {/*
-          §7.6, at the moment the estimate is being typed.
-
-          §2.4 pads silently and says a student need not know the parameter exists -- the
-          alternative is asking them to be more realistic, which does not work. "Need not
-          know" is not "must not be told", though, and this is the one moment the correction
-          is about a figure in front of them.
-
-          It quotes the rung that applies to *this* block, because that is what the engine
-          charges. A line quoting the area average would be describing a correction the app
-          is not making.
-        */}
-        {bias !== null && (
-          <div className="flex flex-wrap items-center gap-2">
-            <p data-testid="bias-line" className="text-xs text-ink-soft">
-              {bias}
-            </p>
-
-            {/*
-              Offered, not applied.
-
-              Padding behind the student is right for a model and wrong for a calendar: an
-              hour the app privately thinks is two is still an hour they plan their evening
-              around. Accepting writes the corrected figure into the block, so the calendar
-              says what the work will actually take -- and sets `paddedHours`, without which
-              the model would pad the bigger number again and taking the advice would cost
-              more than ignoring it.
-            */}
-            {padded !== null && (
-              <Button
-                size="sm"
-                variant="secondary"
-                data-testid="use-padded-hours"
-                onClick={() => setDraft({ ...draft, hours: padded, paddedHours: true })}
-              >
-                Plan {padded}h instead
-              </Button>
-            )}
-          </div>
-        )}
 
         {/* §5.1's boundary, drawn where the student can see it -- the same checkbox
             `ItemChip` offers when something is first read in, offered again here because a

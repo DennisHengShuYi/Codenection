@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARAMS } from '../engine'
-import { isValid } from './constraints'
+import { isValid, overlaps } from './constraints'
 import { rebalance } from './hillClimb'
 import { score } from './objective'
 import { makeRng } from './rng'
 import { makeSchedule, restItem, socialBaseline, studyItem } from './testSupport'
+import type { Schedule, ScheduledItem } from './types'
 
 /** Three pieces of assessed work stacked on one day, all with slack to move into. */
 const pileUp = () =>
@@ -153,5 +154,117 @@ describe('rebalance', () => {
     const result = rebalance(pileUp(), DEFAULT_PARAMS, makeRng(1), 0)
 
     expect(result.evaluations).toBeGreaterThan(result.moves.length)
+  })
+})
+
+/**
+ * A week that arrived with a clash comes back without one.
+ *
+ * The gap this closes: `violations` counted a loose block sitting on a fixed one or on
+ * protected rest, but only ever as a gate on candidate moves -- "no worse than you started"
+ * -- and the score cannot see overlap at all. So a repairing move was permitted and never
+ * preferred. Four probes confirmed it, the worst being a study block on top of protected
+ * rest surviving a full rebalance, which §5.1 makes the version of this that matters.
+ */
+describe('a week that arrives broken', () => {
+  const at = (id: string, over: Partial<ScheduledItem> = {}): ScheduledItem => ({
+    ...studyItem(id, 2, 2),
+    startHour: 14,
+    ...over,
+  })
+
+  const clashing = (over: Partial<ScheduledItem>): Schedule =>
+    makeSchedule([at('Lecture', over), at('Reading')])
+
+  const stillClashing = (schedule: Schedule): boolean =>
+    schedule.items.some((a) =>
+      schedule.items.some(
+        (b) => a.id !== b.id && a.dayIndex === b.dayIndex && overlaps(a, b) && (a.fixed || a.protectedRest),
+      ),
+    )
+
+  it('separates a block sitting on a fixed commitment', () => {
+    const result = rebalance(clashing({ fixed: true }), DEFAULT_PARAMS, makeRng(1), 0)
+
+    expect(stillClashing(result.schedule)).toBe(false)
+  })
+
+  it('separates a block sitting on protected rest', () => {
+    const result = rebalance(
+      clashing({ kind: 'rest', title: 'Rest', protectedRest: true }),
+      DEFAULT_PARAMS,
+      makeRng(1),
+      0,
+    )
+
+    expect(stillClashing(result.schedule)).toBe(false)
+  })
+
+  /** A repair can cost a point of score by breaking up a day, and the clash still has to go
+   *  -- so the search's own bar cannot be what decides whether it is kept. */
+  it('keeps the repair even when the search finds nothing worth doing', () => {
+    const result = rebalance(clashing({ fixed: true }), DEFAULT_PARAMS, makeRng(1), 0)
+
+    expect(result.moves.some((move) => move.kind === 'clearClash')).toBe(true)
+  })
+
+  /** Undo means "as it was", not "as it was once we had tidied it". */
+  it('remembers the week the student actually had, clash and all', () => {
+    const before = clashing({ fixed: true })
+
+    expect(rebalance(before, DEFAULT_PARAMS, makeRng(1), 0).before).toEqual(before)
+  })
+
+  it('leaves a week with no clash exactly as the search left it', () => {
+    const clean = makeSchedule([
+      at('Lecture', { startHour: 9, fixed: true }),
+      at('Reading'),
+    ])
+
+    expect(
+      rebalance(clean, DEFAULT_PARAMS, makeRng(1), 0).moves.some(
+        (move) => move.kind === 'clearClash',
+      ),
+    ).toBe(false)
+  })
+})
+
+/**
+ * The invariant the repair pass exists for: a rebalance hands back a calendar somebody can
+ * actually follow.
+ *
+ * Guarded on a busy fortnight rather than a two-block fixture because the pass runs *before*
+ * the climb, and nothing in `violations` or the score stops the search stacking two loose
+ * blocks again on its way through -- `constraints.ts` permits that state on purpose, so the
+ * search may pass through it. Every fixture measured comes back clean, and this is what says
+ * so out loud: if a future move ever hands one back, the answer is a second pass after the
+ * climb, and this test is where that will be argued.
+ */
+describe('the week that comes back', () => {
+  const busy = () =>
+    makeSchedule([
+      ...socialBaseline(),
+      ...Array.from({ length: 12 }, (_, n) => studyItem(`s${n}`, n % 7, 2)),
+      restItem('rest', 3, 20),
+    ])
+
+  const clashCount = (schedule: Schedule): number => {
+    let found = 0
+    for (let i = 0; i < schedule.items.length; i += 1) {
+      for (let j = i + 1; j < schedule.items.length; j += 1) {
+        const a = schedule.items[i]!
+        const b = schedule.items[j]!
+        if (a.dayIndex === b.dayIndex && overlaps(a, b)) found += 1
+      }
+    }
+    return found
+  }
+
+  it('has nothing sitting on anything else, however crowded it started', () => {
+    const before = busy()
+
+    // The fixture stacks study blocks at nine o'clock, which is what makes it worth running.
+    expect(clashCount(before)).toBeGreaterThan(0)
+    expect(clashCount(rebalance(before, DEFAULT_PARAMS, makeRng(1), 0).schedule)).toBe(0)
   })
 })

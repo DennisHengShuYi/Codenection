@@ -94,34 +94,24 @@ describe('RestPreview when something has to move', () => {
   })
 })
 
-describe('RestPreview when today will not take it', () => {
-  const laterDay: RestPlan = {
-    kind: 'laterDay',
-    block: { ...block, dayIndex: 5 },
-    gain,
-    whyNotToday: 'There is no stretch of today left with room in it.',
-  }
-
-  it('says why today was not the answer', () => {
-    show(laterDay)
-
-    expect(screen.getByTestId('rest-why')).toHaveTextContent(/no stretch of today/i)
-  })
-
-  it('still offers the later day rather than only refusing', () => {
-    show(laterDay)
-
-    expect(screen.getByTestId('approve-rest')).toBeVisible()
-  })
-})
+/**
+ * The "not today, but here is when" plan is gone.
+ *
+ * §5's Rest is pressed by somebody tired *now*, so a day three out is a plan rather than a
+ * stop. Today or a refusal are the only two answers, and the refusal carries the reason --
+ * which is what the describe below covers.
+ */
 
 describe('RestPreview when there is nowhere for it', () => {
-  const refused: RestPlan = { kind: 'refused', why: 'No day in the fortnight has room.' }
+  const refused: RestPlan = {
+    kind: 'refused',
+    why: 'There is no stretch of today left with room in it.',
+  }
 
   it('says what is blocking it', () => {
     show(refused)
 
-    expect(screen.getByTestId('rest-why')).toHaveTextContent(/no day in the fortnight/i)
+    expect(screen.getByTestId('rest-why')).toHaveTextContent(/no stretch of today/i)
   })
 
   /** Nothing to approve. A primary button that cannot do anything is worse than none. */

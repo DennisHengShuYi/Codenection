@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { Calendar, Draft, ParsedItem } from '../../ai'
 import { addItems } from '../../domain/addItems'
 import type { EnergyPrediction } from '../../domain/predictions'
+import type { SleepNight } from '../../domain/sleepLog'
 import type { BlockRecord } from '../../domain/blockLog'
 import { priceRequest, type RequestCost } from '../../domain/requestCost'
 import type { EngineParams } from '../../engine'
@@ -41,7 +42,11 @@ const roomFor = (
   predictions: readonly EnergyPrediction[],
   today: number,
   sleepTargetHours: number | undefined,
-) => roomModel({ schedule, today, blockLog, predictions, sleepTargetHours })
+  /** The reported nights, for how much sleep is enough for this student. Not defaulted, for
+   *  the reason `blockLog` above is not: a preview drawn from population coefficients beside
+   *  a room drawn from learned ones is two numbers for one week, on one screen. */
+  nights: readonly SleepNight[],
+) => roomModel({ schedule, today, blockLog, predictions, sleepTargetHours, nights })
 
 /**
  * §2.3's request box.
@@ -64,6 +69,7 @@ export function RequestBoxScreen({
   blockLog,
   predictions,
   sleepTargetHours,
+  reportedNights = [],
   onAccept,
   onBack,
   onClose,
@@ -93,6 +99,9 @@ export function RequestBoxScreen({
    * screens, which is the class of disagreement `roomFor`'s own comment exists to stop.
    */
   sleepTargetHours?: number
+  /** §8b's reported nights, for how much sleep is enough for this student. Optional and
+   *  defaulting to empty at the destructure, as every other learned input here is. */
+  readonly reportedNights?: readonly SleepNight[]
   onAccept: (item: ParsedItem) => void
   /** Ruling 60: one level up, to the chooser this was chosen from. */
   onBack: () => void
@@ -235,8 +244,8 @@ export function RequestBoxScreen({
 
             {/* §2.3, via §1.3: the warning is shown as two rooms. */}
             <RoomComparison
-              now={roomFor(schedule, blockLog, predictions, today, sleepTargetHours)}
-              ifAccepted={roomFor(addItems(schedule, [item], today), blockLog, predictions, today, sleepTargetHours)}
+              now={roomFor(schedule, blockLog, predictions, today, sleepTargetHours, reportedNights)}
+              ifAccepted={roomFor(addItems(schedule, [item], today), blockLog, predictions, today, sleepTargetHours, reportedNights)}
             />
 
             {drafts.length > 0 && (

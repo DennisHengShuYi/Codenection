@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ParsedItem } from '../ai'
 import { HORIZON_DAYS } from '../engine'
-import type { Schedule, ScheduledItem } from '../optimizer'
+import { smallestFixes, type Schedule, type ScheduledItem } from '../optimizer'
 import { DEFAULT_PARAMS } from '../engine'
 import { describeDeferral, describePlacement, fixThatMakesRoom, placeItems } from './placement'
 import { slotOn, type SlotNeed } from './slotFinder'
@@ -251,6 +251,72 @@ describe('fixThatMakesRoom', () => {
     if (fix !== null) {
       expect(slotOn(fix.move.apply(crowded), 3, { hours: 4, type: 'mental', kind: 'studyBlock' })).not.toBeNull()
     }
+  })
+
+  /**
+   * Among moves that all open the room, the one with the most slack.
+   *
+   * `smallestFixes` ranks by days out of deficit, then depth, then floor gain -- nothing in
+   * that measure knows how soon a block is due, and it deliberately must not, because
+   * aligning it with `score` would stop the fallback firing at all (see its own docstring).
+   * So urgency was a wall and never a preference: a deadline could not be crossed, but an
+   * essay due tomorrow was as likely to be picked as next week's laundry.
+   *
+   * That matters most here of all the callers. The Rest button moves something to buy a
+   * student time off, so reaching for the most urgent thing on the day is the one choice that
+   * turns a rest into a debt.
+   */
+  it('moves the block with the most slack, among those that open the room', () => {
+    const urgent = {
+      ...fullDay(3),
+      id: 'essay',
+      title: 'Essay',
+      hours: 6,
+      startHour: 8,
+      fixed: false,
+      deadlineDay: 4,
+    }
+    // Five, not four: the day runs to `DAY_END_HOUR` of 24, so stopping at 22 leaves a free
+    // two-hour slot and every candidate "opens the room" without moving anything.
+    const roomy = Array.from({ length: 5 }, (_, index) => ({
+      ...fullDay(3),
+      id: `soft-${index}`,
+      title: `Soft ${index}`,
+      hours: 2,
+      startHour: 14 + index * 2,
+      fixed: false,
+      deadlineDay: 20,
+    }))
+
+    const crowded = {
+      ...empty(),
+      // Depleted enough that lifting a block off this day genuinely improves the fortnight.
+      // `smallestFixes` only returns moves that help, so on a healthy week nothing survives
+      // its filter and there is no choice to make.
+      start: { mental: 32, physical: 70, social: 70, errands: 70 },
+      items: [urgent, ...roomy],
+    }
+
+    const wanted = { hours: 2, type: 'mental' as const, kind: 'studyBlock' as const }
+    const slackOf = (itemId: string): number => {
+      const item = crowded.items.find((entry) => entry.id === itemId)
+      return item === undefined ? HORIZON_DAYS : (item.deadlineDay ?? HORIZON_DAYS) - item.dayIndex
+    }
+
+    const openers = smallestFixes(crowded, DEFAULT_PARAMS, 0, 8).filter(
+      (candidate) => slotOn(candidate.move.apply(crowded), 3, wanted) !== null,
+    )
+
+    // The premise, asserted rather than assumed: there is a genuine choice here, with moves
+    // of different urgency both opening the room. Without this the assertion below could
+    // pass on a fixture where only one move ever qualified.
+    const slacks = new Set(openers.map((candidate) => slackOf(candidate.move.itemId)))
+    expect(slacks.size).toBeGreaterThan(1)
+
+    const fix = fixThatMakesRoom(crowded, need({ hours: 2 }), 3, DEFAULT_PARAMS, 0)
+
+    expect(fix).not.toBeNull()
+    expect(slackOf(fix!.move.itemId)).toBe(Math.max(...slacks))
   })
 
   it('does not modify the week it was given', () => {

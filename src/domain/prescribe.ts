@@ -1,9 +1,15 @@
-import { USEFUL_REST_HOURS, type ActivityKind, type LoadType } from '../engine'
+import {
+  LOAD_TYPES,
+  USEFUL_REST_HOURS,
+  type ActivityKind,
+  type LoadType,
+  type Reserves,
+} from '../engine'
 import type { Schedule } from '../optimizer'
 import { blocksOnDay } from './dayBlocks'
 import { DAY_END_HOUR, gapsOn, MIN_GAP_HOURS, WAKE_HOUR, type FreeSlot } from './slotFinder'
 import type { BlockRecord } from './blockLog'
-import { missedSoftDeadlines } from './softDeadlines'
+import { missedSoftDeadlines, type SoftDeadlineMiss } from './softDeadlines'
 
 /** Past this the engine credits nothing, so a longer suggestion would promise recovery the
  *  model refuses to pay out. Imported rather than restated: `engine/index.ts` exports it
@@ -115,14 +121,56 @@ export function prescribe(
   schedule: Schedule,
   today: number,
   blockLog: readonly BlockRecord[],
+  /**
+   * The reserve entering today, where the caller has it: an ORDERING, and nothing more.
+   *
+   * What is neglected still comes entirely from `missedSoftDeadlines` -- a reserve can never
+   * conjure a prescription for a rhythm that is being kept, which is what the paragraphs
+   * above are about. This decides only which of SEVERAL overdue things to answer first, and
+   * that is the one question a rhythm cannot answer: "you have not walked in nine days" and
+   * "you have not seen anyone in eight" are equally true, and the reserve levels say which
+   * one is actually costing the student something.
+   *
+   * The Reserves sheet is what made this visible. It put "People is your thinnest, at 43"
+   * directly above "Worth doing: stop and do nothing" -- both lines correct, answering
+   * different questions, and reading as an app not listening to itself.
+   *
+   * Optional because the Telegram doors call this without a projection to hand, and their
+   * two call sites must agree with each other or a tapped button re-derives a different
+   * prescription than the one it offered. Absent, the ordering is exactly what it was.
+   */
+  reserves?: Reserves,
 ): Prescription | null {
-  // Already sorted most-neglected-first. `find` rather than `[0]` so the worst miss having
-  // no advice of its own -- errands, deliberately -- never silently suppresses advice for
-  // whatever is next. That was a real defect under the old reserve ordering and it would
+  // Already sorted most-neglected-first. Filtered rather than `find`-ed so the worst miss
+  // having no advice of its own -- errands, deliberately -- never silently suppresses advice
+  // for whatever is next. That was a real defect under the old reserve ordering and it would
   // have survived the change unexamined.
-  const miss = missedSoftDeadlines(schedule, today, blockLog).find(
+  const overdue = missedSoftDeadlines(schedule, today, blockLog).filter(
     (candidate) => ADVICE[candidate.type] !== undefined,
   )
+
+  /*
+   * The reserves in the order they need answering, thinnest first.
+   *
+   * Walked all the way down rather than checked once against the floor. The lowest reserve
+   * often has nothing overdue -- because something is already booked for it, which is the
+   * app working -- and falling straight back to days-late at that point threw away an
+   * ordering already in hand. Rest goes overdue after one day and the other rhythms after
+   * three or four, so days-late is a race rest wins almost every time: that is how "stop and
+   * do nothing" kept appearing under a headline about a reserve with nothing to do with
+   * resting.
+   */
+  const byNeed = reserves === undefined ? [] : [...LOAD_TYPES].sort((a, b) => reserves[a] - reserves[b])
+
+  // Days-late underneath, for a caller that gave no reserves: the Telegram doors, whose two
+  // call sites must agree with each other or a tapped button re-derives a different
+  // prescription than the one it offered.
+  const miss =
+    byNeed.reduce<SoftDeadlineMiss | undefined>(
+      (found, type) => found ?? overdue.find((candidate) => candidate.type === type),
+      undefined,
+    ) ?? overdue[0]
+
   if (!miss) return null
 
   const advice = ADVICE[miss.type]

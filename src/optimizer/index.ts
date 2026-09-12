@@ -15,6 +15,7 @@ export type {
 } from './types'
 export { DAY_END_HOUR, gapsOn, hourNear, MIN_GAP_HOURS, WAKE_HOUR, type FreeSlot } from './gaps'
 export { isValid, isWork, overlaps, violations } from './constraints'
+export { clearClashes, type RepairResult } from './repair'
 export { ALL_PRESENT, DEFICIT_DAY_WEIGHT, FRAGMENTATION_WEIGHT, score, toDayInputs } from './objective'
 export { neighbours } from './neighbours'
 export { makeRng, type Rng } from './rng'

@@ -1,6 +1,7 @@
 import { checkedInDays, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
 import { paramsFor } from '../../domain/engineParams'
 import type { EnergyPrediction } from '../../domain/predictions'
+import type { SleepNight } from '../../domain/sleepLog'
 import { project, type Reserves } from '../../engine'
 import { toDayInputs, type Schedule } from '../../optimizer'
 import { roomStateFor, type RoomState } from './roomState'
@@ -47,6 +48,16 @@ export interface RoomModelInput {
    * and it wants the target threaded there rather than this made required.
    */
   readonly sleepTargetHours?: number
+  /**
+   * §8b's reported nights, for how much sleep is enough for this student.
+   *
+   * Threaded for `predictions`' stated reason and not a new one: left out, the room is drawn
+   * from population coefficients while the sleep page quotes a learned figure, and two
+   * surfaces describe one fortnight differently. Optional and defaulting to empty, so every
+   * caller written before this keeps behaving exactly as it did -- `enoughSleepFor` returns
+   * the population figure on no evidence.
+   */
+  readonly nights?: readonly SleepNight[]
 }
 
 export interface RoomModel {
@@ -92,6 +103,7 @@ export function roomModel({
   blockLog,
   predictions,
   sleepTargetHours,
+  nights = [],
 }: RoomModelInput): RoomModel {
   // §8b/Task 17: the durable log is the only source now. It used to be unioned with the
   // profile's own `confirmations` because nothing wrote a `BlockRecord` in the running app
@@ -99,7 +111,7 @@ export function roomModel({
   // Threaded so the drawing runs the same model the prediction loop does. Left out, the
   // room would be lit by population coefficients while the today card scored itself against
   // learned ones -- two surfaces describing the same fortnight differently.
-  const params = paramsFor(outcomesFrom(blockLog), predictions)
+  const params = paramsFor(outcomesFrom(blockLog), predictions, nights)
   // §8b/Ruling 11 amended: a past day carrying no answer is a day the student went quiet,
   // and the model should get more worried, not pretend it heard from them. Days from
   // `today` onward stay checked in -- there is nothing to check in about yet -- which is

@@ -1,26 +1,11 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type { ScheduledItem } from '../../optimizer'
 import { TodayCard } from './TodayCard'
 
-const block: ScheduledItem = {
-  id: 'essay',
-  title: 'Essay draft',
-  type: 'mental',
-  kind: 'studyBlock',
-  hours: 3,
-  intensity: 1,
-  dayIndex: 0,
-  startHour: 9,
-  fixed: false,
-  deadlineDay: null,
-  protectedRest: false,
-}
 
 const setup = (overrides: Partial<Parameters<typeof TodayCard>[0]> = {}) => {
   const props = {
-    block,
     askEnergy: true,
     askSleep: true,
     onEnergy: vi.fn(),
@@ -81,7 +66,7 @@ describe('TodayCard', () => {
 
 
   it('returns null once every row is answered', () => {
-    const { view } = setup({ askEnergy: false, askSleep: false, block: null })
+    const { view } = setup({ askEnergy: false, askSleep: false })
 
     expect(view.container).toBeEmptyDOMElement()
   })
@@ -119,7 +104,6 @@ describe('TodayCard and the sleep reality line', () => {
   it('shows the line when there is something measured to say', () => {
     render(
       <TodayCard
-        block={null}
         askEnergy={false}
         askSleep
         sleepRealityLine="You plan 8 hours and average about 6."
@@ -137,7 +121,6 @@ describe('TodayCard and the sleep reality line', () => {
   it('renders no element at all when there is nothing measured', () => {
     render(
       <TodayCard
-        block={null}
         askEnergy={false}
         askSleep
         onEnergy={vi.fn()}
@@ -159,7 +142,6 @@ describe('TodayCard and the sleep reality line', () => {
   it('sits below the buckets rather than above them', () => {
     const { container } = render(
       <TodayCard
-        block={null}
         askEnergy={false}
         askSleep
         sleepRealityLine="You plan 8 hours and average about 6."
@@ -187,7 +169,6 @@ describe('TodayCard and confirming last night', () => {
   const card = (over: Record<string, unknown> = {}) =>
     render(
       <TodayCard
-        block={null}
         askEnergy={false}
         askSleep
         onEnergy={vi.fn()}

@@ -32,28 +32,34 @@ night and deliberately stores nothing. Rulings 64 to 66 record why each is shape
 Known not built, with the spec amended to say so rather than promising it: §7.2's three-day
 painter and its parameter extraction, §7.7's calibration meter, §9's Malaysia-specific holiday
 and get-outside lists, and §6.4's rolling debt. There is also no server-side quota on the
-public AI endpoints — `plan`, `draft`, `read-photo` and `micro-start` spend the Groq budget
-unauthenticated, which `api/micro-start.ts` states in place.
+public AI endpoints — `plan`, `draft`, `read-photo`, `micro-start` and `insight` spend the
+Groq budget unauthenticated, which `api/micro-start.ts` states in place.
 
 Sleep is worth reading about before changing anything near it, because four numbers that look
 alike answer different questions. `Schedule.sleepByDay[d]` is the night at the **end** of day d
 — §6.1 puts sleep in `recovery[d]`, which produces `reserve[d+1]` — and it holds what the app
 *assumes*, derived every render by `domain/sleepAssumed` from three durable facts in settings:
-a target, any night the student set, and `domain/sleepLog`'s reported nights. The three sleep
+a target, any night the student set, and `domain/sleepLog`'s reported nights. The four sleep
 figures that must never converge are `DEFAULT_SLEEP_HOURS` (8, the night assumed when nobody
-has said), `SLEEP_BASELINE_HOURS` (5, where sleep starts paying and below which it now costs)
-and `roomState.RESTED_NIGHT_HOURS` (7, the line below which a student counts as short).
-Rulings 64 to 68 record why each part is shaped as it is.
+has said), `SLEEP_BASELINE_HOURS` (5, where sleep starts paying and below which it now costs),
+`ENOUGH_SLEEP_HOURS` (9, where it stops paying — the population figure, learned down per
+student by `domain/sleepEnough`) and `roomState.RESTED_NIGHT_HOURS` (7, the line below which a
+student counts as short). Rulings 64 to 69 record why each part is shaped as it is.
 
 One known-open item from the sleep work: `RoomShell.tsx` has grown well past the 800-line
 ceiling, because extracting the settings sheet was dropped from that change rather than done in
 a file being edited concurrently.
 
-Not built, and a decision is needed before it can be: learning a student's personal sleep
-*need* rather than taking their stated target. §7.7's "Not built" note on `sleepBaselineHours`
-explains why prediction residuals cannot identify it; the evidence that could is now collected
-(reported nights beside reported energy), but it needs a real estimator and an answer to what
-the app should say for a student whose sleep never varies.
+Half of a student's personal sleep *need* is now learned rather than assumed, and the halves
+are easy to confuse. `domain/sleepEnough` learns `EngineParams.enoughSleepHours` -- where sleep
+stops paying back -- by pairing reported nights against §8.1's resolved predictions and
+comparing the two halves of that student's own sleep, split at their median night. It is
+deliberately not a fifth entry in `domain/recoveryLearning`, because a finite difference cannot
+identify a threshold and could only ever push this one up; Ruling 69 records why. A student
+whose sleep never varies gets silence and the population figure, by the same mechanism every
+other unmeasured parameter is silent -- and so does one whose two groups sit less than an hour
+apart, which is the half of the evidence bar the sample floor does not cover. `sleepBaselineHours` -- the other end of the same window,
+where sleep *starts* paying -- is still unmeasured, and §7.2's painter is still the plan for it.
 
 Where the source lives:
 

@@ -74,90 +74,66 @@ const renderHome = async (schedule = week()) => {
   return repository
 }
 
-describe('RoomShell with a stuck task', () => {
-  it('suggests nothing until a task is actually stuck', async () => {
-    await renderHome()
+/**
+ * §4.1's card, and the chain behind it.
+ *
+ * The card is raised in the block's own slot, which is what §4.1's trigger now means: not
+ * three days after a block first appeared -- which put "stuck on this one?" in front of a
+ * student at any hour, about something on a day already past -- but at the moment they are
+ * supposed to be doing the thing.
+ *
+ * It names the block as well as the move. "Put your kit on" over a room holding three of
+ * today's items made a student work out which one was meant, and asking somebody who cannot
+ * start a task to first identify the task is the deliberation this card exists to remove.
+ */
+describe('the waiting sheet', () => {
+  it('raises a micro-start card for the block whose slot it is', async () => {
+    await renderHome(week({ items: [runningNow({ title: 'Gym', kind: 'hardExercise' })] }))
+
+    expect(await screen.findByTestId('micro-start')).toBeInTheDocument()
+    expect(screen.getByTestId('micro-start-title')).toHaveTextContent('Gym')
+  })
+
+  /** Rest is not a task somebody is failing to start, and a micro-start for it would turn
+   *  recovery into another thing to be behind on. */
+  it('raises none for protected rest, however much of it is running', async () => {
+    await renderHome(week({ items: [runningNow({ protectedRest: true })] }))
 
     expect(screen.queryByTestId('micro-start')).toBeNull()
   })
 
-  /**
-   * The direction guard, which used to live in `blockActions.test.ts` and moved here with
-   * the caller that computes the age.
-   *
-   * §4.1's trigger is "three days past first appearance", and a task a fortnight in the
-   * *future* has not appeared yet. The age was once computed as `dayIndex - today` -- the
-   * wait ahead of a task rather than the time behind it -- so every distant errand read as
-   * stuck and the room shouted. Nothing else in the suite catches a flipped sign head-on.
-   */
-  it('does not call a task scheduled a fortnight ahead stuck', async () => {
-    await renderHome(week({ items: [item({ dayIndex: 13 })] }))
+  it('raises none for a block whose slot has not come round', async () => {
+    // Tomorrow, so `isStuck`'s day check refuses it whatever the hour happens to be.
+    await renderHome(week({ items: [runningNow({ dayIndex: 1 })] }))
 
     expect(screen.queryByTestId('micro-start')).toBeNull()
   })
 
-  /**
-   * §4.1's trigger is the block's own slot now, not its age: "stuck on this one?" belongs at
-   * the hour you are supposed to be doing it, and a block three days old sits on a past day
-   * where the prompt could never be acted on. See `domain/microStart.isStuck`.
-   */
-  it('raises the card unprompted while the block is in its own slot', async () => {
-    counter += 1
-    const repository = createLocalRepository(`micro-stuck-${counter}`)
-    await repository.clear()
-    await repository.saveWeek(week({ items: [runningNow()] }))
+  /** "Not now" is a dismissal, never a report: it takes this card off this block and says
+   *  nothing about the student. */
+  it('can be waved off for the block it is about', async () => {
+    await renderHome(week({ items: [runningNow()] }))
 
-    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
-    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one is
-    // the press a student makes.
-    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
-    await userEvent.click(screen.getByTestId('open-notices'))
-
+    // Scoped to the card: the day's own check-in carries a "Not now" of its own, and an
+    // unscoped query matches whichever the sheet happened to render first.
     const card = await screen.findByTestId('micro-start')
-    expect(card.textContent).toMatch(/find the one detail/i)
-    expect(card.textContent).toMatch(/\d+ minutes/i)
-  })
-
-  it('opens the ladder for the stuck task, not a dead end', async () => {
-    counter += 1
-    const repository = createLocalRepository(`micro-opens-${counter}`)
-    await repository.clear()
-    await repository.saveWeek(week({ items: [runningNow({ id: 'laundry' })] }))
-
-    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
-    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one is
-    // the press a student makes.
-    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
-    await userEvent.click(screen.getByTestId('open-notices'))
-    await screen.findByTestId('micro-start')
-
-    await userEvent.click(screen.getByRole('button', { name: /i'll do that/i }))
-
-    // Ruling: the card offers rung one, so "I'll do that" lands on the chain that continues
-    // it rather than on the block sheet, which was one hop short of the thing being offered.
-    expect(await screen.findByTestId('rung-action')).toBeVisible()
-    expect(window.location.pathname).toMatch(/\/start$/)
-  })
-
-  it('can be waved off and leaves the room as it was', async () => {
-    counter += 1
-    const repository = createLocalRepository(`micro-wave-${counter}`)
-    await repository.clear()
-    await repository.saveWeek(week({ items: [runningNow()] }))
-
-    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
-    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one is
-    // the press a student makes.
-    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
-    await userEvent.click(screen.getByTestId('open-notices'))
-    const card = await screen.findByTestId('micro-start')
-
     await userEvent.click(within(card).getByRole('button', { name: /not now/i }))
 
-    await waitFor(() => expect(screen.queryByTestId('micro-start')).toBeNull())
-    expect(screen.getByTestId('room-scene')).toBeVisible()
+    expect(screen.queryByTestId('micro-start')).toBeNull()
   })
 
+  /** The card offers rung one, so its call to action opens the page carrying the rest of the
+   *  chain rather than the block sheet, which was one hop short of what was offered. */
+  it('opens the chain from the card', async () => {
+    await renderHome(week({ items: [runningNow()] }))
+
+    await userEvent.click(await screen.findByRole('button', { name: /i'll do that/i }))
+
+    expect(await screen.findByTestId('rung-action')).toBeInTheDocument()
+  })
+})
+
+describe('what the room band says for itself', () => {
   /**
    * §8.2's disclaimer: the 21-day projection is never described as validated, and that has
    * to be said in the product copy. The note now lives permanently on the room screen

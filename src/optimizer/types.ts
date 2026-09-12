@@ -168,6 +168,10 @@ export type MoveKind =
   | 'insertRest'
   | 'insertSocial'
   | 'reorderWithinDay'
+  /** `repair.ts`: a loose block taken off a fixed commitment or off protected rest. Not a
+   *  move the search proposes -- it is applied before the search, and reported afterwards so
+   *  a block that changed day is not a change the student has to notice for themselves. */
+  | 'clearClash'
 
 export interface Move {
   readonly kind: MoveKind

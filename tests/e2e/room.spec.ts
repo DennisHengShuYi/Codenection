@@ -183,9 +183,20 @@ for (const [width, height] of VIEWPORTS) {
     // passes on a button painted under something else; `elementFromPoint` does not -- and
     // this is the check that caught `Waiting` widening the row until its own box reached
     // across the gauge and swallowed the press meant for it.
+    //
+    // Each one is scrolled into its row first, which is a real change to what this asserts
+    // and is worth saying out loud. The row used to WRAP: seven controls came to three rows
+    // at 360px, and since the bar paints the ceiling's colour across its whole height, 180px
+    // of solid brown sat over the drawing -- the character, the door and the bed were behind
+    // the buttons, and nothing in this file noticed because nothing overflowed. It is one row
+    // that scrolls now, so at 320px `The week` starts beyond the row's right edge. What still
+    // has to hold is that every control is REACHABLE and that nothing is painted over it,
+    // which is what this loop asks; what no longer holds is that all five are on screen at
+    // once at every width, which was never the property that mattered.
     for (const id of ['open-settings', 'open-week', 'open-notices', 'open-add', 'room-gauge']) {
       const control = page.getByTestId(id)
       await expect(control).toBeVisible()
+      await control.scrollIntoViewIfNeeded()
 
       const box = await control.boundingBox()
       expect(box, `${id} has no box at ${width}px`).not.toBeNull()
@@ -194,6 +205,12 @@ for (const [width, height] of VIEWPORTS) {
       const topmost = await controlAt(page, box!.x + box!.width / 2, box!.y + box!.height / 2)
       expect(topmost, `${id} is covered at ${width}px`).toBe(id)
     }
+
+    // The bar stays the depth of one control, whatever is in it. This is the assertion the
+    // wrapped row would have failed, and the reason the room came back.
+    const bar = await page.getByTestId('room-bar').boundingBox()
+    expect(bar, 'no control bar to measure').not.toBeNull()
+    expect(bar!.height, `the control bar has wrapped at ${width}px`).toBeLessThan(80)
   })
 }
 
@@ -300,32 +317,53 @@ test('opens the today panel from the control row on a phone, where there is no b
 })
 
 /**
- * The controls belong INSIDE the ceiling, not on the wall below it.
+ * No control floats on the wall between the ceiling and the floor.
  *
  * `Ceiling` draws `10 + pressure * 34` viewBox units, which at 390px is between 13 and 57
  * real pixels while the control row needs 56 -- so on a light day the buttons hung off the
- * ceiling and floated on the wall. The bar carries the ceiling's own colour for that reason,
- * and this is the check that every control actually sits within it at every width, including
- * the ones where the row wraps.
+ * ceiling onto the wall. The bar carries the ceiling's own colour for that reason.
+ *
+ * **The row is along the FOOT on a phone now, and in the ceiling from 768px up**, so "inside
+ * the ceiling" is no longer the whole invariant -- §0.2 wants primary actions in the lower
+ * half on mobile, and at the top of a phone screen this row was as far from the thumb as the
+ * screen allows. What survives the move, and is what this checks: every control in the row
+ * sits inside the row, the row is anchored to one edge of the stage rather than floating
+ * somewhere in the middle of the wall, and the gauge stays in the corner it has always been
+ * in -- it is a readout rather than an action, so it does not travel with the controls.
  */
 for (const [width, height] of VIEWPORTS) {
-  test(`keeps every control inside the ceiling band at ${width}x${height}`, async ({ page }) => {
+  test(`keeps every control on its own band at ${width}x${height}`, async ({ page }) => {
     await page.setViewportSize({ width, height })
     await openApp(page)
 
     const bar = await page.getByTestId('room-bar').boundingBox()
     expect(bar, 'the bar has no box').not.toBeNull()
 
-    for (const id of ['open-settings', 'open-week', 'open-add', 'room-gauge']) {
-      const box = await page.getByTestId(id).boundingBox()
+    for (const id of ['open-settings', 'open-week', 'open-add']) {
+      const control = page.getByTestId(id)
+      await control.scrollIntoViewIfNeeded()
+
+      const box = await control.boundingBox()
       expect(box, `${id} has no box at ${width}px`).not.toBeNull()
 
       expect(box!.y, `${id} starts above the bar at ${width}px`).toBeGreaterThanOrEqual(bar!.y - 1)
       expect(
         box!.y + box!.height,
-        `${id} hangs below the ceiling onto the wall at ${width}px`,
+        `${id} hangs out of the bar at ${width}px`,
       ).toBeLessThanOrEqual(bar!.y + bar!.height + 1)
     }
+
+    // One edge or the other, never adrift on the wall in between.
+    const inTheCeiling = bar!.y < 8
+    const alongTheFoot = bar!.y + bar!.height > height - 8
+    expect(
+      inTheCeiling || alongTheFoot,
+      `the control row is floating on the wall at ${width}px`,
+    ).toBe(true)
+
+    const gauge = await page.getByTestId('room-gauge').boundingBox()
+    expect(gauge, `the gauge has no box at ${width}px`).not.toBeNull()
+    expect(gauge!.y, `the gauge has left the ceiling at ${width}px`).toBeLessThan(20)
   })
 }
 

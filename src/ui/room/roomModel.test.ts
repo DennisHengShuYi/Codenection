@@ -62,12 +62,26 @@ describe('roomModel', () => {
    * compounds real pessimism that was previously invisible to the room.
    */
   describe('checkedIn, wired into the live projection', () => {
+    /*
+     * Seven hours rather than eight, because these tests turn on a weather boundary and
+     * `headroomAt` moved it.
+     *
+     * The assertion is a difference -- the same fortnight reading clear when the student
+     * answered and a storm when they did not -- so the fixture has to sit where the check-in
+     * signal is what decides it. Reserves used to climb to full across the early days
+     * whatever the load, so an attended eight-hour fortnight still read clear; they now
+     * settle at a level set by the load, and eight hours lands on 'clouding' either way. The
+     * first assertion would have gone on passing while the second stopped being about
+     * check-ins at all.
+     *
+     * At seven the two sides are 'storm' and 'clear' again, which is the pair this describes.
+     */
     const heavyMentalDay = (id: string, dayIndex: number): ScheduledItem => ({
       id,
       title: id,
       type: 'mental',
       kind: 'studyBlock',
-      hours: 8,
+      hours: 7,
       intensity: 1.3,
       dayIndex,
       startHour: 9,
@@ -101,7 +115,7 @@ describe('roomModel', () => {
     const fullyAnswered: BlockRecord[] = Array.from({ length: 20 }, (_, day) => ({
       blockId: `i${day}`,
       type: 'mental',
-      plannedHours: 8,
+      plannedHours: 7,
       dayIndex: day,
       // 'right': actual matches planned, so this does not also shift the learned estimate
       // bias -- isolating the assertion to the checkedIn signal alone.
@@ -167,6 +181,62 @@ describe('roomModel', () => {
     it('refuses a caller that does not say what the student has answered', () => {
       // @ts-expect-error blockLog is required: a caller with no log must pass [] itself.
       expect(() => roomModel({ schedule: week(), today: 0 })).toBeTruthy()
+    })
+  })
+
+  /**
+   * The room must run the same model the sleep page describes.
+   *
+   * `domain/sleepEnough` learns where sleep stops paying for this student, and `paramsFor`
+   * applies it -- but only for callers that hand it the reported nights. Left out here, the
+   * room would be drawn from population coefficients while the sleep page quoted a learned
+   * one, which is the exact "two surfaces describing the same fortnight differently" fault
+   * the `predictions` thread above exists to prevent.
+   */
+  describe('how much sleep is enough, threaded into the drawing', () => {
+    /** Long nights, so a lowered ceiling actually changes what the projection credits. A week
+     *  of seven-hour nights would sit under any believable ceiling and prove nothing. */
+    const longNights = week({ sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 10) })
+
+    /** A fortnight saying every night above six bought this student nothing. */
+    const learnable = () => {
+      const nights = []
+      const predictions = []
+
+      for (let index = 0; index < 8; index += 1) {
+        const long = index % 2 === 0
+        const isoDate = `2026-09-0${index + 1}`
+        nights.push({ isoDate, hours: long ? 8 : 5, answeredAt: index })
+        predictions.push({ forDate: isoDate, predicted: 60, reported: long ? 48 : 60 })
+      }
+
+      return { nights, predictions }
+    }
+
+    /**
+     * Read after one night, not a week in.
+     *
+     * Day 0 would show nothing whatever the ceiling is -- `schedule.start` is its entering
+     * value by definition. A week in shows nothing either, for the opposite reason: an empty
+     * week of ten-hour nights pins every reserve at `FULL_RESERVE` under both ceilings, and
+     * two numbers at the cap are equal however differently they got there.
+     */
+    it('credits less sleep once it has learned this student needs less', () => {
+      const { nights, predictions } = learnable()
+      const afterANight = { schedule: longNights, today: 1, predictions }
+
+      const population = roomModel(input(afterANight))
+      const learned = roomModel(input({ ...afterANight, nights }))
+
+      expect(learned.reserves.mental).toBeLessThan(population.reserves.mental)
+    })
+
+    /** And leaves the drawing alone for a student it has learned nothing about. */
+    it('is the same room for a student with no reported nights', () => {
+      const { predictions } = learnable()
+      const afterANight = { schedule: longNights, today: 1, predictions }
+
+      expect(roomModel(input({ ...afterANight, nights: [] }))).toEqual(roomModel(input(afterANight)))
     })
   })
 })

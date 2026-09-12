@@ -72,6 +72,7 @@ function harness(over: Partial<ChatStore> = {}): Harness {
     },
     loadBlockLog: async () => [],
     loadPredictions: async () => [],
+    loadSleepNights: async () => [],
     savePredictions: async (_accountId, next) => {
       savedPredictions.push(next)
     },
@@ -498,6 +499,47 @@ describe('the command surface', () => {
 
         expect(reply?.text).toBeTruthy()
         expect(reply?.text).not.toMatch(/cannot|right now/i)
+      },
+    )
+
+    /**
+     * The reported nights are judged exactly as the predictions above are, and are read for
+     * the same reason: `paramsFor` learns how much sleep is enough for this student from the
+     * two together, so a week read in chat must not run a different model from the same week
+     * read in the app.
+     */
+    it.each(['week', 'schedule', 'rebalance', 'lapsed'])(
+      'still answers /%s when the reported nights cannot be read',
+      async (name) => {
+        const h = harness({
+          loadSleepNights: async () => {
+            throw new Error('offline')
+          },
+        })
+
+        const reply = await handleIntent(command(name), h.store, 1000)
+
+        expect(reply?.text).toBeTruthy()
+        expect(reply?.text).not.toMatch(/cannot|right now/i)
+      },
+    )
+
+    /** And that it is actually consulted, rather than merely tolerated when absent -- the
+     *  fallback tests above would all pass on a store method nobody calls. */
+    it.each(['week', 'schedule', 'rebalance', 'lapsed'])(
+      'reads the reported nights before answering /%s',
+      async (name) => {
+        const asked: string[] = []
+        const h = harness({
+          loadSleepNights: async (accountId) => {
+            asked.push(accountId)
+            return []
+          },
+        })
+
+        await handleIntent(command(name), h.store, 1000)
+
+        expect(asked).toHaveLength(1)
       },
     )
   })

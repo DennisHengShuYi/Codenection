@@ -168,8 +168,22 @@ describe('lapsed', () => {
    * week, and the model is supposed to get more worried, not pretend it heard from them.
    */
   it('lapses a commitment the optimistic projection alone would have let stand, once the student has gone quiet', () => {
+    /*
+     * Starting at 76 rather than 64, because this test lives on a boundary and `headroomAt`
+     * moved it.
+     *
+     * The claim is a difference -- the same fortnight affordable when attended and
+     * unaffordable when silent -- so the fixture has to sit exactly where silence is what
+     * tips it. Reserves used to race from 64 to full across the early days, so the week met
+     * its load with a fortnight of buffer behind it; they now settle instead, and at 64 the
+     * week is beyond saving whether the student answered or not. Both sides read "lapse" and
+     * the test would have gone on passing its second assertion while proving nothing.
+     *
+     * 76 puts it back on the boundary. Nothing else about the fixture changes, and the
+     * difference it demonstrates is the same one.
+     */
     const busy = week({
-      start: { mental: 64, physical: 64, social: 64, errands: 64 },
+      start: { mental: 76, physical: 76, social: 76, errands: 76 },
       items: dailyMentalLoad(14, 6),
     })
     const accepted = accept(busy, item({ hours: 3, deadlineDay: 13 }), 7)

@@ -1,6 +1,6 @@
 import { applyCoupling } from './coupling'
 import { drainForDay } from './drain'
-import { efficiencyAt } from './efficiency'
+import { efficiencyAt, headroomAt } from './efficiency'
 import { FULL_RESERVE } from './params'
 import { recoveryForDay } from './recovery'
 import { LOAD_TYPES, type DayInput, type EngineParams, type LoadType, type Reserves } from './types'
@@ -38,8 +38,21 @@ export function tick(reserves: Reserves, day: DayInput, params: EngineParams): R
   const next: Record<LoadType, number> = { mental: 0, physical: 0, social: 0, errands: 0 }
 
   for (const type of LOAD_TYPES) {
+    /*
+     * §6.1 amended: `recovery × efficiency × headroom`.
+     *
+     * `headroomAt` is read from the same start-of-day level as `efficiencyAt`, for the same
+     * reason given above -- and it answers a different question, so the two multiply rather
+     * than compete. Efficiency is how well a depleted student converts rest; headroom is how
+     * much of the reserve is missing to convert into. Without the second, recovery grew as a
+     * student filled and drain grew as they depleted, both directions reinforced, and the
+     * middle of the range was a knife edge no week could rest on -- see
+     * `params.RECOVERY_HEADROOM_SPAN` for the measurement.
+     */
     next[type] = clamp(
-      reserves[type] - drain[type] + recovery[type] * efficiencyAt(reserves[type]),
+      reserves[type] -
+        drain[type] +
+        recovery[type] * efficiencyAt(reserves[type]) * headroomAt(reserves[type]),
     )
   }
 

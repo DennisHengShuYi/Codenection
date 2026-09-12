@@ -290,6 +290,68 @@ describe('drainSources', () => {
     startHour: 9,
   })
 
+  const restBlock = (hours: number): Activity => ({
+    kind: 'rest',
+    type: 'mental',
+    hours,
+    intensity: 1,
+    startHour: 20,
+  })
+
+  const seeingSomebody = (hours: number): Activity => ({
+    kind: 'socialRestorative',
+    type: 'social',
+    hours,
+    intensity: 1,
+    startHour: 18,
+  })
+
+  /**
+   * The days a student is most likely to ask "why" about are the ones they did something
+   * about, and the itemised explanation had never been run on one.
+   *
+   * `drainForDay` and `drainSources` hold two copies of one formula, bound by the sum test
+   * below -- but that test only ever fed them study blocks, so neither the recovery guard nor
+   * the contact check in the second copy had been exercised at all. A day with rest on it is
+   * exactly where the two could drift without anything noticing.
+   */
+  it('never bills a student for resting', () => {
+    const withRest = day([study(3), restBlock(2)])
+    const sources = drainSources(withRest, rested, DEFAULT_PARAMS)
+
+    expect(sources.some((source) => source.source === 'rest')).toBe(false)
+    // And the study block beside it is still billed, so this is the rest being excluded
+    // rather than the day being skipped.
+    expect(sources.some((source) => source.source === 'studyBlock')).toBe(true)
+  })
+
+  /** §1.2: contact answers isolation, so there is no isolation line to explain on a day that
+   *  had some -- however long the day was otherwise. */
+  it('does not list isolation on a day that had real contact', () => {
+    const sociable = day([study(8), seeingSomebody(2)])
+
+    expect(drainSources(sociable, rested, DEFAULT_PARAMS).some((s) => s.source === 'isolation')).toBe(
+      false,
+    )
+    expect(drainSources(day([study(8)]), rested, DEFAULT_PARAMS).some((s) => s.source === 'isolation')).toBe(
+      true,
+    )
+  })
+
+  /** The same binding as below, on a day carrying both of the kinds the sum test never fed
+   *  it. */
+  it('sums to exactly what drainForDay charged on a day with rest and company', () => {
+    const mixed = day([study(4), seeingSomebody(2), restBlock(2)], { venueChanges: 1 })
+
+    for (const type of ['mental', 'physical', 'social', 'errands'] as const) {
+      const itemised = drainSources(mixed, rested, DEFAULT_PARAMS)
+        .filter((source) => source.type === type)
+        .reduce((sum, source) => sum + source.points, 0)
+
+      expect(itemised).toBeCloseTo(drainForDay(mixed, rested, DEFAULT_PARAMS)[type], 10)
+    }
+  })
+
   /** The guard that keeps the explanation honest. If these ever disagree, a student is being
    *  told about a day the projection did not run. */
   it('sums to exactly what drainForDay charged', () => {
@@ -411,5 +473,64 @@ describe('sleep debt', () => {
     const zero = drainForDay(night(0), rested, DEFAULT_PARAMS)
 
     expect(zero.mental).toBeCloseTo(SLEEP_BASELINE_HOURS * DEFAULT_PARAMS.kSleepDebt.mental)
+  })
+})
+
+/**
+ * §1.2 amended: a heavy day is when people withdraw, and the model has to say so.
+ *
+ * Isolation drained a flat `isolationDrainPerDay` on any day under the social floor, which
+ * made social the one reserve that moved -- and moved like a metronome. Measured over a
+ * fortnight it fell 1.5 a day whether the student did two hours of work a week or fifty. It
+ * was not a reserve responding to a life; it was a clock counting days since somebody last
+ * saw a person.
+ *
+ * Scaled by the day's load rather than charged as a separate term, deliberately. `isolation`
+ * is one of the four coefficients `domain/recoveryLearning` learns per student, and a new
+ * parameter beside it would be one the app had no way to learn -- so the load belongs inside
+ * the coefficient that is already learnable, not next to it.
+ */
+describe('isolation costs more on a demanding day', () => {
+  const sawNobody = (hours: number): DayInput =>
+    day({
+      activities: hours === 0 ? [] : [study(9, hours)],
+    })
+
+  it('charges an empty day the plain isolation drain', () => {
+    expect(drainForDay(sawNobody(0), healthy, DEFAULT_PARAMS).social).toBeCloseTo(
+      DEFAULT_PARAMS.isolationDrainPerDay,
+      5,
+    )
+  })
+
+  it('charges a full day of work more than an empty one', () => {
+    const empty = drainForDay(sawNobody(0), healthy, DEFAULT_PARAMS).social
+    const full = drainForDay(sawNobody(10), healthy, DEFAULT_PARAMS).social
+
+    expect(full).toBeGreaterThan(empty)
+  })
+
+  /** Bounded, so a long day cannot run the charge away with it. A day at `dailyHoursCap` --
+   *  the longest the model permits at all -- is the most isolating there is, and costs
+   *  double. */
+  it('caps the charge at double, however long the day', () => {
+    const atCap = drainForDay(sawNobody(10), healthy, DEFAULT_PARAMS).social
+    const absurd = drainForDay(sawNobody(20), healthy, DEFAULT_PARAMS).social
+
+    expect(atCap).toBeCloseTo(DEFAULT_PARAMS.isolationDrainPerDay * 2, 5)
+    expect(absurd).toBeCloseTo(atCap, 5)
+  })
+
+  /** Seeing somebody still clears it outright. The scaling changes what isolation costs,
+   *  never whether contact answers it. */
+  it('charges nothing at all on a heavy day that had real contact', () => {
+    const seen = day({
+      activities: [
+        study(9, 10),
+        { kind: 'socialRestorative', type: 'social', hours: 2, intensity: 1, startHour: 20 },
+      ],
+    })
+
+    expect(drainForDay(seen, healthy, DEFAULT_PARAMS).social).toBe(0)
   })
 })

@@ -94,22 +94,35 @@ describe('RoomShell in low energy', () => {
     counter += 1
     const repository = createLocalRepository(`low-energy-cards-${counter}`)
     await repository.clear()
-    // Social AND physical low: normally this alone would be enough for a recovery card,
-    // and a lapsed commitment below stacks a second candidate -- two cards above the
+    // Social AND physical low, and a block running its own slot right now, so the stuck
+    // card stacks a second candidate beside the day's own question -- two cards above the
     // threshold, one below it.
     await repository.saveWeek({
-      items: [],
+      items: [
+        {
+          id: 'laundry',
+          title: 'Laundry',
+          type: 'errands',
+          kind: 'errands',
+          hours: 24,
+          intensity: 1,
+          dayIndex: 0,
+          startHour: 0,
+          fixed: false,
+          deadlineDay: null,
+          protectedRest: false,
+        },
+      ],
       start: { mental: 8, physical: 9, social: 7, errands: 10 },
       horizonDays: HORIZON_DAYS,
       sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 6),
-      commitments: [{ id: 'c1', title: 'Committee meeting', reviewDay: -1, itemId: 'x' }],
     })
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
 
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
     const cards = [
-      screen.queryByTestId('lapsed-notice'),
+      screen.queryByTestId('overfull'),
       screen.queryByTestId('micro-start'),
       screen.queryByRole('region', { name: /today's check-in/i }),
     ].filter((card) => card !== null)
@@ -221,7 +234,8 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
    * Errands alone below the threshold. That is what makes `stuck` the visible card: the
    * floor is 10 so `useLowEnergy` activates and the cap falls to one, while mental, physical
    * and social sit at 70 -- above `prescribe`'s PRESCRIBE_BELOW of 40 -- so `recovery`, which
-   * outranks `stuck`, does not apply. With no commitments, `lapsed` cannot apply either.
+   * outranks `stuck`, does not apply. With a week that rearranging can still fix, `overfull`
+   * cannot apply either.
    */
   /**
    * A student who has kept up with themselves and is still stuck on one chore.
@@ -260,14 +274,22 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
     answeredAt: 0,
   }))
 
-  const drainedWithStuckTask = async (label: string) => {
+  /**
+ * A drained student with exactly one live card, whichever card that turns out to be.
+ *
+ * It used to be the stuck task this helper is named for, and is now the overfull day: the
+ * fortnight this fixture describes is past what rearranging can fix, and `overfull` outranks
+ * `stuck` in the order. What is being measured below is the gauge and the address, neither of
+ * which cares which card supplied the premise -- but the premise is asserted rather than
+ * assumed, so a precedence change fails here loudly instead of quietly making the route
+ * untravelled.
+ */
+const drainedWithOneCard = async (label: string) => {
     counter += 1
     const repository = createLocalRepository(`${label}-${counter}`)
     await repository.clear()
-    // Four days in, with the stuck block on today: §4.1's trigger is the block's own slot
-    // now, not its age, so a task last touched on Tuesday no longer prompts. Running the
-    // whole waking day is the only way a fixture can be inside its slot whatever hour the
-    // suite happens to run at.
+    // Four days in, with the block on today and running the whole waking day -- the only way
+    // a fixture can be inside its own slot whatever hour the suite happens to run at.
     // Local, not `toISOString`: `todayIndex` reads the device's own zone, and east of
     // Greenwich the UTC date is yesterday's for the first eight hours of every day -- which
     // would put the block on day 4 while the app thought today was day 5, and the trigger
@@ -304,17 +326,17 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
     render(<RoomShell repository={repository} blockLog={KEPT_UP_LOG} onAnswerBlock={vi.fn()} />)
 
     await waitFor(() => expect(screen.getByTestId('room-scene')).toBeVisible())
-    // The premise, asserted rather than assumed. If precedence or the trigger ever changes
-    // so that no stuck card renders here, this fails loudly instead of the assertions below
-    // passing because the route was never walked.
+    // The premise, asserted rather than assumed. If precedence ever changes so that no card
+    // renders here, this fails loudly instead of the assertions below passing because the
+    // route was never walked.
     expect(screen.queryByTestId('open-week')).toBeNull()
-    await screen.findByTestId('micro-start')
+    await screen.findByTestId('overfull')
 
     return repository
   }
 
   it('leaves the gauge a readout rather than a door, so there is nothing to press', async () => {
-    await drainedWithStuckTask('low-energy-stuck')
+    await drainedWithOneCard('low-energy-one-card')
 
     // The premise: this student is in the collapsed interface and has a live card.
     expect(screen.getByTestId('room-gauge').tagName).not.toBe('BUTTON')
@@ -323,7 +345,7 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
 
   it('withholds the breakdown even from an address typed by hand', async () => {
     window.history.replaceState(null, '', '/reserves')
-    await drainedWithStuckTask('low-energy-stuck-address')
+    await drainedWithOneCard('low-energy-one-card-address')
 
     // The room, not a dashboard -- and not a blank screen either.
     expect(screen.getByTestId('room-scene')).toBeVisible()
@@ -341,18 +363,18 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
    * the fallback for a block that was deep-linked, not the answer for one the student
    * walked into from a card.
    */
-  it('returns to the room, not the week, from a block opened by a live card', async () => {
-    await drainedWithStuckTask('low-energy-stuck-back')
-
-    await userEvent.click(screen.getByRole('button', { name: /i'll do that/i }))
-    await screen.findByRole('dialog', { name: /laundry/i })
-    await userEvent.click(screen.getByTestId('sheet-back'))
-
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-    expect(screen.getByTestId('room-scene')).toBeVisible()
-    expect(screen.queryByTestId('week-reserves')).toBeNull()
-    expect(screen.queryAllByRole('meter')).toHaveLength(0)
-  })
+  /**
+   * Removed with the route it walked.
+   *
+   * It opened a block from the micro-start card -- the only live card that ever navigated to
+   * one -- and that card is gone. No remaining card opens a block, and the waiting list that
+   * does is withheld below §1.5's threshold, so there is no longer a way for a depleted
+   * student to reach a block from the room at all.
+   *
+   * What it was protecting is Ruling 60's rule that Back follows the history, and that is
+   * pinned directly in `view.test.ts` ("comes back to the week from a block, not the room",
+   * and the room cases beside it) rather than through a card that happened to navigate.
+   */
 
   /**
    * The other direction, so the tests above cannot all pass by the breakdown simply never
@@ -360,7 +382,7 @@ describe('the breakdown, and the depleted student who must not be handed it', ()
    * is a door again.
    */
   it('hands the same student the breakdown once low-energy mode is turned off', async () => {
-    await drainedWithStuckTask('low-energy-stuck-off')
+    await drainedWithOneCard('low-energy-one-card-off')
 
     await userEvent.click(screen.getByTestId('open-settings'))
     await userEvent.click(await screen.findByRole('radio', { name: /full interface/i }))

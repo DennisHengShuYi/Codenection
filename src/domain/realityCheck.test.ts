@@ -145,9 +145,9 @@ describe('paddingForItem', () => {
 
   const block = { type: 'mental' as const, kind: 'studyBlock' as const, title: 'WIA3001 essay' }
 
-  it('uses the work itself once it has five answers', () => {
+  it('uses the work itself once it has three answers', () => {
     const history = [
-      ...Array.from({ length: 5 }, () => ran()),
+      ...Array.from({ length: 3 }, () => ran()),
       // Lab reports land on time, and used to drag the essay figure down with them.
       ...Array.from({ length: 5 }, () => ran({ title: 'WIA3001 lab report', actualHours: 2 })),
     ]
@@ -155,6 +155,25 @@ describe('paddingForItem', () => {
     expect(paddingForItem(history, block)).toBeCloseTo(1.5, 2)
   })
 
+  /**
+   * Three, not five. The rungs used to climb -- four for a kind, five for a task -- so a
+   * student who had done one specific thing four times was still being told a number about
+   * their whole area of life, and the bucket that would have said something true about them
+   * took most of a semester to fill.
+   */
+  it('does not wait for a fourth and fifth answer before speaking about the work itself', () => {
+    const history = [
+      ...Array.from({ length: 3 }, () => ran()),
+      // Enough revision to answer at the kind level, and at a different figure -- so a
+      // result of 1.5 can only have come from the essays themselves.
+      ...Array.from({ length: 8 }, () => ran({ title: 'Revision', actualHours: 2 })),
+    ]
+
+    expect(paddingForItem(history, block)).toBeCloseTo(1.5, 2)
+  })
+
+  /** One or two answers about a task is not a bucket. It falls to that task's kind, which
+   *  is the same evidence read one step wider rather than none at all. */
   it('falls to the kind when the work itself has too little behind it', () => {
     const history = [
       ...Array.from({ length: 2 }, () => ran()),
@@ -193,7 +212,7 @@ describe('paddingForItem', () => {
   /** A record written before titles were kept, or by a path that has none, still counts at
    *  the rungs that do not need one. */
   it('still uses an untitled history at the kind and type levels', () => {
-    const history = Array.from({ length: 4 }, () => ran({ title: undefined }))
+    const history = Array.from({ length: 3 }, () => ran({ title: undefined }))
 
     expect(paddingForItem(history, block)).toBeCloseTo(1.5, 2)
   })

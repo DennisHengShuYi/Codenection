@@ -156,6 +156,61 @@ describe('the service worker decides what it may cache', () => {
     expect(worker.stored()).toEqual([])
   })
 
+  /**
+   * The bug this pair exists to stop, reported as "the calendar link keeps expiring".
+   *
+   * `/api/google-connect?begin=1` is a same-origin GET that is not a navigation, so it fell
+   * into the cache-first branch below. The first press stored the JSON naming a consent URL,
+   * and that URL carries a `state` signed at that exact moment and valid for ten minutes.
+   * Every later press was then answered from the cache with the *first* press's state --
+   * so the connection failed with "That calendar link has expired" from ten minutes after
+   * the first attempt onwards, permanently, and signing out changed nothing because the
+   * Cache API is keyed by origin and not by session.
+   *
+   * The worker already refused to cache cross-origin API reads for exactly this reason. The
+   * hole was that this app's own API is same-origin: the functions in `api/` are served from
+   * the same Vercel domain as the shell, so the rule that named the hazard did not cover the
+   * place it actually happened.
+   */
+  it("never caches a request to this app's own API", async () => {
+    const worker = loadServiceWorker()
+
+    await worker.fetchEvent(`${ORIGIN}/api/google-connect?begin=1`)
+
+    expect(worker.stored()).toEqual([])
+  })
+
+  it('never answers an API read from the cache, however full the cache is', async () => {
+    // The half that actually broke the calendar. Refusing to *write* is not enough on its
+    // own: a cache already filled by the previous version of this worker would go on being
+    // served ahead of the network forever, so the read side has to decline it too.
+    //
+    // Asserted as "the worker does not respond" rather than "the worker fetched", because
+    // declining is precisely the mechanism: `return` from the fetch handler hands the
+    // request back to the browser, which performs a normal uncached fetch the worker never
+    // sees. A worker that fetched on the app's behalf here would pass an assertion about
+    // network calls while still sitting in a path this file is trying to keep it out of.
+    const worker = loadServiceWorker({
+      cached: response('a stale consent url from hours ago'),
+      networkResponse: response('a consent url signed just now'),
+    })
+
+    const result = await worker.fetchEvent(`${ORIGIN}/api/google-connect?begin=1`)
+
+    expect(result.respondedWith).toBe(false)
+    expect(result.body).toBeUndefined()
+  })
+
+  /** The exclusion is the API prefix and nothing wider: the hashed assets the shell needs
+   *  must still be served from the cache, or an offline open shows a blank page. */
+  it('still caches a fingerprinted asset', async () => {
+    const worker = loadServiceWorker()
+
+    await worker.fetchEvent(`${ORIGIN}/assets/index-a1b2c3d4.js`)
+
+    expect(worker.stored()).toEqual([`${ORIGIN}/assets/index-a1b2c3d4.js`])
+  })
+
   it('never caches a cross-origin request', async () => {
     // A cache-first worker that stores API reads serves them from the cache forever, so a
     // live projection would quietly show yesterday's numbers until the cache name changed.

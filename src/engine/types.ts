@@ -127,8 +127,30 @@ export interface EngineParams {
    * this falls back to the population figure in `DEFAULT_PARAMS`, and §8's sleep row is what
    * makes that defensible. Stated here because the parameter still reads as though something
    * fills it in.
+   *
+   * Still true of THIS figure, and no longer true of `enoughSleepHours` below -- which is the
+   * distinction to hold on to rather than the good news. They are the two ends of one window
+   * and are measured by different things: where sleep starts paying needs to know what a
+   * night is worth to somebody in absolute terms, which only a record of their sleep could
+   * say; where it STOPS paying is a comparison between two halves of their own nights, which
+   * `domain/sleepEnough` can make out of evidence the app already collects. Learning the
+   * second says nothing about the first.
    */
   readonly sleepBaselineHours: number
+  /**
+   * Hours past which more sleep stops paying this student back.
+   *
+   * The other end of the window `sleepBaselineHours` opens. Below the baseline sleep pays
+   * nothing and costs something; above this it simply stops paying more, so a twelve-hour
+   * night is not credited as seven hours of recovery -- the same judgement §5.1 already makes
+   * about a single overlong rest block.
+   *
+   * A parameter rather than a constant because "enough" is genuinely personal, and unlike
+   * `sleepBaselineHours` something does now fill it in: `domain/sleepEnough` learns it from
+   * reported nights paired against reported energy, and `paramsFor` applies it. It falls back
+   * to the population figure while that evidence is missing, which for most students is always.
+   */
+  readonly enoughSleepHours: number
   /** Reserve points returned per hour of scheduled rest. */
   readonly kRest: Reserves
   /** Reserve points returned per hour of restorative social contact. Separate from

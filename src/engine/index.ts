@@ -28,6 +28,7 @@ export {
   CROSS_EFFECT,
   DEFAULT_PARAMS,
   DEFAULT_SLEEP_HOURS,
+  ENOUGH_SLEEP_HOURS,
   DEFICIT_THRESHOLD,
   EFFICIENCY_FLOOR,
   EFFICIENCY_SPAN,
@@ -38,7 +39,7 @@ export {
   STATE_COST_SLOPE,
 } from './params'
 
-export { efficiencyAt, floorReserve, overallReserve } from './efficiency'
+export { efficiencyAt, floorReserve, headroomAt, overallReserve } from './efficiency'
 export { carryoverAt } from './carryover'
 export { actualCost, stateMultiplier } from './stateCost'
 export { drainForDay, drainSources, fragmentation, type DrainSource } from './drain'

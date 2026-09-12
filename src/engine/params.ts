@@ -6,8 +6,58 @@ import type { CouplingMatrix, CrossEffect, EngineParams, Reserves } from './type
 export const EFFICIENCY_FLOOR = 0.45
 export const EFFICIENCY_SPAN = 0.55
 
+/**
+ * §6.1 amended: how close to full a reserve must be before there is less left to give back.
+ *
+ * The model was bistable without this, and the measurement is worth recording because it
+ * looked like a coefficient problem and was not. Drain rises as a student depletes (§6.6)
+ * and recovery rose as they filled -- `efficiencyAt` below -- so both directions reinforced
+ * and the middle pushed away from itself. On one identical seven-hour-a-day fortnight,
+ * starting at 65 climbed to 100 and starting at 60 fell to 40. There was no settling level
+ * anywhere, so every student ended pinned at one end or the other, and four bars out of five
+ * sat flat at full while the week beneath them changed completely.
+ *
+ * Cutting `kSleep` was tried first and is the wrong instrument: at 3.0 everything up to
+ * eight hours of study a day still ended at exactly 100, and at 2.0 the fortnight went from
+ * 77 to 5 between a six-hour day and an eight-hour one. That moves the cliff. It does not
+ * make a slope.
+ *
+ * Deliberately NOT a softening of §6.2. That curve says recovery is less effective the more
+ * depleted you are, and it is untouched here -- this asks a different question, which is how
+ * much of a reserve is missing at all. A student at 95 has five points to refill and cannot
+ * be given eighteen, whatever their efficiency. Below `FULL_RESERVE - 30` the term is exactly
+ * 1 and changes nothing, so the whole depleted half of the range behaves as it always did.
+ *
+ * Thirty rather than the full hundred, and measured: at 40 an ordinary fortnight of six-hour
+ * days settles at 85, at 30 it settles at 89, at 20 at 93. Twenty leaves the bars too close
+ * together to read; forty starts charging a light week for being light. Thirty puts a week of
+ * ten-hour days at 81 and a week of two-hour days at 96 -- a spread a student can actually
+ * see on a bar.
+ */
+export const RECOVERY_HEADROOM_SPAN = 30
+
 /** §6.1: `recovery[d] = max(0, sleep − 5) × k_sleep + rest_blocks × k_rest`. */
 export const SLEEP_BASELINE_HOURS = 5
+
+/**
+ * §6.1 amended: where sleep stops paying back, until the app learns this student's own figure.
+ *
+ * The credit was linear forever -- nine hours beat eight, twelve beat nine, with no point at
+ * which more stopped helping. That made "enough sleep" something the model could not hold, and
+ * it also credited a twelve-hour night seven hours of recovery. §5.1 already caps REST per
+ * block for exactly that reason ("a 12-hour scroll session is not recovery, and the model must
+ * not count it as neutral free time"); sleep had no equivalent.
+ *
+ * Nine rather than eight, for two reasons. It binds only on genuinely long nights, so it
+ * changes nothing for almost everyone. And it leaves the learned figure room to move DOWNWARD,
+ * which is the direction that matters: "seven is enough for me" is the claim this exists to
+ * make possible, and a default already at the bottom of the plausible range could never express
+ * it.
+ *
+ * Together with `SLEEP_BASELINE_HOURS` this is a window, not a threshold: below five, sleep
+ * pays nothing and costs something (`kSleepDebt`); above nine it simply stops paying more.
+ */
+export const ENOUGH_SLEEP_HOURS = 9
 
 /**
  * The night the app assumes when the student has not said.
@@ -106,6 +156,9 @@ export const DEFAULT_PARAMS: EngineParams = {
   // Starts unbiased and is learned per type from planned-vs-actual (§2.4). The user is
   // never asked for this and need not know the parameter exists (§7.5).
   sleepBaselineHours: SLEEP_BASELINE_HOURS,
+  // §6.1 amended. Learned per student where the evidence allows -- `domain/sleepEnough` --
+  // and the population figure until then.
+  enoughSleepHours: ENOUGH_SLEEP_HOURS,
   // §2.4's slot, and it stays 1 here on purpose: an uncalibrated student has no measured
   // bias, and inventing one would distort every projection they ever see.
   estimateBias: uniform(1),

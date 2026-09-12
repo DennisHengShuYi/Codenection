@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { efficiencyAt, overallReserve } from './efficiency'
+import { efficiencyAt, headroomAt, overallReserve } from './efficiency'
+import { FULL_RESERVE, RECOVERY_HEADROOM_SPAN } from './params'
 
 describe('efficiencyAt', () => {
   it('returns all of your rest at full reserve', () => {
@@ -52,5 +53,38 @@ describe('overallReserve', () => {
     const mentalLow = overallReserve({ mental: 20, physical: 80, social: 80, errands: 80 })
     const socialLow = overallReserve({ mental: 80, physical: 80, social: 20, errands: 80 })
     expect(mentalLow).toBe(socialLow)
+  })
+})
+
+/**
+ * §6.1 amended. The companion to `efficiencyAt`, and deliberately silent across the range
+ * that curve is about -- see `params.RECOVERY_HEADROOM_SPAN` for why the two are different
+ * claims rather than one claim applied twice.
+ */
+describe('headroomAt', () => {
+  it('lands all of a day\'s recovery on a deeply depleted reserve', () => {
+    expect(headroomAt(0)).toBe(1)
+    expect(headroomAt(20)).toBe(1)
+  })
+
+  // The whole depleted half of the range is untouched, which is what stops this softening
+  // §6.2's spiral. 70 is the last level at which nothing is withheld.
+  it('withholds nothing at all up to the span', () => {
+    expect(headroomAt(FULL_RESERVE - RECOVERY_HEADROOM_SPAN)).toBe(1)
+  })
+
+  it('lands nothing on a reserve that is already full', () => {
+    expect(headroomAt(FULL_RESERVE)).toBe(0)
+  })
+
+  it('tapers in between', () => {
+    expect(headroomAt(85)).toBeCloseTo(0.5, 5)
+    expect(headroomAt(95)).toBeCloseTo(1 / 6, 5)
+  })
+
+  /** Reserves are clamped to the range, but coupling and the band biases both produce
+   *  intermediate values and a negative multiplier would turn recovery into drain. */
+  it('never goes negative above full', () => {
+    expect(headroomAt(FULL_RESERVE + 20)).toBe(0)
   })
 })

@@ -257,6 +257,11 @@ describe('RoomShell with a block to confirm', () => {
     await userEvent.click(await screen.findByTestId('add-block'))
     await userEvent.type(await screen.findByLabelText('What'), 'Essay')
 
+    // On the way out rather than under the fields. The line is a question about the figure
+    // being committed to, and it is asked when the student commits to it -- so reaching it
+    // takes the Save press that used to be the end of this flow.
+    await userEvent.click(await screen.findByTestId('save-block'))
+
     await waitFor(() =>
       expect(screen.getByTestId('bias-line')).toHaveTextContent(
         'You underestimate study and writing by about 1.5×. We pad it automatically.',

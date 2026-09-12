@@ -14,16 +14,18 @@ import {
   shortDayLabel,
   todayIndex,
 } from '../../domain/calendar'
-import { accept, lapsed } from '../../domain/commitments'
+import { accept } from '../../domain/commitments'
 import { paramsFor } from '../../domain/engineParams'
+import { insightLines, reserveInsight } from '../../domain/reserveInsight'
 import { firstAction, isStuck } from '../../domain/microStart'
+import { overfullDay } from '../../domain/overfull'
 import { predictionsAfter, resolvePrediction } from '../../domain/predictions'
 import { addBlock, completeItem, deferralOf, editItem, removeItem } from '../../domain/scheduleEdits'
 import { stampEstimateBias } from '../../domain/estimateBias'
 import { stampSoftDeadlines } from '../../domain/softDeadlines'
 import { applyRest, planRest, type RestPlan } from '../../domain/restNow'
 import { RestPreview } from '../rest/RestPreview'
-import { floorReserve, overallReserve, project } from '../../engine'
+import { ENOUGH_SLEEP_HOURS, floorReserve, overallReserve, project } from '../../engine'
 import type { Fix } from '../../optimizer'
 import { toDayInputs } from '../../optimizer'
 import { AddSheet } from '../AddSheet'
@@ -39,7 +41,7 @@ import { CalendarConnection } from '../settings/CalendarConnection'
 import { LinkTelegram } from '../settings/LinkTelegram'
 import { LowEnergyControl } from '../settings/LowEnergyControl'
 import { ReservesSheet } from '../reserves/ReservesSheet'
-import { blockToAsk, pendingCheckIns } from '../today/checkIn'
+import { pendingCheckIns } from '../today/checkIn'
 import { useLowEnergy } from '../useLowEnergy'
 import { useSleepPlan } from '../useSleepPlan'
 import { useProfile } from '../useProfile'
@@ -55,6 +57,7 @@ import { lastNight, withSleep } from '../../domain/sleepPlan'
 import { nightBite } from '../../domain/nightBite'
 import { nightWindow, nightWindowLabel } from '../../domain/nightWindow'
 import { assumeSleep } from '../../domain/sleepAssumed'
+import { sleepEnoughLine } from '../../domain/sleepEnough'
 import { measuredNight, sleepRealityLine } from '../../domain/sleepReality'
 import { sleepForecastLine, squeezeOn } from '../../domain/sleepForecast'
 import { SleepSheet } from '../sleep/SleepSheet'
@@ -231,7 +234,21 @@ export function RoomShell({
   // "not today" of its own. §7 retired the last permanent one -- the failed-recovery log --
   // so a dismissal means "not now", never a report that suppresses something forever.
   const [distressDismissed, setDistressDismissed] = useState(false)
-  const [lapsedDismissed, setLapsedDismissed] = useState(false)
+  // Held as the day index rather than a flag: keeping one overfull day as it is says nothing
+  // about the next one, and a student who dismissed Tuesday should still hear about Friday.
+  const [overfullDismissedDay, setOverfullDismissedDay] = useState<number | null>(null)
+  /**
+   * The last block dropped from the overfull card, when it was a provisional yes -- the only
+   * case that leaves somebody else expecting the student.
+   *
+   * Carries the day it was dropped from, not just the title. Held as a bare string it
+   * outlived its own card: drop a promise off Thursday, watch Thursday come good, and the
+   * next day to fail inherited a withdrawal message for something already dealt with. An
+   * apology to send for a thing you have already withdrawn from is worse than none.
+   */
+  const [dropped, setDropped] = useState<{ dayIndex: number; title: string } | null>(null)
+  // Held as the block's id rather than a flag: "not now" is about this block, so a different
+  // block entering its own slot later still gets to ask.
   const [stuckDismissedId, setStuckDismissedId] = useState<string | null>(null)
   const [todayDismissed, setTodayDismissed] = useState(false)
   const [sleepAnsweredToday, setSleepAnsweredToday] = useState(false)
@@ -251,7 +268,6 @@ export function RoomShell({
   // line on the today card quotes the very same history back to the student. Two calls
   // would be two chances for the number shown to drift from the number applied.
   const outcomes = useMemo(() => outcomesFrom(blockLog), [blockLog])
-  const params = useMemo(() => paramsFor(outcomes, profile.predictions), [outcomes, profile.predictions])
   // §1.5's mode, read AND written. `setOverride` reaches `LowEnergyControl` in the settings
   // sheet below, which is the whole of Ruling 45: the preference was honoured here while
   // nothing in the app could set it, because the control lived on `LowEnergyView` and Task
@@ -279,6 +295,17 @@ export function RoomShell({
     reportNight,
     problem: sleepProblem,
   } = useSleepPlan(repository)
+
+  /**
+   * Below `useSleepPlan` rather than beside `outcomes` above, because it now reads the
+   * reported nights as well: how much sleep is enough for this student is estimated by
+   * comparing the nights they reported against how those days actually went
+   * (`domain/sleepEnough`), and neither stream alone can say anything.
+   */
+  const params = useMemo(
+    () => paramsFor(outcomes, profile.predictions, sleepNights),
+    [outcomes, profile.predictions, sleepNights],
+  )
 
   /**
    * §8.1's two prerequisites: anchor the fortnight to a real day, and claim something about a
@@ -309,6 +336,36 @@ export function RoomShell({
     //
     // A comment rather than an `eslint-disable`, for the reason given on the effect above.
   }, [schedule, profile, blockLog, setSchedule, setProfile])
+
+  /**
+   * §2.2's last answer: the day this fortnight cannot hold, whatever is moved.
+   *
+   * Up here, above the early returns, because it is a hook and hooks cannot sit after one --
+   * which is also why it re-derives `today` for itself rather than reading the `today` below.
+   *
+   * Memoised, and that is not a nicety: this is the only thing in the app that runs the
+   * optimizer to decide what to SHOW rather than on a button press. §2.1 budgets a solve
+   * under 100ms, which is fine once per change to the week and emphatically not fine on
+   * every render of the room.
+   *
+   * `checkedInDays` rather than the optimizer's own `ALL_PRESENT`: §8b's missing-data
+   * pessimism is what takes a heavy fortnight into deficit at all, and a card reading the
+   * week more optimistically than the gauge above it would contradict the model it sits on.
+   */
+  const overfull = useMemo(() => {
+    if (!schedule) return null
+
+    const day = todayIndex(schedule, new Date())
+    if (day === null) return null
+
+    return overfullDay(
+      schedule,
+      params,
+      SEED,
+      day,
+      checkedInDays(blockLog, day, schedule.horizonDays),
+    )
+  }, [schedule, params, blockLog])
 
   if (!schedule) {
     // A sentence rather than a spinner: a spinner tells a student nothing about what is
@@ -404,6 +461,8 @@ export function RoomShell({
     today,
     blockLog,
     predictions: profile.predictions,
+    // So the drawing runs the same learned model `params` above does.
+    nights: sleepNights,
     // Only when actually stated. Absent means the bed keeps its population norm, which is
     // the right reading for a student who has never opened the sleep page.
     sleepTargetHours: hasSleepTarget ? sleepTarget : undefined,
@@ -446,6 +505,53 @@ export function RoomShell({
   // student edited the plan, not after a rebalance, not overnight. They sat under a headline
   // that had been repointed at today, and the two disagreed on screen.
   const bars = domainBars(model.reserves, projection, days, today)
+
+  /**
+   * What the Reserves sheet says beyond reading its own dial back.
+   *
+   * Derived from the projection already in hand rather than a second one: §1.5's text
+   * equivalent, the bars and this block all quote the same fortnight, and a re-derivation
+   * here would be a third chance for one screen to disagree with itself.
+   *
+   * A function rather than a value, and deliberately not a `useMemo`. This point in the
+   * component is below two early returns -- no schedule, and no anchored day -- so a hook
+   * added here would be a hook count that varies between renders, which React reports as
+   * "rendered more hooks than during the previous render" a long way from its cause. Called
+   * only from the branch that renders the sheet, so a closed sheet costs nothing, and the
+   * fresh array it returns is safe: `InsightBlock` keys its effect on the lines themselves
+   * rather than on the array's identity, so re-rendering the room does not re-ask the model.
+   */
+  const reserveInsightLines = (): readonly string[] =>
+    insightLines(
+      reserveInsight({
+        schedule: week,
+        // The reserve entering today, which is what the bars and the headline quote.
+        // `week.start` is where the fortnight opened, and the two differ by everything
+        // that has happened since.
+        reserves: model.reserves,
+        today,
+        blockLog,
+        days,
+        projection,
+        params,
+      }),
+      {
+        deficitDayLabel:
+          projection.firstDeficitDay === null
+            ? null
+            : dayLabel(week, projection.firstDeficitDay, today),
+        labelFor: (type) => LOAD_TYPE_LABELS[type],
+        /* Inline, and short: this name lands mid-sentence ("Coffee with Sarah tomorrow is
+           what answers that"), where `dayLabel`'s full "Tomorrow, Sat 13 Sep" reads as a
+           date stamp dropped into a clause. Same source for the days it cannot shorten. */
+        dayNameFor: (day) =>
+          day === today
+            ? 'today'
+            : day === today + 1
+              ? 'tomorrow'
+              : `on ${dayLabel(week, day, today)}`,
+      },
+    )
 
   // A `const` arrow rather than a declaration, for `acceptItems`' reason below: declarations
   // hoist above the `today === null` guard, so TypeScript could not narrow the day away and
@@ -607,17 +713,15 @@ export function RoomShell({
     closeToRoom()
   }
 
-  // §3's card precedence: distress, then a lapsed commitment, then a stuck task, then the
-  // day's own question -- capped to one below the low-energy threshold and two otherwise.
-  const lapsedCommitments = lapsed(week, today, params, blockLog)
-  // The card below offers rung one, so its call to action goes to the page carrying the
-  // rest of the chain. It used to open the block sheet, which was one hop short of the
-  // thing the card was offering.
+  // §3's card precedence: distress, then a day that does not fit, then a stuck task, then
+  // the day's own question -- capped to one below the low-energy threshold. `overfull` is
+  // computed above, before this component's early returns.
+  // §4.1's trigger: the block whose slot this hour is. `isStuck` refuses rest, sleep and
+  // protected rest, and refuses any day that is not today, so this is the block the student
+  // is supposed to be doing right now and cannot start.
   const stuckItem = week.items.find(
     (item) => item.id !== stuckDismissedId && isStuck(item, { today, nowHour }),
   )
-  const blockForToday = blockToAsk({ schedule: week, today, nowHour, blockLog })
-
 
   const askEnergy = profile.predictions.some(
     (prediction) => prediction.forDate === todayDate && prediction.reported === null,
@@ -632,7 +736,15 @@ export function RoomShell({
    */
   const askSleep =
     !sleepAnsweredToday && (todayDate === null || reportedOn(sleepNights, todayDate) === null)
-  const showTodayCard = !todayDismissed && (askEnergy || askSleep || blockForToday !== null)
+  /**
+   * What the card still has to ask: an energy reading and last night's sleep.
+   *
+   * An unanswered block used to keep it alive too, and that outlived the question it was
+   * for. The block question left this card when the waiting list started answering in place
+   * (Ruling 63), so a student with nothing to say about their energy or their sleep met an
+   * empty check-in card sitting directly above the list already asking about the block.
+   */
+  const showTodayCard = !todayDismissed && (askEnergy || askSleep)
 
   // §8's floor case. Read off what the student reported rather than the modelled reserves: a
   // claim this serious must rest on what they actually said, not on the app's guess.
@@ -640,7 +752,7 @@ export function RoomShell({
 
   const cards = visibleCards({
     distress: !distressDismissed && isDistressed(reportedEnergy),
-    lapsed: !lapsedDismissed && lapsedCommitments.length > 0,
+    overfull: overfull !== null && overfullDismissedDay !== overfull.dayIndex,
     stuck: stuckItem !== undefined,
     today: showTodayCard,
     lowEnergy,
@@ -896,7 +1008,10 @@ export function RoomShell({
                           type="button"
                           data-testid={`open-block-${one.id}`}
                           onClick={() => setView(toBlock(one.id))}
-                          className="self-start text-xs text-ink-soft underline"
+                          /* A real control, at a real size. It was 39x16 -- under half
+                             the height a finger can reliably hit, on the page a student
+                             reaches for when they have things to answer. */
+                          className="-mx-2 flex min-h-11 items-center self-start px-2 text-xs text-ink-soft underline"
                         >
                           Open it
                         </button>
@@ -914,12 +1029,36 @@ export function RoomShell({
         <LiveCards
           cards={cards}
           onDistressDismiss={() => setDistressDismissed(true)}
-          lapsedCommitments={lapsedCommitments}
-          onLapsedDismiss={() => setLapsedDismissed(true)}
+          overfullDayLabel={overfull === null ? '' : dayLabel(week, overfull.dayIndex, today)}
+          overfullCandidates={overfull?.candidates ?? []}
+          /* Only while the card is still about the day it was dropped from. */
+          overfullDropped={dropped !== null && dropped.dayIndex === overfull?.dayIndex ? dropped.title : null}
+          /* The same removal the block sheet performs, down to discarding the micro-start
+             chain: a block dropped here and a block removed there must not leave the app in
+             two different states. `removeItem` retires the matching commitment itself. */
+          onOverfullDrop={(itemId) => {
+            const going = week.items.find((one) => one.id === itemId)
+            const wasPromised = (week.commitments ?? []).some((one) => one.itemId === itemId)
+
+            setSchedule(removeItem(week, itemId))
+            dropLadder(itemId)
+            setDropped(
+              wasPromised && going !== undefined && overfull !== null
+                ? { dayIndex: overfull.dayIndex, title: going.title }
+                : null,
+            )
+          }}
+          onOverfullDismiss={() => {
+            setOverfullDismissedDay(overfull?.dayIndex ?? null)
+            setDropped(null)
+          }}
           stuckMicroStart={stuckItem === undefined ? null : firstAction(stuckItem)}
+          stuckTitle={stuckItem?.title ?? ''}
+          /* The card offers rung one, so its call to action opens the page carrying the rest
+             of the chain. It used to open the block sheet, which was one hop short of the
+             thing the card was offering. */
           onStuckStart={() => stuckItem !== undefined && setView(toMicroStart(stuckItem.id))}
           onStuckDismiss={() => stuckItem !== undefined && setStuckDismissedId(stuckItem.id)}
-          blockForToday={blockForToday}
           askEnergy={askEnergy}
           askSleep={askSleep}
           /* Beside the question it is about: answering "how much sleep last night?" is the
@@ -1087,6 +1226,8 @@ export function RoomShell({
           blockLog={blockLog}
           predictions={profile.predictions}
           sleepTargetHours={hasSleepTarget ? sleepTarget : undefined}
+          /* So the "if you accept" room runs the same learned model the room does. */
+          reportedNights={sleepNights}
           onAcceptItems={(items) => acceptItems(items)}
           onAcceptRequest={(item) => setSchedule(accept(week, item, today))}
           onClose={closeToRoom}
@@ -1114,6 +1255,9 @@ export function RoomShell({
             onAddBlock={(day) => setView(toNewBlock(day))}
             blockLog={blockLog}
             predictions={profile.predictions}
+            /* Not `nights`, which on this component is the night bands it draws. These are
+               the log the model learns from -- see `WeekScreen`'s own note. */
+            reportedNights={sleepNights}
           />
         </Sheet>
       )}
@@ -1149,6 +1293,16 @@ export function RoomShell({
              is exactly what §1.5's reduced interface exists to hold back -- the same reason
              the reserve breakdown is withheld -- while the page itself stays reachable. */
           realityLine={lowEnergy ? null : sleepRealityLine(sleepNights, sleepTarget)}
+          /* What this student's own nights say about how much sleep is enough for them, read
+             off the very parameter the projection is running on -- so the sentence and the
+             model can never disagree. Withheld in low-energy mode for `realityLine`'s reason.
+
+             It says the figure and the model acts on it; it does NOT rewrite `sleepTarget`.
+             The target is what the student stated, and learning something about them is not
+             licence to edit it underneath them. */
+          enoughLine={
+            lowEnergy ? null : sleepEnoughLine(params.enoughSleepHours, ENOUGH_SLEEP_HOURS)
+          }
           /* Only the target. The nights ahead follow from it on the next render, which is
              what fixed the bug where raising the target moved nothing: it used to rewrite the
              week, and only nights that still sat exactly at the old target were recognised as
@@ -1239,6 +1393,7 @@ export function RoomShell({
           bars={bars}
           projection={projection}
           history={reportedEnergy}
+          insightLines={reserveInsightLines()}
           onClose={closeToRoom}
         />
       )}
@@ -1397,14 +1552,34 @@ export function RoomShell({
 
         {/* One control row across the top of the room, packed to the left: `Settings`, then
             `The week`, then `Waiting`, then `+`.
-            
-            Three things keep it out of the gauge's way, and the fourth control is what made
-            all three necessary -- at 320px the row is wider than the screen. `pr-14` holds
-            the corner open, `flex-wrap` puts the overflow on a second line rather than
-            pushing it under the gauge, and the container itself takes no pointer events, so
-            even where its empty box reaches across the gauge it cannot swallow the press.
-            That last one is not belt and braces: the row's transparent box intercepting the
-            gauge is exactly how `dial.spec.ts` failed at 320 and 390. */}
+
+            Two things keep it out of the gauge's way, and the seven controls are what made
+            both necessary -- at 320px the row is far wider than the screen. `pr-16` holds
+            the corner open, and the container itself takes no pointer events, so even where
+            its empty box reaches across the gauge it cannot swallow the press. That second
+            one is not belt and braces: the row's transparent box intercepting the gauge is
+            exactly how `dial.spec.ts` failed at 320 and 390.
+
+            **One row that scrolls, where it used to wrap.** Wrapping was the earlier answer
+            and it was measured only as "nothing overflows": at 360px the seven controls came
+            to THREE rows, and this bar paints the ceiling's colour across its whole height,
+            so 180px of solid brown sat over the drawing. What was left of the room was the
+            top of a bookstack and a table edge above an empty floor -- the character, the
+            door and the bed were all behind the buttons. A row that scrolls keeps the bar
+            the depth of one control, which is the depth the ceiling was drawn for.
+
+            The scrolling box is INSIDE the padded container rather than being the container,
+            so it ends where `pr-16` ends: a button can never scroll under the gauge, which
+            would be a control that cannot be pressed and looks like one that can.
+
+            **Along the bottom on a phone, in the ceiling from 768px up.** §0.2 wants primary
+            actions in the lower half on mobile, and on a phone this row was as far from the
+            thumb as the screen allows. The foot of the stage is also the one part of it with
+            nothing in it: the drawing is top-aligned so its slack collects below, which is
+            the same clear floor the preview banner was already put on. The corner is only
+            held open at the top, because that is the only place the gauge shares this line --
+            on a phone the row gets those 64px back, and four controls fit before it scrolls
+            instead of three. */}
         <div data-testid="room-bar"
           /**
            * The controls sit INSIDE the ceiling, which means the bar has to carry the
@@ -1420,7 +1595,21 @@ export function RoomShell({
            * still reads above it, and a bar of controls floating on a wall read worse.
            */
           style={{ backgroundColor: PALETTE.ink }}
-          className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-center gap-2.5 px-3 py-3 pr-16 [&>*]:pointer-events-auto">
+          className="pointer-events-none absolute inset-x-0 bottom-0 px-3 py-3 md:bottom-auto md:top-0 md:pr-16">
+          {/* `shrink-0` on every child, or the row compresses the buttons to illegibility
+              instead of scrolling. The scrollbar is hidden because this is a control strip on
+              a touch screen, not a document: a horizontal bar under the buttons would sit on
+              the ceiling and read as part of the drawing. */}
+          {/* The edge says there is more, so a half-cut button reads as a row that scrolls
+              rather than as one that broke. Ink to transparent, because the bar already
+              paints the ceiling's colour and anything else would be a second edge. */}
+          <div
+            aria-hidden="true"
+            style={{ backgroundImage: `linear-gradient(to left, ${PALETTE.ink}, transparent)` }}
+            className="pointer-events-none absolute inset-y-0 right-3 w-6 md:right-16"
+          />
+
+          <div className="pointer-events-auto flex items-center gap-2.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
           {settingsButton}
           {/*
             First in the row, and outside `!lowEnergy` -- both deliberate.
@@ -1485,6 +1674,7 @@ export function RoomShell({
           <Button data-testid="open-add" aria-label="Add something" onClick={() => setView(toAdd())}>
             +
           </Button>
+          </div>
         </div>
 
         {/* Ruling 46: the panel, floating over the wall from 768px up.
@@ -1499,6 +1689,13 @@ export function RoomShell({
           room is full-bleed there and a panel over it would cover the character, which
           Ruling 55 and four viewport tests forbid.
 
+          Wider than the 16rem it started at, and wider again from 1024px. Each row is two
+          columns -- what the object means, and the hours behind it -- and at 16rem both were
+          wrapping mid-phrase: "nothing / today" under "People", "easing / off" under a "4 /
+          hours" that had itself broken in half. Every row was legible and none of them read
+          as a sentence. At 768 the panel still starts well clear of the character, which is
+          the thing Ruling 55 protects.
+
           It starts below the brown at the top, which is the taller of two things and neither
           is a fixed number of pixels. `Ceiling` draws 34 of the viewBox's 260 units and hangs
           7 more below it in blocks, so the brown really ends at 41/260 -- 15.8% of the
@@ -1512,7 +1709,7 @@ export function RoomShell({
       <aside
         data-testid="today-panel-floating"
         aria-label="Today"
-        className="pointer-events-none absolute bottom-3 right-3 top-[max(17%,5.5rem)] hidden w-64 overflow-y-auto rounded-2xl border border-line bg-surface/90 p-2 shadow-lg backdrop-blur-sm md:block [&>*]:pointer-events-auto"
+        className="pointer-events-none absolute bottom-3 right-3 top-[max(17%,5.5rem)] hidden w-72 overflow-y-auto rounded-2xl border border-line bg-surface/90 p-2 shadow-lg backdrop-blur-sm md:block lg:w-80 [&>*]:pointer-events-auto"
       >
         <TodayPanel rows={panelRows} />
       </aside>
@@ -1526,9 +1723,16 @@ export function RoomShell({
             of the character, and this banner is 108px tall, so directly under the controls
             it lands on the character's face -- which `room.spec.ts` hit-tests at four
             viewports. The foot of the stage is clear of the drawing's subject at every
-            width. */}
+            width, because the drawing is top-aligned and the slack collects below it. That
+            is also what makes room for the control row down there on a phone, which is why
+            this now sits above it rather than at the very bottom. */}
+        {/* Above the control row on a phone, where that row now is. The 5rem is the row's
+            own height plus the gap -- one control at 44px inside `py-3`, which is 68 -- and
+            it is a real coupling rather than a magic number: a second line of controls would
+            slide under this banner, which is why `responsive.spec.ts` asserts the row stays
+            one line. */}
         {session === null && (
-          <div className="absolute inset-x-2 bottom-2">
+          <div className="absolute inset-x-2 bottom-20 md:bottom-2">
             <PreviewBanner onSignIn={onSignIn} />
           </div>
         )}

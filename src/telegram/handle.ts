@@ -229,6 +229,19 @@ export interface ChatStore {
    */
   loadPredictions(accountId: string): Promise<readonly EnergyPrediction[]>
   /**
+   * §8b's reported nights, from the same `user_state.settings` blob.
+   *
+   * Here for `loadPredictions`' stated reason and not a new one: `paramsFor` learns how much
+   * sleep is enough for this student from these nights paired against those predictions, and
+   * without them a week read in chat runs a different model from the same week read in the
+   * app -- Ruling 41's failure exactly.
+   *
+   * Resolves to empty rather than rejecting, as `loadPredictions` does: a student who has
+   * reported no nights is an ordinary state, and the worst case of guessing is the
+   * population figure the app itself opens on.
+   */
+  loadSleepNights(accountId: string): Promise<readonly SleepNight[]>
+  /**
    * Writes §8.1's predictions back, for a check-in answered in chat.
    *
    * Only the predictions, never the whole settings blob: the app writes that whole and a
@@ -420,8 +433,9 @@ export async function handleIntent(
         if (blockLog === null) return askUnavailableReply()
 
         const predictions = await store.loadPredictions(accountId).catch(() => [])
+        const nights = await store.loadSleepNights(accountId).catch(() => [])
         const outcomes = outcomesFrom(blockLog)
-        const params = paramsFor(outcomes, predictions)
+        const params = paramsFor(outcomes, predictions, nights)
         const projection = project(
           week.start,
           toDayInputs(week, checkedInDays(blockLog, today, week.horizonDays)),
@@ -451,9 +465,10 @@ export async function handleIntent(
         if (blockLog === null) return askUnavailableReply()
 
         const predictions = await store.loadPredictions(accountId).catch(() => [])
+        const nights = await store.loadSleepNights(accountId).catch(() => [])
 
         return scheduleReply(
-          scheduleView({ schedule: week, today: todayFor(week, now), blockLog, predictions }),
+          scheduleView({ schedule: week, today: todayFor(week, now), blockLog, predictions, nights }),
         )
       }
 
@@ -500,9 +515,10 @@ export async function handleIntent(
         // which day that is -- the same `todayFor` every other command here reads.
         const today = todayFor(week, now)
         const predictions = await store.loadPredictions(accountId).catch(() => [])
+        const nights = await store.loadSleepNights(accountId).catch(() => [])
         const outcome = runRebalance(
           week,
-          paramsFor(outcomesFrom(blockLog), predictions),
+          paramsFor(outcomesFrom(blockLog), predictions, nights),
           REBALANCE_SEED,
           today,
         )
@@ -521,9 +537,10 @@ export async function handleIntent(
         if (blockLog === null) return askUnavailableReply()
 
         const predictions = await store.loadPredictions(accountId).catch(() => [])
+        const nights = await store.loadSleepNights(accountId).catch(() => [])
 
         return lapsedReply(
-          lapsed(week, todayFor(week, now), paramsFor(outcomesFrom(blockLog), predictions), blockLog),
+          lapsed(week, todayFor(week, now), paramsFor(outcomesFrom(blockLog), predictions, nights), blockLog),
         )
       }
 
@@ -650,9 +667,10 @@ export async function handleIntent(
     if (blockLog === null) return askUnavailableReply()
 
     const predictions = await store.loadPredictions(accountId).catch(() => [])
+    const nights = await store.loadSleepNights(accountId).catch(() => [])
     const outcome = runRebalance(
       week,
-      paramsFor(outcomesFrom(blockLog), predictions),
+      paramsFor(outcomesFrom(blockLog), predictions, nights),
       REBALANCE_SEED,
       todayFor(week, now),
     )
@@ -770,9 +788,10 @@ export async function handleIntent(
 
     if (intent.kind === 'backToSchedule') {
       const predictions = await store.loadPredictions(accountId).catch(() => [])
+      const nights = await store.loadSleepNights(accountId).catch(() => [])
 
       return scheduleReply(
-        scheduleView({ schedule: week, today: todayFor(week, now), blockLog, predictions }),
+        scheduleView({ schedule: week, today: todayFor(week, now), blockLog, predictions, nights }),
         { replacing: true },
       )
     }

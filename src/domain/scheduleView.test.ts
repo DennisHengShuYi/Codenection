@@ -226,4 +226,33 @@ describe('the reserve on each cell', () => {
     const figures = new Set(cells.map((cell) => Math.round(cell.reserve)))
     expect(figures.size).toBeGreaterThan(1)
   })
+
+  /**
+   * The week grid and the room must not run two different models over one fortnight, which
+   * is the reason `blockLog` and `predictions` are threaded here at all. `domain/sleepEnough`
+   * adds a third learned figure, and leaving it out would reopen exactly that gap: the grid
+   * lit by population coefficients while the room is lit by learned ones.
+   */
+  it('runs the learned ceiling on sleep, not the population one', () => {
+    const nights = []
+    const predictions = []
+
+    // A fortnight saying every night above six bought this student nothing.
+    for (let index = 0; index < 8; index += 1) {
+      const long = index % 2 === 0
+      const isoDate = `2026-09-0${index + 1}`
+      nights.push({ isoDate, hours: long ? 8 : 5, answeredAt: index })
+      predictions.push({ forDate: isoDate, predicted: 60, reported: long ? 48 : 60 })
+    }
+
+    // Ten-hour nights, so a lowered ceiling changes what the projection credits. Seven-hour
+    // nights would sit under any believable ceiling and prove nothing.
+    const schedule = week([], { sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 10) })
+    const input = { schedule, today: 0, blockLog: [], predictions }
+
+    const population = scheduleView(input)
+    const learned = scheduleView({ ...input, nights })
+
+    expect(learned[1]?.reserve).toBeLessThan(population[1]?.reserve ?? 0)
+  })
 })

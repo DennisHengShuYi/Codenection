@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { BlockOutcome } from './calibration'
 import { paramsFor } from './engineParams'
 import type { EnergyPrediction } from './predictions'
+import type { SleepNight } from './sleepLog'
 import { DEFAULT_PARAMS } from '../engine'
 
 const overran = (count: number, type: BlockOutcome['type'] = 'mental'): BlockOutcome[] =>
@@ -133,5 +134,58 @@ describe('paramsFor and what the prediction loop has learned', () => {
 
     expect(both.estimateBias.mental).toBeGreaterThan(1)
     expect(both.kSleep.mental).toBeGreaterThan(DEFAULT_PARAMS.kSleep.mental)
+  })
+
+  /**
+   * The third learner: where sleep stops paying back, for this student.
+   *
+   * A separate estimator rather than a fifth entry in `recoveryLearning`'s table, because a
+   * finite difference cannot identify a threshold -- see `./sleepEnough`. It reaches the
+   * engine through the same single door as the other two.
+   */
+  describe('how much sleep is enough', () => {
+    /** A fortnight where every night above six bought this student nothing: the long nights
+     *  land twelve points worse than claimed, the short ones land exactly as claimed. */
+    const nightsAndDays = (): {
+      nights: SleepNight[]
+      predictions: EnergyPrediction[]
+    } => {
+      const nights: SleepNight[] = []
+      const predictions: EnergyPrediction[] = []
+
+      for (let index = 0; index < 8; index += 1) {
+        const long = index % 2 === 0
+        const isoDate = `2026-09-0${index + 1}`
+        nights.push({ isoDate, hours: long ? 8 : 5, answeredAt: index })
+        predictions.push({ forDate: isoDate, predicted: 60, reported: long ? 48 : 60 })
+      }
+
+      return { nights, predictions }
+    }
+
+    it('carries a learned figure into the engine', () => {
+      const { nights, predictions } = nightsAndDays()
+
+      expect(paramsFor([], predictions, nights).enoughSleepHours).toBeLessThan(
+        DEFAULT_PARAMS.enoughSleepHours,
+      )
+    })
+
+    it('carries the population figure when nothing has been measured', () => {
+      expect(paramsFor([]).enoughSleepHours).toBe(DEFAULT_PARAMS.enoughSleepHours)
+    })
+
+    /** The assertion that catches this bleeding into a neighbour, mirroring "leaves the
+     *  parameters it cannot honestly identify alone" above. `sleepBaselineHours` especially:
+     *  it is the other end of the same window and is still not measured by anything. */
+    it('moves nothing else', () => {
+      const { nights, predictions } = nightsAndDays()
+      const learned = paramsFor([], predictions, nights)
+
+      expect(learned.sleepBaselineHours).toBe(DEFAULT_PARAMS.sleepBaselineHours)
+      expect(learned.kSleepDebt).toEqual(DEFAULT_PARAMS.kSleepDebt)
+      expect(learned.typeIntensity).toEqual(DEFAULT_PARAMS.typeIntensity)
+      expect(learned.estimateBias).toEqual(DEFAULT_PARAMS.estimateBias)
+    })
   })
 })

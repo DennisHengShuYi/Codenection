@@ -3,6 +3,8 @@ import type { BlockOutcome } from './calibration'
 import type { EnergyPrediction } from './predictions'
 import { recoveryScales } from './recoveryLearning'
 import { paddingFor } from './realityCheck'
+import { enoughSleepFor } from './sleepEnough'
+import type { SleepNight } from './sleepLog'
 
 /**
  * Turns what the app has measured about a student into the parameters its model runs on.
@@ -45,6 +47,19 @@ export function paramsFor(
    * caller written before the loop existed keeps compiling and behaving as it did.
    */
   predictions: readonly EnergyPrediction[] = [],
+  /**
+   * §8b's reported nights, for how much sleep is enough for this student.
+   *
+   * Defaulted empty for the same reason `predictions` is, and it matters more here: this one
+   * arrived last, so every caller written before it must keep behaving exactly as it did.
+   * With no nights `enoughSleepFor` returns the population figure, so the guarantee above
+   * holds byte for byte.
+   *
+   * The two evidence streams are passed separately rather than pre-joined because they are
+   * durably separate -- `sleepLog` in settings, predictions in the calibration blob -- and
+   * `sleepEnough` is where the join belongs.
+   */
+  nights: readonly SleepNight[] = [],
 ): EngineParams {
   const estimateBias = Object.fromEntries(
     LOAD_TYPES.map((type) => [type, paddingFor(outcomes, type)]),
@@ -65,5 +80,10 @@ export function paramsFor(
     // for why that mattered so much on the two above.
     kSocialContact: DEFAULT_PARAMS.kSocialContact * socialContact,
     isolationDrainPerDay: DEFAULT_PARAMS.isolationDrainPerDay * isolation,
+    // The third learner, and the only one that is not a scale. A threshold cannot be
+    // identified by the finite difference `recoveryScales` runs on -- `./sleepEnough` states
+    // why -- so it is estimated by comparing two groups of nights and arrives already in
+    // hours, which is why it is assigned rather than multiplied.
+    enoughSleepHours: enoughSleepFor(nights, predictions),
   }
 }

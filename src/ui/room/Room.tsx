@@ -7,6 +7,7 @@ import { Bed, Desk, Mirror, Phone } from './scene/Furniture'
 import { Clutter, Company, Dumbbell, Papers } from './scene/Loose'
 import { FLOOR_Y, PALETTE } from './scene/palette'
 import { Ceiling, Floor, Wall } from './scene/Walls'
+import { useNarrowViewport } from '../useNarrowViewport'
 
 /**
  * §1.3's room, drawn as one scalable scene -- and, per §3, a picture rather than a control
@@ -69,6 +70,7 @@ export function Room({
   // gauge from it read 100% on a nine-hour day at 43% reserve.
   const percent = Math.round(state.reserve * 100)
   const fills = frame === 'fill'
+  const narrow = useNarrowViewport()
 
   return (
     /* The inline framing is no longer locked to the viewBox's 3:2 ratio for hotspot
@@ -86,7 +88,30 @@ export function Room({
           media query, which is §10's argument for hand-rolled SVG over an image. */}
       <svg
         data-testid="room-scene"
-        viewBox={fills ? '0 0 300 260' : '0 0 300 200'}
+        /**
+         * Framed tighter on a phone, and only on a phone.
+         *
+         * On a tall narrow screen `meet` fits the drawing to its WIDTH and stops, so how big
+         * the bed and the desk come out is decided entirely by how wide the phone is --
+         * nothing about the viewBox height changes it. At 390px that left the room a band
+         * across the top third with a great deal of empty floor beneath.
+         *
+         * So the phone framing drops the empty wall either side of the furniture. The
+         * numbers are a measurement, not a guess: the objects were measured in a browser as
+         * occupying x 30..286 of the 300-unit viewBox, so that is exactly what is shown.
+         * Everything comes out about a sixth larger and nothing is clipped -- what leaves the
+         * frame is wall. Moving an object nearer an edge than x=30 or x=286 means measuring
+         * again.
+         *
+         * Cropped through the viewBox rather than by drawing the `<svg>` wider than its
+         * stage, which framed the same region but put the element itself outside the
+         * viewport -- `responsive.spec.ts` refuses that, rightly: it cannot tell a deliberate
+         * overflow from content a student has lost.
+         *
+         * Wide screens keep the full 300, where the fit is height-bound, the drawing already
+         * fills the frame, and cropping would throw away room the screen has to spare.
+         */
+        viewBox={fills ? (narrow ? '30 0 256 260' : '0 0 300 260') : '0 0 300 200'}
         /* Top-aligned in the fill framing so the slack collects at the bottom of the stage,
            where the band is, instead of being split above and below the drawing. */
         preserveAspectRatio={fills ? 'xMidYMin meet' : 'xMidYMid meet'}

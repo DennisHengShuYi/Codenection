@@ -40,7 +40,8 @@ const roomFor = (
   blockLog: readonly BlockRecord[],
   predictions: readonly EnergyPrediction[],
   today: number,
-) => roomModel({ schedule, today, blockLog, predictions })
+  sleepTargetHours: number | undefined,
+) => roomModel({ schedule, today, blockLog, predictions, sleepTargetHours })
 
 /**
  * §2.3's request box.
@@ -62,6 +63,7 @@ export function RequestBoxScreen({
   today,
   blockLog,
   predictions,
+  sleepTargetHours,
   onAccept,
   onBack,
   onClose,
@@ -82,6 +84,15 @@ export function RequestBoxScreen({
    *  drawn on this screen must run the model the rest of the app runs, not the population
    *  one. This is the call site the identical mistake was made at once already. */
   predictions: readonly EnergyPrediction[]
+  /**
+   * The night the student says they are aiming for, forwarded for the same reason the block
+   * log and the predictions are: both rooms this screen draws must run the same model.
+   *
+   * Without it the bed here measured a shortfall against the population norm while the room
+   * screen measured it against the student's own figure -- two beds for one week, on two
+   * screens, which is the class of disagreement `roomFor`'s own comment exists to stop.
+   */
+  sleepTargetHours?: number
   onAccept: (item: ParsedItem) => void
   /** Ruling 60: one level up, to the chooser this was chosen from. */
   onBack: () => void
@@ -224,8 +235,8 @@ export function RequestBoxScreen({
 
             {/* §2.3, via §1.3: the warning is shown as two rooms. */}
             <RoomComparison
-              now={roomFor(schedule, blockLog, predictions, today)}
-              ifAccepted={roomFor(addItems(schedule, [item], today), blockLog, predictions, today)}
+              now={roomFor(schedule, blockLog, predictions, today, sleepTargetHours)}
+              ifAccepted={roomFor(addItems(schedule, [item], today), blockLog, predictions, today, sleepTargetHours)}
             />
 
             {drafts.length > 0 && (

@@ -158,10 +158,23 @@ export function roomStateFor(
     (item) => item.type === 'errands' && !item.fixed,
   )
 
+  /*
+   * Only the nights already behind the student.
+   *
+   * This averaged the whole fortnight, so the bed reported a debt largely made of the app's
+   * own forecast -- and once `assumeSleep` began deriving the nights ahead from a measured
+   * average, most of that figure was a prediction rather than a loss. A debt is accrued: a
+   * student cannot owe sleep they have not yet failed to get. Short nights AHEAD are a
+   * warning, and the window and the forecast are what carry one.
+   *
+   * Nothing owed on the first morning, because nothing is behind them yet.
+   */
+  const behind = schedule.sleepByDay.slice(0, Math.max(0, today))
+
   const averageSleep =
-    schedule.sleepByDay.length === 0
+    behind.length === 0
       ? RESTED_NIGHT_HOURS
-      : schedule.sleepByDay.reduce((sum, hours) => sum + hours, 0) / schedule.sleepByDay.length
+      : behind.reduce((sum, hours) => sum + hours, 0) / behind.length
 
   const sleepDebt = Math.max(0, (sleepTargetHours ?? RESTED_NIGHT_HOURS) - averageSleep)
 

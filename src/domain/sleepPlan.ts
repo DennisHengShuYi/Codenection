@@ -16,15 +16,24 @@ import type { Schedule } from '../optimizer'
  * rule forbids in spirit.
  */
 
-export type SleepBucket = 'under5' | 'six' | 'seven' | 'eightPlus'
+export type SleepBucket = 'under5' | 'six' | 'seven' | 'eightPlus' | 'tenPlus'
 
-/** Buckets, not a typed number (§7.5): nobody reports their night to the half hour, and
- *  asking for one collects a figure that means nothing. */
+/**
+ * Buckets, not a typed number (§7.5): nobody reports their night to the half hour, and asking
+ * for one collects a figure that means nothing.
+ *
+ * `tenPlus` was added once a short night began costing reserve (Ruling 67). The top bucket
+ * stopped at 8.5, so a student who slept eleven hours after a bad week had no way to say so --
+ * and the one night that most deserves recording is the recovery night. The four original
+ * values are unchanged: the log stores hours rather than bucket names, so nothing already
+ * reported is rewritten by this.
+ */
 export const SLEEP_HOURS: Record<SleepBucket, number> = {
   under5: 4.5,
   six: 6,
   seven: 7,
   eightPlus: 8.5,
+  tenPlus: 10,
 }
 
 /** A night is somewhere between none at all and a whole day. Zero is deliberately allowed:

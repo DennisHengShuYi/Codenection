@@ -443,11 +443,14 @@ describe('the command surface', () => {
       expect(reply?.buttons?.flat()).toHaveLength(5)
     })
 
+    /** Five since Ruling 67: a short night costs reserve now, so the top bucket could not
+     *  stop at 8.5 -- a student who slept eleven hours after a bad week had no way to say so,
+     *  and that is the night most worth recording. */
     it('asks about sleep when that is what was asked for', async () => {
       const h = harness()
 
       expect((await handleIntent(command('checkin', 'sleep'), h.store, 1000))?.buttons?.flat())
-        .toHaveLength(4)
+        .toHaveLength(5)
     })
 
     it('answers /lapsed plainly when nothing has fallen through', async () => {

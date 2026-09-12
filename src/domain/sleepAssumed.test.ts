@@ -18,6 +18,7 @@ const assumed = (over: Partial<Parameters<typeof assumeSleep>[0]> = {}) =>
     today: 2,
     measuredHours: null,
     chosenByDate: {},
+    reportedNights: [],
     targetHours: 8,
     wakeHour: 7,
     ...over,
@@ -104,6 +105,7 @@ describe('assumeSleep', () => {
       today: 0,
       measuredHours: 3,
       chosenByDate: {},
+      reportedNights: [],
       targetHours: 8,
       wakeHour: 7,
     })
@@ -123,6 +125,7 @@ describe('assumeSleep', () => {
       today: 2,
       measuredHours: null,
       chosenByDate: { '2026-09-12': 5 },
+      reportedNights: [],
       targetHours: 8,
       wakeHour: 7,
     }).sleepByDay
@@ -182,5 +185,41 @@ describe('assumeSleep', () => {
     }
 
     expect(assumed({ schedule: week({ items: [all] }), targetHours: 8 })[2]).toBe(0)
+  })
+
+  /**
+   * A night already past is read from what the student REPORTED, where they reported it.
+   *
+   * `sleepByDay` held the plan for past nights unless the today card happened to have written
+   * the answer into it -- so the same fact had two homes and they could disagree. A night
+   * reported over Telegram on the fortnight's first day writes no week entry at all (there is
+   * no day before day 0), and one reported in an earlier session might not survive. The log is
+   * the ground truth for what was slept; this is what makes the derived week agree with it.
+   */
+  it('reads a night already past from what the student reported', () => {
+    const nights = assumed({
+      today: 3,
+      // Keyed by the morning the night ended, which is the day AFTER the night itself.
+      reportedNights: [{ isoDate: '2026-09-12', hours: 4, answeredAt: 1 }],
+    })
+
+    // The week starts 2026-09-10, so that morning ends the night of day 1.
+    expect(nights[1]).toBe(4)
+  })
+
+  it('keeps the plan for a past night nobody reported', () => {
+    expect(assumed({ today: 3 })[1]).toBe(7)
+  })
+
+  /** A report about a night still ahead is not a report -- it cannot have happened yet, and
+   *  the nights ahead are the app's own forecast. */
+  it('does not let a stray report rewrite a night still ahead', () => {
+    const nights = assumed({
+      today: 1,
+      targetHours: 8,
+      reportedNights: [{ isoDate: '2026-09-14', hours: 2, answeredAt: 1 }],
+    })
+
+    expect(nights[3]).toBe(8)
   })
 })

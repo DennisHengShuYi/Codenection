@@ -50,13 +50,17 @@ describe('TodayCard', () => {
     expect(props.onEnergy).toHaveBeenCalledWith(30)
   })
 
-  it('offers the four sleep buckets, reporting the bucket key', async () => {
+  /** Five since Ruling 67. A short night costs reserve now, so the top bucket could not stop
+   *  at 8.5: the recovery night after a bad week is the one most worth recording, and there
+   *  was no way to report it. */
+  it('offers the five sleep buckets, reporting the bucket key', async () => {
     const { props } = setup()
 
     expect(screen.getByTestId('sleep-under5')).toHaveTextContent(/under 5/i)
     expect(screen.getByTestId('sleep-six')).toHaveTextContent('6')
     expect(screen.getByTestId('sleep-seven')).toHaveTextContent('7')
-    expect(screen.getByTestId('sleep-eightPlus')).toHaveTextContent(/8\+/)
+    expect(screen.getByTestId('sleep-eightPlus')).toHaveTextContent('8')
+    expect(screen.getByTestId('sleep-tenPlus')).toHaveTextContent(/10\+/)
 
     await userEvent.click(screen.getByTestId('sleep-seven'))
     expect(props.onSleep).toHaveBeenCalledWith('seven')

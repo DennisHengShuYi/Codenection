@@ -451,7 +451,8 @@ const SLEEP_BUCKETS: readonly { label: string; bucket: string }[] = [
   { label: 'Under 5 hours', bucket: 'under5' },
   { label: 'About 6', bucket: 'six' },
   { label: 'About 7', bucket: 'seven' },
-  { label: '8 or more', bucket: 'eightPlus' },
+  { label: '8 or 9', bucket: 'eightPlus' },
+  { label: '10 or more', bucket: 'tenPlus' },
 ]
 
 export function checkInReply(asking: 'energy' | 'sleep'): Reply {

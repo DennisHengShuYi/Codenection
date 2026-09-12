@@ -391,6 +391,7 @@ export function RoomShell({
     chosenByDate: sleepChosenByDate,
     targetHours: sleepTarget,
     wakeHour: sleepWakeHour,
+    reportedNights: sleepNights,
   })
 
   // Threaded alongside `today` from the same clock read -- see the comment above this
@@ -1085,6 +1086,7 @@ export function RoomShell({
           today={today}
           blockLog={blockLog}
           predictions={profile.predictions}
+          sleepTargetHours={hasSleepTarget ? sleepTarget : undefined}
           onAcceptItems={(items) => acceptItems(items)}
           onAcceptRequest={(item) => setSchedule(accept(week, item, today))}
           onClose={closeToRoom}

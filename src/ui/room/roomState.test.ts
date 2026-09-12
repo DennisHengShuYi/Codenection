@@ -28,7 +28,7 @@ const schedule = (items: ScheduledItem[] = [], sleepHours = 8): Schedule => ({
   sleepByDay: Array.from({ length: HORIZON_DAYS }, () => sleepHours),
 })
 
-const stateFor = (reserves: Reserves, week: Schedule = schedule()) =>
+const stateFor = (reserves: Reserves, week: Schedule = schedule(), today = 0) =>
   roomStateFor(
     reserves,
     project(reserves, toDayInputs(week, ALL_PRESENT), DEFAULT_PARAMS),
@@ -36,7 +36,10 @@ const stateFor = (reserves: Reserves, week: Schedule = schedule()) =>
     // Ruling 45: the room draws a day now. These older tests are about the bindings that still
     // read reserves -- the character, the door, the weather -- so they look at a day with
     // nothing on it and say so, rather than leaving the day to a default.
-    0,
+    //
+    // `today` is taken where a case needs nights BEHIND the student: sleep debt is accrued,
+    // so on day zero nothing is owed however short the fortnight's nights are.
+    today,
     [],
   )
 
@@ -67,12 +70,13 @@ describe('roomStateFor', () => {
     expect(stateFor(healthy, schedule(many)).clutter.length).toBeLessThanOrEqual(6)
   })
 
+  // A day in, so there is a night behind them to owe against.
   it('shows sleep debt building on short nights', () => {
-    expect(stateFor(healthy, schedule([], 5)).sleepDebt).toBeGreaterThan(0)
+    expect(stateFor(healthy, schedule([], 5), 3).sleepDebt).toBeGreaterThan(0)
   })
 
   it('shows no sleep debt on long ones', () => {
-    expect(stateFor(healthy, schedule([], 9)).sleepDebt).toBe(0)
+    expect(stateFor(healthy, schedule([], 9), 3).sleepDebt).toBe(0)
   })
 
   // §1.3: "Window weather -- the projection, rendered literally."
@@ -333,14 +337,14 @@ describe('the clock, and the ceiling that no longer speaks', () => {
  * calibration the engine's side is waiting on". A stated target is that calibration arriving.
  */
 describe('roomStateFor and a stated sleep target', () => {
-  const withTarget = (sleepHours: number, targetHours?: number) => {
+  const withTarget = (sleepHours: number, targetHours?: number, today = 3) => {
     const week = schedule([], sleepHours)
 
     return roomStateFor(
       healthy,
       project(healthy, toDayInputs(week, ALL_PRESENT), DEFAULT_PARAMS),
       week,
-      0,
+      today,
       [],
       targetHours,
     )
@@ -362,6 +366,55 @@ describe('roomStateFor and a stated sleep target', () => {
   })
 
   it('still reports a shortfall against a low target when the nights are lower', () => {
-    expect(withTarget(4, 6).sleepDebt).toBeCloseTo(2)
+    expect(withTarget(4, 6, 3).sleepDebt).toBeCloseTo(2)
+  })
+})
+
+/**
+ * A debt is accrued, not forecast.
+ *
+ * `sleepDebt` averaged all twenty-one nights, so the bed's "about 3.4 hours of sleep owed"
+ * included nights that had not happened -- and once `assumeSleep` began deriving those nights
+ * from a measured average, the bed was reporting a debt largely made of the app's own
+ * forecast. A student cannot owe sleep they have not yet failed to get.
+ */
+describe('roomStateFor and what sleep is actually owed', () => {
+  const nights = (hours: readonly number[], today: number, targetHours?: number) => {
+    const week: Schedule = {
+      items: [],
+      start: healthy,
+      horizonDays: HORIZON_DAYS,
+      sleepByDay: Array.from({ length: HORIZON_DAYS }, (_, day) => hours[day] ?? 8),
+    }
+
+    return roomStateFor(
+      healthy,
+      project(healthy, toDayInputs(week, ALL_PRESENT), DEFAULT_PARAMS),
+      week,
+      today,
+      [],
+      targetHours,
+    )
+  }
+
+  it('reads only the nights already behind the student', () => {
+    // Three short nights behind today, generous nights ahead. The debt is about the three.
+    expect(nights([5, 5, 5, 9, 9, 9, 9], 3).sleepDebt).toBeCloseTo(2)
+  })
+
+  /** The forecast cannot put a student in debt. Short nights AHEAD are a warning the window
+   *  and the forecast carry; they are not hours already lost. */
+  it('ignores the nights still ahead', () => {
+    expect(nights([8, 8, 8, 2, 2, 2, 2], 3).sleepDebt).toBe(0)
+  })
+
+  /** On the first morning nothing is behind them, so nothing is owed -- rather than a debt
+   *  computed from a fortnight of assumptions. */
+  it('owes nothing on the fortnight\u2019s first morning', () => {
+    expect(nights([2, 2, 2], 0).sleepDebt).toBe(0)
+  })
+
+  it('still measures against a target the student stated', () => {
+    expect(nights([7, 7, 7], 3, 9).sleepDebt).toBeCloseTo(2)
   })
 })

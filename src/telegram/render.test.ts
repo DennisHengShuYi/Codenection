@@ -1,5 +1,6 @@
 import { COMMANDS } from './commands'
 import { describe, expect, it } from 'vitest'
+import { SLEEP_HOURS } from '../domain/sleepPlan'
 import type { ParsedItem } from '../ai'
 import {
   MAX_ECHO_LENGTH,
@@ -614,10 +615,19 @@ describe('checkInReply', () => {
     expect(labels.join(' ')).toMatch(/empty/i)
   })
 
-  it('asks for sleep in the same four buckets', () => {
+  /**
+   * Five since Ruling 67, and asserted against the card's own record rather than a literal.
+   *
+   * A short night costs reserve now, so the top bucket could not stop at 8.5 -- the recovery
+   * night after a bad week is the one most worth recording. Counting `SLEEP_HOURS` instead of
+   * a number means adding a sixth bucket to one surface and not the other fails here, which
+   * is the disagreement §8b② forbids: a student answering in both places must not meet two
+   * different questions.
+   */
+  it('asks for sleep in the same buckets the card offers', () => {
     const labels = checkInReply('sleep').buttons?.flat().map((button) => button.label) ?? []
 
-    expect(labels).toHaveLength(4)
+    expect(labels).toHaveLength(Object.keys(SLEEP_HOURS).length)
   })
 
   /** A student who answers in both places must not meet two different questions (§8b②). */

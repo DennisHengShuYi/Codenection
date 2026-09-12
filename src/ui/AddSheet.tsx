@@ -78,6 +78,7 @@ export function AddSheet({
   today,
   blockLog,
   predictions,
+  sleepTargetHours,
   onAcceptItems,
   onAcceptRequest,
   onClose,
@@ -97,6 +98,9 @@ export function AddSheet({
   /** §8.1's resolved predictions, forwarded to the request path so both rooms it draws run
    *  the model the rest of the app runs rather than the population one. */
   readonly predictions: readonly EnergyPrediction[]
+  /** The student's stated sleep target, forwarded to the request path so the room it draws
+   *  measures a shortfall against the same figure the room screen does. */
+  readonly sleepTargetHours?: number
   readonly onAcceptItems: (items: readonly ParsedItem[]) => void
   readonly onAcceptRequest: (item: ParsedItem) => void
   readonly onClose: () => void
@@ -208,6 +212,7 @@ export function AddSheet({
         today={today}
         blockLog={blockLog}
         predictions={predictions}
+        sleepTargetHours={sleepTargetHours}
         onAccept={(item) => {
           onAcceptRequest(item)
           close()

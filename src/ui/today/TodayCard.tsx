@@ -18,7 +18,10 @@ const SLEEP_LABELS: Record<SleepBucket, string> = {
   under5: 'Under 5',
   six: '6',
   seven: '7',
-  eightPlus: '8+',
+  // "8-9" rather than "8+", now that there is a bucket above it. A student who slept eleven
+  // hours after a bad week could not say so, and that is the night most worth recording.
+  eightPlus: '8–9',
+  tenPlus: '10+',
 }
 
 /** Order matters only for display -- all four render with the same variant (Ruling 22). */

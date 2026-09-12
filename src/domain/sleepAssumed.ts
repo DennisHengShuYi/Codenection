@@ -1,6 +1,7 @@
 import type { Schedule } from '../optimizer'
 import { dateFor } from './calendar'
 import { nightBite } from './nightBite'
+import { reportedOn, type SleepNight } from './sleepLog'
 import { isRealSleepHours } from './sleepPlan'
 
 /**
@@ -28,6 +29,7 @@ export function assumeSleep({
   chosenByDate,
   targetHours,
   wakeHour,
+  reportedNights,
 }: {
   readonly schedule: Schedule
   readonly today: number
@@ -40,14 +42,32 @@ export function assumeSleep({
   /** The clock hour the student gets up, which fixes each night's bedtime and so decides what
    *  counts as booked over it (`domain/nightBite`). */
   readonly wakeHour: number
+  /** §8's answered nights (`domain/sleepLog`), keyed by the morning each night ended. The
+   *  ground truth for a night already past. */
+  readonly reportedNights: readonly SleepNight[]
 }): Schedule {
   return {
     ...schedule,
     sleepByDay: schedule.sleepByDay.map((existing, day) => {
-      // Nights already past are history, not a forecast. A reported one is a fact the card
-      // wrote; an unreported one is the plan that stood at the time. Neither is ours to
-      // revise -- rewriting them would change what the student's own week looked like.
-      if (day < today) return existing
+      /*
+       * Nights already past are history, not a forecast -- but history has a better source
+       * than this array.
+       *
+       * What the student REPORTED is read from the log, keyed by the morning the night ended
+       * (the day after the night itself). `sleepByDay` held the plan for a past night unless
+       * the today card happened to have written the answer in, so the same fact had two homes
+       * and they could disagree: a night reported over Telegram on the fortnight's first day
+       * writes no week entry at all, because there is no day before day 0.
+       *
+       * An unreported past night keeps the plan that stood at the time, which is not ours to
+       * revise -- rewriting it would change what the student's own week looked like.
+       */
+      if (day < today) {
+        const morning = dateFor(schedule, day + 1)
+        const reported = morning === null ? null : reportedOn(reportedNights, morning)
+
+        return reported !== null && isRealSleepHours(reported) ? reported : existing
+      }
 
       const date = dateFor(schedule, day)
       const stated = date === null ? undefined : chosenByDate[date]

@@ -1,3 +1,4 @@
+import { DAY_END_HOUR, WAKE_HOUR } from '../../optimizer'
 import { hourLabel } from '../kit/labels'
 
 /**
@@ -37,6 +38,21 @@ export function HourPicker({
       // Hours. Without it the spinner steps in minutes and the picker offers times this app
       // cannot hold.
       step={3600}
+      /*
+       * Fenced to the day the app actually schedules, and that is what shortens the list.
+       *
+       * The picker is the platform's -- Chrome draws a time input's as a scrolling column --
+       * so there is no styling this shorter. There are only fewer hours to show. These are
+       * the bounds `gapsOn` already walks: nothing is ever placed before `WAKE_HOUR`, so
+       * offering 03:00 was offering an hour the app would not schedule into.
+       *
+       * A fence rather than a refusal. `value` is not clamped, because a block already at
+       * 02:00 -- imported from a calendar, or set before this fence existed -- is a fact
+       * about the week, and a field that silently moved it would be lying about the week to
+       * tidy its own list.
+       */
+      min={hourLabel(WAKE_HOUR)}
+      max={hourLabel(DAY_END_HOUR - 1)}
       value={hourLabel(value)}
       onChange={(event) => {
         /*

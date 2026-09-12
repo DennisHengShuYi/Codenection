@@ -117,3 +117,36 @@ describe('HourPicker', () => {
     expect(input.className).toMatch(/min-h-11/)
   })
 })
+
+/**
+ * Fenced to the day the app actually schedules.
+ *
+ * The list is the platform's -- Chrome draws a time input's picker as a scrolling column --
+ * so the only honest way to shorten it is to have fewer hours to show. `WAKE_HOUR` and
+ * `DAY_END_HOUR` are the window `gapsOn` already walks: nothing is ever placed before 08:00,
+ * so offering 03:00 was offering an hour the app would not schedule into.
+ *
+ * A fence rather than a refusal. An hour outside it can still arrive from a block that is
+ * already in the week -- imported from a calendar, or set before this fence existed -- and
+ * the field has to show that block's real hour rather than silently move it.
+ */
+describe('the hours it offers', () => {
+  it('starts at the hour the app wakes up', () => {
+    const { input } = pick()
+
+    expect(input).toHaveAttribute('min', '08:00')
+  })
+
+  it('stops at the last hour it can schedule into', () => {
+    const { input } = pick()
+
+    expect(input).toHaveAttribute('max', '23:00')
+  })
+
+  /** A block already sitting at 02:00 is a fact about the week, not a value to argue with. */
+  it('still shows an hour from outside the window', () => {
+    const { input } = pick(vi.fn(), 2)
+
+    expect(input).toHaveValue('02:00')
+  })
+})

@@ -11,11 +11,12 @@ import {
   type EngineParams,
   type LoadType,
 } from '../../engine'
-import { DAY_END_HOUR, type Schedule, type ScheduledItem } from '../../optimizer'
+import { type Schedule, type ScheduledItem } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { Field } from '../kit/Field'
 import { DayPicker } from './DayPicker'
-import { BLOCK_KIND_LABELS, hourLabel, LOAD_TYPE_LABELS } from '../kit/labels'
+import { HourPicker } from './HourPicker'
+import { BLOCK_KIND_LABELS, LOAD_TYPE_LABELS } from '../kit/labels'
 import { Sheet } from '../kit/Sheet'
 import {
   blankDraft,
@@ -26,6 +27,24 @@ import {
   validate,
   withHours,
 } from './eventDraft'
+
+
+/** What being pinned means, said once, in the terms the student would use for it. */
+const pinnedNote = (item: ScheduledItem | null): string | null => {
+  if (item === null) return null
+
+  // Checked before `fixed` because protected rest is also fixed, and this is the bigger of
+  // the two things to be overruling (§5.1).
+  if (item.protectedRest) {
+    return 'This is protected recovery — the app pinned it on purpose, and moving it is you overruling that.'
+  }
+
+  if (item.fixed) {
+    return 'Your week is built around this one, so nothing else will be moved to make room for it.'
+  }
+
+  return null
+}
 
 /**
  * The day/time picker `blockActions` was waiting for.
@@ -48,25 +67,6 @@ import {
  */
 
 const INPUT = 'min-h-11 w-full rounded border border-line bg-surface px-2 py-1 text-sm text-ink'
-
-const HOURS_OF_DAY = Array.from({ length: DAY_END_HOUR }, (_, hour) => hour)
-
-/** What being pinned means, said once, in the terms the student would use for it. */
-const pinnedNote = (item: ScheduledItem | null): string | null => {
-  if (item === null) return null
-
-  // Checked before `fixed` because protected rest is also fixed, and this is the bigger of
-  // the two things to be overruling (§5.1).
-  if (item.protectedRest) {
-    return 'This is protected recovery — the app pinned it on purpose, and moving it is you overruling that.'
-  }
-
-  if (item.fixed) {
-    return 'Your week is built around this one, so nothing else will be moved to make room for it.'
-  }
-
-  return null
-}
 
 export function EventForm({
   schedule,
@@ -300,18 +300,14 @@ export function EventForm({
             onChange={(dayIndex) => setDraft({ ...draft, dayIndex: dayIndex ?? draft.dayIndex })}
           />
 
+          {/* A clock rather than twenty-four rows. Changing 09:00 to 10:00 used to mean
+              opening a list of every hour of the day and finding the next line; see
+              `HourPicker` for why the platform's own control is better at this. */}
           <Field label="Starts at" error={errors.startHour}>
-            <select
+            <HourPicker
               value={draft.startHour}
-              onChange={(event) => setDraft({ ...draft, startHour: Number(event.target.value) })}
-              className={INPUT}
-            >
-              {HOURS_OF_DAY.map((hour) => (
-                <option key={hour} value={hour}>
-                  {hourLabel(hour)}
-                </option>
-              ))}
-            </select>
+              onChange={(startHour) => setDraft({ ...draft, startHour })}
+            />
           </Field>
 
           <Field label="Hours" error={errors.hours}>

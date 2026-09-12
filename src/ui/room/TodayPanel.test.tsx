@@ -276,6 +276,25 @@ describe('what else changes in the room', () => {
     expect(screen.getByRole('dialog')).toContainElement(screen.getByTestId('panel-help-body'))
   })
 
+  /**
+   * Outside the panel's own DOM, which is the difference between covering the screen and
+   * merely claiming to. On a laptop this panel is the floating aside, and that aside carries
+   * `backdrop-blur` -- a backdrop-filter establishes a containing block for `fixed`
+   * descendants, so a sheet rendered inside it resolves `inset-0` against a 16rem column and
+   * opens inside the sidebar, clipped by its scroll box. Asserted structurally because the
+   * geometry that causes it is a painted effect jsdom does not compute.
+   */
+  it('renders outside the panel, so nothing above it can box the dialog in', async () => {
+    render(<TodayPanel rows={[row()]} />)
+
+    await userEvent.click(screen.getByTestId('panel-help'))
+
+    expect(screen.getByTestId('today-panel')).not.toContainElement(screen.getByRole('dialog'))
+    expect(screen.getByTestId('panel-help').closest('div')).not.toContainElement(
+      screen.getByRole('dialog'),
+    )
+  })
+
   it('closes from the dialog itself', async () => {
     render(<TodayPanel rows={[row()]} />)
 

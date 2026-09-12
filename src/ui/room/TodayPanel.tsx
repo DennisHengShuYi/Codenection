@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Sheet } from '../kit/Sheet'
 import type { PanelRow } from './todayRows'
 
@@ -100,24 +101,32 @@ export function TodayPanel({ rows }: { rows: readonly PanelRow[] }) {
           each one belongs to the row above it; this belongs to the room rather than to the
           list, and unfolding six paragraphs mid-panel pushes the day's own items off the
           screen to answer a question about something else. */}
-      {helpOpen && (
-        <Sheet title="What else changes in the room" onClose={() => setHelpOpen(false)}>
-          <div data-testid="panel-help-body" className="flex flex-col gap-3 text-sm">
-            <p className="text-ink-soft">
-              These move for other reasons — not for what is on today.
-            </p>
+      {/* Portalled to the body, which is what makes "over the whole screen" true rather than
+          nearly true. On a laptop this panel is the floating aside, and that aside carries
+          `backdrop-blur` -- a backdrop-filter establishes a containing block for `fixed`
+          descendants, so the sheet's `inset-0` resolved against a 16rem column and the
+          dialog opened inside the sidebar it was launched from, clipped by its own scroll
+          box. Nothing in the sheet was wrong; it was being measured against the wrong box. */}
+      {helpOpen &&
+        createPortal(
+          <Sheet title="What else changes in the room" onClose={() => setHelpOpen(false)}>
+            <div data-testid="panel-help-body" className="flex flex-col gap-3 text-sm">
+              <p className="text-ink-soft">
+                These move for other reasons — not for what is on today.
+              </p>
 
-            <dl className="flex flex-col gap-3">
-              {ELSEWHERE.map((entry) => (
-                <div key={entry.what} className="flex flex-col">
-                  <dt className="font-medium text-ink">{entry.what}</dt>
-                  <dd className="text-ink-soft">{entry.driven}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        </Sheet>
-      )}
+              <dl className="flex flex-col gap-3">
+                {ELSEWHERE.map((entry) => (
+                  <div key={entry.what} className="flex flex-col">
+                    <dt className="font-medium text-ink">{entry.what}</dt>
+                    <dd className="text-ink-soft">{entry.driven}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </Sheet>,
+          document.body,
+        )}
 
       <ul data-testid="today-panel" className="flex flex-col gap-1">
       {rows.map((row) => {

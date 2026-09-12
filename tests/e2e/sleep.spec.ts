@@ -236,15 +236,24 @@ test('warns that an over-committed day will cost tonight', async ({ page }) => {
 test('reads the fortnight off the sleep the student actually gets', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
 
-  const horizon = async (): Promise<string> =>
-    (await page.getByTestId('room-scene').getAttribute('aria-label')) ?? ''
+  /*
+   * Waited for rather than read once.
+   *
+   * `seed` writes the store, reloads and clicks through the gate; the room then renders from
+   * whatever the repository has resolved so far and re-renders when the settings arrive. A
+   * bare `getAttribute` is a single read against that first paint, so this test passed on a
+   * fast machine and failed in CI on the sentence the seeded nights had not reached yet. The
+   * assertion is unchanged -- `toHaveAttribute` retries until the label says it, or gives up.
+   */
+  const scene = page.getByTestId('room-scene')
 
   // The same empty week twice, once with nothing reported and once with a short week behind
   // it. Four hours is below the credit floor, so those nights give nothing back at all.
   await seed(page, { week: anchoredWeek(), settings: { lowEnergyOverride: 'off' } })
   // Nothing reported, so the fortnight is assumed at the eight-hour default and the room has
   // no sleep debt to report at all.
-  expect(await horizon()).not.toContain('sleep owed')
+  await expect(scene).toHaveAttribute('aria-label', /Through the window/)
+  await expect(scene).not.toHaveAttribute('aria-label', /sleep owed/)
 
   await seed(page, {
     week: anchoredWeek(),
@@ -265,7 +274,7 @@ test('reads the fortnight off the sleep the student actually gets', async ({ pag
    * weather because an empty week drains too slowly for the deficit day to move -- the
    * difference this proves is that the assumption reached the model at all.
    */
-  expect(await horizon()).toContain('sleep owed')
+  await expect(scene).toHaveAttribute('aria-label', /sleep owed/)
 })
 
 /**

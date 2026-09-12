@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../../data'
+import { isoDateOf } from '../../domain/calendar'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule, ScheduledItem } from '../../optimizer'
 import { RoomShell } from './RoomShell'
@@ -13,11 +14,11 @@ import { RoomShell } from './RoomShell'
  * is reachable at all, that it is reachable by the student §1.5 strips the interface for,
  * and that approving reaches *stored* state as protected rest.
  */
-const daysAgo = (days: number): string => {
-  const then = new Date()
-  then.setUTCDate(then.getUTCDate() - days)
-  return then.toISOString().split('T')[0] ?? ''
-}
+/** The student's own date, not the UTC one — see `calendar.isoDateOf`. Stepping `setUTCDate`
+ *  and rendering with `toISOString()` named yesterday for the first eight hours of every
+ *  local day at UTC+8, which is where the app's own "today" and this fixture parted. */
+const daysAgo = (days: number): string =>
+  isoDateOf(new Date(Date.now() - days * 24 * 60 * 60 * 1000))
 
 const item = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
   id: 'essay',

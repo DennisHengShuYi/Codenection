@@ -61,6 +61,58 @@ test('shows the corner gauge on top of the room, not behind its wall', async ({ 
   expect(topmost).toBe('room-gauge')
 })
 
+/**
+ * The gauge sits inside the ceiling bar, at every width a student holds.
+ *
+ * The bar is drawn in viewBox units and scales with the stage; the gauge is a fixed 44 CSS
+ * pixels, because that is the minimum touch target and `ReserveGauge` fills it exactly. So
+ * the two drift apart as the screen narrows, and nothing in this suite could see it: the
+ * scroll-width checks pass because the gauge overflows a rect inside the drawing rather than
+ * the viewport. Measured before the fix, it hung 4.2px below the bar at 390, 8.2px at 360 and
+ * 13.5px at 320.
+ *
+ * Measured against the brown rect itself rather than the `room-ceiling` group, which also
+ * contains the two blocks hanging below the bar -- the group's box is 7 units taller, which
+ * is enough to make an overflowing gauge look contained.
+ */
+for (const width of [320, 360, 390, 768]) {
+  test(`keeps the corner gauge inside the ceiling bar at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 })
+    await openApp(page)
+
+    const bar = await page.getByTestId('room-ceiling').locator('rect').first().boundingBox()
+    const gauge = await page.getByTestId('room-gauge').boundingBox()
+
+    expect(bar, 'the ceiling bar has no box').not.toBeNull()
+    expect(gauge, 'the gauge has no box').not.toBeNull()
+
+    const barBottom = bar!.y + bar!.height
+    const gaugeBottom = gauge!.y + gauge!.height
+
+    expect(
+      gaugeBottom,
+      `the gauge hangs ${(gaugeBottom - barBottom).toFixed(1)}px below the ceiling bar at ${width}px`,
+    ).toBeLessThanOrEqual(barBottom)
+  })
+}
+
+/**
+ * And the bar does not solve that by swallowing what hangs under it.
+ *
+ * The clock is the topmost thing on the wall, so it is the first casualty of a deeper
+ * ceiling. 320px is the binding case: the bar has the least room there and the gauge needs
+ * the most of it.
+ */
+test('does not deepen the ceiling over the clock', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  await openApp(page)
+
+  const bar = await page.getByTestId('room-ceiling').locator('rect').first().boundingBox()
+  const clock = await page.getByTestId('room-clock').boundingBox()
+
+  expect(clock!.y).toBeGreaterThan(bar!.y + bar!.height)
+})
+
 // §1.5: the picture carries nothing to a screen reader, so the words have to be there.
 // Ruling 61 moved them behind the `Waiting` button, which is where they are read from now.
 test('states the room in words as well as drawing it', async ({ page }) => {

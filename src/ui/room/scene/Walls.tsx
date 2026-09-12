@@ -60,10 +60,34 @@ export function Floor() {
  * One fixed depth, chosen at the deep end of the old range so the bar it backs has room.
  * What it used to say is on the clock (`dayFull`), in a shape that means it.
  */
-const CEILING_DEPTH = 34
+export const CEILING_DEPTH = 34
 
-export function Ceiling() {
-  const depth = CEILING_DEPTH
+/**
+ * Deeper on a phone, and only on a phone.
+ *
+ * The corner gauge is a fixed 44 CSS pixels because that is the minimum touch target, while
+ * this bar is drawn in viewBox units that scale with the stage -- so the bar shrank as the
+ * screen narrowed and the gauge did not. Measured against the brown rect itself, the gauge
+ * hung 4.2px below it at 390, 8.2px at 360 and 13.5px at 320. Only desktop had ever been
+ * clear of it.
+ *
+ * 42 is what 320px needs: the bar comes out 52.5px there against the gauge's 48, and the
+ * clock starts at 46.4 units, so the bar stops 4.4 units clear of it. Deeper than about 44
+ * and the ceiling starts eating the clock.
+ *
+ * Applied only under `useNarrowViewport` rather than everywhere, because the wide stage never
+ * had the problem -- it had 31px of clearance -- and deepening it there pushed the ceiling
+ * down onto the today panel, whose offset is a percentage measured against this depth. A
+ * phone bug is not a reason to re-tune a desktop layout. The room is already framed
+ * differently on a phone (`Room`'s narrow viewBox), so this is one more thing that differs
+ * with the crop rather than a new inconsistency.
+ *
+ * `Room.GAUGE_BOX`'s own `top-1 sm:top-3` does the other half. Neither is enough alone: 44px
+ * of gauge under a 12px offset cannot fit in any bar that still leaves the clock room.
+ */
+export const CEILING_DEPTH_NARROW = 42
+
+export function Ceiling({ depth = CEILING_DEPTH }: { readonly depth?: number }) {
   const blocks = 2
 
   return (

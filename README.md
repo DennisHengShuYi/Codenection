@@ -811,10 +811,6 @@ commit — a green build on stale tests only proves the code still does what it 
    saying which day is the problem and what is standing on it. The student still decides what
    comes out, and nothing is ever dropped automatically.
 
-Carried over from the previous plan, unchanged and still committed. Items 7 and 8 are the ones
-that block nothing and matter most: one of them is the only thing on this page that can cost real
-money, and the other guards every credential in the product.
-
 7. **Server-side quota and auth on the public AI endpoints.** The one honest hole in the current
    build: `plan`, `draft`, `read-photo`, `micro-start` and `insight` are unauthenticated. Highest
    priority, because it is the only thing here that can cost real money.
@@ -831,6 +827,29 @@ money, and the other guards every credential in the product.
 12. **The Malaysia layer, smallest-first:** a hardcoded public-holiday table (a holiday reduces
     commitments but not deadlines, so it shifts load rather than removing it), and festival periods
     defaulting to *demanding* rather than restful, which for most students is the truth.
+
+13. **Make the insight block smarter without giving it authority.** The model on the Reserves
+    sheet is a rephraser: `domain/reserveInsight` computes every number and the one action first,
+    and `ai/insightSchema` refuses the whole reply if the line count changed — a line added has
+    invented a claim, a line dropped has deleted a warning. That boundary is §8.2 in force and is
+    not what needs loosening. What needs doing is making it observable (`npm run dev` has no
+    `/api` proxy, so the call 404s and nobody has ever read the model's actual output), then
+    passing structured facts rather than prose so it can lead with what matters — under a rule as
+    mechanical as the count check. When a line reads wrongly the fault is upstream, in
+    `domain/reserveInsight`, not in a prompt.
+
+14. **Make the same activity reuse the same name** ([#71](https://github.com/DennisHengShuYi/Codenection/issues/71)).
+    §2.4's ladder groups answers by title, so the name is the key the learning is stored under: a
+    student who writes `badminton`, `Badminton`, `badminton w sam` and `bball` has four buckets,
+    none of which reaches the three answers Reality Check needs, and the app falls back to a number
+    about their whole area of life. Two halves. The matcher is containment over normalised words
+    (`domain/taskKey`), which handles `essay` / `WIA3001 essay` and not typos, short forms or
+    synonyms — and must stay conservative at the boundary, because merging `Run` with `Run errands`
+    would teach the app that a walk takes as long as a supermarket trip. The other half is cheaper
+    and larger: `snapTitle` runs in `parseBrainDump` alone, so photo import, the request box and
+    the calendar never snap at all — and a calendar import brings in a fortnight at once, every row
+    named whatever its owner called it. Every way in offers the names already in use; only one of
+    them uses them.
 
 **Explicitly not in scope**, and on the roadmap slide instead: the learned per-user cross-effect
 matrix (it needs weeks of ratings and cannot be honestly demonstrated in a weekend), status

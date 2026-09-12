@@ -116,10 +116,27 @@ if (!commit) {
   process.exit(0)
 }
 
+/*
+ * What this account already had, kept where this script has nothing to say about it.
+ *
+ * The settings column is one blob, so an upsert replaces it whole -- and the second account
+ * seeded for a demo turned out to be carrying `ladders` and `sleepWakeHour`, neither of which
+ * this script writes and both of which would have gone silently. A seed is allowed to replace
+ * the week it is seeding; it is not allowed to quietly drop settings nobody asked it about.
+ */
+const { data: existing } = await admin
+  .from('user_state')
+  .select('settings')
+  .eq('id', accountId)
+  .maybeSingle()
+
+const kept = (existing?.settings ?? {}) as Record<string, unknown>
+
 const { error: stateError } = await admin.from('user_state').upsert({
   id: accountId,
   week,
   settings: {
+    ...kept,
     lowEnergyOverride: 'auto',
     calibration: profile,
     // Without these the sleep page has nothing to compare, `sleepReality` stays silent below

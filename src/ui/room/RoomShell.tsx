@@ -43,6 +43,7 @@ import { LowEnergyControl } from '../settings/LowEnergyControl'
 import { ReservesSheet } from '../reserves/ReservesSheet'
 import { pendingCheckIns } from '../today/checkIn'
 import { useLowEnergy } from '../useLowEnergy'
+import { useCalendarConnected } from '../useCalendarConnected'
 import { useSleepPlan } from '../useSleepPlan'
 import { useProfile } from '../useProfile'
 import { useReducedMotion } from '../useReducedMotion'
@@ -295,6 +296,32 @@ export function RoomShell({
     reportNight,
     problem: sleepProblem,
   } = useSleepPlan(repository)
+
+  /**
+   * Whether a calendar is already connected, for the add flow to offer the right step.
+   *
+   * `AddSheet.calendarConnected` defaults to false and nothing here was passing it, so the
+   * import screen offered "Connect Google Calendar" to a student who had already connected
+   * and offered "Read my calendar" to nobody -- which is why no calendar event ever reached
+   * a week. `CalendarConnection` in settings has been asking the same question since the
+   * feature shipped; this is the one place that needed the answer and did not have it.
+   */
+  const { connected: calendarConnected, refresh: askAboutCalendar } =
+    useCalendarConnected(session !== null)
+
+  /*
+   * Asked again each time the calendar way is opened.
+   *
+   * Returning from Google is a full page load, so the answer at mount would usually be right
+   * -- but disconnecting happens on another screen entirely, and a student who withdrew the
+   * grant in settings and came straight here would be offered a Read button for a permission
+   * that no longer exists.
+   */
+  const onCalendarWay = view.kind === 'add' && view.way === 'calendar'
+
+  useEffect(() => {
+    if (onCalendarWay) askAboutCalendar()
+  }, [onCalendarWay, askAboutCalendar])
 
   /**
    * Below `useSleepPlan` rather than beside `outcomes` above, because it now reads the
@@ -1225,6 +1252,7 @@ export function RoomShell({
           today={today}
           blockLog={blockLog}
           predictions={profile.predictions}
+          calendarConnected={calendarConnected}
           sleepTargetHours={hasSleepTarget ? sleepTarget : undefined}
           /* So the "if you accept" room runs the same learned model the room does. */
           reportedNights={sleepNights}

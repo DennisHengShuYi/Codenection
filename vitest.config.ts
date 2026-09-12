@@ -78,8 +78,15 @@ export default defineConfig({
       exclude: ['src/**/*.{test,spec}.{ts,tsx}', 'src/main.tsx', 'src/test-setup.ts'],
 
       /**
-       * Set just under what the suite reaches today (98.1 / 92.2 / 98.0 / 98.8) so
-       * ordinary changes are not blocked by rounding while a real drop fails the build.
+       * Set just under what the suite reaches today (97.2 / 93.1 / 97.3 / 98.5, statements /
+       * branches / functions / lines) so ordinary changes are not blocked by rounding while a
+       * real drop fails the build.
+       *
+       * The figures above are re-measured, not inherited. They previously read 98.1 / 92.2 /
+       * 98.0 / 98.8, which had drifted far enough to claim a branch coverage BELOW the branch
+       * threshold sitting eight lines down -- a comment asserting the build could not pass. If
+       * you move a threshold, run `npm run test:coverage` and update this line from its output
+       * in the same change.
        *
        * .claude/CLAUDE.md: these only ever go up. Lowering one to accommodate untested
        * new code defeats the point -- if a change cannot meet the line, the answer is a

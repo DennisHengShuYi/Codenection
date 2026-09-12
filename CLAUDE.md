@@ -35,12 +35,25 @@ and get-outside lists, and §6.4's rolling debt. There is also no server-side qu
 public AI endpoints — `plan`, `draft`, `read-photo` and `micro-start` spend the Groq budget
 unauthenticated, which `api/micro-start.ts` states in place.
 
-Two known-open items from the sleep work, both recorded in place rather than hidden:
-`ui/request/RequestBoxScreen` draws a room preview without the student's sleep target, so its
-bed measures against the population norm while the room screen measures against the target
-(`RoomModelInput.sleepTargetHours` says so at the site); and `RoomShell.tsx` has grown further
-past the 800-line ceiling, because extracting the settings sheet was dropped from that change
-rather than done in a file being edited concurrently.
+Sleep is worth reading about before changing anything near it, because four numbers that look
+alike answer different questions. `Schedule.sleepByDay[d]` is the night at the **end** of day d
+— §6.1 puts sleep in `recovery[d]`, which produces `reserve[d+1]` — and it holds what the app
+*assumes*, derived every render by `domain/sleepAssumed` from three durable facts in settings:
+a target, any night the student set, and `domain/sleepLog`'s reported nights. The three sleep
+figures that must never converge are `DEFAULT_SLEEP_HOURS` (8, the night assumed when nobody
+has said), `SLEEP_BASELINE_HOURS` (5, where sleep starts paying and below which it now costs)
+and `roomState.RESTED_NIGHT_HOURS` (7, the line below which a student counts as short).
+Rulings 64 to 68 record why each part is shaped as it is.
+
+One known-open item from the sleep work: `RoomShell.tsx` has grown well past the 800-line
+ceiling, because extracting the settings sheet was dropped from that change rather than done in
+a file being edited concurrently.
+
+Not built, and a decision is needed before it can be: learning a student's personal sleep
+*need* rather than taking their stated target. §7.7's "Not built" note on `sleepBaselineHours`
+explains why prediction residuals cannot identify it; the evidence that could is now collected
+(reported nights beside reported energy), but it needs a real estimator and an answer to what
+the app should say for a student whose sleep never varies.
 
 Where the source lives:
 

@@ -11,11 +11,13 @@ import { biasLine } from '../domain/realityCheck'
 import { runRebalance } from '../domain/rebalanceOutcome'
 import { scheduleView } from '../domain/scheduleView'
 import { stampSoftDeadlines } from '../domain/softDeadlines'
-import { withSleep } from '../ui/today/checkIn'
+import type { SleepNight } from '../domain/sleepLog'
+import { lastNight } from '../domain/sleepPlan'
+import { SLEEP_HOURS, withSleep } from '../ui/today/checkIn'
 import { firstAction } from '../domain/microStart'
 import { prescribe } from '../domain/prescribe'
 import { scheduleRecovery } from '../domain/scheduleRecovery'
-import { overallReserve, project, type LoadType } from '../engine'
+import { overallReserve, project, type ActivityKind, type LoadType } from '../engine'
 import { toDayInputs, type Schedule } from '../optimizer'
 import { tooLongToTranscribe } from './audio'
 import { resolveConfirmation, summarise, type PendingDump } from './brainDump'
@@ -135,6 +137,18 @@ export interface ChatServices {
  */
 const todayFor = (week: Schedule, now: number): number => todayIndex(week, new Date(now)) ?? 0
 
+/**
+ * Where the student is in the fortnight and in the day, for `blocksReply`.
+ *
+ * The hour is the student's own, from the same `Date` every other reading here comes from.
+ * Without it the bot asked how an 8pm block went at 9am -- and `/day` asked about days that
+ * had not arrived -- while the today card, which has always had a clock, asked neither.
+ */
+const nowFor = (week: Schedule, now: number): { today: number; hour: number } => ({
+  today: todayFor(week, now),
+  hour: new Date(now).getHours(),
+})
+
 /** §2.1's search takes its randomness as a parameter. The same seed the app uses, so a
  *  student who rebalances in chat and then in the app is not shown two different weeks. */
 const REBALANCE_SEED = 20260908
@@ -184,6 +198,15 @@ export interface ChatStore {
    *  matrix (§6.6) both consume the durable block log this writes into. */
   recordBlockAnswer(accountId: string, answer: BlockAnswerInput, now: number): Promise<void>
   /**
+   * §8's answered night, recorded as an answer rather than only written into the week.
+   *
+   * Upserts on the night's date. Without this the bot's claim that a night reported here and
+   * one reported in the app are the same fact was only half true: `withSleep` put the figure
+   * in the week, and nothing recorded that anybody had been *asked* -- so the app went on
+   * asking, and `domain/sleepReality` could not count the night as evidence.
+   */
+  recordSleepNight(accountId: string, night: SleepNight): Promise<void>
+  /**
    * The same durable log `recordBlockAnswer` writes into, read back.
    *
    * §2.4's evidence and §6.5's missing-data pessimism are both computed from it, and
@@ -222,6 +245,9 @@ export interface ChatStore {
 export interface BlockAnswerInput {
   readonly blockId: string
   readonly type: LoadType
+  /** §2.4's narrow rungs, read off the week rather than carried through the callback. */
+  readonly kind?: ActivityKind
+  readonly title?: string
   readonly plannedHours: number
   readonly dayIndex: number
   readonly answer: BlockAnswer
@@ -354,7 +380,12 @@ export async function handleIntent(
 
       case 'today': {
         const week = await store.loadWeek(accountId)
-        return blocksReply('today', blocksOnDay(week, todayFor(week, now)), await answeredSoFar(week))
+        return blocksReply(
+          'today',
+          blocksOnDay(week, todayFor(week, now)),
+          await answeredSoFar(week),
+          nowFor(week, now),
+        )
       }
 
       case 'yesterday': {
@@ -366,7 +397,12 @@ export async function handleIntent(
         // later trust.
         if (today === null || today < 1) return yesterdayUnavailableReply()
 
-        return blocksReply('yesterday', blocksOnDay(week, today - 1), await answeredSoFar(week))
+        return blocksReply(
+          'yesterday',
+          blocksOnDay(week, today - 1),
+          await answeredSoFar(week),
+          nowFor(week, now),
+        )
       }
 
       /**
@@ -436,7 +472,12 @@ export async function handleIntent(
           return needDayReply(week.horizonDays)
         }
 
-        return blocksReply('today', blocksOnDay(week, asked), await answeredSoFar(week))
+        return blocksReply(
+          'today',
+          blocksOnDay(week, asked),
+          await answeredSoFar(week),
+          nowFor(week, now),
+        )
       }
 
       /**
@@ -455,11 +496,15 @@ export async function handleIntent(
         const blockLog = await store.loadBlockLog(accountId).catch(() => null)
         if (blockLog === null) return askUnavailableReply()
 
+        // The solver may only touch days the student can still act on, so it has to be told
+        // which day that is -- the same `todayFor` every other command here reads.
+        const today = todayFor(week, now)
         const predictions = await store.loadPredictions(accountId).catch(() => [])
         const outcome = runRebalance(
           week,
           paramsFor(outcomesFrom(blockLog), predictions),
           REBALANCE_SEED,
+          today,
         )
 
         return rebalanceReply(
@@ -494,7 +539,7 @@ export async function handleIntent(
         // stamp, and only `RoomShell` was stamping -- so this door reported nothing
         // neglected where the screen would have shown a prescription.
         const today = todayFor(week, now)
-        const prescription = prescribe(stampSoftDeadlines(week, today, blockLog), today, blockLog)
+        const prescription = prescribe(stampSoftDeadlines(week, today), today, blockLog)
 
         // Null covers both "nothing has gone neglected" and "there is no room", which
         // prescribe() deliberately does not distinguish -- either way there is one honest
@@ -562,11 +607,20 @@ export async function handleIntent(
   }
 
   if (intent.kind === 'blockAnswer') {
+    // §2.4's narrower rungs need what the block was and what it was called. Neither fits in
+    // 64 bytes of callback data beside everything already there, so they are read back off
+    // the week by id rather than carried -- and left absent when the block has since gone,
+    // which costs the answer its two narrow rungs and nothing else.
+    const answered = (await store.loadWeek(accountId)).items.find(
+      (item) => item.id === intent.blockId,
+    )
+
     await store.recordBlockAnswer(
       accountId,
       {
         blockId: intent.blockId,
         type: intent.type,
+        ...(answered === undefined ? {} : { kind: answered.kind, title: answered.title }),
         plannedHours: intent.plannedHours,
         dayIndex: intent.dayIndex,
         answer: intent.answer,
@@ -596,7 +650,12 @@ export async function handleIntent(
     if (blockLog === null) return askUnavailableReply()
 
     const predictions = await store.loadPredictions(accountId).catch(() => [])
-    const outcome = runRebalance(week, paramsFor(outcomesFrom(blockLog), predictions), REBALANCE_SEED)
+    const outcome = runRebalance(
+      week,
+      paramsFor(outcomesFrom(blockLog), predictions),
+      REBALANCE_SEED,
+      todayFor(week, now),
+    )
     await store.saveWeek(accountId, outcome.schedule)
 
     return { text: outcome.report }
@@ -614,7 +673,7 @@ export async function handleIntent(
     // given week and what has been confirmed, and a button carrying its own payload could
     // be replayed with a different one.
     const today = todayFor(week, now)
-    const prescription = prescribe(stampSoftDeadlines(week, today, blockLog), today, blockLog)
+    const prescription = prescribe(stampSoftDeadlines(week, today), today, blockLog)
     if (prescription === null) return noGapReply()
 
     // Through the app's own door, not a hand-built copy of what it makes. `restNow.ts` calls
@@ -726,6 +785,7 @@ export async function handleIntent(
       'today',
       blocksOnDay(week, intent.dayIndex),
       answeredIds(blockLog),
+      nowFor(week, now),
       { replacing: true },
     )
   }
@@ -754,7 +814,33 @@ export async function handleIntent(
       // §8's sleep row, written into the week exactly as the today card writes it -- the
       // same `withSleep`, so a night reported on the phone and one reported in the app
       // reach the model identically.
-      await store.saveWeek(accountId, withSleep(week, today, intent.bucket))
+      // `lastNight(today)`, not `today`: `sleepByDay[d]` is the night at the END of day d,
+      // so the night reported this morning is yesterday's entry. Day 0 has no entry for it
+      // -- the night began outside the fortnight -- and the record below holds it regardless.
+      const night = lastNight(today)
+      if (night !== null) {
+        await store.saveWeek(accountId, withSleep(week, night, intent.bucket))
+      }
+
+      /*
+       * And recorded as an *answered* night, which the week cannot carry: `sleepByDay` holds
+       * the figure and says nothing about whether anybody was asked, so without this the app
+       * went on asking and `sleepReality` could not count it.
+       *
+       * Only when the week has a real date. The log is keyed by one, and the energy branch
+       * below already states the reason: a record against a day index "means something
+       * different tomorrow". The week write above is index-based and has always worked on an
+       * unanchored week, so it is not made conditional on this -- only the dated record is.
+       */
+      const reportedOn = dateFor(week, today)
+      if (reportedOn !== null) {
+        await store.recordSleepNight(accountId, {
+          isoDate: reportedOn,
+          hours: SLEEP_HOURS[intent.bucket],
+          answeredAt: now,
+        })
+      }
+
       return checkedInReply()
     }
 

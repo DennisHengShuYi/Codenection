@@ -14,15 +14,15 @@ const pileUp = () =>
 describe('smallestFixes', () => {
   // §2.2: "A student will do one thing; they will not follow a nine-change reshuffle."
   it('returns at most three', () => {
-    expect(smallestFixes(pileUp(), DEFAULT_PARAMS).length).toBeLessThanOrEqual(3)
+    expect(smallestFixes(pileUp(), DEFAULT_PARAMS, 0).length).toBeLessThanOrEqual(3)
   })
 
   it('honours a caller-supplied limit', () => {
-    expect(smallestFixes(pileUp(), DEFAULT_PARAMS, 1).length).toBeLessThanOrEqual(1)
+    expect(smallestFixes(pileUp(), DEFAULT_PARAMS, 0, 1).length).toBeLessThanOrEqual(1)
   })
 
   it('orders them by how much they actually help', () => {
-    const fixes = smallestFixes(pileUp(), DEFAULT_PARAMS)
+    const fixes = smallestFixes(pileUp(), DEFAULT_PARAMS, 0)
 
     for (let i = 1; i < fixes.length; i += 1) {
       expect(fixes[i - 1]!.gain).toBeGreaterThanOrEqual(fixes[i]!.gain)
@@ -30,7 +30,7 @@ describe('smallestFixes', () => {
   })
 
   it('only ever returns single moves that genuinely improve the fortnight', () => {
-    for (const fix of smallestFixes(pileUp(), DEFAULT_PARAMS)) {
+    for (const fix of smallestFixes(pileUp(), DEFAULT_PARAMS, 0)) {
       const better =
         fix.worstAfter > fix.worstBefore || fix.deficitDaysAfter < fix.deficitDaysBefore
       expect(better).toBe(true)
@@ -51,7 +51,7 @@ describe('smallestFixes', () => {
       5,
     )
 
-    const fixes = smallestFixes(crisis, DEFAULT_PARAMS)
+    const fixes = smallestFixes(crisis, DEFAULT_PARAMS, 0)
 
     expect(fixes.length).toBeGreaterThan(0)
     expect(fixes[0]!.worstBefore).toBe(0)
@@ -59,7 +59,7 @@ describe('smallestFixes', () => {
   })
 
   it('reports the before and after a student can read', () => {
-    for (const fix of smallestFixes(pileUp(), DEFAULT_PARAMS)) {
+    for (const fix of smallestFixes(pileUp(), DEFAULT_PARAMS, 0)) {
       expect(fix.move.description.length).toBeGreaterThan(0)
       expect(fix.gain).toBeCloseTo(fix.worstAfter - fix.worstBefore)
     }
@@ -74,7 +74,7 @@ describe('smallestFixes', () => {
    * night for loneliness" answer §5.2 rules out.
    */
   it('prescribes seeing someone on an empty week, not rest', () => {
-    const fixes = smallestFixes(makeSchedule([]), DEFAULT_PARAMS)
+    const fixes = smallestFixes(makeSchedule([]), DEFAULT_PARAMS, 0)
 
     expect(fixes.length).toBeGreaterThan(0)
     expect(fixes.every((fix) => fix.move.kind === 'insertSocial')).toBe(true)
@@ -111,7 +111,7 @@ describe('smallestFixes', () => {
     ])
 
     // The shape `runRebalance` actually builds its fallback with: `[0] ?? null`.
-    expect(smallestFixes(saturated, DEFAULT_PARAMS, 1)[0] ?? null).toBeNull()
+    expect(smallestFixes(saturated, DEFAULT_PARAMS, 0, 1)[0] ?? null).toBeNull()
   })
 
   it('returns nothing when every day is already protected and nothing can move', () => {
@@ -137,13 +137,13 @@ describe('smallestFixes', () => {
         })),
     ])
 
-    expect(smallestFixes(saturated, DEFAULT_PARAMS)).toEqual([])
+    expect(smallestFixes(saturated, DEFAULT_PARAMS, 0)).toEqual([])
   })
 
   it('never proposes moving protected rest', () => {
     const schedule = makeSchedule([...pileUp().items, restItem('rest', 4, 20)])
 
-    for (const fix of smallestFixes(schedule, DEFAULT_PARAMS)) {
+    for (const fix of smallestFixes(schedule, DEFAULT_PARAMS, 0)) {
       expect(fix.move.itemId).not.toBe('rest')
     }
   })
@@ -151,7 +151,7 @@ describe('smallestFixes', () => {
   it('does not mutate the schedule it is given', () => {
     const schedule = pileUp()
     const before = JSON.stringify(schedule)
-    smallestFixes(schedule, DEFAULT_PARAMS)
+    smallestFixes(schedule, DEFAULT_PARAMS, 0)
 
     expect(JSON.stringify(schedule)).toBe(before)
   })

@@ -1,8 +1,13 @@
 import { useState } from 'react'
-import type { BlockRecord } from '../../domain/blockLog'
+import { checkedInDays, outcomesFrom, type BlockRecord } from '../../domain/blockLog'
+import { describeDeficit, explainDeficit } from '../../domain/deficitCause'
+import { paramsFor } from '../../domain/engineParams'
+import { DEFICIT_THRESHOLD, LOAD_TYPES, project } from '../../engine'
+import { toDayInputs } from '../../optimizer'
 import type { Fix, Schedule } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { dayGrid } from './dayGrid'
+import { NightBand, type NightOnDay } from './NightBand'
 import { dayLabel } from '../../domain/calendar'
 import { LOAD_TYPE_LABELS } from '../kit/labels'
 import type { EnergyPrediction } from '../../domain/predictions'
@@ -79,8 +84,30 @@ const TYPE_HUE: Record<string, string> = {
 export function WeekScreen(props: {
   readonly schedule: Schedule
   readonly today: number
+  /**
+   * One night per day of the fortnight, already worked out.
+   *
+   * Data rather than a wake hour this screen does the arithmetic on. Deciding what counts as
+   * booked over a night needs the student's target and any night they set, neither of which
+   * belongs on the week screen -- and the assumed figure in `schedule.sleepByDay` has the
+   * bite already taken out of it, so this screen could not recover the planned night to
+   * measure against even if it wanted to. Indexed by day, because the open day is this
+   * component's own state and nobody outside it knows which night to hand over.
+   */
+  readonly nights: readonly NightOnDay[]
   readonly working: boolean
   readonly report: string | null
+  /**
+   * What the last edit on this screen did, when it needs saying.
+   *
+   * Separate from `report`, which belongs to Rebalance. Later is the reason it exists:
+   * `deferItem` returns the week unchanged when nothing between here and the deadline has
+   * room, and the two outcomes were indistinguishable once the sheet closed. The room's own
+   * `placement-note` could not carry it -- that lives behind the `Waiting` button, whose
+   * count does not know about it, so the message would have waited behind a button reading
+   * "Nothing waiting". This says it where the student already is.
+   */
+  readonly note?: string | null
   /**
    * §2.2/§4: the single best remaining move, when Rebalance could not improve the
    * fortnight but the fortnight still needs help. Null when the solver found something to
@@ -125,12 +152,14 @@ export function WeekScreen(props: {
     today,
     working,
     report,
+    note = null,
     fallback = null,
     onRebalance,
     onSelectBlock,
     onAddBlock,
     blockLog = [],
     predictions = [],
+    nights,
   } = props
   const [openDay, setOpenDay] = useState<number | null>(null)
 
@@ -158,6 +187,51 @@ export function WeekScreen(props: {
 
   const grid = openDay === null ? null : dayGrid(schedule, openDay)
 
+  /**
+   * The night at the end of the open day.
+   *
+   * Under the grid rather than in it: a night is the boundary between two days, not an hour
+   * inside one, which is the whole reason it does not have to be drawn twice to cross
+   * midnight. `NightBand` states that at length.
+   */
+  const night = openDay === null ? null : (nights[openDay] ?? null)
+
+  /**
+   * Why the open day is marked, or null when it is not.
+   *
+   * The grid's ⚠ says a day is in deficit and nothing else, and the days that most need
+   * explaining are the ones that look empty: a light day carrying a warning is where a
+   * fortnight of load finally lands, and nothing on that day accounts for it.
+   *
+   * Computed from the same projection that produced the mark, so the sentence cannot
+   * describe a day the model did not simulate -- see `domain/deficitCause`.
+   */
+  const params = paramsFor(outcomesFrom(blockLog), predictions)
+  const days = toDayInputs(schedule, checkedInDays(blockLog, today, schedule.horizonDays))
+  const projection = project(schedule.start, days, params)
+  const cause =
+    openDay === null
+      ? null
+      : explainDeficit({ start: schedule.start, days, projection, params, dayIndex: openDay })
+
+  /**
+   * Where all four reserves stand on the day that is open.
+   *
+   * Computed for every day of the horizon and shown for none of them until now. The range
+   * travels with the figure because the projection is three runs at different optimism
+   * levels and `central` is the middle one -- §8.2 is explicit that this is a decision aid
+   * and never described as validated, and one hard number per day quietly drops that.
+   */
+  const standing =
+    openDay === null
+      ? null
+      : LOAD_TYPES.map((type) => ({
+          type,
+          middle: projection.central[openDay]?.[type] ?? 0,
+          best: projection.optimistic[openDay]?.[type] ?? 0,
+          worst: projection.pessimistic[openDay]?.[type] ?? 0,
+        }))
+
   return (
     <div className="flex flex-col gap-4">
       {!hasFixedLoad && (
@@ -169,7 +243,11 @@ export function WeekScreen(props: {
 
       <ul className="grid grid-cols-3 gap-2 md:grid-cols-7">
         {cells.map((cell) => {
-          const parts = [dayLabel(schedule, cell.dayIndex, today), BAND_LABEL[cell.band]]
+          const parts = [
+            dayLabel(schedule, cell.dayIndex, today),
+            BAND_LABEL[cell.band],
+            `reserve ${Math.round(cell.reserve)}%`,
+          ]
           if (cell.deficit) parts.push('deficit')
           if (cell.unconfirmed) parts.push('not confirmed')
 
@@ -183,8 +261,21 @@ export function WeekScreen(props: {
                 // it rather than setting a persisted on/off state, so `aria-expanded` is
                 // the correct role for a screen reader -- `aria-pressed` would misreport it.
                 aria-expanded={openDay === cell.dayIndex}
+                // The visible half of `aria-expanded`. A screen reader has always known
+                // which day was open; a sighted student had nothing, since the grid looks
+                // identical whichever cell was tapped and the panel below only names a date
+                // you have to read to check. §1.5's rule, arriving from the other side: an
+                // accessible name is not a visual pairing.
+                data-open={openDay === cell.dayIndex}
                 onClick={() => setOpenDay(cell.dayIndex)}
-                className={`flex min-h-11 w-full flex-col items-center justify-center gap-1 rounded-lg border border-line p-2 text-xs aspect-square md:aspect-auto ${BAND_SHADE[cell.band]}`}
+                className={`flex min-h-11 w-full flex-col items-center justify-center gap-1 rounded-lg border p-2 text-xs aspect-square md:aspect-auto ${BAND_SHADE[cell.band]} ${
+                  openDay === cell.dayIndex
+                    ? // Drawn with the border the cell already had rather than an outline or a
+                      // ring: a ring sits outside the box and would overlap its neighbours in
+                      // a grid this tight at 320px.
+                      'border-ink shadow-sm'
+                    : 'border-line'
+                }`}
               >
                 {/* Terser than the spoken name above deliberately: this is one of
                     twenty-one squares in a grid that has to hold at 320px, and "Today, Sat
@@ -193,6 +284,16 @@ export function WeekScreen(props: {
                     because "Day 1" is the first day to everyone but the array. */}
                 <span>{cell.date ?? `Day ${cell.dayIndex + 1}`}</span>
                 <span aria-hidden="true">{BAND_GLYPH[cell.band]}</span>
+
+                {/* Where the day leaves you, from the same projection the ⚠ is read from.
+                    The mean of the four -- and the mark beside it is computed from the
+                    floor, so a cell can read 67% and still be marked: one reserve empty
+                    beside three healthy ones is the case the floor catches and the mean
+                    hides. Hidden from assistive technology because the cell's own spoken
+                    name already carries it in words. */}
+                <span aria-hidden="true" className="tabular-nums text-ink-soft">
+                  {Math.round(cell.reserve)}%
+                </span>
                 {cell.deficit && <span aria-hidden="true">⚠</span>}
                 {/* §4: the confirmation prompt discoverable from the overview, not only from
                     the card -- quiet on purpose, so the deficit ⚠ above stays the louder
@@ -216,6 +317,12 @@ export function WeekScreen(props: {
           </p>
         )}
 
+        {note !== null && note !== undefined && (
+          <p data-testid="week-note" role="status" className="text-sm text-ink-soft">
+            {note}
+          </p>
+        )}
+
         {/* The outward write, under the actions rather than beside Rebalance: it is the one
             control on this screen that reaches outside the app, and it should not sit at
             the same weight as the one a student presses several times a week. */}
@@ -231,9 +338,59 @@ export function WeekScreen(props: {
 
       {grid !== null && openDay !== null && (
         <div className="flex flex-col gap-3">
+          {/* Above the day rather than beside the mark: the mark is in a cell the size of a
+              thumbnail, and this is two sentences. It also reads in the order a student
+              asks the question -- they tapped the day because of the warning. */}
+          {standing !== null && (
+            <div data-testid="day-reserves" className="flex flex-col gap-1">
+              {standing.map((reserve) => (
+                <div
+                  key={reserve.type}
+                  data-testid={`reserve-${reserve.type}`}
+                  data-deficit={reserve.middle < DEFICIT_THRESHOLD}
+                  className="flex items-baseline justify-between gap-3 text-sm"
+                >
+                  <span className="text-ink">{LOAD_TYPE_LABELS[reserve.type]}</span>
+
+                  <span className="flex items-baseline gap-2 tabular-nums">
+                    <span
+                      className={
+                        reserve.middle < DEFICIT_THRESHOLD
+                          ? 'font-semibold text-attention'
+                          : 'text-ink'
+                      }
+                    >
+                      {Math.round(reserve.middle)}
+                    </span>
+                    {/* The spread, small and beside it: the figure is the middle of three
+                        runs, and showing it alone would read as a measurement. */}
+                    <span className="text-xs text-ink-soft">
+                      {Math.round(reserve.worst)}–{Math.round(reserve.best)}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {cause !== null && (
+            <p
+              data-testid="deficit-why"
+              role="status"
+              className="rounded-lg border border-line bg-attention/10 p-3 text-sm text-ink"
+            >
+              {describeDeficit(cause)}
+            </p>
+          )}
           <div
             data-testid="day-grid"
-            className="relative mx-auto w-full max-w-2xl rounded-xl border border-line bg-surface"
+            /* Square-bottomed and open-edged when a night follows, so the two read as one
+               day rather than as a grid and a panel beneath it. The night is still outside
+               the hour axis -- that is what keeps it from being split across midnight -- but
+               it belongs to this day and should look like it. */
+            className={`relative mx-auto w-full max-w-2xl border border-line bg-surface ${
+              night === null ? 'rounded-xl' : 'rounded-t-xl border-b-0'
+            }`}
             style={{ minHeight: `${(grid.hours.length - 1) * 48}px` }}
           >
             {grid.hours.slice(0, -1).map((hour) => (
@@ -248,13 +405,20 @@ export function WeekScreen(props: {
               </div>
             ))}
 
-            {grid.blocks.map(({ item, topPercent, heightPercent }) => (
+            {grid.blocks.map(({ item, topPercent, heightPercent, continuesPast, continuedFrom }) => (
               <button
-                key={item.id}
+                // A block that crosses midnight is drawn on both days, so the id alone is
+                // not unique within one render of the pair.
+                key={`${item.id}-${continuedFrom ? 'tail' : 'head'}`}
                 type="button"
                 data-testid={`block-${item.id}`}
                 onClick={() => onSelectBlock(item.id)}
-                className={`absolute left-14 right-2 min-h-11 break-words rounded-lg p-1 text-left text-xs text-on-color ${TYPE_HUE[item.type]}`}
+                className={`absolute left-14 right-2 min-h-11 break-words rounded-lg p-1 text-left text-xs text-on-color ${TYPE_HUE[item.type]} ${
+                  // Square off the edge the block runs through, so the split reads as one
+                  // thing continuing rather than as two separate blocks that happen to
+                  // share a name.
+                  continuesPast ? 'rounded-b-none' : ''
+                } ${continuedFrom ? 'rounded-t-none' : ''}`}
                 style={{ top: `${topPercent}%`, height: `${heightPercent}%` }}
               >
                 {/* `break-words` on both lines: a pasted URL or a spaceless course code must
@@ -264,12 +428,21 @@ export function WeekScreen(props: {
                 <div className="break-words">{item.title}</div>
                 <div className="break-words">
                   {TYPE_LABEL[item.type]} — {item.startHour}:00–{item.startHour + item.hours}:00
+                  {/* Said in words, not only by a squared corner: the hours above already
+                      read past midnight -- "23:00-25:00" -- and a student needs to know
+                      which half of it they are looking at. */}
+                  {continuesPast && ' → carries into the next day'}
+                  {continuedFrom && ' ← carried from the day before'}
                   {item.fixed && ' 🔒 fixed'}
                   {item.protectedRest && ' 🛡 protected'}
                 </div>
               </button>
             ))}
           </div>
+
+          {night !== null && (
+            <NightBand night={night.night} lostHours={night.lostHours} />
+          )}
 
           {/* Under the grid rather than above it: this adds to the day, so it has to
               follow the day it is about -- unlike Rebalance, which acts on the whole

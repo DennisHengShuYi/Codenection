@@ -50,6 +50,7 @@ const measure = (schedule: Schedule, params: EngineParams): Measured => {
 export function smallestFixes(
   schedule: Schedule,
   params: EngineParams,
+  today: number,
   limit: number = DEFAULT_LIMIT,
 ): Fix[] {
   const before = measure(schedule, params)
@@ -79,7 +80,7 @@ export function smallestFixes(
     (before.deficitArea - after.deficitArea) * 0.1 +
     (after.worstFloor - before.worstFloor)
 
-  return neighbours(schedule, params)
+  return neighbours(schedule, params, today)
     .map((move) => {
       const after = measure(move.apply(schedule), params)
       return {

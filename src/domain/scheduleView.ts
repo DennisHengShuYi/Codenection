@@ -2,7 +2,7 @@ import { answeredIds, checkedInDays, outcomesFrom, type BlockRecord } from './bl
 import { dateFor } from './calendar'
 import { paramsFor } from './engineParams'
 import type { EnergyPrediction } from './predictions'
-import { DEFICIT_THRESHOLD, floorReserve, HORIZON_DAYS, project } from '../engine'
+import { DEFICIT_THRESHOLD, floorReserve, HORIZON_DAYS, overallReserve, project } from '../engine'
 import { toDayInputs, type Schedule } from '../optimizer'
 
 /**
@@ -28,6 +28,16 @@ export interface DayCell {
   /** From the projection, not from the hours: a light day can still be a deficit day if the
    *  fortnight around it has already emptied the student. */
   readonly deficit: boolean
+  /**
+   * Where the four reserves average out on this day, from the same projection the deficit
+   * mark is read from.
+   *
+   * The mean, which is what the dial's headline quotes -- and worth knowing what that means
+   * beside a warning: the mark is computed from the *floor*, so a day can read 67 and still
+   * be marked. One reserve empty beside three healthy ones is exactly the case the floor
+   * exists to catch and the mean exists to hide.
+   */
+  readonly reserve: number
   /** A block on a day already lived that has not been asked about. Drives §4's mark, so the
    *  confirmation prompt is discoverable from the overview and not only from the card. */
   readonly unconfirmed: boolean
@@ -86,6 +96,7 @@ export function scheduleView({
       // read the mean, which is strictly laxer: a day the dial called a crossing could
       // render unmarked here, because mental at 5 beside errands at 90 averages fine.
       deficit: reserves !== undefined && floorReserve(reserves) < DEFICIT_THRESHOLD,
+      reserve: reserves === undefined ? 0 : overallReserve(reserves),
       // A day still ahead cannot have been lived, so asking about it would be asking a
       // student to report the future.
       unconfirmed: dayIndex <= today && onDay.some((item) => !alreadyAsked(item.id)),

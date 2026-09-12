@@ -18,22 +18,22 @@ const model = (over: Partial<BlockSheetModel> = {}): BlockSheetModel => ({
     deadlineDay: null,
     protectedRest: false,
   },
-  actions: ['done', 'later', 'microStart'],
+  actions: ['later', 'microStart'],
   recordedAnswer: null,
   ...over,
 })
 
-const setup = (over: Partial<BlockSheetModel> = {}) => {
+const setup = (over: Partial<BlockSheetModel> = {}, preview = 'This would move to Thursday.') => {
   const handlers = {
     onClose: vi.fn(),
     onBack: vi.fn(),
-    onDone: vi.fn(),
     onLater: vi.fn(),
     onConfirm: vi.fn(),
     onRested: vi.fn(),
     onEdit: vi.fn(),
     onRemove: vi.fn(),
     onMicroStart: vi.fn(),
+    previewLater: () => preview,
   }
   render(<BlockSheet model={model(over)} {...handlers} />)
   return handlers
@@ -53,16 +53,16 @@ describe('BlockSheet', () => {
     expect(screen.getByTestId('block-when')).toHaveTextContent('3')
   })
 
-  it('completes the block', async () => {
-    const { onDone } = setup()
+  /** `done` is gone from the model: it called `completeItem`, which deletes the block --
+   *  the same thing Remove does, without the confirmation or the name. */
+  it('offers no Done, which was a delete wearing another word', () => {
+    setup()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Done' }))
-
-    expect(onDone).toHaveBeenCalledWith('essay')
+    expect(screen.queryByRole('button', { name: 'Done' })).not.toBeInTheDocument()
   })
 
   it('offers nothing it was not given', () => {
-    setup({ actions: ['done'] })
+    setup({ actions: ['edit'] })
 
     expect(screen.queryByRole('button', { name: 'Later' })).not.toBeInTheDocument()
   })
@@ -75,13 +75,30 @@ describe('BlockSheet', () => {
     expect(onConfirm).toHaveBeenCalledWith('essay', 'longer')
   })
 
-  it('labels the four confirm answers in the student-facing words', () => {
+  /**
+   * Three, not four. "Didn't happen" sat one row above Remove doing the same job, so the
+   * question narrowed to the one thing Reality Check reads: how long it took. The answer
+   * itself still exists -- the today card and the bot both write it, and `softDeadlines`
+   * depends on it to stop a skipped rest satisfying the rest rhythm.
+   */
+  it('labels the three confirm answers in the student-facing words', () => {
     setup({ actions: ['confirm'] })
 
-    expect(screen.getByTestId('answer-didnt')).toHaveTextContent("Didn't happen")
     expect(screen.getByTestId('answer-less')).toHaveTextContent('Took less')
     expect(screen.getByTestId('answer-right')).toHaveTextContent('About right')
     expect(screen.getByTestId('answer-longer')).toHaveTextContent('Took longer')
+    expect(screen.queryByTestId('answer-didnt')).toBeNull()
+  })
+
+  /** They report on the past; Micro start, Edit and Remove change the plan. Mixed into one
+   *  wrapped row a student picked "Edit" out of a line that began "Took less". */
+  it('keeps the answers on a row of their own', () => {
+    setup({ actions: ['confirm', 'edit', 'remove'] })
+
+    const row = screen.getByTestId('answer-row')
+
+    expect(within(row).getByTestId('answer-less')).toBeVisible()
+    expect(within(row).queryByRole('button', { name: 'Edit' })).toBeNull()
   })
 
   it('asks protected rest whether it happened', async () => {
@@ -135,8 +152,8 @@ describe('BlockSheet', () => {
     setup()
 
     const bar = screen.getByTestId('sheet-actions')
-    expect(within(bar).getByRole('button', { name: 'Done' })).toBeInTheDocument()
     expect(within(bar).getByRole('button', { name: 'Later' })).toBeInTheDocument()
+    expect(within(bar).getByRole('button', { name: /micro start/i })).toBeInTheDocument()
   })
 
   /**
@@ -161,7 +178,7 @@ describe('BlockSheet', () => {
 })
 
 describe('changing the block rather than answering about it', () => {
-  const editable = { actions: ['done', 'edit', 'remove'] as const }
+  const editable = { actions: ['later', 'edit', 'remove'] as const }
 
   it('opens the form when Edit is pressed', async () => {
     const { onEdit } = setup({ actions: [...editable.actions] })
@@ -204,5 +221,103 @@ describe('changing the block rather than answering about it', () => {
 
     expect(onRemove).not.toHaveBeenCalled()
     expect(screen.queryByTestId('confirm-remove')).toBeNull()
+  })
+})
+
+/**
+ * The line under the title, which says three things about the block and got two of them
+ * wrong on a rest block.
+ *
+ * `1 hours` was unconditional plural. And the load-type word is `IN_THEIR_WORDS[item.type]`,
+ * while every rest block the app creates carries `type: 'mental'` as a placeholder --
+ * `drain.ts` excludes rest from draining, so nothing ever spends it. Nothing else read that
+ * placeholder; this line did, so a rest block introduced itself as study.
+ */
+describe('what the line under the title says', () => {
+  it('counts one hour as an hour', () => {
+    setup({ item: { ...model().item, hours: 1 } })
+
+    expect(screen.getByText(/1 hour\b/)).toBeVisible()
+    expect(screen.queryByText(/1 hours/)).toBeNull()
+  })
+
+  it('still pluralises the rest', () => {
+    setup({ item: { ...model().item, hours: 3 } })
+
+    expect(screen.getByText(/3 hours/)).toBeVisible()
+  })
+
+  it('names the load type on a block that spends one', () => {
+    setup({ item: { ...model().item, type: 'mental' } })
+
+    expect(screen.getByText(/study and writing/i)).toBeVisible()
+  })
+
+  /** A rest block's kind is its description, and the title already says "Rest". Naming a
+   *  load type it never spends tells the student something untrue about the block. */
+  it('says nothing about a load type on a rest block', () => {
+    setup({
+      item: { ...model().item, title: 'Rest', kind: 'rest', protectedRest: true },
+      actions: ['didRest', 'edit'],
+    })
+
+    expect(screen.queryByText(/study and writing/i)).toBeNull()
+  })
+
+  it('still says when a rest block is and how long it runs', () => {
+    setup({
+      item: { ...model().item, title: 'Rest', kind: 'rest', protectedRest: true, hours: 1 },
+      actions: ['didRest', 'edit'],
+    })
+
+    expect(screen.getByText(/20:00–21:00/)).toBeVisible()
+    expect(screen.getByText(/1 hour\b/)).toBeVisible()
+  })
+
+  /**
+   * Later proposes; the student decides. These are the two ways out of that proposal, and
+   * the shape it takes when there is nothing to propose.
+   */
+  describe('the Later proposal', () => {
+    it('offers the move alongside a way to decline it', async () => {
+      const handlers = setup()
+
+      await userEvent.click(screen.getByRole('button', { name: /^later$/i }))
+
+      expect(screen.getByTestId('confirm-later')).toHaveTextContent(/would move to/i)
+      expect(screen.getByRole('button', { name: /keep it here/i })).toBeVisible()
+      expect(handlers.onLater).not.toHaveBeenCalled()
+    })
+
+    /**
+     * With nowhere to go there is nothing to approve, so the sheet offers only a way out. A
+     * disabled "Move it" would be a button that exists to be refused.
+     */
+    it('offers no move when there is nowhere for the block to go', async () => {
+      setup({}, 'There is no room for Essay on any day it could move to.')
+
+      await userEvent.click(screen.getByRole('button', { name: /^later$/i }))
+
+      expect(screen.getByTestId('confirm-later')).toHaveTextContent(/no room/i)
+      expect(screen.queryByTestId('confirm-later-yes')).toBeNull()
+      // Two buttons answer to "Close" here -- the sheet's own dismiss carries the same
+      // accessible name -- so this asks for the one whose visible text says it, which is the
+      // one the wording changed from "Keep it here".
+      expect(screen.getAllByRole('button', { name: 'Close' }).map((b) => b.textContent)).toContain(
+        'Close',
+      )
+    })
+
+    /** Back returns to the block, not out of the sheet: the proposal replaced the body, so
+     *  leaving it has to put the body back. */
+    it('goes back to the block from the proposal', async () => {
+      setup()
+
+      await userEvent.click(screen.getByRole('button', { name: /^later$/i }))
+      await userEvent.click(screen.getByRole('button', { name: /back/i }))
+
+      expect(screen.queryByTestId('confirm-later')).toBeNull()
+      expect(screen.getByRole('button', { name: /^later$/i })).toBeVisible()
+    })
   })
 })

@@ -1,9 +1,10 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { act } from 'react'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS, type Repository } from '../data'
+import { DEFAULT_SETTINGS, type Repository, type Session } from '../data'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule, ScheduledItem } from '../optimizer'
+import { freshWeek } from '../domain/freshWeek'
 import { SAVE_FAILED, useSchedule } from './useSchedule'
 
 const item = (id: string): ScheduledItem => ({
@@ -26,6 +27,8 @@ const week = (id: string): Schedule => ({
   horizonDays: HORIZON_DAYS,
   sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
 })
+
+const session: Session = { userId: 'student-1', email: 'student@example.edu' }
 
 const only = (schedule: Schedule | null): string | null => schedule?.items[0]?.id ?? null
 
@@ -106,6 +109,21 @@ describe('loading the week', () => {
 
     await waitFor(() => expect(result.current.schedule).not.toBeNull())
     expect(result.current.schedule?.items.length).toBeGreaterThan(0)
+  })
+
+  /**
+   * CRITICAL, and the exact defect `useProfile.test.tsx` already pins down on the other
+   * half of the seed: the fortnight was seeded on "nothing saved" alone, with no session
+   * check. `useProfile` gates its own seed on `session === null` and says why -- "a real
+   * signed-in account is a real student, not a preview" -- but the week did not, so a
+   * student signing up got the crunch fixture's UM timetable, its three invented
+   * assignments, and its 41/44/32/55 opening reserves presented as their own.
+   */
+  it('does not seed the demo fortnight for a real signed-in first run', async () => {
+    const { result } = renderHook(() => useSchedule(gated().repository, session))
+
+    await waitFor(() => expect(result.current.schedule).not.toBeNull())
+    expect(result.current.schedule).toEqual(freshWeek())
   })
 })
 

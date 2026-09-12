@@ -34,8 +34,15 @@ const daysWith = (hours: number): DayInput[] =>
     ],
   }))
 
-const barsFor = (reserves: Reserves, days: DayInput[] = emptyDays()) =>
-  domainBars(reserves, project(reserves, days, DEFAULT_PARAMS), days)
+const barsFor = (reserves: Reserves, days: DayInput[] = emptyDays(), today = 0) =>
+  domainBars(reserves, project(reserves, days, DEFAULT_PARAMS), days, today)
+
+const uniform = (value: number): Reserves => ({
+  mental: value,
+  physical: value,
+  social: value,
+  errands: value,
+})
 
 describe('scheduleDensity', () => {
   it('is zero for an empty fortnight', () => {
@@ -151,5 +158,59 @@ describe('a bar with nothing measuring its direction', () => {
     for (const bar of barsFor(healthy).filter((entry) => entry.key !== 'schedule')) {
       expect(bar.trend).not.toBeNull()
     }
+  })
+})
+
+/**
+ * The five bars do not describe the same stretch of time, and nothing said so.
+ *
+ * The four reserve bars are one instant -- the reserve entering today. The density bar is
+ * committed hours across the whole horizon. They sat in one list, in one visual language,
+ * with one kind of bar, so "People 32" and "How packed the days are 76" read as two figures
+ * about the same period. They are a snapshot and a fortnight.
+ *
+ * Carried as data rather than as a caption the view invents, so the text equivalent and the
+ * drawing cannot come to describe different periods.
+ */
+describe('the stretch of time a bar covers', () => {
+  it('marks the four reserve bars as a reading taken now', () => {
+    for (const bar of barsFor(healthy).filter((entry) => entry.key !== 'schedule')) {
+      expect(bar.span).toBe('now')
+    }
+  })
+
+  it('marks the density bar as covering the horizon it actually measures', () => {
+    const density = barsFor(healthy).find((bar) => bar.key === 'schedule')
+
+    expect(density?.span).toBe('horizon')
+  })
+})
+
+/**
+ * The arrows describe the days around today, not the end of the fortnight.
+ *
+ * The whole 21-day projection used to be handed to `trendOf`, which keeps the LAST three
+ * entries -- so the arrow described days 18, 19 and 20 while `trendOf`'s own docstring said it
+ * showed "where things are going now". On a projection that mostly decays that reads falling
+ * almost regardless of what is happening this week.
+ *
+ * The series climbs near today and collapses at the far end, deliberately: reading the
+ * horizon's tail gives falling and reading around today gives rising, so the old behaviour and
+ * the new one cannot both pass. A gentler fixture would pass either way and prove nothing.
+ */
+describe('which days the trend arrow is about', () => {
+  it('trends on the days around today rather than the end of the horizon', () => {
+    const days = emptyDays()
+    const climbThenCollapse = Array.from({ length: HORIZON_DAYS }, (_, day) =>
+      uniform(day <= 4 ? 40 + day * 5 : 60 - day * 2),
+    )
+    const projection = {
+      ...project(healthy, days, DEFAULT_PARAMS),
+      central: climbThenCollapse,
+    }
+
+    const mental = domainBars(healthy, projection, days, 4).find((bar) => bar.key === 'mental')
+
+    expect(mental?.trend).toBe('rising')
   })
 })

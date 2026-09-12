@@ -71,11 +71,27 @@ export interface Activity {
   readonly intensity: number
   /** Local hour the activity starts, 0..24. Fractional values allowed. */
   readonly startHour: number
+  /**
+   * §2.4's correction for *this* work, where the log has enough to say.
+   *
+   * `EngineParams.estimateBias` is one number per load type, which is all Reality Check
+   * could learn until `paddingForItem` put a ladder under it -- and a per-type parameter
+   * cannot carry a per-block answer. So the block brings its own and the parameter stays the
+   * fallback.
+   *
+   * Optional because most callers have no block log in hand: the optimizer's neighbours, the
+   * fixtures, every projection built before this. Absent means the type's, which is what
+   * every block got before.
+   */
+  readonly estimateBias?: number
 }
 
 export interface DayInput {
   readonly dayIndex: number
   readonly activities: readonly Activity[]
+  /** Hours slept on the night at the END of this day -- the night between it and the next.
+   *  It enters §6.1's `recovery[d]`, which produces `reserve[d+1]`, so this is the sleep the
+   *  student wakes up on tomorrow. `Schedule.sleepByDay` states the same rule at length. */
   readonly sleepHours: number
   /** Distinct venues visited; drives travel load (§6.4). */
   readonly venueChanges: number
@@ -96,6 +112,9 @@ export interface EngineParams {
   readonly typeIntensity: Reserves
   /** Reserve points returned per hour of sleep above the baseline. */
   readonly kSleep: Reserves
+  /** §6.1 amended: the cost per hour a night falls short of `sleepBaselineHours`, charged as
+   *  drain. See `params.kSleepDebt` for why it is drain and not negative recovery. */
+  readonly kSleepDebt: Reserves
   /**
    * Hours of sleep that count as breaking even for this student.
    *

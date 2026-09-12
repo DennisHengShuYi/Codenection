@@ -23,7 +23,7 @@ const days = (): DayInput[] =>
 
 const textFor = (reserves: Reserves, capacity = 75): string => {
   const projection = project(reserves, days(), DEFAULT_PARAMS)
-  return describeDial(capacity, domainBars(reserves, projection, days()), projection)
+  return describeDial(capacity, domainBars(reserves, projection, days(), 0), projection)
 }
 
 describe('describeDial', () => {
@@ -77,6 +77,7 @@ describe('a bar with no measured direction, in words', () => {
           value: 72,
           ceiling: 100,
           status: 'stretched',
+          span: 'horizon',
           trend,
           warning: null,
         },
@@ -95,5 +96,36 @@ describe('a bar with no measured direction, in words', () => {
    *  when a trend really is present. */
   it('still says the direction when there is one', () => {
     expect(withDensity('flat')).toMatch(/steady/i)
+  })
+})
+
+/**
+ * §1.5: the text equivalent carries everything the graphic carries, and the graphic now
+ * says which stretch of time each group of bars covers. A screen reader user hearing
+ * "People 32" and "How packed the days are 76" in one list, with nothing separating a
+ * snapshot from a fortnight, is being given the harder version of the same puzzle.
+ */
+describe('the stretch of time, in words', () => {
+  const barsOf = () => domainBars(healthy, project(healthy, days(), DEFAULT_PARAMS), days(), 0)
+
+  it('says the headline is where today started, not where the week is', () => {
+    const text = describeDial(67, barsOf(), project(healthy, days(), DEFAULT_PARAMS))
+
+    expect(text).toMatch(/started today|today started/i)
+    expect(text).not.toMatch(/this week/i)
+  })
+
+  it('names the horizon the density bar actually measures', () => {
+    const text = describeDial(67, barsOf(), project(healthy, days(), DEFAULT_PARAMS))
+
+    expect(text).toMatch(/21 days/i)
+  })
+
+  /** Once per group, for the same reason the drawing says it once: four repetitions of one
+   *  reading is noise read aloud as much as it is on screen. */
+  it('says each stretch once', () => {
+    const text = describeDial(67, barsOf(), project(healthy, days(), DEFAULT_PARAMS))
+
+    expect(text.match(/Where today started/gi) ?? []).toHaveLength(1)
   })
 })

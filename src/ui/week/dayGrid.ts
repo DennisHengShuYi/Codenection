@@ -20,6 +20,10 @@ export interface GridBlock {
    *  component needs no measurement pass. */
   readonly topPercent: number
   readonly heightPercent: number
+  /** Runs past midnight, so what is drawn here is only the part before it. */
+  readonly continuesPast: boolean
+  /** Started the day before: this is the tail, drawn from the top of the day. */
+  readonly continuedFrom: boolean
 }
 
 export interface DayGrid {
@@ -55,16 +59,41 @@ const deriveWindow = (rawFirst: number, rawLast: number): { firstHour: number; l
     : { firstHour: lastHour - MIN_WINDOW_HOURS, lastHour }
 }
 
+/** Midnight, as an hour of the day it ends. */
+const END_OF_DAY = 24
+
 export function dayGrid(schedule: Schedule, dayIndex: number): DayGrid {
   const items = blocksOnDay(schedule, dayIndex)
 
+  /**
+   * What ran past midnight into this day.
+   *
+   * A block belongs on both days it touches -- the part before midnight where it starts, the
+   * rest at the top of where it ends -- which is what every calendar a student has used
+   * does, and where they would look for it. Without this the tail simply vanished and the
+   * head was drawn two hours tall inside a two-hour window, hanging half outside the grid.
+   */
+  const carried = dayIndex === 0 ? [] : blocksOnDay(schedule, dayIndex - 1).filter(
+    (item) => item.startHour + item.hours > END_OF_DAY,
+  )
+
+  const tailHours = (item: ScheduledItem): number => item.startHour + item.hours - END_OF_DAY
+
+  const starts = [
+    ...items.map((item) => item.startHour),
+    // A tail starts at midnight, so the window has to reach it or there is nowhere to draw.
+    ...carried.map(() => 0),
+  ]
+  const ends = [
+    // Clipped: the hours after midnight are the next day's to draw, not this one's.
+    ...items.map((item) => Math.min(item.startHour + item.hours, END_OF_DAY)),
+    ...carried.map(tailHours),
+  ]
+
   const { firstHour, lastHour } =
-    items.length === 0
+    starts.length === 0
       ? { firstHour: DEFAULT_FIRST_HOUR, lastHour: DEFAULT_LAST_HOUR }
-      : deriveWindow(
-          Math.floor(Math.min(...items.map((item) => item.startHour))) - 1,
-          Math.ceil(Math.max(...items.map((item) => item.startHour + item.hours))) + 1,
-        )
+      : deriveWindow(Math.floor(Math.min(...starts)) - 1, Math.ceil(Math.max(...ends)) + 1)
 
   const span = lastHour - firstHour
 
@@ -74,10 +103,25 @@ export function dayGrid(schedule: Schedule, dayIndex: number): DayGrid {
     hours: Array.from({ length: span + 1 }, (_, index) => firstHour + index),
     // `blocksOnDay` already sorts by start hour and returns a copy, so the schedule handed
     // in is never reordered here.
-    blocks: items.map((item) => ({
-      item,
-      topPercent: ((item.startHour - firstHour) / span) * 100,
-      heightPercent: (item.hours / span) * 100,
-    })),
+    blocks: [
+      ...carried.map((item) => ({
+        item,
+        topPercent: ((0 - firstHour) / span) * 100,
+        heightPercent: (tailHours(item) / span) * 100,
+        continuesPast: false,
+        continuedFrom: true,
+      })),
+      ...items.map((item) => {
+        const drawnHours = Math.min(item.startHour + item.hours, END_OF_DAY) - item.startHour
+
+        return {
+          item,
+          topPercent: ((item.startHour - firstHour) / span) * 100,
+          heightPercent: (drawnHours / span) * 100,
+          continuesPast: item.startHour + item.hours > END_OF_DAY,
+          continuedFrom: false,
+        }
+      }),
+    ],
   }
 }

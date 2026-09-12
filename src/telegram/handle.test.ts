@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ParsedItem } from '../ai'
 import { outcomesFrom, type BlockRecord } from '../domain/blockLog'
 import type { EnergyPrediction } from '../domain/predictions'
+import type { SleepNight } from '../domain/sleepLog'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
 import { handleIntent, type BlockAnswerInput, type ChatStore } from './handle'
@@ -37,6 +38,7 @@ interface Harness {
   answered: string[]
   linked: Array<{ chatId: number; accountId: string }>
   savedPredictions: Array<readonly EnergyPrediction[]>
+  sleepNights: SleepNight[]
 }
 
 function harness(over: Partial<ChatStore> = {}): Harness {
@@ -46,6 +48,7 @@ function harness(over: Partial<ChatStore> = {}): Harness {
   const answered: string[] = []
   const linked: Array<{ chatId: number; accountId: string }> = []
   const savedPredictions: Array<readonly EnergyPrediction[]> = []
+  const sleepNights: SleepNight[] = []
 
   const store: ChatStore = {
     accountForChat: async () => 'account-1',
@@ -72,10 +75,13 @@ function harness(over: Partial<ChatStore> = {}): Harness {
     savePredictions: async (_accountId, next) => {
       savedPredictions.push(next)
     },
+    recordSleepNight: async (_accountId, night) => {
+      sleepNights.push(night)
+    },
     ...over,
   }
 
-  return { store, saved, blockAnswers, pendings, answered, linked, savedPredictions }
+  return { store, saved, blockAnswers, pendings, answered, linked, savedPredictions, sleepNights }
 }
 
 const parse = vi.fn()
@@ -301,8 +307,25 @@ describe('the command surface', () => {
    * ever, while every other block on the day stayed unreachable from chat.
    */
   describe('/today and what has already been answered', () => {
-    const second = { ...studyBlock, id: 'b2', title: 'Stats problem set' }
-    const bothBlocks = () => week([studyBlock, second]) as never
+    /**
+     * A clock these tests state rather than inherit.
+     *
+     * The bot asks only about blocks that have actually happened -- `dayBlocks.hasHappened`,
+     * the same rule the today card uses -- so every test here turns on what hour it is. They
+     * took it from `1000`, one second past the epoch, read back through
+     * `new Date(now).getHours()`. That is the **local** hour, so the harness's clock was
+     * whichever zone the machine ran in: 08:00 at UTC+8, where these fixtures have finished,
+     * and 00:00 in CI, where they have not. The suite passed on the author's machine and
+     * failed on GitHub, and nothing in the test named the hour it was relying on.
+     *
+     * Built from local components, so `getHours()` reads 09:00 in every zone. The production
+     * code is right as it stands: §9 wants the student's own clock, not UTC.
+     */
+    const NINE_IN_THE_MORNING = new Date(1970, 0, 1, 9, 0, 0).getTime()
+
+    const early = { ...studyBlock, startHour: 5, hours: 1 }
+    const second = { ...early, id: 'b2', title: 'Stats problem set' }
+    const bothBlocks = () => week([early, second]) as never
 
     const logFor = (blockId: string): BlockRecord[] => [
       { blockId, type: 'mental', plannedHours: 2, dayIndex: 0, answer: 'right', answeredAt: 1 },
@@ -311,7 +334,7 @@ describe('the command surface', () => {
     it('moves on to the next block once the first has been answered', async () => {
       const h = harness({ loadWeek: bothBlocks, loadBlockLog: async () => logFor('b1') })
 
-      const reply = await handleIntent(command('today'), h.store, 1000)
+      const reply = await handleIntent(command('today'), h.store, NINE_IN_THE_MORNING)
 
       expect(reply?.text).toContain('Did Stats problem set happen?')
       expect(reply?.buttons?.flat().every((b) => b.data.startsWith('block:b2:'))).toBe(true)
@@ -323,7 +346,7 @@ describe('the command surface', () => {
         loadBlockLog: async () => [...logFor('b1'), ...logFor('b2')],
       })
 
-      const reply = await handleIntent(command('today'), h.store, 1000)
+      const reply = await handleIntent(command('today'), h.store, NINE_IN_THE_MORNING)
 
       expect(reply?.buttons).toBeUndefined()
       expect(reply?.text).toContain('Ethics essay')
@@ -343,7 +366,7 @@ describe('the command surface', () => {
         },
       })
 
-      const reply = await handleIntent(command('today'), h.store, 1000)
+      const reply = await handleIntent(command('today'), h.store, NINE_IN_THE_MORNING)
 
       expect(reply?.buttons).toBeUndefined()
       expect(reply?.text).toContain('Ethics essay')
@@ -420,11 +443,14 @@ describe('the command surface', () => {
       expect(reply?.buttons?.flat()).toHaveLength(5)
     })
 
+    /** Five since Ruling 67: a short night costs reserve now, so the top bucket could not
+     *  stop at 8.5 -- a student who slept eleven hours after a bad week had no way to say so,
+     *  and that is the night most worth recording. */
     it('asks about sleep when that is what was asked for', async () => {
       const h = harness()
 
       expect((await handleIntent(command('checkin', 'sleep'), h.store, 1000))?.buttons?.flat())
-        .toHaveLength(4)
+        .toHaveLength(5)
     })
 
     it('answers /lapsed plainly when nothing has fallen through', async () => {
@@ -660,7 +686,9 @@ describe('the bot and the card produce the same outcome', () => {
 
     // The bot's own path: the exact buttons /yesterday would send, and the exact callback
     // Telegram sends back for a press on "Took longer".
-    const reply = blocksReply('yesterday', [block])
+    // Yesterday, so the hour does not matter: everything on a day already behind us has
+    // happened.
+    const reply = blocksReply('yesterday', [block], [], { today: block.dayIndex + 1, hour: 9 })
     const pressed = reply.buttons?.flat().find((button) => button.label === 'Took longer')
     if (pressed === undefined) throw new Error('no "Took longer" button was offered')
 
@@ -1228,6 +1256,10 @@ describe('looking back at yesterday', () => {
  * Ruling 22's last three, at the handler rather than the renderer: a reply that looks right and
  * writes nothing is the failure mode these are guarding against.
  */
+/** Midday on 1970-01-03, so a week anchored to 1970-01-01 puts "today" on day 2 whatever
+ *  zone the run is in -- and day 2 has a day before it to carry last night. */
+const NOON_ON_DAY_TWO = Date.parse('1970-01-03T12:00:00Z')
+
 describe('answering from chat', () => {
   const anchoredWeek = () => ({
     ...week(),
@@ -1262,12 +1294,24 @@ describe('answering from chat', () => {
     expect(reply?.text).toMatch(/cannot place/i)
   })
 
+  /**
+   * Anchored two days back rather than on `now`, because the night being reported is
+   * `today - 1`: `sleepByDay[d]` is the night at the END of day d (§6.1 puts sleep in
+   * `recovery[d]`, which produces `reserve[d+1]`). On a week starting today there is no such
+   * entry at all, which the day-zero case below covers.
+   */
   it('writes a reported night into the week, exactly as the today card does', async () => {
-    const h = harness({ loadWeek: async () => anchoredWeek() })
+    const h = harness({ loadWeek: async () => ({ ...week(), startedOn: '1970-01-01' }) })
 
-    await handleIntent({ kind: 'sleepAnswer', chatId: 7, bucket: 'under5' } as never, h.store, 1000)
+    await handleIntent(
+      { kind: 'sleepAnswer', chatId: 7, bucket: 'under5' } as never,
+      h.store,
+      NOON_ON_DAY_TWO,
+    )
 
-    expect(h.saved[0]?.sleepByDay[0]).toBe(4.5)
+    expect(h.saved[0]?.sleepByDay[1]).toBe(4.5)
+    // Not tonight, which has not happened.
+    expect(h.saved[0]?.sleepByDay[2]).toBe(7)
   })
 
   /**
@@ -1564,5 +1608,48 @@ describe('Ruling 62 when storage will not answer', () => {
 
     expect(h.saved).toHaveLength(0)
     expect(reply?.text.length).toBeGreaterThan(0)
+  })
+})
+
+/**
+ * A night reported on the phone and one reported in the app have to be the same fact.
+ *
+ * `handle.ts` already claimed that property in a comment -- the bot writes through the same
+ * `withSleep` -- but the week alone cannot carry it: `sleepByDay` holds the figure and nothing
+ * recorded that it was *answered*, so a night reported in chat left the app still asking, and
+ * left `sleepReality` unable to count it.
+ */
+describe('a night reported in chat', () => {
+  const sleepAnswer = { kind: 'sleepAnswer', chatId: 7, bucket: 'six' } as never
+
+  it('is recorded as an answered night, not only written into the week', async () => {
+    const h = harness({ loadWeek: async () => ({ ...week(), startedOn: '1970-01-01' }) })
+
+    await handleIntent(sleepAnswer, h.store, NOON_ON_DAY_TWO)
+
+    // Keyed by the morning the night ended, which is the date the app has in hand and the
+    // one that exists even when the night began outside the fortnight.
+    expect(h.sleepNights).toEqual([
+      expect.objectContaining({ isoDate: '1970-01-03', hours: 6 }),
+    ])
+    expect(h.saved[0]?.sleepByDay[1]).toBe(6)
+  })
+
+  /**
+   * The fortnight's first day has no entry for the night before it -- that night began
+   * outside the week the app holds -- so there is nothing to write. The record is still
+   * kept, because the log is keyed by a date rather than bounded by the horizon, and that
+   * is what keeps the seven-night average honest from the first morning.
+   */
+  it('records the night on day zero, where the week has no entry to write', async () => {
+    const h = harness({ loadWeek: async () => ({ ...week(), startedOn: '1970-01-01' }) })
+
+    const reply = await handleIntent(sleepAnswer, h.store, Date.parse('1970-01-01T12:00:00Z'))
+
+    expect(h.saved).toEqual([])
+    expect(h.sleepNights).toEqual([
+      expect.objectContaining({ isoDate: '1970-01-01', hours: 6 }),
+    ])
+    expect(reply).not.toBeNull()
   })
 })

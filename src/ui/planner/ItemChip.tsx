@@ -107,8 +107,14 @@ export function ItemChip({
         {/* Ruling 43: the one thing a calendar entry is for, and the one thing this chip did not
             say. The day and the hour used to be decided AFTER the accept, by `placement.ts`
             -- so a student confirmed an entry without being told when it would land, and
-            met it later in the week. */}
-        <Field label="Day">
+            met it later in the week.
+
+            Labelled "Due by" rather than "Day", because that is what it writes. `placement`
+            searches backwards from this day for a free slot, so an entry due Friday may
+            perfectly well land on Wednesday -- and an essay due Friday is one of the most
+            movable things in a week, which is exactly why it should. "Day" read as when am I
+            doing this and answered when is this due, with nothing to tell the two apart. */}
+        <Field label="Due by">
           <select
             data-testid={`when-day-${item.id}`}
             value={item.deadlineDay === null ? '' : String(item.deadlineDay)}
@@ -200,7 +206,7 @@ export function ItemChip({
           student never said. `PlannerScreen` holds the accept shut until this is answered. */}
       {!saysWhen(item) && (
         <p data-testid={`when-missing-${item.id}`} className="text-xs text-attention">
-          When is this? Pick a day before adding it.
+          When is this due? Pick a day before adding it.
         </p>
       )}
 

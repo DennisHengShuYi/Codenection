@@ -277,3 +277,114 @@ Three older notations survive in comments and are not ruling numbers:
 
 `src/ui/AddSheet.test.tsx:261` — and 5 other file(s)
 
+## Ruling 64
+
+Recorded at the time rather than reconstructed, unlike the entries above.
+
+**A stated sleep target is a guess the app makes, not a promise it keeps.** The projection
+assumes it; the solver may still place work past midnight, and the app warns when a day will
+cost a night. The rejected alternative was a hard wall -- shrinking the placeable day so work
+could never be booked into the hours a student said they would be asleep. That is more
+faithful to the words, and it makes a crunch fortnight genuinely unsolvable: the rebalancer
+loses most of its freedom exactly when it is needed. `optimizer/gaps.DAY_END_HOUR` is
+therefore untouched by the whole sleep feature.
+
+`src/data/types.ts` — the field this governs, with the reasoning in place
+
+## Ruling 65
+
+Recorded at the time.
+
+**The deadline squeeze is a forecast, never a record.** When a day asks for more hours than a
+day has and something is actually due, the app says so *before* the night -- and stores
+nothing. It never writes a reduced figure into `sleepByDay`, because it never observed the
+night. Storing it would be simpler downstream and would have the app assert what a student
+slept on evidence it does not have, which is the same rule that kept the Today panel's bed
+row silent for a night nobody answered.
+
+The accepted cost, stated so it is not rediscovered as a bug: the projection stays optimistic
+on an over-committed day, because it assumes the planned night. The warning sentence and the
+room's own dimming light are what cover it.
+
+`src/domain/sleepForecast.ts` — the module, and the accepted cost in its own words
+
+## Ruling 66
+
+Recorded at the time.
+
+**Planning a night and checking a night are separate acts, with separate surfaces.** §8's
+check-in card asks "how much sleep last night?", once a day, and then disappears: it is about
+a night that already happened, and the answer is evidence. The sleep page is where a student
+says what they intend, and it has an address because an intention has to be changeable.
+
+Two consequences that look like inconsistencies and are not. The page offers whole hours
+(6/7/8/9) while the card keeps its four buckets, because "under 5" is an honest thing to
+report and an absurd thing to aim for. And the two write to different places -- the plan into
+`Schedule.sleepByDay`, the report into `domain/sleepLog` -- which is what finally lets the app
+tell "slept eight hours" from "nobody has asked yet", and so what lets it compare them at all.
+
+`src/ui/sleep/SleepSheet.tsx` — the page; `src/ui/room/view.ts` — why it is an address
+
+
+## Ruling 67
+
+Recorded at the time.
+
+**Sleep deprivation is charged as drain, never as negative recovery.** A night short of §6.1's
+five-hour baseline costs the mental and physical reserves per hour short, added to `drain[d]`.
+
+The obvious alternative — dropping the `max(0, …)` so the sleep credit goes negative — is
+mechanically backwards. `recovery[d]` is multiplied by `efficiency[d]`, which falls as the
+reserve falls, so a negative credit would get *smaller* the more depleted a student was:
+deprivation would hurt a rested student more than an exhausted one, inverting §6.2's spiral
+rather than deepening it. A cost belongs in drain, where `stateMultiplier` already makes costs
+rise as a reserve falls.
+
+Charged flat rather than through `actualCost`'s state multiplier. That multiplier prices the
+effort of *doing* something at a given reserve, and a night that did not happen is not an
+activity. The compounding arrives through the reserve itself falling, which makes the next
+day's work dearer.
+
+The coefficient is 4, not `k_sleep`'s 6 and 7. Measured: at mirrored rates a two-hour night
+regime empties both reserves by day four, and once several sit at zero every bad week looks
+identical — the model loses the resolution the spiral exists to show. At 4, a two-hour night
+costs about 15 mental and 12 physical on the day, which is a serious visible hit that a single
+all-nighter recovers from.
+
+`src/engine/params.ts` — the coefficients and their reasoning; `src/engine/drain.ts` — the term
+
+## Ruling 68
+
+Recorded at the time.
+
+**The solver prefers not to put work in a student's night, and is never forbidden from it.**
+Hours of work sitting after the stamped bedtime are charged as a small penalty in
+`objective.score`.
+
+`gapsOn` treats everything from `WAKE_HOUR` to midnight as placeable, so the search has always
+been free to put work at 23:00 — and nothing scored it, so among arrangements it was allowed
+to make it had no preference at all for protecting a night. Measured: asked for two hours near
+09:00 on a day whose only wide opening is the last one, `hourNear` returns 22:00.
+
+The lower bound of that window was always a statement about when a student is awake —
+`WAKE_HOUR = 8` exists precisely so nothing lands at four in the morning. This is the upper
+bound finally saying the same thing.
+
+Soft, not a wall. Clamping `gapsOn` to the bedtime instead would forbid the solver from ever
+touching a night, which makes a crunch fortnight genuinely unsolvable exactly when the
+rebalancer is most needed — the "promise rather than guess" option Ruling 64 already rejected.
+This makes the solver *prefer* 14:00 when 14:00 is free, still use 23:00 when there is nowhere
+else, and leaves `domain/sleepForecast` to say so honestly when it does.
+
+Sparse in the way `deadlinePressure` is — zero until bedtime, linear after it, rather than a
+falloff across the evening. That term's comment records the measurement behind the choice: a
+smooth gradient on every item on every day took an ordinary fortnight from 402 evaluations to
+2,407. Measured here with a bedtime stamped on both fixtures, the eval count and score are
+unchanged, because neither fixture places work past 23:00.
+
+Weighted like `DEADLINE_PRESSURE_WEIGHT` and for the same reason: §2.1's ordering is not up for
+negotiation, and the solver may never trade a genuinely higher worst day for a better bedtime.
+A test pins that as an inequality rather than trusting the weight to stay small.
+
+`src/optimizer/objective.ts` — the term; `src/optimizer/types.ts` — why the bedtime is stamped
+rather than derived

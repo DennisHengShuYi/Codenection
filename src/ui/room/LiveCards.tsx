@@ -1,5 +1,3 @@
-import type { BlockAnswer } from '../../domain/blockLog'
-import type { BlockOutcome } from '../../domain/calibration'
 import type { Commitment } from '../../optimizer'
 import type { MicroStart } from '../../domain/microStart'
 import type { ScheduledItem } from '../../optimizer'
@@ -26,10 +24,10 @@ export function LiveCards({
   blockForToday,
   askEnergy,
   askSleep,
-  outcomes,
+  sleepRealityLine,
+  plannedLastNight,
   onEnergy,
   onSleep,
-  onBlockAnswer,
   onTodayDismiss,
 }: {
   readonly cards: readonly CardId[]
@@ -42,12 +40,14 @@ export function LiveCards({
   readonly blockForToday: ScheduledItem | null
   readonly askEnergy: boolean
   readonly askSleep: boolean
-  /** §2.4's history, forwarded to `TodayCard` for §7.6's Reality Check line. Optional for
-   *  the same no-cold-start reason `TodayCard` states. */
-  readonly outcomes?: readonly BlockOutcome[]
+  /** §7.6's Reality Check for sleep, forwarded to `TodayCard`. Optional for the same
+   *  no-cold-start reason `outcomes` is. */
+  readonly sleepRealityLine?: string | null
+  /** What the week planned for the night the card is asking about, forwarded to
+   *  `TodayCard`. Optional for the same no-cold-start reason `outcomes` is. */
+  readonly plannedLastNight?: number | null
   readonly onEnergy: (energy: number) => void
   readonly onSleep: (bucket: SleepBucket) => void
-  readonly onBlockAnswer: (itemId: string, answer: BlockAnswer) => void
   readonly onTodayDismiss: () => void
 }) {
   const renderCard = (id: CardId) => {
@@ -72,10 +72,10 @@ export function LiveCards({
             block={blockForToday}
             askEnergy={askEnergy}
             askSleep={askSleep}
-            outcomes={outcomes}
+            sleepRealityLine={sleepRealityLine}
+            plannedLastNight={plannedLastNight}
             onEnergy={onEnergy}
             onSleep={onSleep}
-            onBlock={onBlockAnswer}
             onDismiss={onTodayDismiss}
           />
         )

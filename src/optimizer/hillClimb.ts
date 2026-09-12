@@ -27,6 +27,7 @@ function climb(
   start: Schedule,
   params: EngineParams,
   rng: Rng,
+  today: number,
 ): { schedule: Schedule; moves: Move[]; evaluations: number } {
   let current = start
   let currentScore = score(current, params)
@@ -34,7 +35,7 @@ function climb(
   const taken: Move[] = []
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration += 1) {
-    const options = candidates(current, params)
+    const options = candidates(current, params, today)
     if (options.length === 0) break
 
     const offset = Math.floor(rng() * options.length)
@@ -84,6 +85,13 @@ function climb(
  * offset still breaks ties, and because a solver that takes its randomness as a parameter
  * remains testable if restarts are ever reinstated.
  *
+ * `today` bounds the neighbourhood to days the student can still act on. Without it the
+ * cheapest improvement available was always to insert recovery into days already lived --
+ * the engine re-projects from day zero, so retroactive rest lifts the whole fortnight,
+ * including the trough `worstFloor` reads. On a real account that turned a true gain of one
+ * reserve point into a reported thirty-three, and put three of four proposed social blocks on
+ * days that had already happened.
+ *
  * Never returns a schedule worse than the one it was given: the incumbent starts as the
  * input, so a search that finds nothing returns the input unchanged with an empty move
  * list. A rebalance that quietly made a week worse would cost far more trust than one
@@ -94,9 +102,10 @@ export function rebalance(
   schedule: Schedule,
   params: EngineParams,
   rng: Rng,
+  today: number,
 ): RebalanceResult {
   const baseScore = score(schedule, params)
-  const attempt = climb(schedule, params, rng)
+  const attempt = climb(schedule, params, rng, today)
   const improved = score(attempt.schedule, params) > baseScore + EPSILON
 
   const best = improved ? attempt.schedule : schedule

@@ -16,14 +16,31 @@ import type { Repository } from './types'
  *
  * Signed in and configured, the week lives in Supabase under that account, still backed
  * by browser storage so an unreachable database degrades rather than losing the week.
+ *
+ * **The preview is only ever a preview.** Every store here is named, and an account's name
+ * is its own -- so the fortnight a visitor builds signed out cannot be read back as a
+ * signed-in student's week, and two accounts sharing a device cannot read each other. That
+ * mattered most on the backup path: the signed-in store fell back to the *same* database
+ * the preview lived in, so a seeded demo week was one unreachable Supabase away from being
+ * presented to a real student as their own.
  */
+
+/** The store a signed-out visitor writes to. Written rather than held in memory because
+ *  closing the tab would otherwise lose a fortnight somebody had just built. */
+const PREVIEW_STORE = 'codenection'
+
+/** One database per account, so nothing on this device is shared between two students --
+ *  or between a student and the preview. */
+const storeFor = (session: Session): string => `codenection-${session.userId}`
 export function createRepository(
   session: Session | null,
   config: DataConfig = readDataConfig(),
 ): Repository {
-  const local = createLocalRepository()
+  if (session === null) return createLocalRepository(PREVIEW_STORE)
 
-  if (session === null || config.supabaseUrl === null || config.supabaseAnonKey === null) {
+  const local = createLocalRepository(storeFor(session))
+
+  if (config.supabaseUrl === null || config.supabaseAnonKey === null) {
     return local
   }
 

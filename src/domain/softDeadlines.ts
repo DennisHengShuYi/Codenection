@@ -65,8 +65,6 @@ export const RHYTHM_KINDS: readonly BlockKind[] = [
   'socialRestorative',
 ]
 
-const isRhythm = (kind: ActivityKind): boolean => RHYTHM_KINDS.includes(kind as BlockKind)
-
 const intervalFor = (kind: ActivityKind): number =>
   SOFT_DEADLINE_INTERVALS[kind as BlockKind] ?? SOFT_DEADLINE_INTERVALS.errands
 
@@ -145,29 +143,33 @@ const rhythmBase = (kind: ActivityKind, lastConfirmed: ReadonlyMap<ActivityKind,
  *   which is what makes "every event has a deadline" true with no exception carved out.
  * - A block already in the past keeps the day it was due, so history does not re-date
  *   itself every time the app is opened.
- * - Otherwise: rhythms are dated from the last confirmed occurrence, tasks from today, and
- *   a task's deadline is set once and then left alone.
+ * - Otherwise: the interval for the kind, counted from the block's **own day**, set once and
+ *   then left alone.
  *
- * That last clause is the whole feature. If re-stamping pushed a task's wall forward on
- * every load, deferring would stay free and nothing would have changed.
+ * That last clause is the whole feature. If re-stamping pushed the wall forward on every
+ * load -- and with the day as the base, every *move* would push it too -- deferring would
+ * stay free and nothing would have changed.
+ *
+ * **Counted from the block's own day, not from today and not from the last confirmed
+ * occurrence.** Both of those ignored where the block was actually scheduled, and the result
+ * was that most of a real week was born already late. From today, one number covered the
+ * whole fortnight: on day 7 every study block anywhere in the week was due on day 12, so
+ * everything past day 12 was overdue the moment it was stamped. From the last confirmed
+ * occurrence, badminton last played on day 4 with a 3-day interval was "due day 7" even with
+ * the next game sitting on day 11. Measured on a real account, fifteen of twenty movable
+ * blocks were past their deadline, and `deferItem` refused every one of them -- a deadline
+ * behind the block leaves it no later day to search, so Later answered "no room" about a
+ * fortnight in which no day was full.
+ *
+ * The interval asks how long this kind of thing may wait. What it waits from is when it is
+ * scheduled.
+ *
+ * The rhythm signal that the old base carried is not lost, and deliberately did not move
+ * here: `missedSoftDeadlines` keeps its own last-confirmed check for a rhythm with *nothing
+ * scheduled at all*, which is the case that actually means "you have not exercised in a
+ * while". That is a question about the gap between occurrences; this one is about a block.
  */
-export function stampSoftDeadlines(
-  schedule: Schedule,
-  today: number,
-  blockLog: readonly BlockRecord[],
-): Schedule {
-  const lastConfirmed = lastConfirmedByKind(schedule, blockLog)
-
-  // Rank within each rhythm, so successive occurrences fall one interval apart rather than
-  // all landing on the same due day and all reading as late.
-  const rank = new Map<string, number>()
-  for (const kind of RHYTHM_KINDS) {
-    schedule.items
-      .filter((candidate) => candidate.kind === kind && candidate.dayIndex >= today)
-      .sort((a, b) => a.dayIndex - b.dayIndex)
-      .forEach((candidate, index) => rank.set(candidate.id, index))
-  }
-
+export function stampSoftDeadlines(schedule: Schedule, today: number): Schedule {
   return {
     ...schedule,
     items: schedule.items.map((item) => {
@@ -182,15 +184,10 @@ export function stampSoftDeadlines(
         return { ...item, softDeadlineDay: item.softDeadlineDay ?? item.dayIndex }
       }
 
-      if (isRhythm(item.kind)) {
-        const nth = rank.get(item.id) ?? 0
-        return {
-          ...item,
-          softDeadlineDay: rhythmBase(item.kind, lastConfirmed) + (nth + 1) * intervalFor(item.kind),
-        }
+      return {
+        ...item,
+        softDeadlineDay: item.softDeadlineDay ?? item.dayIndex + intervalFor(item.kind),
       }
-
-      return { ...item, softDeadlineDay: item.softDeadlineDay ?? today + intervalFor(item.kind) }
     }),
   }
 }

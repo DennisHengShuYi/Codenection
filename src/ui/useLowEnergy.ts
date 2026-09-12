@@ -64,13 +64,20 @@ export function useLowEnergy(repo: Repository): {
   }, [repo])
 
   function setOverride(override: StoredSettings['lowEnergyOverride']) {
-    const next = { ...settings, lowEnergyOverride: override }
-    setSettings(next)
-    // Applied on screen whether or not it persists: a student switching the mode off
-    // should see it turn off, even if the preference cannot be saved for next time. What
-    // changed is that the failure is now reported rather than dropped.
+    setSettings({ ...settings, lowEnergyOverride: override })
+    // Re-read before writing, the way `useProfile.setProfile` does, rather than spreading
+    // this hook's own cached snapshot. Spreading the snapshot dropped any field another
+    // writer had put on the blob since this hook loaded -- latent while settings held only a
+    // mode and a profile, and reachable the moment sleep began writing the same blob. The
+    // regression test in this hook's spec is named for it.
+    //
+    // Applied on screen whether or not it persists: a student switching the mode off should
+    // see it turn off, even if the preference cannot be saved for next time. The failure is
+    // reported rather than dropped.
     repo
-      .saveSettings(next)
+      .loadSettings()
+      .catch(() => DEFAULT_SETTINGS)
+      .then((saved) => repo.saveSettings({ ...saved, lowEnergyOverride: override }))
       .then(() => setProblem(null))
       .catch(() => setProblem(SAVE_FAILED))
   }

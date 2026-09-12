@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { BlockRecord } from '../../domain/blockLog'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule, ScheduledItem } from '../../optimizer'
-import { blockToAsk, SLEEP_HOURS, withSleep } from './checkIn'
+import { blockToAsk, pendingCheckIns } from './checkIn'
 
 const item = (id: string, type: ScheduledItem['type'], dayIndex = 0): ScheduledItem => ({
   id,
@@ -101,18 +101,79 @@ describe('blockToAsk', () => {
   })
 })
 
-describe('withSleep', () => {
-  it('writes the reported night into the day it was about', () => {
-    const next = withSleep(week([]), 3, 'under5')
+/**
+ * Everything still waiting to be answered, rather than the one the card asks about.
+ *
+ * `blockToAsk` picks by least-sampled load type, because one question a day should teach the
+ * model the most it can. That is the wrong order for a list: a student looking at what they
+ * owe reads it the way the days happened, oldest first, and "Tuesday's lab" means nothing
+ * next to "Friday's essay" if the two are shuffled by what the model wants to learn.
+ *
+ * Same filter, different order -- and the filter is the part that must not drift, since
+ * asking about something that has not happened is the failure `hasHappened` exists to stop.
+ */
+describe('pendingCheckIns', () => {
+  it('lists everything that has happened and has no answer', () => {
+    const weekOf = week([
+      item('a', 'mental', 0),
+      item('b', 'mental', 1),
+    ])
 
-    expect(next.sleepByDay[3]).toBe(SLEEP_HOURS.under5)
+    expect(pendingCheckIns({ schedule: weekOf, today: 2, nowHour: 9 }).map((one) => one.id)).toEqual(
+      ['a', 'b'],
+    )
   })
 
-  it('leaves every other night alone, and does not mutate the week it was given', () => {
-    const before = week([])
-    const next = withSleep(before, 3, 'under5')
+  it('puts the oldest first, and orders a day by when it happened', () => {
+    const weekOf = week([
+      { ...item('evening', 'mental', 0), startHour: 20 },
+      { ...item('morning', 'mental', 0), startHour: 9 },
+      { ...item('later-day', 'mental', 1), startHour: 9 },
+    ])
 
-    expect(next.sleepByDay[4]).toBe(7)
-    expect(before.sleepByDay[3]).toBe(7)
+    expect(
+      pendingCheckIns({ schedule: weekOf, today: 2, nowHour: 9 }).map((one) => one.id),
+    ).toEqual(['morning', 'evening', 'later-day'])
+  })
+
+  it('leaves out what has already been answered', () => {
+    const weekOf = week([item('a', 'mental', 0), item('b', 'mental', 0)])
+
+    expect(
+      pendingCheckIns({
+        schedule: weekOf,
+        today: 1,
+        nowHour: 9,
+        blockLog: [record('a', 'mental')],
+      }).map((one) => one.id),
+    ).toEqual(['b'])
+  })
+
+  it('leaves out what has not happened yet, by the clock', () => {
+    const weekOf = week([
+      { ...item('done', 'mental', 1), startHour: 9, hours: 1 },
+      { ...item('tonight', 'mental', 1), startHour: 20 },
+      item('tomorrow', 'mental', 2),
+    ])
+
+    expect(pendingCheckIns({ schedule: weekOf, today: 1, nowHour: 14 }).map((one) => one.id)).toEqual(
+      ['done'],
+    )
+  })
+
+  it('is empty when there is nothing owed', () => {
+    expect(pendingCheckIns({ schedule: week([]), today: 3, nowHour: 9 })).toEqual([])
+  })
+
+  /** The card and the list must never disagree about what is answerable: the card asks about
+   *  one of these, never about something absent from it. */
+  it('always contains the block the card is asking about', () => {
+    const weekOf = week([item('a', 'mental', 0), item('b', 'physical', 1)])
+
+    const asked = blockToAsk({ schedule: weekOf, today: 2, nowHour: 9 })
+
+    expect(pendingCheckIns({ schedule: weekOf, today: 2, nowHour: 9 }).map((one) => one.id)).toContain(
+      asked?.id,
+    )
   })
 })

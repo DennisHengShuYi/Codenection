@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { HORIZON_DAYS } from '../engine'
 import type { Schedule } from '../optimizer'
-import { anchorTo, calendarFor, dateFor, dayIndexFor, isAnchored, todayIndex } from './calendar'
+import {
+  anchorTo,
+  calendarFor,
+  dateFor,
+  dayIndexFor,
+  dayLabel,
+  isAnchored,
+  shortDayLabel,
+  todayIndex,
+} from './calendar'
 
 const week = (over: Partial<Schedule> = {}): Schedule => ({
   items: [],
@@ -229,5 +238,35 @@ describe('the calendar handed to the readers', () => {
    */
   it('offers no label for a week that has never been dated', () => {
     expect(calendarFor(week(), 0).todayLabel).toBeUndefined()
+  })
+})
+
+/**
+ * The short rendering, for prose rather than for a heading.
+ *
+ * `dayLabel` composes both halves -- "Today, Sat 12 Sept" -- which is right above a row and
+ * unusable inside a sentence: the sleep page's forecast read "Today, Sat 12 Sept's deadline
+ * will cost you about 4 hours of sleep." Found by looking at the screen, which is the only
+ * thing that can find it.
+ */
+describe('shortDayLabel', () => {
+  const anchored = week({ startedOn: '2026-09-12' })
+
+  it('says Today and Tomorrow without the date after them', () => {
+    expect(shortDayLabel(anchored, 0, 0)).toBe('Today')
+    expect(shortDayLabel(anchored, 1, 0)).toBe('Tomorrow')
+  })
+
+  it('names any other day without a relative prefix', () => {
+    expect(shortDayLabel(anchored, 2, 0)).toBe(dayLabel(anchored, 2, 0))
+  })
+
+  /** It has to survive a sentence, which is the whole reason it exists. */
+  it('takes a possessive cleanly', () => {
+    expect(`${shortDayLabel(anchored, 0, 0)}'s deadline`).toBe("Today's deadline")
+  })
+
+  it('falls back to a numbered day without an anchor, like dayLabel', () => {
+    expect(shortDayLabel(week(), 4, 0)).toBe('Day 5')
   })
 })

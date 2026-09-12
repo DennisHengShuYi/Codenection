@@ -1,3 +1,5 @@
+import { snapTitle } from '../domain/snapTitle'
+import type { KnownTitle } from '../domain/titleVocabulary'
 import { parseWithRules } from './fallbackParser'
 import { parseModelReply } from './schema'
 import { MAX_INPUT_LENGTH, type Calendar, type ParseOutcome } from './types'
@@ -19,6 +21,19 @@ export async function parseBrainDump(
    * before, which is the honest answer for a week that has never been dated.
    */
   calendar?: Calendar,
+  /**
+   * The names this student already uses, and what for.
+   *
+   * Two jobs, both aimed at one problem: on this path the title is the model's phrasing, not
+   * the student's, so one gym habit becomes "Gym session" this week and "Workout" the next
+   * -- and §2.4's narrow rungs, which group answers by title, get a fresh empty bucket each
+   * time. The list is sent to the model, which helps and is only advice; the reply is then
+   * snapped onto these names, which is ordinary code and cannot be ignored.
+   *
+   * Optional, and empty is the honest default: a student with no history has no names to be
+   * held to, and nothing about the reading changes.
+   */
+  vocabulary: readonly KnownTitle[] = [],
 ): Promise<ParseOutcome> {
   const trimmed = text.trim()
 
@@ -31,12 +46,25 @@ export async function parseBrainDump(
     const response = await fetch('/api/plan', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: trimmed, calendar }),
+      // Names only. The model may pick one of these; it never gets to mint an identifier,
+      // and what comes back is snapped and shown before anything is added.
+      body: JSON.stringify({
+        text: trimmed,
+        calendar,
+        ...(vocabulary.length === 0
+          ? {}
+          : { vocabulary: vocabulary.map((known) => known.title) }),
+      }),
     })
 
     if (response.ok) {
       const items = parseModelReply(await response.json())
-      if (items !== null) return { items, source: 'model' }
+      if (items !== null) {
+        return {
+          items: items.map((item) => ({ ...item, title: snapTitle(item, vocabulary) })),
+          source: 'model',
+        }
+      }
     }
   } catch {
     // A dead network, or no endpoint at all. Falls through to the rules below.

@@ -175,24 +175,45 @@ describe('RoomShell with the room', () => {
   })
 
   // The point of the whole unit: acting on a block has real model consequences.
-  it('completing an errand through the week screen removes it from the saved week', async () => {
+  /**
+   * Through Remove, because Done is gone.
+   *
+   * It called `completeItem`, which is `withoutItem` -- the same deletion, without the
+   * confirmation and under a word that sounded like progress. The path this test proves
+   * still exists; it just has one honest name now, and it asks first.
+   */
+  it('taking an errand out through the week screen removes it from the saved week', async () => {
     const repository = await renderWithErrand()
 
     await userEvent.click(screen.getByTestId('open-week'))
     await userEvent.click(await screen.findByTestId('day-2'))
     await userEvent.click(await screen.findByTestId('block-laundry'))
-    await userEvent.click(await screen.findByRole('button', { name: /^done$/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /^remove$/i }))
+    await userEvent.click(await screen.findByTestId('confirm-remove-yes'))
 
     await waitFor(async () => expect((await repository.loadWeek())?.items).toHaveLength(0))
   })
 
-  it('deferring an errand moves it later in the saved week', async () => {
+  /**
+   * Later asks before it acts now, so this walks both presses.
+   *
+   * The first press only proposes: it scores every opening and can pass over a day that
+   * plainly had room, which is not guessable from the button's name, so the week must be
+   * untouched until the student has seen where it would go and agreed.
+   */
+  it('deferring an errand moves it later in the saved week, once confirmed', async () => {
     const repository = await renderWithErrand()
 
     await userEvent.click(screen.getByTestId('open-week'))
     await userEvent.click(await screen.findByTestId('day-2'))
     await userEvent.click(await screen.findByTestId('block-laundry'))
     await userEvent.click(await screen.findByRole('button', { name: /^later$/i }))
+
+    // Proposed, not done.
+    expect(await screen.findByTestId('confirm-later')).toBeVisible()
+    expect((await repository.loadWeek())?.items[0]?.dayIndex).toBe(2)
+
+    await userEvent.click(screen.getByTestId('confirm-later-yes'))
 
     await waitFor(async () =>
       expect((await repository.loadWeek())?.items[0]?.dayIndex).toBeGreaterThan(2),
@@ -238,7 +259,7 @@ describe('RoomShell with the room', () => {
           kind: 'rest',
           hours: 1,
           intensity: 1,
-          dayIndex: 3,
+          dayIndex: 1,
           startHour: 16,
           fixed: true,
           deadlineDay: null,
@@ -248,13 +269,17 @@ describe('RoomShell with the room', () => {
       start: { mental: 70, physical: 70, social: 70, errands: 70 },
       horizonDays: HORIZON_DAYS,
       sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+      // Three days in, so the nap on day 1 has actually happened. A future rest block is
+      // asked nothing: "did you rest" about an evening nobody has lived has no true answer,
+      // and an answer to it would read to `softDeadlines` as a rhythm satisfied.
+      startedOn: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     })
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={onAnswerBlock} />)
     await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
 
     await userEvent.click(screen.getByTestId('open-week'))
-    await userEvent.click(await screen.findByTestId('day-3'))
+    await userEvent.click(await screen.findByTestId('day-1'))
     await userEvent.click(await screen.findByTestId('block-nap'))
     await userEvent.click(await screen.findByTestId('rested-yes'))
 

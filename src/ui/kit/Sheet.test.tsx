@@ -234,7 +234,7 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
     expect(within(actionBar()).getByRole('button', { name: /what would this cost/i })).toBeVisible()
   })
 
-  it('BlockSheet: Done is in the bar', () => {
+  it('BlockSheet: Later is in the bar', () => {
     const model: BlockSheetModel = {
       item: {
         id: 'essay',
@@ -249,16 +249,16 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         deadlineDay: null,
         protectedRest: false,
       },
-      actions: ['done', 'later', 'microStart'],
+      actions: ['later', 'microStart'],
       recordedAnswer: null,
     }
 
     render(
       <BlockSheet
         model={model}
+        previewLater={() => 'This would move to Thursday.'}
         onClose={vi.fn()}
         onBack={vi.fn()}
-        onDone={vi.fn()}
         onLater={vi.fn()}
         onConfirm={vi.fn()}
         onRested={vi.fn()}
@@ -268,7 +268,7 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
       />,
     )
 
-    expect(within(actionBar()).getByRole('button', { name: 'Done' })).toBeVisible()
+    expect(within(actionBar()).getByRole('button', { name: 'Later' })).toBeVisible()
   })
 
   it('the settings sheet: Sign out is in the bar, not loose in the body', async () => {

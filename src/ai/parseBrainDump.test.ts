@@ -78,3 +78,63 @@ describe('parseBrainDump', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * The student's own names, on the path where the names are not theirs.
+ *
+ * §2.4's narrow rungs group answers by title, and here the title is whatever the model wrote
+ * from their sentence: "Gym session" one week, "Workout" the next, each a fresh bucket at
+ * zero answers. Nothing fills, and the feature is dead for anyone who does not type their
+ * own blocks.
+ *
+ * Two layers, and this file covers the one that holds. The list is sent to the model, which
+ * helps and is only advice; the reply is then snapped onto the names already in use, which
+ * is ordinary code and cannot be ignored. See `domain/snapTitle` for the guards.
+ */
+describe('reading against the names a student already uses', () => {
+  const known = [{ title: 'Gym', kind: 'hardExercise' as const }]
+
+  const replying = (title: string) =>
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        items: [
+          { title, type: 'physical', kind: 'hardExercise', hours: 1, deadlineDay: 2, startHour: 18, hard: false, confident: true },
+        ],
+      }),
+    })
+
+  it('renames the model’s phrasing to the one already in use', async () => {
+    vi.stubGlobal('fetch', replying('Gym session'))
+
+    const outcome = await parseBrainDump('gym tuesday', undefined, known)
+
+    expect(outcome.items[0]?.title).toBe('Gym')
+  })
+
+  it('leaves something genuinely new exactly as the model wrote it', async () => {
+    vi.stubGlobal('fetch', replying('Rock climbing'))
+
+    const outcome = await parseBrainDump('climbing tuesday', undefined, known)
+
+    expect(outcome.items[0]?.title).toBe('Rock climbing')
+  })
+
+  it('sends the names along, so the model can use them itself', async () => {
+    const fetched = replying('Gym')
+    vi.stubGlobal('fetch', fetched)
+
+    await parseBrainDump('gym tuesday', undefined, known)
+
+    const body = JSON.parse((fetched.mock.calls[0]?.[1] as RequestInit).body as string)
+    expect(body.vocabulary).toEqual(['Gym'])
+  })
+
+  it('changes nothing when the student has no history to go on', async () => {
+    vi.stubGlobal('fetch', replying('Gym session'))
+
+    const outcome = await parseBrainDump('gym tuesday')
+
+    expect(outcome.items[0]?.title).toBe('Gym session')
+  })
+})

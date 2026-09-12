@@ -5,8 +5,9 @@ import type { Calendar } from '../src/ai/types'
 import { readRequest } from '../src/ai/readRequest'
 import { draftReplies } from '../src/ai/drafts'
 import type { BlockRecord } from '../src/domain/blockLog'
+import { recordNight, type SleepNight } from '../src/domain/sleepLog'
 import type { EnergyPrediction } from '../src/domain/predictions'
-import { HORIZON_DAYS } from '../src/engine'
+import { DEFAULT_SLEEP_HOURS, HORIZON_DAYS } from '../src/engine'
 import type { Schedule } from '../src/optimizer'
 import type { PendingDump } from '../src/telegram/brainDump'
 import { checkRequest } from '../src/telegram/guard'
@@ -39,7 +40,7 @@ const emptyWeek = (): Schedule => ({
   items: [],
   start: { mental: 70, physical: 70, social: 70, errands: 70 },
   horizonDays: HORIZON_DAYS,
-  sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+  sleepByDay: Array.from({ length: HORIZON_DAYS }, () => DEFAULT_SLEEP_HOURS),
 })
 
 /**
@@ -140,6 +141,10 @@ export function createStore(client: SupabaseClient): ChatStore {
           account_id: accountId,
           block_id: answer.blockId,
           load_type: answer.type,
+          // §2.4's narrow rungs, migration 0008. Null rather than absent, so a block the
+          // bot could not find on the week clears a stale title rather than keeping one.
+          activity_kind: answer.kind ?? null,
+          title: answer.title ?? null,
           planned_hours: answer.plannedHours,
           day_index: answer.dayIndex,
           answer: answer.answer,
@@ -166,7 +171,7 @@ export function createStore(client: SupabaseClient): ChatStore {
     async loadBlockLog(accountId) {
       const { data, error } = await client
         .from('block_answers')
-        .select('block_id, load_type, planned_hours, day_index, answer, answered_at')
+        .select('block_id, load_type, activity_kind, title, planned_hours, day_index, answer, answered_at')
         .eq('account_id', accountId)
 
       // An empty log and an unreadable one mean opposite things. Collapsing them would
@@ -178,6 +183,12 @@ export function createStore(client: SupabaseClient): ChatStore {
         (row): BlockRecord => ({
           blockId: row.block_id as string,
           type: row.load_type as BlockRecord['type'],
+          // Absent before migration 0008, and absent is the truth: nothing recorded what
+          // those blocks were.
+          ...(row.activity_kind === null || row.activity_kind === undefined
+            ? {}
+            : { kind: row.activity_kind as BlockRecord['kind'] }),
+          ...(row.title === null || row.title === undefined ? {} : { title: row.title as string }),
           plannedHours: row.planned_hours as number,
           dayIndex: row.day_index as number,
           answer: row.answer as BlockRecord['answer'],
@@ -227,6 +238,33 @@ export function createStore(client: SupabaseClient): ChatStore {
 
       await client.from('user_state').upsert(
         { id: accountId, settings: { ...settings, calibration: { ...calibration, predictions } } },
+        { onConflict: 'id' },
+      )
+    },
+
+    /**
+     * §8's answered night, merged into the same `user_state.settings` blob the app reads.
+     *
+     * Read-and-merge rather than a whole-blob upsert, for `savePredictions`' stated reason:
+     * the app writes that blob entire from the browser, and a bot replacing it would drop
+     * whatever the student changed there since. Only `sleepNights` is ours to touch -- and
+     * within it, only the one night, upserted on its date so answering twice corrects rather
+     * than stacking a second record that would double-count in every average.
+     */
+    async recordSleepNight(accountId, night) {
+      const { data } = await client
+        .from('user_state')
+        .select('settings')
+        .eq('id', accountId)
+        .maybeSingle()
+
+      const settings = (data?.settings as Record<string, unknown> | null) ?? {}
+      const existing = Array.isArray(settings.sleepNights)
+        ? (settings.sleepNights as SleepNight[])
+        : []
+
+      await client.from('user_state').upsert(
+        { id: accountId, settings: { ...settings, sleepNights: recordNight(existing, night) } },
         { onConflict: 'id' },
       )
     },

@@ -1,4 +1,5 @@
-import type { DomainBar, Trend } from './domainBars'
+import { HORIZON_DAYS } from '../../engine'
+import type { BarSpan, DomainBar, Trend } from './domainBars'
 
 const GLYPHS: Record<Trend, string> = { rising: '▲', flat: '▬', falling: '▼' }
 
@@ -17,11 +18,33 @@ const FILL: Record<DomainBar['status'], string> = {
   critical: 'bg-critical',
 }
 
+/**
+ * What stretch of time a group of bars covers, in a student's words.
+ *
+ * The horizon's length is read from the engine rather than written out, so the sentence
+ * cannot come to name a different number of days from the one being measured.
+ */
+const SPAN_WORDS: Record<BarSpan, string> = {
+  now: 'Where today started',
+  horizon: `Across the next ${HORIZON_DAYS} days`,
+}
+
 export function DomainBarList({ bars }: { bars: readonly DomainBar[] }) {
   return (
     <ul className="flex flex-col gap-3">
-      {bars.map((bar) => (
+      {bars.map((bar, index) => (
         <li key={bar.key} className="flex flex-col gap-1">
+          {/* Said once where the span changes, not once per row: four reserve bars share
+              one reading and repeating it four times is noise. The boundary is real -- a
+              snapshot above, a fortnight below -- so it earns a heading. */}
+          {bar.span !== bars[index - 1]?.span && (
+            <p
+              data-testid={`span-${bar.span}`}
+              className="mt-1 text-xs uppercase tracking-wide text-ink-soft first:mt-0"
+            >
+              {SPAN_WORDS[bar.span]}
+            </p>
+          )}
           <div className="flex items-baseline justify-between gap-2 text-sm">
             <span>{bar.label}</span>
             <span className="flex items-center gap-2">

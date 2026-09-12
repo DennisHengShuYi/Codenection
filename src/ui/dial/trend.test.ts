@@ -32,4 +32,21 @@ describe('trendOf', () => {
   it('judges only the most recent days', () => {
     expect(trendOf([0, 0, 60, 50, 40])).toBe('falling')
   })
+
+  /**
+   * The default is calibrated for reserve points, where 1.5 on a 0-100 scale is noise. In
+   * hours it is a large change -- three days going from two to three and a quarter would read
+   * flat, which is most of a study block -- so a caller measuring something else passes its
+   * own. Pinned in both directions, because making a threshold a parameter is exactly the
+   * change that silently moves the default.
+   */
+  it('keeps its reserve-point default when no sensitivity is given', () => {
+    expect(trendOf([50, 50.4, 50.8])).toBe('flat')
+    expect(trendOf([50, 51, 52])).toBe('rising')
+  })
+
+  it('takes a sensitivity for a caller on a different scale', () => {
+    expect(trendOf([2, 2.5, 3], 0.5)).toBe('rising')
+    expect(trendOf([2, 2.5, 3], 5)).toBe('flat')
+  })
 })

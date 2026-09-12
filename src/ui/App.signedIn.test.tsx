@@ -39,14 +39,6 @@ vi.mock('../data', async (importOriginal) => {
   }
 })
 
-const carryOverWeek = vi.fn()
-vi.mock('../data/carryOver', () => ({
-  carryOverWeek: (from: unknown, to: unknown) => {
-    carryOverWeek(from, to)
-    return Promise.resolve()
-  },
-}))
-
 describe('App, signed in', () => {
   it('goes straight to the week rather than asking for a sign-in', async () => {
     render(<App />)
@@ -95,37 +87,11 @@ describe('App, signed in', () => {
   })
 })
 
-describe('signing in through the form', () => {
-  /**
-   * The copying used to live in the sign-in screen's callback. It now lives in the session
-   * hook, so that a Google redirect -- which never touches that screen -- gets it too. The
-   * risk that creates is the opposite one: the form path going through both and copying
-   * twice, which would put a preview over real data on the second pass.
-   */
-  it('carries the preview week across exactly once, even though Supabase also announces the sign-in', async () => {
-    currentSession = null
-    carryOverWeek.mockReset()
-    listeners.length = 0
-    signIn.mockResolvedValue({ ok: true, session: { userId: 'u1', email: 'student@um.edu.my' } })
-
-    render(<App />)
-    await waitFor(() => expect(screen.getByLabelText(/email/i)).toBeVisible())
-
-    await userEvent.type(screen.getByLabelText(/email/i), 'student@um.edu.my')
-    await userEvent.type(screen.getByLabelText(/password/i), 'longenough')
-    await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
-
-    await waitFor(() => expect(carryOverWeek).toHaveBeenCalledOnce())
-
-    // What Supabase does a moment later, every time.
-    listeners.forEach((notify) => notify({ userId: 'u1', email: 'student@um.edu.my' }))
-
-    expect(carryOverWeek).toHaveBeenCalledOnce()
-  })
-})
-
 describe('signing in', () => {
-  it('carries a preview week into the account and shows the room', async () => {
+  // The room renders for a signed-in account. It does *not* inherit the preview: since the
+  // carry-over was removed, browser storage and the account are separate stores, and what
+  // this proves is that the account still resolves to a usable week of its own.
+  it('opens on the room, on the account own week', async () => {
     currentSession = null
     const { unmount } = render(<App />)
     await waitFor(() =>

@@ -9,6 +9,7 @@ const bar = (over: Partial<DomainBar> = {}): DomainBar => ({
   value: 70,
   ceiling: 100,
   status: 'healthy',
+  span: 'now',
   trend: 'flat',
   warning: null,
   ...over,
@@ -101,5 +102,52 @@ describe('a bar with no measured direction', () => {
     render(<DomainBarList bars={[bar({ key: 'mental', trend: 'falling' })]} />)
 
     expect(screen.getByTestId('trend-mental')).toHaveAttribute('aria-label', 'falling')
+  })
+})
+
+/**
+ * Four bars are a snapshot and the fifth is a fortnight, so the list says which is which.
+ *
+ * Said once per group rather than once per row: the four reserve bars share a span, and
+ * repeating it four times is noise of exactly the kind the panel's intro sentence already
+ * avoids. The heading appears where the span changes, which is a real boundary in the data
+ * rather than a decoration.
+ */
+describe('the stretch of time each group covers', () => {
+  const reserveBar = (over: Partial<DomainBar> = {}) => bar({ span: 'now', ...over })
+  const densityBar = () =>
+    bar({ key: 'schedule', label: 'How packed the days are', span: 'horizon', trend: null })
+
+  it('heads the reserve bars with when the reading was taken', () => {
+    render(<DomainBarList bars={[reserveBar(), densityBar()]} />)
+
+    expect(screen.getByTestId('span-now')).toBeVisible()
+  })
+
+  it('heads the horizon bar with the stretch it measures', () => {
+    render(<DomainBarList bars={[reserveBar(), densityBar()]} />)
+
+    expect(screen.getByTestId('span-horizon')).toHaveTextContent(/21 days/i)
+  })
+
+  it('says each span once, however many bars share it', () => {
+    render(
+      <DomainBarList
+        bars={[reserveBar(), reserveBar({ key: 'social', label: 'People' }), densityBar()]}
+      />,
+    )
+
+    expect(screen.getAllByTestId('span-now')).toHaveLength(1)
+  })
+
+  it('puts the heading above the bars it describes', () => {
+    render(<DomainBarList bars={[reserveBar(), densityBar()]} />)
+
+    const heading = screen.getByTestId('span-horizon')
+    const meter = screen.getByRole('meter', { name: 'How packed the days are' })
+
+    expect(
+      Boolean(heading.compareDocumentPosition(meter) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true)
   })
 })

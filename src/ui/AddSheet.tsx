@@ -10,6 +10,7 @@ import { suggestRepeat } from '../domain/recurrence'
 import { beginConnect, readCalendar } from '../google/client'
 import { CalendarImportScreen } from './planner/CalendarImportScreen'
 import { calendarFor } from '../domain/calendar'
+import { titleVocabulary } from '../domain/titleVocabulary'
 import { dayLabelsFor } from './planner/dayLabels'
 import { PhotoImportScreen } from './planner/PhotoImportScreen'
 import { PlannerScreen } from './planner/PlannerScreen'
@@ -77,6 +78,7 @@ export function AddSheet({
   today,
   blockLog,
   predictions,
+  sleepTargetHours,
   onAcceptItems,
   onAcceptRequest,
   onClose,
@@ -96,6 +98,9 @@ export function AddSheet({
   /** §8.1's resolved predictions, forwarded to the request path so both rooms it draws run
    *  the model the rest of the app runs rather than the population one. */
   readonly predictions: readonly EnergyPrediction[]
+  /** The student's stated sleep target, forwarded to the request path so the room it draws
+   *  measures a shortfall against the same figure the room screen does. */
+  readonly sleepTargetHours?: number
   readonly onAcceptItems: (items: readonly ParsedItem[]) => void
   readonly onAcceptRequest: (item: ParsedItem) => void
   readonly onClose: () => void
@@ -130,6 +135,15 @@ export function AddSheet({
   /** Ruling 44: and the same week, said in the terms the two readers need. */
   const calendar = calendarFor(schedule, today)
 
+  /**
+   * What this student already calls things, for the paths where the name is the model's
+   * rather than theirs.
+   *
+   * Derived here rather than taken as a prop: this component already holds both the week and
+   * the block log, and a second caller computing it is a second answer to one question.
+   */
+  const vocabulary = titleVocabulary({ schedule, blockLog })
+
   if (way === 'photo') {
     return (
       <PhotoImportScreen
@@ -151,6 +165,7 @@ export function AddSheet({
       <PlannerScreen
         dayLabels={dayLabels}
         calendar={calendar}
+        vocabulary={vocabulary}
         suggestRepeat={(item) => suggestRepeat(item, schedule)}
         onAccept={(items) => {
           onAcceptItems(items)
@@ -197,6 +212,7 @@ export function AddSheet({
         today={today}
         blockLog={blockLog}
         predictions={predictions}
+        sleepTargetHours={sleepTargetHours}
         onAccept={(item) => {
           onAcceptRequest(item)
           close()

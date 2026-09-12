@@ -358,7 +358,7 @@ function rungOne(
   if (roomToday < MIN_GAP_HOURS) return CEILING_REACHED
 
   const wanted = Math.min(USEFUL_REST_HOURS, roomToday)
-  const fix = fixThatMakesRoom(schedule, REST_NEED(wanted), today, params)
+  const fix = fixThatMakesRoom(schedule, REST_NEED(wanted), today, params, today)
   if (fix === null) return NO_ROOM_TODAY
 
   const moved = fix.move.apply(schedule)

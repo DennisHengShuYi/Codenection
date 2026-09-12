@@ -81,7 +81,7 @@ export function createSupabaseRepository(
       const client = await getClient()
       const { data, error } = await client
         .from(BLOCK_LOG_TABLE)
-        .select('block_id, load_type, planned_hours, day_index, answer, answered_at')
+        .select('block_id, load_type, activity_kind, title, planned_hours, day_index, answer, answered_at')
         .eq('account_id', userId)
         // Ordered, because the contract has to mean one thing on both adapters. PostgREST
         // makes no ordering promise without this, while the local adapter returns insertion
@@ -97,6 +97,13 @@ export function createSupabaseRepository(
         (row): BlockRecord => ({
           blockId: row.block_id as string,
           type: row.load_type as BlockRecord['type'],
+          // Absent on anything written before migration 0008, which is the honest state:
+          // nothing recorded what those blocks were. They go on counting at the rung that
+          // never needed them.
+          ...(row.activity_kind === null || row.activity_kind === undefined
+            ? {}
+            : { kind: row.activity_kind as BlockRecord['kind'] }),
+          ...(row.title === null || row.title === undefined ? {} : { title: row.title as string }),
           plannedHours: row.planned_hours as number,
           dayIndex: row.day_index as number,
           answer: row.answer as BlockRecord['answer'],
@@ -112,6 +119,11 @@ export function createSupabaseRepository(
           account_id: userId,
           block_id: record.blockId,
           load_type: record.type,
+          // §2.4's two narrow rungs. Null rather than absent, so an answer corrected later
+          // by a path that has neither clears what a previous one wrote rather than leaving
+          // a stale title attached to it.
+          activity_kind: record.kind ?? null,
+          title: record.title ?? null,
           planned_hours: record.plannedHours,
           day_index: record.dayIndex,
           answer: record.answer,

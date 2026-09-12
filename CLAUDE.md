@@ -18,14 +18,42 @@ as `Ruling 41`, and are indexed in **`docs/rulings.md`**.
 ## Repository status
 
 Built and passing: the engine and optimizer, the room and week screens, the say-anything
-planner, photo and calendar import, Micro-Start, the Rest button, the request box, accounts,
-and the Telegram channel. `npx tsc --noEmit` is clean and `npm test` is green.
+planner, photo and calendar import, Micro-Start, the Rest button, the request box, the sleep
+page, accounts, and the Telegram channel. `npx tsc --noEmit` is clean and `npm test` is green.
+
+Sleep is worth a sentence of its own, because it spans four layers and its parts are easy to
+mistake for each other. `Schedule.sleepByDay` is the PLAN — what the app assumes each night
+will be, seeded from a target the student states on the sleep page. `domain/sleepLog` is the
+REPORT — which nights were actually answered, keyed by date, which is what lets the app tell
+"slept eight hours" from "nobody has asked yet". `domain/sleepReality` compares them and stays
+silent below three nights; `domain/sleepForecast` warns that an over-committed day will cost a
+night and deliberately stores nothing. Rulings 64 to 66 record why each is shaped that way.
 
 Known not built, with the spec amended to say so rather than promising it: §7.2's three-day
 painter and its parameter extraction, §7.7's calibration meter, §9's Malaysia-specific holiday
 and get-outside lists, and §6.4's rolling debt. There is also no server-side quota on the
 public AI endpoints — `plan`, `draft`, `read-photo` and `micro-start` spend the Groq budget
 unauthenticated, which `api/micro-start.ts` states in place.
+
+Sleep is worth reading about before changing anything near it, because four numbers that look
+alike answer different questions. `Schedule.sleepByDay[d]` is the night at the **end** of day d
+— §6.1 puts sleep in `recovery[d]`, which produces `reserve[d+1]` — and it holds what the app
+*assumes*, derived every render by `domain/sleepAssumed` from three durable facts in settings:
+a target, any night the student set, and `domain/sleepLog`'s reported nights. The three sleep
+figures that must never converge are `DEFAULT_SLEEP_HOURS` (8, the night assumed when nobody
+has said), `SLEEP_BASELINE_HOURS` (5, where sleep starts paying and below which it now costs)
+and `roomState.RESTED_NIGHT_HOURS` (7, the line below which a student counts as short).
+Rulings 64 to 68 record why each part is shaped as it is.
+
+One known-open item from the sleep work: `RoomShell.tsx` has grown well past the 800-line
+ceiling, because extracting the settings sheet was dropped from that change rather than done in
+a file being edited concurrently.
+
+Not built, and a decision is needed before it can be: learning a student's personal sleep
+*need* rather than taking their stated target. §7.7's "Not built" note on `sleepBaselineHours`
+explains why prediction residuals cannot identify it; the evidence that could is now collected
+(reported nights beside reported energy), but it needs a real estimator and an answer to what
+the app should say for a student whose sleep never varies.
 
 Where the source lives:
 

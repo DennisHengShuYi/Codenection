@@ -69,7 +69,12 @@ test('the two rooms stack rather than sitting side by side on a phone', async ({
   await openRequest(page)
   await priceIt(page)
 
-  const rooms = page.getByTestId('room-comparison').locator('svg')
+  // The scenes, not every `svg` inside the comparison. This located `svg` and took the first
+  // two, which held while each room drew exactly one -- then the corner gauge became a ring
+  // and every room gained a second. `nth(1)` was then the FIRST room's gauge, which sits at
+  // its top right, so a correctly stacked pair failed. `room-scene` is the element the
+  // assertion is actually about.
+  const rooms = page.getByTestId('room-comparison').getByTestId('room-scene')
   const first = await rooms.nth(0).boundingBox()
   const second = await rooms.nth(1).boundingBox()
 

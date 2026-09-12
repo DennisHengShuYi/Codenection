@@ -95,15 +95,15 @@ describe('the search budget, with every item carrying a soft deadline', () => {
       startHour: 14,
     }))
 
-    const stamped = stampSoftDeadlines(makeSchedule([...fixtures, ...movable]), 0, [])
-    const result = rebalance(stamped, DEFAULT_PARAMS, makeRng(5))
+    const stamped = stampSoftDeadlines(makeSchedule([...fixtures, ...movable]), 0)
+    const result = rebalance(stamped, DEFAULT_PARAMS, makeRng(5), 0)
 
     expect(result.evaluations).toBeGreaterThan(0)
     expect(result.evaluations).toBeLessThan(3_000)
   })
 
   it('gives every undated item a deadline, so the fixture above tests what it claims', () => {
-    const stamped = stampSoftDeadlines(makeSchedule([studyItem('a', 3, 2)]), 0, [])
+    const stamped = stampSoftDeadlines(makeSchedule([studyItem('a', 3, 2)]), 0)
 
     expect(stamped.items.every((item) => item.softDeadlineDay !== undefined)).toBe(true)
   })

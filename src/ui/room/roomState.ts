@@ -128,6 +128,22 @@ export function roomStateFor(
   today: number,
   /** Ruling 45: what the student has answered, so a block that is done is put away. */
   blockLog: readonly BlockRecord[],
+  /**
+   * The night the student says they are aiming for, when they have said.
+   *
+   * What `RESTED_NIGHT_HOURS` below has been waiting for: that constant is a population norm
+   * and its own docstring records the consequence -- "for a student who needs nine hours the
+   * bed under-reports" -- and that the fix "wants the same calibration the engine's side is
+   * waiting on, not a constant swapped here". This is that calibration, stated rather than
+   * inferred.
+   *
+   * Optional, and the fallback is deliberately `RESTED_NIGHT_HOURS` rather than
+   * `DEFAULT_SLEEP_HOURS`. Those answer different questions: 8 is the night the app assumes
+   * when nobody has told it, 7 is the line below which somebody counts as short. Falling back
+   * to 8 would wilt the bed for every student who had never opened the sleep page, which is a
+   * claim about them the app has no basis for making.
+   */
+  sleepTargetHours?: number,
 ): RoomState {
   const day = dayLoadFor(schedule, today, blockLog)
 
@@ -142,12 +158,25 @@ export function roomStateFor(
     (item) => item.type === 'errands' && !item.fixed,
   )
 
-  const averageSleep =
-    schedule.sleepByDay.length === 0
-      ? RESTED_NIGHT_HOURS
-      : schedule.sleepByDay.reduce((sum, hours) => sum + hours, 0) / schedule.sleepByDay.length
+  /*
+   * Only the nights already behind the student.
+   *
+   * This averaged the whole fortnight, so the bed reported a debt largely made of the app's
+   * own forecast -- and once `assumeSleep` began deriving the nights ahead from a measured
+   * average, most of that figure was a prediction rather than a loss. A debt is accrued: a
+   * student cannot owe sleep they have not yet failed to get. Short nights AHEAD are a
+   * warning, and the window and the forecast are what carry one.
+   *
+   * Nothing owed on the first morning, because nothing is behind them yet.
+   */
+  const behind = schedule.sleepByDay.slice(0, Math.max(0, today))
 
-  const sleepDebt = Math.max(0, RESTED_NIGHT_HOURS - averageSleep)
+  const averageSleep =
+    behind.length === 0
+      ? RESTED_NIGHT_HOURS
+      : behind.reduce((sum, hours) => sum + hours, 0) / behind.length
+
+  const sleepDebt = Math.max(0, (sleepTargetHours ?? RESTED_NIGHT_HOURS) - averageSleep)
 
   return {
     // Ruling 47: the same reading, in the object that can actually carry it.

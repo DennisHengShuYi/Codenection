@@ -95,7 +95,7 @@ describe('createStore (api/telegram.ts), recordBlockAnswer', () => {
   // §8b②'s vocabulary and columns, written as `outcomesFrom` and the today card's own
   // repository expect them -- `load_type`, `planned_hours`, `day_index`, and one of the
   // four answers, not the old `yes`/`no`/`partly`.
-  it('writes the four-answer vocabulary and the three new columns', async () => {
+  it('writes the four-answer vocabulary and every column the log reads', async () => {
     const { client, rows } = fakeClient()
     const store = createStore(client)
 
@@ -109,11 +109,38 @@ describe('createStore (api/telegram.ts), recordBlockAnswer', () => {
       account_id: 'account-1',
       block_id: 'b1',
       load_type: 'physical',
+      // Migration 0008's two, written as null rather than left out: an answer corrected by
+      // a path that has neither should clear what an earlier one wrote, not leave a stale
+      // title attached to it.
+      activity_kind: null,
+      title: null,
       planned_hours: 1.5,
       day_index: 3,
       answer: 'didnt',
       answered_at: new Date(5000).toISOString(),
     })
+  })
+
+  /** §2.4's narrow rungs reach the table when the bot could find the block on the week. */
+  it('writes what the block was when it knows', async () => {
+    const { client, rows } = fakeClient()
+    const store = createStore(client)
+
+    await store.recordBlockAnswer(
+      'account-1',
+      {
+        blockId: 'b1',
+        type: 'mental',
+        kind: 'studyBlock',
+        title: 'WIA3001 essay',
+        plannedHours: 2,
+        dayIndex: 1,
+        answer: 'longer',
+      },
+      5000,
+    )
+
+    expect(rows[0]).toMatchObject({ activity_kind: 'studyBlock', title: 'WIA3001 essay' })
   })
 })
 

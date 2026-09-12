@@ -176,14 +176,158 @@ describe('the two rows that are not ordinary objects', () => {
    * answered, so this is the number the week holds rather than a claim about the student's
    * night -- see the wording in `TodayPanel`.
    */
-  it('reads sleep off the day the panel is showing', () => {
-    expect(rowFor(week([], 6), 'bed')?.hours).toBe(6)
+  /**
+   * Rewritten with the off-by-one fix: this row reads LAST night, which is `today - 1`.
+   * `sleepByDay[d]` is the night at the END of day d, so what it read before was tonight.
+   */
+  it('reads the night that ended this morning', () => {
+    expect(rowFor(week([], 6), 'bed', 1)?.hours).toBe(6)
+  })
+
+  it('says it has nothing rather than showing a zero on the first morning', () => {
+    const row = rowFor(week([], 6), 'bed', 0)
+
+    expect(row?.reading).toBe('nothing recorded before this week')
   })
 
   it('follows the day, so yesterday and today can differ', () => {
     const schedule = { ...week(), sleepByDay: week().sleepByDay.map((_, day) => (day === 3 ? 5 : 9)) }
 
-    expect(rowFor(schedule, 'bed', 3)?.hours).toBe(5)
-    expect(rowFor(schedule, 'bed', 4)?.hours).toBe(9)
+    // Shifted by one against what this asserted before, for the same reason: day 3's row
+    // reports the night at the end of day 2, not the one at the end of day 3.
+    expect(rowFor(schedule, 'bed', 4)?.hours).toBe(5)
+    expect(rowFor(schedule, 'bed', 5)?.hours).toBe(9)
+  })
+})
+
+/**
+ * Loadline's SEE bullet wants load, contributing factors AND trends per object. The number is
+ * the load, the blocks behind an opened row are the factors, and this is the third.
+ */
+describe('the trend on a row', () => {
+  it('says the load is picking up when the next days are heavier', () => {
+    const schedule = week([
+      block({ id: 'a', dayIndex: 0, hours: 1 }),
+      block({ id: 'b', dayIndex: 1, hours: 2 }),
+      block({ id: 'c', dayIndex: 2, hours: 4 }),
+    ])
+
+    expect(rowFor(schedule, 'books')?.trend).toBe('picking up')
+  })
+
+  it('says nothing at all on an even run of days', () => {
+    const schedule = week([
+      block({ id: 'a', dayIndex: 0, hours: 2 }),
+      block({ id: 'b', dayIndex: 1, hours: 2 }),
+      block({ id: 'c', dayIndex: 2, hours: 2 }),
+    ])
+
+    expect(rowFor(schedule, 'books')?.trend).toBeNull()
+  })
+
+  it('says nothing on a row with nothing on it', () => {
+    expect(rowFor(week(), 'dumbbell')?.trend).toBeNull()
+  })
+
+  /** Boxes count things rather than hours, so its words are about a pile rather than time. */
+  it('speaks in things on the counted row', () => {
+    const errand = (id: string, dayIndex: number) =>
+      block({ id, dayIndex, hours: 1, type: 'errands', kind: 'errands' })
+    const schedule = week([errand('a', 2), errand('b', 2)])
+
+    expect(rowFor(schedule, 'boxes')?.trend).toBe('piling up')
+  })
+
+  /**
+   * The bed carries none, ever, and this is where that is recorded.
+   *
+   * Its figure is the week's own sleep number: `sleepByDay` defaults to 7 for a night nobody
+   * answered and nothing records whether it WAS answered, so the row already cannot tell
+   * "slept seven hours" from "nobody has asked yet". A direction drawn from that series would
+   * be a claim about data the app does not have.
+   */
+  it('leaves the bed without a trend, because nothing measured it', () => {
+    expect(rowFor(week(), 'bed')?.trend).toBeNull()
+  })
+})
+
+/**
+ * The bed, once nights have actually been answered.
+ *
+ * This row carried `trend: null` unconditionally, for one stated reason: it could not tell
+ * "slept eight hours" from "nobody has asked yet", so a direction drawn from `sleepByDay`
+ * would have been a claim about data the app did not have. `domain/sleepLog` removes exactly
+ * that reason -- and only that one, which is why the silence still holds without it.
+ */
+describe('the bed row and reported nights', () => {
+  it('says nothing when no night has been answered', () => {
+    expect(panelRowsFor(week(), 0, [], []).find((row) => row.id === 'bed')?.trend).toBeNull()
+  })
+
+  /** The shared evidence floor, same as everywhere else the app speaks about a student: two
+   *  points make a line out of a coincidence. */
+  it('says nothing on fewer nights than the app speaks on', () => {
+    expect(
+      panelRowsFor(week(), 0, [], [8, 5]).find((row) => row.id === 'bed')?.trend,
+    ).toBeNull()
+  })
+
+  /**
+   * Rising is GOOD news here, which is why the bed has its own wording rather than the hours
+   * vocabulary the study and exercise rows use. "Easing off" on a row about sleep would read
+   * as reassurance about the thing going wrong.
+   */
+  it('says nights are getting longer when they are', () => {
+    expect(panelRowsFor(week(), 0, [], [5, 6.5, 8]).find((row) => row.id === 'bed')?.trend).toBe(
+      'getting longer',
+    )
+  })
+
+  it('says nights are getting shorter when they are', () => {
+    expect(panelRowsFor(week(), 0, [], [8, 6.5, 5]).find((row) => row.id === 'bed')?.trend).toBe(
+      'getting shorter',
+    )
+  })
+
+  it('says nothing when reported nights are steady', () => {
+    expect(
+      panelRowsFor(week(), 0, [], [7, 7, 7]).find((row) => row.id === 'bed')?.trend,
+    ).toBeNull()
+  })
+})
+
+/**
+ * The bed is about last night, which is the night that shaped today.
+ *
+ * It read `sleepByDay[today]` and called it "sleep on this day". Under §6.1's arithmetic that
+ * index is the night at the END of today -- tonight, which has not happened -- so the row was
+ * reporting a plan and labelling it as a night.
+ */
+describe('the bed row and last night', () => {
+  const withNights = (hours: readonly number[]): Schedule => ({
+    ...week(),
+    sleepByDay: Array.from({ length: HORIZON_DAYS }, (_, day) => hours[day] ?? 8),
+  })
+
+  it('reads the night that ended this morning, not the one still ahead', () => {
+    const schedule = withNights([8, 5, 9])
+
+    expect(panelRowsFor(schedule, 2, []).find((row) => row.id === 'bed')?.hours).toBe(5)
+  })
+
+  /**
+   * Kept on the first morning, not dropped.
+   *
+   * Leaving it out was the first attempt, and Ruling 46 is why it was wrong: this panel is
+   * the LEGEND for the room's objects, the bed is still drawn on day 0, and a drawn object
+   * with no row is an object nothing explains. It stays and says it has nothing to report --
+   * see `reading` above.
+   */
+  it('keeps the row on the first morning, because the room still draws a bed', () => {
+    expect(panelRowsFor(week(), 0, []).find((row) => row.id === 'bed')).toBeDefined()
+  })
+
+  it('is there on every other morning too', () => {
+    expect(panelRowsFor(week(), 1, []).find((row) => row.id === 'bed')).toBeDefined()
   })
 })

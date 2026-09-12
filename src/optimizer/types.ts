@@ -33,6 +33,27 @@ export interface ScheduledItem {
    * this existed, which is what makes it optional. `domain/softDeadlines` owns it.
    */
   readonly softDeadlineDay?: number
+  /**
+   * §2.4's correction for this block, stamped from the block log before the engine sees it.
+   *
+   * Derived rather than stored, exactly like `softDeadlineDay` above: it is a reading of the
+   * log at a moment, not a property of the block, and a week saved with one baked in would
+   * carry a stale correction for ever. `domain/estimateBias` owns it, and `drain` falls back
+   * to the type-wide figure wherever it is absent.
+   */
+  readonly estimateBias?: number
+  /**
+   * The student was shown §2.4's correction for this work and accepted it, so `hours` is
+   * already the corrected figure.
+   *
+   * Persisted, unlike `estimateBias` above -- it records something the student did rather
+   * than a reading of the log, and a decision they made must survive the week being saved.
+   *
+   * Without it, accepting the app's own suggestion would be worse than ignoring it: the
+   * bigger number would be padded again, and two hours of work agreed at 3.8 would be
+   * charged as 7.2.
+   */
+  readonly paddedHours?: boolean
   /** Stronger than `fixed`. §5.1 calls structurally protected recovery the most
    *  important design decision in the app: the optimizer cannot move protected rest, and
    *  cannot schedule anything over it either. */
@@ -74,7 +95,46 @@ export interface Schedule {
   readonly items: readonly ScheduledItem[]
   readonly start: Reserves
   readonly horizonDays: number
+  /**
+   * Hours slept on the night at the END of each day, indexed by day.
+   *
+   * `sleepByDay[d]` is the night between day `d` and day `d + 1`, and that follows from
+   * §6.1's own arithmetic rather than being a convention anyone chose:
+   * `reserve[d+1] = reserve[d] - drain[d] + recovery[d] x efficiency[d]`, and sleep enters
+   * through `recovery[d]`. Sleeping well on Friday night is what you wake up with on
+   * Saturday, so that night is Friday's entry.
+   *
+   * Written down because it was not, and an off-by-one lived here for months as a result:
+   * the check-in card asks "how much sleep last night?" and wrote the answer to
+   * `sleepByDay[today]`, which is TONIGHT. Last night is `sleepByDay[today - 1]` --
+   * `domain/sleepPlan.lastNight` is the one place that subtraction is done. The report never
+   * reached the day it explained, so the app could not say "you are low today because you
+   * slept five hours", and tonight's plan was quietly overwritten by a night already past.
+   */
   readonly sleepByDay: readonly number[]
+  /**
+   * The clock hour after which work costs the solver extra, when the app knows it.
+   *
+   * `gapsOn` treats everything from `WAKE_HOUR` to midnight as placeable, so the solver has
+   * always been free to put work at 23:00 -- and nothing scored it, so among arrangements it
+   * was allowed to make it had no preference for protecting a night. Measured: asked for two
+   * hours near 09:00 on a full day, `hourNear` returns 22:00.
+   *
+   * The lower bound of that window was always a statement about when a student is awake --
+   * `WAKE_HOUR = 8` exists precisely so nothing lands at four in the morning. This is the
+   * upper bound finally saying the same thing.
+   *
+   * Stamped rather than derived. The resolved bedtime needs the student's target and any
+   * night they set, which live in settings and are unreachable from `src/optimizer`; and
+   * `sleepByDay` here already has the night's bite taken out of it, so deriving a bedtime
+   * from it would move with the very thing being measured.
+   *
+   * One figure for the fortnight rather than one per night, deliberately: this drives a
+   * tiebreaker, and a tiebreaker does not need to be right about the rare night a student
+   * set differently. Absent on weeks saved before this existed, and on any caller that has
+   * no reason to care -- then nothing is charged, exactly as before.
+   */
+  readonly bedHour?: number
   /**
    * The real date day 0 falls on, as YYYY-MM-DD, or absent for a week saved before anchoring
    * existed.

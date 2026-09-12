@@ -31,7 +31,19 @@ import { dateFor, todayIndex } from './calendar'
  * store as one opaque blob.
  */
 export interface PredictionBasis {
-  /** Mean nightly sleep over the days the claim spans. */
+  /**
+   * Mean nightly sleep over the days the claim spans.
+   *
+   * A mix, deliberately, and worth saying so because the name reads like one thing. Nights
+   * already past hold what the student reported, or the plan that stood if they said nothing;
+   * nights ahead hold what `domain/sleepAssumed` derives -- their target, lowered by their
+   * measured average and by whatever is booked over the night.
+   *
+   * That mix is the right figure for this field rather than a flaw in it: the claim being
+   * recorded is a projection made on a particular day, and what it *assumed* about sleep is
+   * exactly a real past plus a forecast future. Averaging only the reported nights would
+   * describe a different claim from the one that was made.
+   */
   readonly assumedSleepHours: number
   /** Total rest-block hours over the same span. */
   readonly assumedRestHours: number

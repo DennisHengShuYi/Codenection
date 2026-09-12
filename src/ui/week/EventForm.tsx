@@ -1,10 +1,11 @@
 import { useState, type JSX } from 'react'
-import { dateFor } from '../../domain/calendar'
+import { outcomesFrom, type BlockRecord } from '../../domain/blockLog'
+import { biasLineForBlock, paddingDetail } from '../../domain/realityCheck'
+import { titleVocabulary } from '../../domain/titleVocabulary'
 import { editWarnings } from '../../domain/editWarnings'
 import type { ItemFields } from '../../domain/scheduleEdits'
 import {
   BLOCK_KINDS,
-  HORIZON_DAYS,
   LOAD_TYPES,
   type ActivityKind,
   type EngineParams,
@@ -13,9 +14,18 @@ import {
 import { DAY_END_HOUR, type Schedule, type ScheduledItem } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { Field } from '../kit/Field'
+import { DayPicker } from './DayPicker'
 import { BLOCK_KIND_LABELS, hourLabel, LOAD_TYPE_LABELS } from '../kit/labels'
 import { Sheet } from '../kit/Sheet'
-import { blankDraft, candidate, draftFrom, isComplete, toFields, validate } from './eventDraft'
+import {
+  blankDraft,
+  candidate,
+  draftFrom,
+  isComplete,
+  toFields,
+  validate,
+  withHours,
+} from './eventDraft'
 
 /**
  * The day/time picker `blockActions` was waiting for.
@@ -63,6 +73,8 @@ export function EventForm({
   params,
   item,
   dayIndex,
+  today,
+  blockLog = [],
   onSave,
   onClose,
   onBack,
@@ -73,6 +85,13 @@ export function EventForm({
   readonly item: ScheduledItem | null
   /** Which day a NEW block starts on. Ignored when `item` is given, which carries its own. */
   readonly dayIndex: number
+  /** For naming the days. "Today" and "Tomorrow" are not recoverable from a date alone, and
+   *  they are the two a student is most likely to be picking. */
+  readonly today: number
+  /** §8b's durable log, for the names offered while typing. Defaulted to empty so a caller
+   *  with none -- and a student on their first day -- gets a plain field rather than an
+   *  error. */
+  readonly blockLog?: readonly BlockRecord[]
   readonly onSave: (fields: ItemFields) => void
   readonly onClose: () => void
   /** Ruling 60: one level up -- to the block, when there is one; to the week otherwise. */
@@ -80,9 +99,30 @@ export function EventForm({
 }): JSX.Element {
   // The one piece of state in the component. Everything else below is derived from it, which
   // is what `eventDraft.ts` is for.
+  const vocabulary = titleVocabulary({ schedule, blockLog })
+
+  const outcomes = outcomesFrom(blockLog)
+
   const [draft, setDraft] = useState(() =>
     item === null ? blankDraft(schedule, dayIndex) : draftFrom(item),
   )
+
+  // Nothing to say about a block with no name yet: the narrow rungs are keyed on what it is
+  // called, and a blank title matches nothing.
+  const bias = draft.title.trim() === '' ? null : biasLineForBlock(outcomes, draft)
+
+  /**
+   * The corrected hours, or null when there is nothing to offer.
+   *
+   * Null once the student has taken it, so the offer does not sit there restating a figure
+   * already in the field -- and null again the moment they type their own hours over it,
+   * because `withHours` gives the agreement up and a figure they chose has not been
+   * corrected by anything.
+   */
+  const padded =
+    bias === null || draft.paddedHours
+      ? null
+      : Math.round(draft.hours * paddingDetail(outcomes, draft).padding * 2) / 2
 
   const errors = validate(draft)
   const warnings = editWarnings({ schedule, item: candidate(draft, item), params })
@@ -94,7 +134,6 @@ export function EventForm({
    * offering a day the form then refuses to save -- Save greyed out with a message about a
    * day the student can plainly see in the list.
    */
-  const days = Array.from({ length: Math.min(schedule.horizonDays, HORIZON_DAYS) }, (_, index) => index)
 
   return (
     <Sheet
@@ -113,12 +152,33 @@ export function EventForm({
     >
       <div className="flex flex-col gap-3">
         <Field label="What" error={errors.title}>
+          {/*
+            What this student has called things before, offered while they type.
+
+            §2.4's narrow rungs group answers by title, so "gym" and "Gym session" are two
+            buckets neither of which ever fills. `taskKey` collapses what it can from the
+            words; this is the cheaper half of the fix -- the name already in use is one tap
+            away, so the second spelling never gets typed.
+
+            A native `<datalist>` rather than a built dropdown. The browser filters as they
+            type, announces it, and works on a phone keyboard, none of which a hand-rolled
+            list gets for free -- and the field stays a plain text box, so a name that is
+            genuinely new needs no escape hatch.
+          */}
           <input
+            list="what-before"
             value={draft.title}
             onChange={(event) => setDraft({ ...draft, title: event.target.value })}
             className={INPUT}
           />
         </Field>
+
+        {/* Outside the field, because `Field` clones a single child to attach its label. */}
+        <datalist id="what-before">
+          {vocabulary.map((known) => (
+            <option key={known.title} value={known.title} />
+          ))}
+        </datalist>
 
         <div className="flex flex-wrap gap-3">
           <Field label="Kind">
@@ -153,22 +213,17 @@ export function EventForm({
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Field label="Day" error={errors.dayIndex}>
-            <select
-              value={draft.dayIndex}
-              onChange={(event) => setDraft({ ...draft, dayIndex: Number(event.target.value) })}
-              className={INPUT}
-            >
-              {days.map((day) => (
-                // The real date where the week has been anchored to one, and the day number
-                // otherwise -- the same fallback the week grid's own labels use, so the two
-                // never name one day two different ways.
-                <option key={day} value={day}>
-                  {dateFor(schedule, day) ?? `Day ${day}`}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <DayPicker
+            schedule={schedule}
+            today={today}
+            value={draft.dayIndex}
+            label="Day"
+            error={errors.dayIndex}
+            testId="day-of-block"
+            // Required: a block has to be somewhere. `DayPicker` only reports null where a
+            // day is optional, so the fallback is unreachable here and states the type.
+            onChange={(dayIndex) => setDraft({ ...draft, dayIndex: dayIndex ?? draft.dayIndex })}
+          />
 
           <Field label="Starts at" error={errors.startHour}>
             <select
@@ -190,11 +245,75 @@ export function EventForm({
               min={0.5}
               step={0.5}
               value={draft.hours}
-              onChange={(event) => setDraft({ ...draft, hours: Number(event.target.value) })}
+              onChange={(event) => setDraft(withHours(draft, Number(event.target.value)))}
               className={INPUT}
             />
           </Field>
+
+          {/*
+            When it is due, as against when it is scheduled above.
+            
+            The one thing this form could not say. Every other way into the week states a
+            deadline -- the planner from what a student typed, the photo reader from a
+            timetable, the calendar import from the event's own date -- so a block added by
+            hand fell to the synthetic deadline its kind gets, and a wrong one could not be
+            corrected anywhere.
+
+            "Not set" is first and is the ordinary answer: most of what a student types in is
+            not due on any particular day, and `softDeadlines` covers those by kind.
+          */}
+          <DayPicker
+            schedule={schedule}
+            today={today}
+            value={draft.deadlineDay}
+            label="Due by"
+            error={errors.deadlineDay}
+            testId="deadline-day"
+            optional
+            onChange={(deadlineDay) => setDraft({ ...draft, deadlineDay })}
+          />
         </div>
+
+        {/*
+          §7.6, at the moment the estimate is being typed.
+
+          §2.4 pads silently and says a student need not know the parameter exists -- the
+          alternative is asking them to be more realistic, which does not work. "Need not
+          know" is not "must not be told", though, and this is the one moment the correction
+          is about a figure in front of them.
+
+          It quotes the rung that applies to *this* block, because that is what the engine
+          charges. A line quoting the area average would be describing a correction the app
+          is not making.
+        */}
+        {bias !== null && (
+          <div className="flex flex-wrap items-center gap-2">
+            <p data-testid="bias-line" className="text-xs text-ink-soft">
+              {bias}
+            </p>
+
+            {/*
+              Offered, not applied.
+
+              Padding behind the student is right for a model and wrong for a calendar: an
+              hour the app privately thinks is two is still an hour they plan their evening
+              around. Accepting writes the corrected figure into the block, so the calendar
+              says what the work will actually take -- and sets `paddedHours`, without which
+              the model would pad the bigger number again and taking the advice would cost
+              more than ignoring it.
+            */}
+            {padded !== null && (
+              <Button
+                size="sm"
+                variant="secondary"
+                data-testid="use-padded-hours"
+                onClick={() => setDraft({ ...draft, hours: padded, paddedHours: true })}
+              >
+                Plan {padded}h instead
+              </Button>
+            )}
+          </div>
+        )}
 
         {/* §5.1's boundary, drawn where the student can see it -- the same checkbox
             `ItemChip` offers when something is first read in, offered again here because a

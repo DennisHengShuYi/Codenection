@@ -1,5 +1,6 @@
 import { COMMANDS } from './commands'
 import { describe, expect, it } from 'vitest'
+import { SLEEP_HOURS } from '../domain/sleepPlan'
 import type { ParsedItem } from '../ai'
 import {
   MAX_ECHO_LENGTH,
@@ -202,7 +203,7 @@ describe('blocksReply', () => {
   ]
 
   it('names each block and when it was', () => {
-    const reply = blocksReply('today', blocks)
+    const reply = blocksReply('today', blocks, [], { today: 1, hour: 23 })
 
     expect(reply.text).toContain('Ethics essay')
     expect(reply.text).toContain('Shift')
@@ -211,7 +212,7 @@ describe('blocksReply', () => {
   // §8b②: the same four answers as the today card, in the same order, so a student who
   // answers in both places is never asked two different questions.
   it('offers the same four answers as the today card, for the first unanswered block', () => {
-    const buttons = blocksReply('today', blocks).buttons?.flat() ?? []
+    const buttons = blocksReply('today', blocks, [], { today: 1, hour: 23 }).buttons?.flat() ?? []
 
     expect(buttons.map((button) => button.label)).toEqual([
       "Didn't happen",
@@ -224,13 +225,13 @@ describe('blocksReply', () => {
   // §8b②: the callback is the only place the block's type, planned hours and day index
   // survive the round trip back to `recordBlockAnswer`.
   it("carries the first block's type, planned hours and day index in every button", () => {
-    const actions = blocksReply('today', blocks).buttons?.flat().map((button) => button.data) ?? []
+    const actions = blocksReply('today', blocks, [], { today: 1, hour: 23 }).buttons?.flat().map((button) => button.data) ?? []
 
     expect(actions.every((action) => action.startsWith('block:b1:m:2:1:'))).toBe(true)
   })
 
   it('says so plainly when the day had nothing on it', () => {
-    const reply = blocksReply('today', [])
+    const reply = blocksReply('today', [], [], { today: 1, hour: 23 })
 
     expect(reply.text).toMatch(/nothing/i)
     expect(reply.buttons).toBeUndefined()
@@ -243,14 +244,14 @@ describe('blocksReply', () => {
    * way: `blockToAsk` skips what the log already holds and moves on.
    */
   it('moves on to the next block once the first has been answered', () => {
-    const actions = blocksReply('today', blocks, ['b1']).buttons?.flat().map((b) => b.data) ?? []
+    const actions = blocksReply('today', blocks, ['b1'], { today: 1, hour: 23 }).buttons?.flat().map((b) => b.data) ?? []
 
     expect(actions.length).toBe(4)
     expect(actions.every((action) => action.startsWith('block:b2:s:3:1:'))).toBe(true)
   })
 
   it('asks nothing once every block on the day has been answered', () => {
-    const answered = blocksReply('today', blocks, ['b1', 'b2'])
+    const answered = blocksReply('today', blocks, ['b1', 'b2'], { today: 1, hour: 23 })
 
     expect(answered.buttons).toBeUndefined()
     // The day is still worth listing -- the student asked what was on it.
@@ -259,7 +260,7 @@ describe('blocksReply', () => {
   })
 
   it('still lists every block on the day, not only the one being asked about', () => {
-    const text = blocksReply('today', blocks, ['b1']).text
+    const text = blocksReply('today', blocks, ['b1'], { today: 1, hour: 23 }).text
 
     expect(text).toContain('Ethics essay')
     expect(text).toContain('Shift')
@@ -284,7 +285,7 @@ describe('blocksReply', () => {
       },
     ]
 
-    for (const button of blocksReply('today', longest).buttons?.flat() ?? []) {
+    for (const button of blocksReply('today', longest, [], { today: 1, hour: 23 }).buttons?.flat() ?? []) {
       expect(new TextEncoder().encode(button.data).length).toBeLessThanOrEqual(64)
     }
   })
@@ -445,9 +446,12 @@ describe('askReply', () => {
 
 describe('the wording at its edges', () => {
   it('labels yesterday as yesterday, not as today', () => {
-    const reply = blocksReply('yesterday', [
-      { id: 'b1', title: 'Shift', startHour: 17, type: 'social', hours: 3, dayIndex: 1 },
-    ])
+    const reply = blocksReply(
+      'yesterday',
+      [{ id: 'b1', title: 'Shift', startHour: 17, type: 'social', hours: 3, dayIndex: 1 }],
+      [],
+      { today: 2, hour: 9 },
+    )
 
     expect(reply.text).toMatch(/yesterday/i)
   })
@@ -611,10 +615,19 @@ describe('checkInReply', () => {
     expect(labels.join(' ')).toMatch(/empty/i)
   })
 
-  it('asks for sleep in the same four buckets', () => {
+  /**
+   * Five since Ruling 67, and asserted against the card's own record rather than a literal.
+   *
+   * A short night costs reserve now, so the top bucket could not stop at 8.5 -- the recovery
+   * night after a bad week is the one most worth recording. Counting `SLEEP_HOURS` instead of
+   * a number means adding a sixth bucket to one surface and not the other fails here, which
+   * is the disagreement §8b② forbids: a student answering in both places must not meet two
+   * different questions.
+   */
+  it('asks for sleep in the same buckets the card offers', () => {
     const labels = checkInReply('sleep').buttons?.flat().map((button) => button.label) ?? []
 
-    expect(labels).toHaveLength(4)
+    expect(labels).toHaveLength(Object.keys(SLEEP_HOURS).length)
   })
 
   /** A student who answers in both places must not meet two different questions (§8b②). */
@@ -700,18 +713,18 @@ describe('blocksReply as a day opened from the fortnight', () => {
   ]
 
   it('offers a way back to the fortnight', () => {
-    const data = blocksReply('today', blocks, [], { replacing: true }).buttons?.flat().map((b) => b.data) ?? []
+    const data = blocksReply('today', blocks, [], { today: 1, hour: 23 }, { replacing: true }).buttons?.flat().map((b) => b.data) ?? []
 
     expect(data).toContain('back:schedule')
   })
 
   it('replaces the fortnight it was opened from', () => {
-    expect(blocksReply('today', blocks, [], { replacing: true }).replaceMessage).toBe(true)
+    expect(blocksReply('today', blocks, [], { today: 1, hour: 23 }, { replacing: true }).replaceMessage).toBe(true)
   })
 
   it('stays an ordinary message for a plain /today', () => {
-    expect(blocksReply('today', blocks).replaceMessage).toBeUndefined()
-    expect(blocksReply('today', blocks).buttons?.flat().some((b) => b.data === 'back:schedule')).toBe(false)
+    expect(blocksReply('today', blocks, [], { today: 1, hour: 23 }).replaceMessage).toBeUndefined()
+    expect(blocksReply('today', blocks, [], { today: 1, hour: 23 }).buttons?.flat().some((b) => b.data === 'back:schedule')).toBe(false)
   })
 })
 
@@ -735,5 +748,65 @@ describe('the help text against what the door actually accepts', () => {
 
   it('says a voice note works, because it does', () => {
     expect(helpReply().text).toMatch(/voice/i)
+  })
+})
+
+/**
+ * The bot asked about blocks that had not happened.
+ *
+ * `blocksReply` took the first unanswered block on the day with no clock in sight, so
+ * `/today` at 9am asked "Did the 8pm essay happen?" and `/day` asked about days still ahead.
+ * Whatever the student tapped went into the block log as a measurement of a block they had
+ * not lived, and estimate bias -- the number behind the app's published accuracy -- is
+ * computed from those.
+ *
+ * The today card has never done this: `blockToAsk` has required a clock since it was
+ * written, for this exact reason. §8b② says the two surfaces must not ask different
+ * questions, and two copies of one rule is how they came to. `hasHappened` is one rule in
+ * `domain/dayBlocks` now, and this is its second caller.
+ */
+describe('blocksReply, asking only about what has happened', () => {
+  const evening = {
+    id: 'b1',
+    title: 'Ethics essay',
+    startHour: 20,
+    type: 'mental' as const,
+    hours: 2,
+    dayIndex: 1,
+  }
+
+  it('lists a block that has not happened but does not ask about it', () => {
+    const reply = blocksReply('today', [evening], [], { today: 1, hour: 9 })
+
+    expect(reply.text).toContain('Ethics essay')
+    expect(reply.text).not.toMatch(/did .*happen/i)
+    expect(reply.buttons).toBeUndefined()
+  })
+
+  it('asks once the block has finished', () => {
+    const reply = blocksReply('today', [evening], [], { today: 1, hour: 22 })
+
+    expect(reply.text).toMatch(/did .*happen/i)
+  })
+
+  it('never asks about a day still ahead', () => {
+    const reply = blocksReply('today', [{ ...evening, dayIndex: 5 }], [], { today: 1, hour: 23 })
+
+    expect(reply.buttons).toBeUndefined()
+  })
+
+  it('asks about anything on a day already behind us, whatever the hour', () => {
+    const reply = blocksReply('yesterday', [{ ...evening, dayIndex: 0 }], [], { today: 1, hour: 1 })
+
+    expect(reply.text).toMatch(/did .*happen/i)
+  })
+
+  /** Opened from the fortnight, a day with nothing to ask about must still offer the way
+   *  back -- otherwise every future day is a dead end in the chat. */
+  it('keeps the way back on a day it has nothing to ask about', () => {
+    const reply = blocksReply('today', [evening], [], { today: 1, hour: 9 }, { replacing: true })
+
+    expect(reply.replaceMessage).toBe(true)
+    expect(reply.buttons?.flat().map((button) => button.data)).toContain('back:schedule')
   })
 })

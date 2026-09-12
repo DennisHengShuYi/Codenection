@@ -70,6 +70,27 @@ describe('RequestBoxScreen', () => {
   })
 
   /**
+   * Which reserve, not "you".
+   *
+   * This figure is one reserve -- the one the request actually spends -- while
+   * `describeRebalance` says "your worst day goes from 41 to 44" about the floor across all
+   * four. Both were phrased as happening to *you*, so they read as one number a student could
+   * compare, and they are not comparable: a mental ask barely touches the overall floor,
+   * which is usually social isolation weeks out.
+   *
+   * Nothing asserted this sentence's wording before, only that it contained a digit -- so it
+   * could be reworded, or lose the figures entirely, without a test noticing.
+   */
+  it('says which reserve the figures are about', async () => {
+    setup()
+    await ask()
+
+    const said = screen.getByTestId('request-cost').textContent
+    expect(said).toMatch(/Life admin/)
+    expect(said).not.toMatch(/takes you from/)
+  })
+
+  /**
    * §2.4's whole point is that a student's own estimate bias, learned from Reality Check,
    * is measurably different from the population default -- so the one screen pricing a
    * commitment for them must price it with their own calibrated numbers, not everyone

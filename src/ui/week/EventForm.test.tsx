@@ -38,6 +38,7 @@ const setup = (over: Partial<Parameters<typeof EventForm>[0]> = {}) => {
       params={DEFAULT_PARAMS}
       item={null}
       dayIndex={3}
+      today={0}
       onSave={onSave}
       onClose={onClose}
       onBack={onBack}
@@ -225,5 +226,301 @@ describe('correcting what a block is and when it happens', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ fixed: false }))
+  })
+})
+
+/**
+ * The deadline, which this form could not set until now.
+ *
+ * Every other way into the week could state one -- the planner reads it out of what a
+ * student typed, the photo reader off a timetable, the calendar import off the event's own
+ * date. The one surface a student fills in by hand could not, so a block added here fell to
+ * the synthetic deadline its kind gets and there was no way to correct a wrong one.
+ */
+describe('setting when something is due', () => {
+  it('offers a due date, and defaults to none', () => {
+    setup()
+
+    expect(screen.getByTestId('deadline-day')).toHaveValue('')
+  })
+
+  it('saves the due date the student picked', async () => {
+    const props = setup()
+
+    await userEvent.type(screen.getByLabelText('What'), 'Essay')
+    await userEvent.selectOptions(screen.getByTestId('deadline-day'), '6')
+    await userEvent.click(screen.getByTestId('save-block'))
+
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ deadlineDay: 6 }))
+  })
+
+  /** Undated is the ordinary case, and has to stay sayable: most things a student types in
+   *  are not due on any particular day, and the kind's own interval covers those. */
+  it('lets a due date be taken back off', async () => {
+    const props = setup({ item: item('essay', { deadlineDay: 6 }) })
+
+    await userEvent.selectOptions(screen.getByTestId('deadline-day'), '')
+    await userEvent.click(screen.getByTestId('save-block'))
+
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ deadlineDay: null }))
+  })
+
+  it('opens on the due date a block already has', () => {
+    setup({ item: item('essay', { deadlineDay: 6 }) })
+
+    expect(screen.getByTestId('deadline-day')).toHaveValue('6')
+  })
+
+  /** Not a warning like a clash: a block after its own deadline cannot be reconciled by any
+   *  later rearrangement, so the save is held until one of the two moves. */
+  it('refuses a day that falls after the due date, and says which way round', async () => {
+    const props = setup()
+
+    await userEvent.type(screen.getByLabelText('What'), 'Essay')
+    await userEvent.selectOptions(screen.getByTestId('deadline-day'), '1')
+    await userEvent.click(screen.getByTestId('save-block'))
+
+    expect(props.onSave).not.toHaveBeenCalled()
+    expect(screen.getByText(/due before the day/i)).toBeVisible()
+  })
+})
+
+/**
+ * The days, named the way the rest of the app names them.
+ *
+ * This form printed raw ISO dates -- `2026-09-15` -- in both its day pickers, while the
+ * planner's chip asked the same question with `dayLabel`: "Today", "Tomorrow", "Fri 12 Sep".
+ * Two vocabularies for one question, which `kit/labels.ts` names as the way "the planner and
+ * the week come to call the same thing different things". `calendar.ts` already holds the
+ * one answer; this reads it rather than formatting a second.
+ */
+describe('how the days are named', () => {
+  it('calls today Today', () => {
+    setup({ today: 3 })
+
+    expect(screen.getByTestId('deadline-day')).toHaveTextContent(/Today/)
+  })
+
+  it('calls tomorrow Tomorrow', () => {
+    setup({ today: 3 })
+
+    expect(screen.getByTestId('deadline-day')).toHaveTextContent(/Tomorrow/)
+  })
+
+  /**
+   * Rewritten: a week with real dates gets a real calendar, where naming the days is the
+   * browser's job and doing it ourselves would mean drawing a month view to put the names
+   * in. The three tests above still cover the naming, because they run on the fallback --
+   * a week with no `startedOn` has no dates to show a calendar of, and that is the seeded
+   * fortnight's ordinary state.
+   */
+  it('offers a calendar once the week has real dates to show', () => {
+    setup({ today: 0, schedule: { ...week(), startedOn: '2026-09-12' } })
+
+    expect(screen.getByTestId('deadline-day')).toHaveAttribute('type', 'date')
+  })
+
+  it('names the scheduling day the same way', () => {
+    setup({ today: 3 })
+
+    expect(screen.getByTestId('day-of-block')).toHaveTextContent(/Today/)
+  })
+})
+
+/**
+ * What you have called things before, offered while you type.
+ *
+ * §2.4's narrow rungs group answers by title, so "gym" and "Gym session" are two buckets
+ * neither of which fills. `taskKey` collapses what it can from the words; this is the
+ * cheaper half of the fix -- the name already in use is one tap away, so the second spelling
+ * never gets typed.
+ *
+ * A native `<datalist>` rather than a built dropdown: the browser filters as the student
+ * types, announces it, and works on a phone keyboard, none of which a hand-rolled list gets
+ * for free. It also stays a plain text field, so a name that is genuinely new needs no
+ * escape hatch.
+ */
+describe('names offered while typing', () => {
+  const answeredGym = {
+    blockId: 'gym-1',
+    type: 'physical' as const,
+    kind: 'hardExercise' as const,
+    title: 'Gym',
+    plannedHours: 1,
+    dayIndex: 0,
+    answer: 'right' as const,
+    answeredAt: 1,
+  }
+
+  /** A datalist option carries a value and no text, so the value is what to read. */
+  const offered = (): string[] =>
+    [...document.querySelectorAll('#what-before option')].map((option) =>
+      option.getAttribute('value') ?? '',
+    )
+
+  it('offers what is already in the week', () => {
+    setup({ schedule: week([item('lab', { title: 'WIA3001 lab' })]) })
+
+    expect(offered()).toContain('WIA3001 lab')
+  })
+
+  it('offers what the student has answered for before', () => {
+    setup({ blockLog: [answeredGym] })
+
+    expect(offered()).toContain('Gym')
+  })
+
+  it('leaves the field a plain text box, so a new name needs no escape hatch', () => {
+    setup({ blockLog: [answeredGym] })
+
+    const field = screen.getByLabelText('What')
+
+    expect(field).toHaveAttribute('list')
+    expect(field.tagName).toBe('INPUT')
+  })
+})
+
+/**
+ * What the app will quietly do to this estimate, said before it is added.
+ *
+ * §2.4 pads a student's hours silently and is explicit that they need not know the parameter
+ * exists -- the alternative is asking them to be more realistic, which does not work. But
+ * "need not know" is not "must not be told", and the moment a figure is being typed is the
+ * one moment the correction is about something in front of them.
+ *
+ * It quotes the rung that actually applies to this block, not the area average: the app
+ * charges `paddingForItem`, and a line quoting anything else would describe a correction it
+ * is not making.
+ */
+describe('what it will do with the hours you typed', () => {
+  const answered = (title: string, actualHours: number) => ({
+    blockId: `${title}-${actualHours}-${Math.random()}`,
+    type: 'mental' as const,
+    kind: 'studyBlock' as const,
+    title,
+    plannedHours: 2,
+    dayIndex: 0,
+    answer: actualHours > 2 ? ('longer' as const) : ('right' as const),
+    answeredAt: 1,
+  })
+
+  const overran = (title: string, count: number) =>
+    Array.from({ length: count }, () => answered(title, 4))
+
+  it('says what it will allow for, once it has measured this work', async () => {
+    setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+
+    expect(await screen.findByTestId('bias-line')).toHaveTextContent(/WIA3001 essay/i)
+  })
+
+  /**
+   * Offered, not applied.
+   *
+   * §2.4 pads behind the student, which is right for a model and wrong for a calendar: an
+   * hour the app privately thinks is two is an hour the student still plans their evening
+   * around. The offer puts the corrected figure where they can accept it, and accepting
+   * writes it into the block -- so the calendar says what the work will actually take.
+   *
+   * Accepting must also stop the model padding it again, or taking the app's advice would
+   * cost more than ignoring it. That is `paddedHours`, and `domain/estimateBias` honours it.
+   */
+  it('offers the corrected hours rather than applying them', async () => {
+    setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+
+    // A fresh block starts at one hour, and this history runs 1.5x over.
+    expect(await screen.findByTestId('use-padded-hours')).toHaveTextContent(/1\.5/)
+    // Untouched until the student says so.
+    expect(screen.getByLabelText('Hours')).toHaveValue(1)
+  })
+
+  it('writes the corrected figure into the block when it is accepted', async () => {
+    const props = setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+    await userEvent.click(await screen.findByTestId('use-padded-hours'))
+    await userEvent.click(screen.getByTestId('save-block'))
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ hours: 1.5, paddedHours: true }),
+    )
+  })
+
+  it('stops offering once it has been taken', async () => {
+    setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+    await userEvent.click(await screen.findByTestId('use-padded-hours'))
+
+    expect(screen.queryByTestId('use-padded-hours')).toBeNull()
+  })
+
+  /** Typing over the figure is a new estimate, and a new estimate has not been corrected. */
+  it('offers again when the student types their own hours over it', async () => {
+    setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+    await userEvent.click(await screen.findByTestId('use-padded-hours'))
+    await userEvent.clear(screen.getByLabelText('Hours'))
+    await userEvent.type(screen.getByLabelText('Hours'), '2')
+
+    expect(await screen.findByTestId('use-padded-hours')).toBeVisible()
+  })
+
+  it('saves the hours the student typed when the offer is left alone', async () => {
+    const props = setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+    await userEvent.click(screen.getByTestId('save-block'))
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ hours: 1, paddedHours: false }),
+    )
+  })
+
+  it('says nothing before anything has been typed', () => {
+    setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    expect(screen.queryByTestId('bias-line')).toBeNull()
+  })
+
+  /**
+   * Not a silence -- the ladder working. A title it has never seen still belongs to a kind
+   * it has, and what it knows about studying is the honest thing to say about a study block
+   * with a new name on it.
+   */
+  it('falls back to what it knows about the kind when the name is new', async () => {
+    setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    // No word in common with "WIA3001 essay", so containment finds no family and the task
+    // rung has nothing -- which is the fall-through this is about.
+    await userEvent.type(screen.getByLabelText('What'), 'Revision')
+
+    expect(await screen.findByTestId('bias-line')).toHaveTextContent(/studying/i)
+  })
+
+  /** Silence takes all three rungs failing, which is the ladder's whole point: an unmeasured
+   *  task falls to its kind, an unmeasured kind to its area, and only work with nothing
+   *  behind it at any level gets no line. */
+  it('says nothing about work it has never measured at any level', async () => {
+    setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    await userEvent.type(screen.getByLabelText('What'), 'Climbing')
+    // Kind sets the area of life, Detail sets the activity -- the two middle rungs.
+    await userEvent.selectOptions(screen.getByLabelText('Kind'), 'physical')
+    await userEvent.selectOptions(screen.getByLabelText('Detail'), 'hardExercise')
+
+    expect(screen.queryByTestId('bias-line')).toBeNull()
+  })
+
+  it('says nothing at all without history', async () => {
+    setup()
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+
+    expect(screen.queryByTestId('bias-line')).toBeNull()
   })
 })

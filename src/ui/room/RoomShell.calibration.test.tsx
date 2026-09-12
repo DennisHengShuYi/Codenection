@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../../data'
 import type { BlockRecord } from '../../domain/blockLog'
+import { isoDateOf } from '../../domain/calendar'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule, ScheduledItem } from '../../optimizer'
 import { RoomShell } from './RoomShell'
@@ -112,27 +113,16 @@ describe('RoomShell with a block to confirm', () => {
   })
 
   /**
-   * §7.9: "no" is a neutral answer that feeds the model, not a failure. It must be
-   * recorded rather than discarded.
+   * The "Didn't happen" answer is no longer offered anywhere in the app, so the test that
+   * pressed it is gone with it.
+   *
+   * What it was protecting still holds where it can: `didnt` remains a `BlockAnswer`, the
+   * bot still writes it, and `softDeadlines` still reads it by name so a rest answered that
+   * way does not satisfy the rest rhythm. What the app can no longer tell apart is "I
+   * skipped it" from "I never said" -- and neither satisfies the rhythm, so the distinction
+   * cost evidence rather than correctness.
    */
-  it('records a no as data rather than throwing it away', async () => {
-    const onAnswerBlock = vi.fn()
-    counter += 1
-    const repository = createLocalRepository(`calibration-no-${counter}`)
-    await repository.clear()
-    await repository.saveWeek(week({ items: [item({ dayIndex: 0 })] }))
 
-    render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={onAnswerBlock} />)
-    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one starts
-    // with the press a student would make.
-    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
-    await userEvent.click(screen.getByTestId('open-notices'))
-    await waitFor(() => expect(screen.getByTestId('answer-didnt')).toBeVisible())
-
-    await userEvent.click(screen.getByTestId('answer-didnt'))
-
-    expect(onAnswerBlock).toHaveBeenCalledWith(expect.objectContaining({ answer: 'didnt' }))
-  })
 
   it('a block already answered in the log is not asked about again', async () => {
     const answered = [
@@ -194,13 +184,32 @@ describe('RoomShell with a block to confirm', () => {
    * -- see `checkIn.ts`'s own doc comment. This is the level that proves `RoomShell` really
    * wires the answer through to the stored week, not just that `withSleep` itself works.
    */
+  /**
+   * Anchored three days back, where it used to run on an unanchored week.
+   *
+   * The card reports LAST night, which is `sleepByDay[today - 1]`: that array is keyed by the
+   * day a night ends, because §6.1 puts sleep in `recovery[d]` and `recovery[d]` produces
+   * `reserve[d+1]`. On a week starting today there is no such entry at all -- the night began
+   * before the fortnight -- so the figure goes only to the durable log, which
+   * `RoomShell.sleep.test.tsx` covers. This case keeps its own claim, that the answer reaches
+   * the saved week, by giving the week a night to reach.
+   *
+   * The anchor is a LOCAL date. `toISOString()` is UTC and the app derives the student's day
+   * locally (§9), so a UTC anchor puts today on day 4 for the first eight hours of every day
+   * and this assertion would fail on the clock rather than on the code.
+   */
   it('recording a night of sleep on the today card writes it into the saved week', async () => {
-    const repository = await renderHome()
+    const startedOn = isoDateOf(new Date(Date.now() - 3 * 24 * 60 * 60 * 1000))
+    const repository = await renderHome(week({ startedOn }))
     await waitFor(() => expect(screen.getByTestId('sleep-under5')).toBeVisible())
 
     await userEvent.click(screen.getByTestId('sleep-under5'))
 
-    await waitFor(async () => expect((await repository.loadWeek())?.sleepByDay[0]).toBe(4.5))
+    await waitFor(async () => expect((await repository.loadWeek())?.sleepByDay[2]).toBe(4.5))
+    // Not tonight, which has not happened. Asserted as "not last night's figure" rather
+    // than as a number, because the nights from today onward are derived now
+    // (`domain/sleepAssumed`) and no longer the fixture's own.
+    expect((await repository.loadWeek())?.sleepByDay[3]).not.toBe(4.5)
   })
 
   it('dismissing the today card with "Not now" hides it without answering anything', async () => {
@@ -238,10 +247,15 @@ describe('RoomShell with a block to confirm', () => {
     }))
 
     render(<RoomShell repository={repository} blockLog={overran} onAnswerBlock={vi.fn()} />)
-    // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one starts
-    // with the press a student would make.
-    await waitFor(() => expect(screen.getByTestId('open-notices')).toBeVisible())
-    await userEvent.click(screen.getByTestId('open-notices'))
+
+    // Through the add form, because that is where the line lives now: it belongs where an
+    // estimate is being made rather than where one is being reported on. The wiring under
+    // test is unchanged -- that the durable log reaches the sentence at all.
+    await waitFor(() => expect(screen.getByTestId('open-week')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-week'))
+    await userEvent.click(await screen.findByTestId('day-3'))
+    await userEvent.click(await screen.findByTestId('add-block'))
+    await userEvent.type(await screen.findByLabelText('What'), 'Essay')
 
     await waitFor(() =>
       expect(screen.getByTestId('bias-line')).toHaveTextContent(

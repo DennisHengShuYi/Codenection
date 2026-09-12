@@ -8,6 +8,7 @@ import { priceRequest, type RequestCost } from '../../domain/requestCost'
 import type { EngineParams } from '../../engine'
 import type { Schedule } from '../../optimizer'
 import { Button } from '../kit/Button'
+import { LOAD_TYPE_LABELS } from '../kit/labels'
 import { Card } from '../kit/Card'
 import { Field } from '../kit/Field'
 import { Sheet } from '../kit/Sheet'
@@ -39,7 +40,8 @@ const roomFor = (
   blockLog: readonly BlockRecord[],
   predictions: readonly EnergyPrediction[],
   today: number,
-) => roomModel({ schedule, today, blockLog, predictions })
+  sleepTargetHours: number | undefined,
+) => roomModel({ schedule, today, blockLog, predictions, sleepTargetHours })
 
 /**
  * §2.3's request box.
@@ -61,6 +63,7 @@ export function RequestBoxScreen({
   today,
   blockLog,
   predictions,
+  sleepTargetHours,
   onAccept,
   onBack,
   onClose,
@@ -81,6 +84,15 @@ export function RequestBoxScreen({
    *  drawn on this screen must run the model the rest of the app runs, not the population
    *  one. This is the call site the identical mistake was made at once already. */
   predictions: readonly EnergyPrediction[]
+  /**
+   * The night the student says they are aiming for, forwarded for the same reason the block
+   * log and the predictions are: both rooms this screen draws must run the same model.
+   *
+   * Without it the bed here measured a shortfall against the population norm while the room
+   * screen measured it against the student's own figure -- two beds for one week, on two
+   * screens, which is the class of disagreement `roomFor`'s own comment exists to stop.
+   */
+  sleepTargetHours?: number
   onAccept: (item: ParsedItem) => void
   /** Ruling 60: one level up, to the chooser this was chosen from. */
   onBack: () => void
@@ -202,10 +214,16 @@ export function RequestBoxScreen({
 
             {/* Stated in reserve, the app's own unit. §2.3 says "pushes you to 105%", which is
                 committed load against capacity -- a metric this app does not have, and a second
-                percentage moving the opposite way would contradict the dial. */}
+                percentage moving the opposite way would contradict the dial.
+
+                Named rather than "you", and that is the same correction `describeDeferral`
+                carries: this figure is one reserve -- the one the request actually spends --
+                while `describeRebalance` says "your worst day goes from 41 to 44" about the
+                floor across all four. Unnamed, the two read as one number a student could
+                compare, and they are not comparable. */}
             <p data-testid="request-cost" role="status" className="text-sm">
-              Saying yes takes you from {Math.round(cost.floorBefore)} to{' '}
-              {Math.round(cost.floorAfter)} at your lowest point
+              Saying yes takes {LOAD_TYPE_LABELS[item.type]} from {Math.round(cost.floorBefore)}{' '}
+              to {Math.round(cost.floorAfter)} at its lowest
               {cost.eveningsEquivalent >= 1 &&
                 ` — about ${cost.eveningsEquivalent === 1 ? 'an evening' : `${cost.eveningsEquivalent} evenings`} of downtime`}
               .
@@ -217,8 +235,8 @@ export function RequestBoxScreen({
 
             {/* §2.3, via §1.3: the warning is shown as two rooms. */}
             <RoomComparison
-              now={roomFor(schedule, blockLog, predictions, today)}
-              ifAccepted={roomFor(addItems(schedule, [item], today), blockLog, predictions, today)}
+              now={roomFor(schedule, blockLog, predictions, today, sleepTargetHours)}
+              ifAccepted={roomFor(addItems(schedule, [item], today), blockLog, predictions, today, sleepTargetHours)}
             />
 
             {drafts.length > 0 && (

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ROOM,
   back,
+  fromPath,
   toAdd,
   toBlock,
   toEditBlock,
@@ -9,7 +10,9 @@ import {
   toNewBlock,
   toRebalance,
   toReserves,
+  toPath,
   toSettings,
+  toSleep,
   toWeek,
   type View,
 } from './view'
@@ -153,5 +156,30 @@ describe('the micro-start page', () => {
 
   it('is about the block it names', () => {
     expect(toMicroStart('b1')).toEqual({ kind: 'microStart', itemId: 'b1' })
+  })
+})
+
+/**
+ * §8's check-in asks about last night once a day and then disappears. Planning the nights
+ * ahead needs an address you can come back to, which is the whole reason this is a page.
+ */
+describe('the sleep page', () => {
+  it('has an address, both ways', () => {
+    expect(toSleep()).toEqual({ kind: 'sleep' })
+    expect(toPath(toSleep())).toBe('/sleep')
+    expect(fromPath('/sleep')).toEqual({ kind: 'sleep' })
+  })
+
+  /** Top level, opened from the room, so it returns there by `back`'s existing fallthrough
+   *  rather than by a case of its own. Tested anyway: that fallthrough is the REASON no case
+   *  was added, and without this a later refactor of it could change this silently. */
+  it('returns to the room', () => {
+    expect(back(toSleep())).toEqual(ROOM)
+  })
+
+  /** These functions read a string a person can type. An unrecognised sub-path must resolve
+   *  to the room rather than half-matching the page. */
+  it('does not half-match a deeper path', () => {
+    expect(fromPath('/sleep/tonight')).toEqual(ROOM)
   })
 })

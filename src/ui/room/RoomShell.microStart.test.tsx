@@ -30,6 +30,17 @@ const item = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
   ...over,
 })
 
+/**
+ * A block whose slot is the hour the suite happens to run in.
+ *
+ * §4.1's trigger is the block's own slot now, so a fixture has to be inside one. Running the
+ * whole waking day is the only way to be certain of that at any hour, and day 0 with no
+ * anchor is today by definition -- which avoids the `toISOString` trap as well, where east
+ * of Greenwich the UTC date is yesterday's for the first eight hours of every day.
+ */
+const runningNow = (over: Partial<ScheduledItem> = {}): ScheduledItem =>
+  item({ dayIndex: 0, startHour: 0, hours: 24, ...over })
+
 const week = (over: Partial<Schedule> = {}): Schedule => ({
   items: [item()],
   start: { mental: 70, physical: 70, social: 70, errands: 70 },
@@ -85,14 +96,16 @@ describe('RoomShell with a stuck task', () => {
     expect(screen.queryByTestId('micro-start')).toBeNull()
   })
 
-  // §4.1's other half: three days past first appearance, with no clock in the domain
-  // layer, so `today` has to be pushed forward via anchoring rather than misses.
-  it('raises the card unprompted once a task has sat three days', async () => {
+  /**
+   * §4.1's trigger is the block's own slot now, not its age: "stuck on this one?" belongs at
+   * the hour you are supposed to be doing it, and a block three days old sits on a past day
+   * where the prompt could never be acted on. See `domain/microStart.isStuck`.
+   */
+  it('raises the card unprompted while the block is in its own slot', async () => {
     counter += 1
     const repository = createLocalRepository(`micro-stuck-${counter}`)
     await repository.clear()
-    const startedOn = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    await repository.saveWeek({ ...week({ items: [item({ dayIndex: 0 })] }), startedOn })
+    await repository.saveWeek(week({ items: [runningNow()] }))
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
     // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one is
@@ -109,11 +122,7 @@ describe('RoomShell with a stuck task', () => {
     counter += 1
     const repository = createLocalRepository(`micro-opens-${counter}`)
     await repository.clear()
-    const startedOn = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    await repository.saveWeek({
-      ...week({ items: [item({ dayIndex: 0, id: 'laundry' })] }),
-      startedOn,
-    })
+    await repository.saveWeek(week({ items: [runningNow({ id: 'laundry' })] }))
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
     // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one is
@@ -134,8 +143,7 @@ describe('RoomShell with a stuck task', () => {
     counter += 1
     const repository = createLocalRepository(`micro-wave-${counter}`)
     await repository.clear()
-    const startedOn = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    await repository.saveWeek({ ...week({ items: [item({ dayIndex: 0 })] }), startedOn })
+    await repository.saveWeek(week({ items: [runningNow()] }))
 
     render(<RoomShell repository={repository} blockLog={[]} onAnswerBlock={vi.fn()} />)
     // Ruling 61: the cards wait behind the `Waiting` button now, so getting to one is

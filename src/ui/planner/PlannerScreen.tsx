@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Calendar, ParsedItem } from '../../ai'
+import type { KnownTitle } from '../../domain/titleVocabulary'
 import { Button } from '../kit/Button'
 import { Field } from '../kit/Field'
 import { Sheet } from '../kit/Sheet'
@@ -22,6 +23,7 @@ export function PlannerScreen({
   onClose,
   dayLabels,
   calendar,
+  vocabulary = [],
   suggestRepeat = () => null,
 }: {
   onAccept: (items: readonly ParsedItem[]) => void
@@ -48,6 +50,17 @@ export function PlannerScreen({
    * to compare against behaves exactly as before.
    */
   suggestRepeat?: (item: ParsedItem) => ParsedItem['repeat']
+  /**
+   * The names this student already uses, and what for.
+   *
+   * On this path the title is the model's phrasing rather than the student's, so one gym
+   * habit becomes "Gym session" this week and "Workout" the next -- and §2.4's narrow rungs,
+   * which group answers by title, get an empty bucket each time. The list goes to the model
+   * as advice and holds the reply afterwards; see `domain/snapTitle`.
+   *
+   * Defaulted to empty so a caller with no history behaves exactly as this screen did.
+   */
+  vocabulary?: readonly KnownTitle[]
 }) {
   const [text, setText] = useState('')
   const [items, setItems] = useState<ParsedItem[] | null>(null)
@@ -64,7 +77,7 @@ export function PlannerScreen({
        * the tap that needs it.
        */
       const { parseBrainDump } = await import('../../ai')
-      const outcome = await parseBrainDump(text, calendar)
+      const outcome = await parseBrainDump(text, calendar, vocabulary)
       setItems(outcome.items.map((item) => ({ ...item, repeat: item.repeat ?? suggestRepeat(item) })))
     } finally {
       // In a finally block because parseBrainDump is built never to reject -- but if that
@@ -118,7 +131,7 @@ export function PlannerScreen({
         {missingWhen.length > 0 && (
           <p data-testid="when-blocked" role="status" className="text-sm text-attention">
             {missingWhen.length === 1
-              ? 'One of these does not say when it happens. Pick a day for it before adding.'
+              ? 'One of these does not say when it is due. Pick a day for it before adding.'
               : `${missingWhen.length} of these do not say when they happen. Pick a day for each before adding.`}
           </p>
         )}

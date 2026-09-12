@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { CALENDAR_SCOPES, consentUrl } from '../src/google/authUrl'
 import { checkCallback, checkStart, type GoogleConfig } from '../src/google/guard'
 import { seal } from '../src/google/secretBox'
-import { readState, signState } from '../src/google/state'
+import { inspectState, signState } from '../src/google/state'
 import { readServiceRoleKey, readSupabasePair, readSupabaseUrl } from '../src/data/serverEnv'
 import { bearerFrom, callerFrom, type Caller } from '../src/data/sessionCheck'
 
@@ -142,11 +142,25 @@ export default async function handler(request: Request): Promise<Response> {
   // The account comes from the signed state, never from anything in the query a caller
   // chose. This is what stops somebody completing a connection to *their* Google account
   // against *somebody else's* row.
-  const accountId = await readState(
+  const reading = await inspectState(
     url.searchParams.get('state') ?? '',
     google.stateSecret as string,
   )
-  if (accountId === null) return say('That calendar link has expired. Try connecting again.', 400)
+
+  if (!reading.ok) {
+    // Logged, not shown. The student gets one sentence for all five refusals, because which
+    // part of a defence somebody tripped is information about the defence -- but an operator
+    // reading this deployment's log needs the difference, since only `expired` is the one
+    // that pressing Connect again actually fixes. A `signature` here means this deployment's
+    // `GOOGLE_STATE_SECRET` differs from the one that signed the link, and every student
+    // will see "expired" forever until that is corrected. Same split as the session warning
+    // above.
+    console.warn(`google-connect: refused a state -- ${reading.reason}`)
+
+    return say('That calendar link has expired. Try connecting again.', 400)
+  }
+
+  const accountId = reading.accountId
 
   const exchanged = await fetch(TOKEN_ENDPOINT, {
     method: 'POST',

@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { isoDateOf } from '../../domain/calendar'
 import { createLocalRepository } from '../../data'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule } from '../../optimizer'
@@ -90,7 +91,10 @@ describe('RoomShell scoring its own predictions', () => {
     await repository.clear()
 
     // A week anchored today, carrying a claim about today that is still unscored.
-    const today = new Date().toISOString().split('T')[0] ?? ''
+    // The app's own notion of today, not a second one. Derived here with `toISOString`,
+    // which is the UTC date -- so between local midnight and 08:00 at UTC+8 this stored a
+    // prediction for yesterday and then looked for today's card.
+    const today = isoDateOf(new Date())
     await repository.saveWeek({ ...week(), startedOn: today })
     const settings = await repository.loadSettings()
     await repository.saveSettings({
@@ -122,7 +126,10 @@ describe('RoomShell scoring its own predictions', () => {
     const repository = createLocalRepository(`prediction-scored-${counter}`)
     await repository.clear()
 
-    const today = new Date().toISOString().split('T')[0] ?? ''
+    // The app's own notion of today, not a second one. Derived here with `toISOString`,
+    // which is the UTC date -- so between local midnight and 08:00 at UTC+8 this stored a
+    // prediction for yesterday and then looked for today's card.
+    const today = isoDateOf(new Date())
     await repository.saveWeek({ ...week(), startedOn: today })
     const settings = await repository.loadSettings()
     await repository.saveSettings({

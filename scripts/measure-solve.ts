@@ -9,7 +9,8 @@ for (const [name, make] of [
   const schedule = make()
 
   const started = performance.now()
-  const result = rebalance(schedule, DEFAULT_PARAMS, makeRng(1))
+  const result = // No anchor on these fixtures, so the whole fortnight is still ahead: today is day zero.
+  rebalance(schedule, DEFAULT_PARAMS, makeRng(1), 0)
   const elapsed = performance.now() - started
 
   console.log(

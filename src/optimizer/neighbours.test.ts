@@ -6,15 +6,51 @@ import { neighbours } from './neighbours'
 import { errandItem, makeSchedule, restItem, studyItem } from './testSupport'
 
 describe('neighbours', () => {
+  /**
+   * The past is not a neighbourhood.
+   *
+   * This module had no notion of `today` at all: `restMoves` and `socialMoves` looped from
+   * day 0, and `shiftMoves` bounded its destination only by the horizon. So the cheapest
+   * improvement available to the hill climber was always to insert recovery into days that
+   * had already happened -- the engine re-projects from day 0, so retroactive rest lifts the
+   * whole fortnight including the trough `worstFloor` reads.
+   *
+   * Measured on a real account with today at day 7: all five blocks the solver added landed
+   * in the past, and the reported gain was "your worst day goes from 29 to 62" where leaving
+   * the past alone gave 29 to 30. Thirty-two of the thirty-three points were fiction, and
+   * three of the four social blocks it proposed were on days the student could not act on.
+   */
+  it('never offers a move that touches a day already behind the student', () => {
+    const schedule = makeSchedule([studyItem('a', 3, 2), errandItem('b', 1, 8)])
+    const today = 5
+    const past = (week: typeof schedule) =>
+      JSON.stringify(week.items.filter((item) => item.dayIndex < today))
+
+    const before = past(schedule)
+
+    for (const move of neighbours(schedule, DEFAULT_PARAMS, today)) {
+      // The past may not gain a block, lose one, or have one rearranged within it. A block
+      // that was already there stays exactly as it was -- it happened that way.
+      expect(past(move.apply(schedule))).toBe(before)
+    }
+  })
+
+  /** A block already in the past stays exactly where it is: it happened there. */
+  it('never offers to move a block out of the past', () => {
+    const schedule = makeSchedule([studyItem('done', 3, 1)])
+
+    expect(neighbours(schedule, DEFAULT_PARAMS, 5).some((m) => m.itemId === 'done')).toBe(false)
+  })
+
   it('offers to move a movable task to another day', () => {
-    const moves = neighbours(makeSchedule([studyItem('a', 3, 2)]), DEFAULT_PARAMS)
+    const moves = neighbours(makeSchedule([studyItem('a', 3, 2)]), DEFAULT_PARAMS, 0)
 
     expect(moves.some((m) => m.kind === 'shiftDay' && m.itemId === 'a')).toBe(true)
   })
 
   it('never offers to move a fixed block', () => {
     const lecture = { ...studyItem('lecture', 3, 2), fixed: true }
-    const moves = neighbours(makeSchedule([lecture]), DEFAULT_PARAMS)
+    const moves = neighbours(makeSchedule([lecture]), DEFAULT_PARAMS, 0)
 
     expect(moves.some((m) => m.itemId === 'lecture')).toBe(false)
   })
@@ -22,7 +58,7 @@ describe('neighbours', () => {
   // §2.1 and §5.1. If the search can reach a state where rest has moved, protected rest
   // is not protected -- so this is checked at generation, not only at validation.
   it('never offers to move protected rest', () => {
-    const moves = neighbours(makeSchedule([restItem('rest', 3, 20)]), DEFAULT_PARAMS)
+    const moves = neighbours(makeSchedule([restItem('rest', 3, 20)]), DEFAULT_PARAMS, 0)
 
     expect(moves.some((m) => m.itemId === 'rest')).toBe(false)
   })
@@ -31,7 +67,7 @@ describe('neighbours', () => {
     const due = { ...studyItem('due', 2, 2), deadlineDay: 2 }
     const schedule = makeSchedule([due])
 
-    for (const move of neighbours(schedule, DEFAULT_PARAMS).filter((m) => m.kind === 'shiftDay')) {
+    for (const move of neighbours(schedule, DEFAULT_PARAMS, 0).filter((m) => m.kind === 'shiftDay')) {
       expect(move.apply(schedule).items[0]!.dayIndex).toBeLessThanOrEqual(2)
     }
   })
@@ -39,7 +75,7 @@ describe('neighbours', () => {
   it('never offers to move a task off the start of the horizon', () => {
     const schedule = makeSchedule([studyItem('a', 0, 2)])
 
-    for (const move of neighbours(schedule, DEFAULT_PARAMS).filter((m) => m.kind === 'shiftDay')) {
+    for (const move of neighbours(schedule, DEFAULT_PARAMS, 0).filter((m) => m.kind === 'shiftDay')) {
       expect(move.apply(schedule).items[0]!.dayIndex).toBeGreaterThanOrEqual(0)
     }
   })
@@ -48,6 +84,7 @@ describe('neighbours', () => {
     const moves = neighbours(
       makeSchedule([errandItem('e1', 1, 9), errandItem('e2', 4, 14)]),
       DEFAULT_PARAMS,
+      0,
     )
 
     expect(moves.some((m) => m.kind === 'batchErrands')).toBe(true)
@@ -69,7 +106,7 @@ describe('neighbours', () => {
     // third argument is the start hour and each is an hour long, so 23:00 + 1h leaves the
     // next one starting at 24:00.
     const week = makeSchedule([errandItem('late', 2, 23), errandItem('other', 5, 9)])
-    const moves = neighbours(week, DEFAULT_PARAMS)
+    const moves = neighbours(week, DEFAULT_PARAMS, 0)
 
     expect(moves.length).toBeGreaterThan(0)
 
@@ -81,13 +118,13 @@ describe('neighbours', () => {
   })
 
   it('offers to insert a rest block', () => {
-    const moves = neighbours(makeSchedule([studyItem('a', 1, 2)]), DEFAULT_PARAMS)
+    const moves = neighbours(makeSchedule([studyItem('a', 1, 2)]), DEFAULT_PARAMS, 0)
 
     expect(moves.some((m) => m.kind === 'insertRest')).toBe(true)
   })
 
   it('does not offer a second rest block on a day that already has one', () => {
-    const moves = neighbours(makeSchedule([restItem('rest', 3, 20)]), DEFAULT_PARAMS)
+    const moves = neighbours(makeSchedule([restItem('rest', 3, 20)]), DEFAULT_PARAMS, 0)
     const onDayThree = moves.filter((m) => m.kind === 'insertRest' && m.itemId === 'rest-3')
 
     expect(onDayThree).toHaveLength(0)
@@ -104,7 +141,7 @@ describe('neighbours', () => {
       startHour: 17,
     }
     const study = { ...studyItem('study', 1, 2), startHour: 19 }
-    const moves = neighbours(makeSchedule([gym, study]), DEFAULT_PARAMS)
+    const moves = neighbours(makeSchedule([gym, study]), DEFAULT_PARAMS, 0)
 
     expect(moves.some((m) => m.kind === 'reorderWithinDay')).toBe(true)
   })
@@ -119,7 +156,7 @@ describe('neighbours', () => {
       restItem('rest', 4, 20),
     ])
 
-    for (const move of neighbours(schedule, DEFAULT_PARAMS)) {
+    for (const move of neighbours(schedule, DEFAULT_PARAMS, 0)) {
       expect(isValid(move.apply(schedule), DEFAULT_PARAMS)).toBe(true)
     }
   })
@@ -148,14 +185,14 @@ describe('neighbours', () => {
 
     expect(isValid(broken, DEFAULT_PARAMS)).toBe(false)
     expect(violations(broken, DEFAULT_PARAMS)).toHaveLength(2)
-    expect(neighbours(broken, DEFAULT_PARAMS).length).toBeGreaterThan(0)
+    expect(neighbours(broken, DEFAULT_PARAMS, 0).length).toBeGreaterThan(0)
   })
 
   it('offers moves that reduce the damage even when none can fully repair it', () => {
     const broken = doublyBroken()
     const before = violations(broken, DEFAULT_PARAMS).length
 
-    const improving = neighbours(broken, DEFAULT_PARAMS).filter(
+    const improving = neighbours(broken, DEFAULT_PARAMS, 0).filter(
       (move) => violations(move.apply(broken), DEFAULT_PARAMS).length < before,
     )
 
@@ -166,7 +203,7 @@ describe('neighbours', () => {
     const broken = doublyBroken()
     const before = violations(broken, DEFAULT_PARAMS).length
 
-    for (const move of neighbours(broken, DEFAULT_PARAMS)) {
+    for (const move of neighbours(broken, DEFAULT_PARAMS, 0)) {
       expect(violations(move.apply(broken), DEFAULT_PARAMS).length).toBeLessThanOrEqual(before)
     }
   })
@@ -175,7 +212,7 @@ describe('neighbours', () => {
     const schedule = makeSchedule([studyItem('a', 3, 2)])
     const before = JSON.stringify(schedule)
 
-    for (const move of neighbours(schedule, DEFAULT_PARAMS)) move.apply(schedule)
+    for (const move of neighbours(schedule, DEFAULT_PARAMS, 0)) move.apply(schedule)
 
     expect(JSON.stringify(schedule)).toBe(before)
   })
@@ -183,14 +220,14 @@ describe('neighbours', () => {
   // Nothing to move or reorder, so the only things on offer are the two the solver can
   // add from nothing: rest, and time with other people.
   it('offers only the things it can add on an empty schedule', () => {
-    const moves = neighbours(makeSchedule([]), DEFAULT_PARAMS)
+    const moves = neighbours(makeSchedule([]), DEFAULT_PARAMS, 0)
 
     expect(moves.length).toBeGreaterThan(0)
     expect(moves.every((m) => m.kind === 'insertRest' || m.kind === 'insertSocial')).toBe(true)
   })
 
   it('describes every move in plain language', () => {
-    for (const move of neighbours(makeSchedule([studyItem('a', 3, 2)]), DEFAULT_PARAMS)) {
+    for (const move of neighbours(makeSchedule([studyItem('a', 3, 2)]), DEFAULT_PARAMS, 0)) {
       expect(move.description.length).toBeGreaterThan(0)
       expect(move.description).not.toMatch(/optimis|optimiz/i)
     }
@@ -218,7 +255,7 @@ describe('neighbours placing what it inserts', () => {
   })
 
   const insertedRestOn = (schedule: Parameters<typeof neighbours>[0], day: number) => {
-    const move = neighbours(schedule, DEFAULT_PARAMS).find(
+    const move = neighbours(schedule, DEFAULT_PARAMS, 0).find(
       (m) => m.kind === 'insertRest' && m.itemId === `rest-${day}`,
     )
 
@@ -251,7 +288,7 @@ describe('neighbours placing what it inserts', () => {
    */
   it('produces a rest insertion that does not violate the week it lands in', () => {
     const busyEvening = makeSchedule([evening('a', 3, 19, 5)])
-    const move = neighbours(busyEvening, DEFAULT_PARAMS).find(
+    const move = neighbours(busyEvening, DEFAULT_PARAMS, 0).find(
       (m) => m.kind === 'insertRest' && m.itemId === 'rest-3',
     )
 
@@ -265,7 +302,7 @@ describe('neighbours placing what it inserts', () => {
    *  neighbourhood, and the search is already at four thousand evaluations on the crunch
    *  fixture. */
   it('still offers exactly one rest insertion per day', () => {
-    const moves = neighbours(makeSchedule([studyItem('a', 3, 2)]), DEFAULT_PARAMS)
+    const moves = neighbours(makeSchedule([studyItem('a', 3, 2)]), DEFAULT_PARAMS, 0)
     const onDayThree = moves.filter((m) => m.kind === 'insertRest' && m.itemId === 'rest-3')
 
     expect(onDayThree).toHaveLength(1)
@@ -273,7 +310,7 @@ describe('neighbours placing what it inserts', () => {
 
   it('places inserted social away from what is already on the day', () => {
     const busyEvening = makeSchedule([evening('a', 3, 17, 6)])
-    const move = neighbours(busyEvening, DEFAULT_PARAMS).find(
+    const move = neighbours(busyEvening, DEFAULT_PARAMS, 0).find(
       (m) => m.kind === 'insertSocial' && m.itemId === 'social-3',
     )
 

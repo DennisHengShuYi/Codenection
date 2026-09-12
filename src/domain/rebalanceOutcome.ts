@@ -62,16 +62,17 @@ export function runRebalance(
   schedule: Schedule,
   params: EngineParams,
   seed: number,
+  today: number,
 ): RebalanceOutcome {
   // Seeded rather than random: §2.1's search takes its randomness as a parameter, and a
   // student who taps twice should not see two different weeks.
-  const result = rebalance(schedule, params, makeRng(seed))
+  const result = rebalance(schedule, params, makeRng(seed), today)
 
   // `describeRebalance` already distinguishes a healthy week with nothing to move from an
   // overloaded one, so the fallback is only wanted in the second case -- and only when the
   // solver itself found nothing, otherwise it would be second-guessing a real improvement.
   const fallback =
-    result.moves.length === 0 ? (smallestFixes(schedule, params, 1)[0] ?? null) : null
+    result.moves.length === 0 ? (smallestFixes(schedule, params, today, 1)[0] ?? null) : null
 
   return {
     schedule: result.schedule,

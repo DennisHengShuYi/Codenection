@@ -42,6 +42,32 @@ for (const width of [320, 390, 768, 1280]) {
   })
 }
 
+/**
+ * The breakdown is the point of this sheet, and the gauge was eating it.
+ *
+ * The arc was `w-full` on a viewBox carrying no width, so it scaled with whatever contained
+ * it: in a 512px sheet that is a 294px-tall needle above a 48px number, and the five bars
+ * the sheet exists for started below the fold behind a scrollbar.
+ *
+ * The bound is on the gauge itself rather than on where a bar lands, because that is the
+ * thing being constrained -- a test that measured the first bar passed at every width while
+ * the sheet was still mostly needle, since the first bar was never the one pushed off.
+ */
+for (const width of [320, 390, 768, 1280]) {
+  test(`the gauge stays a readout rather than the page at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 })
+    await openApp(page)
+
+    await page.getByTestId('room-gauge').click()
+    await expect(page.getByRole('dialog', { name: /reserves/i })).toBeVisible()
+
+    const gauge = await page.getByTestId('dial-gauge').boundingBox()
+
+    expect(gauge, 'the gauge has no box').not.toBeNull()
+    expect(gauge?.height ?? 0, `the gauge is ${gauge?.height}px tall at ${width}px`).toBeLessThanOrEqual(140)
+  })
+}
+
 test('shows five domain bars, each against its own ceiling', async ({ page }) => {
   await openApp(page)
 

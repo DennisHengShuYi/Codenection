@@ -1,6 +1,7 @@
 import { carryoverAt } from './carryover'
 import { stateMultiplier } from './stateCost'
-import type { Activity, DayInput, EngineParams, LoadType, Reserves } from './types'
+import { LOAD_TYPES } from './types'
+import type { Activity, ActivityKind, DayInput, EngineParams, LoadType, Reserves } from './types'
 
 /**
  * What costs a reserve.
@@ -78,16 +79,38 @@ export function drainForDay(
     errands: 0,
   }
 
+  /*
+   * §6.1 amended: a night short of the baseline costs something.
+   *
+   * Bounded by the baseline itself, so a night of none at all is the worst there is -- there
+   * is no negative sleep to charge for. Charged flat rather than through `actualCost`'s state
+   * multiplier: that multiplier prices the effort of DOING something at a given reserve, and
+   * a night that did not happen is not an activity. The compounding comes from the reserve
+   * itself falling, which makes the next day's work dearer.
+   *
+   * `params.kSleepDebt` carries the reasoning for the coefficients, including why social is
+   * zero here exactly as it is in `kSleep`.
+   */
+  const short = Math.max(0, params.sleepBaselineHours - day.sleepHours)
+  if (short > 0) {
+    for (const type of LOAD_TYPES) totals[type] += short * params.kSleepDebt[type]
+  }
+
   for (const activity of day.activities) {
     if (!isDraining(activity)) continue
 
     const residue = carryoverAt(day.activities, activity.startHour)[activity.type]
 
+    // The block's own correction where §2.4 has enough to give it one, the area-wide
+    // figure otherwise. A student whose essays run 3x over and whose lab reports land on
+    // time used to pay the average of the two on both.
+    const bias = activity.estimateBias ?? params.estimateBias[activity.type]
+
     totals[activity.type] +=
       activity.hours *
       activity.intensity *
       params.typeIntensity[activity.type] *
-      params.estimateBias[activity.type] *
+      bias *
       stateMultiplier(reserves[activity.type], residue)
   }
 
@@ -112,4 +135,81 @@ export function drainForDay(
   }
 
   return totals
+}
+
+/** One line of a day's drain, in the terms the model actually charged it. */
+export interface DrainSource {
+  /** The kind of work, or the name of a day-level charge. */
+  readonly source: ActivityKind | 'fragmentation' | 'deadline' | 'travel' | 'isolation'
+  readonly type: LoadType
+  readonly points: number
+}
+
+/**
+ * The same day's drain, itemised.
+ *
+ * `drainForDay` returns four totals, which is everything the model needs and nothing a
+ * student can be told. Explaining a deficit day means naming where the points went, so this
+ * returns the same arithmetic with the sources kept apart -- activities gathered by kind, and
+ * each day-level charge on its own line.
+ *
+ * A second function rather than a refactor of the first, deliberately. `drainForDay` runs
+ * thousands of times inside §2.1's search, and building a breakdown object per day per
+ * candidate is a cost the search would pay for a sentence it never reads. This is called once,
+ * for one day, when a student asks why.
+ *
+ * That leaves two copies of one formula. `drain.test.ts` binds them: the sources must sum to
+ * exactly what `drainForDay` charged, or they have drifted and the explanation is describing
+ * a day the projection never simulated.
+ */
+export function drainSources(
+  day: DayInput,
+  reserves: Reserves,
+  params: EngineParams,
+): readonly DrainSource[] {
+  const byKind = new Map<string, DrainSource>()
+
+  const add = (source: DrainSource['source'], type: LoadType, points: number): void => {
+    if (points <= 0) return
+
+    const key = `${source}:${type}`
+    const existing = byKind.get(key)
+    byKind.set(key, { source, type, points: (existing?.points ?? 0) + points })
+  }
+
+  for (const activity of day.activities) {
+    if (!isDraining(activity)) continue
+
+    const residue = carryoverAt(day.activities, activity.startHour)[activity.type]
+    const bias = activity.estimateBias ?? params.estimateBias[activity.type]
+
+    add(
+      activity.kind,
+      activity.type,
+      activity.hours *
+        activity.intensity *
+        params.typeIntensity[activity.type] *
+        bias *
+        stateMultiplier(reserves[activity.type], residue),
+    )
+  }
+
+  add('fragmentation', 'mental', fragmentation(day.activities) * params.contextSwitchPenalty)
+  add(
+    'deadline',
+    'mental',
+    deadlineDrain(day.daysToNearestDeadline, params.deadlineProximityWeight),
+  )
+  add('travel', 'errands', day.venueChanges * params.travelLoadPerVenueChange)
+
+  let socialHours = 0
+  for (const activity of day.activities) {
+    if (activity.type === 'social') socialHours += activity.hours
+  }
+
+  if (socialHours < params.socialFloorHoursPerDay) {
+    add('isolation', 'social', params.isolationDrainPerDay)
+  }
+
+  return [...byKind.values()]
 }

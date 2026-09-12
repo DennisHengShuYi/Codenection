@@ -12,7 +12,6 @@ import { beginConnect, readCalendar } from '../google/client'
 import { CalendarImportScreen } from './planner/CalendarImportScreen'
 import { calendarFor } from '../domain/calendar'
 import { titleVocabulary } from '../domain/titleVocabulary'
-import { dayLabelsFor } from './planner/dayLabels'
 import { PhotoImportScreen } from './planner/PhotoImportScreen'
 import { PlannerScreen } from './planner/PlannerScreen'
 import { RequestBoxScreen } from './request/RequestBoxScreen'
@@ -136,7 +135,6 @@ export function AddSheet({
    * what the labels need -- the screens below it take the finished list and hand it to the
    * chip.
    */
-  const dayLabels = dayLabelsFor(schedule, today)
   /** Ruling 44: and the same week, said in the terms the two readers need. */
   const calendar = calendarFor(schedule, today)
 
@@ -152,7 +150,8 @@ export function AddSheet({
   if (way === 'photo') {
     return (
       <PhotoImportScreen
-        dayLabels={dayLabels}
+        schedule={schedule}
+        today={today}
         calendar={calendar}
         suggestRepeat={(item) => suggestRepeat(item, schedule)}
         onAccept={(items) => {
@@ -168,7 +167,8 @@ export function AddSheet({
   if (way === 'type') {
     return (
       <PlannerScreen
-        dayLabels={dayLabels}
+        schedule={schedule}
+        today={today}
         calendar={calendar}
         vocabulary={vocabulary}
         suggestRepeat={(item) => suggestRepeat(item, schedule)}
@@ -185,7 +185,8 @@ export function AddSheet({
   if (way === 'calendar') {
     return (
       <CalendarImportScreen
-        dayLabels={dayLabels}
+        schedule={schedule}
+        today={today}
         connected={calendarConnected}
         // Ruling 63: the outcome is returned to the screen rather than discarded. This was
         // `void beginConnect()`, which sent a refusal to the browser console and a missing
@@ -210,7 +211,6 @@ export function AddSheet({
   if (way === 'request') {
     return (
       <RequestBoxScreen
-        dayLabels={dayLabels}
         calendar={calendar}
         schedule={schedule}
         params={params}

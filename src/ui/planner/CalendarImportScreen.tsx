@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ParsedItem } from '../../ai'
 import { Button } from '../kit/Button'
+import type { Schedule } from '../../optimizer'
 import { Sheet } from '../kit/Sheet'
 import { ItemChip } from './ItemChip'
 import { saysWhen } from './when'
@@ -26,7 +27,8 @@ export function CalendarImportScreen({
   onAccept,
   onBack,
   onClose,
-  dayLabels,
+  schedule,
+  today,
   suggestRepeat = () => null,
 }: {
   /** Whether this student has already granted calendar access. */
@@ -49,8 +51,9 @@ export function CalendarImportScreen({
   /** Done entirely -- straight to the room, whatever depth this was opened to. Distinct
    *  from `onBack`, which is what a single `onCancel` used to conflate. */
   readonly onClose: () => void
-  /** Ruling 43: the horizon's days in a student's words, for the chip's "when" question. */
-  readonly dayLabels: readonly string[]
+  /** The week the chips are being added to, so each one can pick its day on a calendar. */
+  readonly schedule: Schedule
+  readonly today: number
   readonly suggestRepeat?: (item: ParsedItem) => ParsedItem['repeat']
 }) {
   const [items, setItems] = useState<ParsedItem[] | null>(null)
@@ -186,7 +189,8 @@ export function CalendarImportScreen({
               <ItemChip
                 key={item.id}
                 item={item}
-                dayLabels={dayLabels}
+                schedule={schedule}
+                today={today}
                 onChange={(next) =>
                   setItems(items.map((existing) => (existing.id === next.id ? next : existing)))
                 }

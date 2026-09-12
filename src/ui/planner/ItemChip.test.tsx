@@ -1,9 +1,25 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { ParsedItem } from '../../ai'
 import { ACTIVITY_KINDS } from '../../engine'
 import { ItemChip } from './ItemChip'
+import { HORIZON_DAYS } from '../../engine'
+import type { Schedule } from '../../optimizer'
+
+/**
+ * A fortnight with no `startedOn`, which is the ordinary state of a seeded week.
+ *
+ * `DayPicker` falls back to the named days there, so these tests still drive the same
+ * control they always did -- the day NAMES this file used to pass in are now derived from
+ * the week rather than handed over, which is the whole point of the change.
+ */
+const WEEK: Schedule = {
+  items: [],
+  start: { mental: 70, physical: 70, social: 70, errands: 70 },
+  horizonDays: HORIZON_DAYS,
+  sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+}
 
 const item = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   id: 'a',
@@ -19,18 +35,8 @@ const item = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   ...over,
 })
 
-/** Ruling 43: real dates rather than day indices. "Day 2" is a modelling term; "Tue 10 Sep" is
- *  what a student recognises as their own week. */
-const DAY_LABELS = [
-  'Today, Mon 8 Sep',
-  'Tue 9 Sep',
-  'Wed 10 Sep',
-  'Thu 11 Sep',
-  'Fri 12 Sep',
-]
-
-const setup = (over: Partial<ParsedItem> = {}) => {
-  const props = { item: item(over), onChange: vi.fn(), onRemove: vi.fn(), dayLabels: DAY_LABELS }
+const setup = (over: Partial<ParsedItem> = {}, schedule: Schedule = WEEK) => {
+  const props = { item: item(over), onChange: vi.fn(), onRemove: vi.fn(), schedule, today: 0 }
   render(<ItemChip {...props} />)
   return props
 }
@@ -232,11 +238,28 @@ describe('the chip saying when', () => {
     expect(screen.getByTestId('when-missing-a')).toHaveTextContent(/due/i)
   })
 
-  it('shows the day it will land on, in words a student recognises', () => {
+  /**
+   * The day is picked on a calendar now, not chosen from a list of twenty-one.
+   *
+   * `DayPicker` shows a real date where the week has been anchored, and falls back to the
+   * named days where it has not -- which is what `WEEK` above is, and an ordinary state
+   * rather than an error. Both halves are asserted, because the four ways in hit both: a
+   * seeded fortnight has no `startedOn` and a lived-in one does.
+   */
+  it('offers the day as a calendar once the week knows its dates', () => {
+    setup({ deadlineDay: 2 }, { ...WEEK, startedOn: '2026-09-08' })
+
+    const day = screen.getByTestId('when-day-a')
+
+    expect(day).toHaveAttribute('type', 'date')
+    expect(day).toHaveValue('2026-09-10')
+  })
+
+  it('names the days instead where the week has no dates to show', () => {
     setup({ deadlineDay: 2 })
 
     expect(screen.getByTestId('when-day-a')).toHaveValue('2')
-    expect(screen.getByRole('option', { name: 'Wed 10 Sep' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /day 3/i })).toBeInTheDocument()
   })
 
   it('shows the stated time', () => {
@@ -245,7 +268,15 @@ describe('the chip saying when', () => {
     expect(screen.getByTestId('when-hour-a')).toHaveValue('9')
   })
 
-  it('lets the day be corrected', async () => {
+  it('lets the day be corrected on the calendar', () => {
+    const props = setup({ deadlineDay: 2 }, { ...WEEK, startedOn: '2026-09-08' })
+
+    fireEvent.change(screen.getByTestId('when-day-a'), { target: { value: '2026-09-11' } })
+
+    expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ deadlineDay: 3 }))
+  })
+
+  it('lets it be corrected on the fallback list too', async () => {
     const props = setup({ deadlineDay: 2 })
 
     await userEvent.selectOptions(screen.getByTestId('when-day-a'), '3')

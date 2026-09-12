@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLocalRepository } from '../../data'
@@ -39,6 +39,27 @@ const openPlanner = async () => {
   return repository
 }
 
+/**
+ * The day, answered on every chip.
+ *
+ * Ruling 43: the week will not take an item that does not say when it happens, so this is
+ * the press a student makes before Add.
+ *
+ * A date rather than an option, because the chip picks its day on a calendar now -- the
+ * `<select>` of twenty-one days it used to render survives only where a week has no
+ * `startedOn`, and `RoomShell` anchors the week it loads. `fireEvent` rather than typing
+ * because a date input is segmented and jsdom does not implement that editing model.
+ */
+async function answerTheDay() {
+  for (const picker of screen.getAllByTestId(/^when-day-/)) {
+    const day = (picker as HTMLInputElement).min
+    const third = new Date(`${day}T00:00:00Z`)
+    third.setUTCDate(third.getUTCDate() + 2)
+
+    fireEvent.change(picker, { target: { value: third.toISOString().slice(0, 10) } })
+  }
+}
+
 describe('RoomShell with the planner', () => {
   it('opens the planner and can be stepped back from without changing anything', async () => {
     const repository = await openPlanner()
@@ -61,9 +82,7 @@ describe('RoomShell with the planner', () => {
 
     // Ruling 43: the week will not take an item that does not say when it happens, so the day is
     // answered on the chip first -- the same press a student makes.
-    for (const select of screen.getAllByTestId(/^when-day-/)) {
-      await userEvent.selectOptions(select, '2')
-    }
+    await answerTheDay()
 
     await userEvent.click(screen.getByRole('button', { name: /add these/i }))
 
@@ -86,9 +105,7 @@ describe('RoomShell with the planner', () => {
 
     // Ruling 43: the week will not take an item that does not say when it happens, so the day is
     // answered on the chip first -- the same press a student makes.
-    for (const select of screen.getAllByTestId(/^when-day-/)) {
-      await userEvent.selectOptions(select, '2')
-    }
+    await answerTheDay()
 
     await userEvent.click(screen.getByRole('button', { name: /add these/i }))
 
@@ -111,9 +128,7 @@ describe('RoomShell with the planner', () => {
 
     // Ruling 43: the week will not take an item that does not say when it happens, so the day is
     // answered on the chip first -- the same press a student makes.
-    for (const select of screen.getAllByTestId(/^when-day-/)) {
-      await userEvent.selectOptions(select, '2')
-    }
+    await answerTheDay()
 
     await userEvent.click(screen.getByRole('button', { name: /add these/i }))
 
@@ -136,9 +151,7 @@ describe('RoomShell with the planner', () => {
 
     // Ruling 43: the week will not take an item that does not say when it happens, so the day is
     // answered on the chip first -- the same press a student makes.
-    for (const select of screen.getAllByTestId(/^when-day-/)) {
-      await userEvent.selectOptions(select, '2')
-    }
+    await answerTheDay()
     await userEvent.click(screen.getByRole('button', { name: /add these/i }))
     // Ruling 61: what the app did with what was added is a notice, so it waits behind the
     // `Waiting` button with the rest of them rather than appearing under the room.
@@ -240,9 +253,7 @@ describe('RoomShell with the planner', () => {
 
     // Ruling 43: the week will not take an item that does not say when it happens, so the day is
     // answered on the chip first -- the same press a student makes.
-    for (const select of screen.getAllByTestId(/^when-day-/)) {
-      await userEvent.selectOptions(select, '2')
-    }
+    await answerTheDay()
 
     // Nothing in the week to look like, so nothing is suggested.
     expect(screen.queryByText(/repeats every week/i)).toBeNull()

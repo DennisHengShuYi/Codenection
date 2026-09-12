@@ -2,6 +2,8 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PlannerScreen } from './PlannerScreen'
+import { HORIZON_DAYS } from '../../engine'
+import type { Schedule } from '../../optimizer'
 
 /**
  * The endpoint is stubbed as unreachable throughout, so every case here exercises the
@@ -11,12 +13,27 @@ import { PlannerScreen } from './PlannerScreen'
 beforeEach(() => vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no endpoint'))))
 afterEach(() => vi.unstubAllGlobals())
 
+/**
+ * A fortnight with no `startedOn`, which is the ordinary state of a seeded week.
+ *
+ * `DayPicker` falls back to the named days there, so these tests still drive the same
+ * control they always did -- the day NAMES this file used to pass in are now derived from
+ * the week rather than handed over, which is the whole point of the change.
+ */
+const WEEK: Schedule = {
+  items: [],
+  start: { mental: 70, physical: 70, social: 70, errands: 70 },
+  horizonDays: HORIZON_DAYS,
+  sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+}
+
 const setup = () => {
   const props = {
     onAccept: vi.fn(),
     onBack: vi.fn(),
     onClose: vi.fn(),
-    dayLabels: ['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep'],
+    schedule: WEEK,
+    today: 0,
     calendar: { today: 0, startWeekday: 5, todayLabel: '11 September 2026' },
   }
   render(<PlannerScreen {...props} />)

@@ -2,6 +2,8 @@ import { WEEKDAY_NAMES } from '../../domain/calendar'
 import type { ParsedItem } from '../../ai'
 import { BLOCK_KINDS, LOAD_TYPES, type ActivityKind, type LoadType } from '../../engine'
 import { Button } from '../kit/Button'
+import type { Schedule } from '../../optimizer'
+import { DayPicker } from '../week/DayPicker'
 import { CARD_TONES } from '../kit/Card'
 import { Field } from '../kit/Field'
 import { BLOCK_KIND_LABELS, LOAD_TYPE_LABELS } from '../kit/labels'
@@ -31,19 +33,28 @@ export function ItemChip({
   item,
   onChange,
   onRemove,
-  dayLabels,
+  schedule,
+  today,
 }: {
   item: ParsedItem
   onChange: (next: ParsedItem) => void
   onRemove: (id: string) => void
   /**
-   * Ruling 43: the horizon's days, named the way a student recognises them.
+   * The week, so the day can be picked on a calendar.
    *
-   * Passed in rather than derived, because the names depend on when the week started and
-   * this component holds no week. Index is the day index the item carries, so the select's
-   * value is the domain's own number and nothing has to be translated back.
+   * This took a list of day NAMES and rendered a `<select>` of them -- Ruling 43's answer
+   * when the chip held no week and could not turn a day index into a date. `DayPicker` can,
+   * and the manual add form has used it since: the four ways in were the only place left
+   * showing a dropdown of twenty-one days, which is a scrolling column on a phone and a
+   * popup taller than the sheet on a laptop.
+   *
+   * The names have not gone anywhere. `DayPicker` falls back to exactly them where the week
+   * has no `startedOn` -- an ordinary state, not an error -- so an unanchored fortnight
+   * still offers the days it can name rather than a calendar of nothing.
    */
-  dayLabels: readonly string[]
+  schedule: Schedule
+  /** For naming "Today" and "Tomorrow" on that fallback, which a date alone cannot say. */
+  today: number
 }) {
   // A list item, not `Card` -- `Card` renders a `<div>`, and this always sits inside the
   // screens' `<ul>` of chips, where a `<div>` would be invalid list markup. `CARD_TONES` is
@@ -114,28 +125,15 @@ export function ItemChip({
             perfectly well land on Wednesday -- and an essay due Friday is one of the most
             movable things in a week, which is exactly why it should. "Day" read as when am I
             doing this and answered when is this due, with nothing to tell the two apart. */}
-        <Field label="Due by">
-          <select
-            data-testid={`when-day-${item.id}`}
-            value={item.deadlineDay === null ? '' : String(item.deadlineDay)}
-            onChange={(event) =>
-              onChange({
-                ...item,
-                deadlineDay: event.target.value === '' ? null : Number(event.target.value),
-              })
-            }
-            className="min-h-11 rounded border border-line bg-surface px-2 py-1 text-sm text-ink"
-          >
-            {/* Only while it is the answer. Once a day is chosen, offering "not said" back
-                would invite undoing the thing this chip just asked for. */}
-            {item.deadlineDay === null && <option value="">Pick a day</option>}
-            {dayLabels.map((label, dayIndex) => (
-              <option key={label} value={String(dayIndex)}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <DayPicker
+          schedule={schedule}
+          today={today}
+          value={item.deadlineDay}
+          label="Due by"
+          optional
+          testId={`when-day-${item.id}`}
+          onChange={(deadlineDay) => onChange({ ...item, deadlineDay })}
+        />
 
         <Field label="Time">
           <select

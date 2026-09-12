@@ -3,6 +3,7 @@ import type { Calendar, ParsedItem } from '../../ai'
 import type { KnownTitle } from '../../domain/titleVocabulary'
 import { Button } from '../kit/Button'
 import { Field } from '../kit/Field'
+import type { Schedule } from '../../optimizer'
 import { Sheet } from '../kit/Sheet'
 import { ItemChip } from './ItemChip'
 import { saysWhen } from './when'
@@ -21,7 +22,8 @@ export function PlannerScreen({
   onAccept,
   onBack,
   onClose,
-  dayLabels,
+  schedule,
+  today,
   calendar,
   vocabulary = [],
   suggestRepeat = () => null,
@@ -35,7 +37,8 @@ export function PlannerScreen({
   onClose: () => void
   /** Ruling 43: the horizon's days in a student's words, for the chip's own "when" question.
    *  Threaded from the caller because the names depend on when the week started. */
-  dayLabels: readonly string[]
+  schedule: Schedule
+  today: number
   /** Ruling 44: which real day the horizon's day 0 is, so a stated weekday lands on that weekday
    *  rather than on whatever `today % 7` produced. */
   calendar: Calendar
@@ -150,7 +153,8 @@ export function PlannerScreen({
               <ItemChip
                 key={item.id}
                 item={item}
-                dayLabels={dayLabels}
+                schedule={schedule}
+                today={today}
                 onChange={(next) =>
                   setItems(items.map((existing) => (existing.id === next.id ? next : existing)))
                 }

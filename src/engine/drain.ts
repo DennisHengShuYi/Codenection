@@ -1,4 +1,5 @@
 import { carryoverAt } from './carryover'
+import { SECONDARY_COST } from './params'
 import { stateMultiplier } from './stateCost'
 import { LOAD_TYPES } from './types'
 import type { Activity, ActivityKind, DayInput, EngineParams, LoadType, Reserves } from './types'
@@ -47,6 +48,44 @@ export function fragmentation(activities: readonly Activity[]): number {
 function deadlineDrain(daysToNearestDeadline: number | null, weight: number): number {
   if (daysToNearestDeadline === null) return 0
   return weight / (1 + Math.max(0, daysToNearestDeadline))
+}
+
+/**
+ * What an hour of `source` load costs the `target` reserve.
+ *
+ * Two tables rather than one, and deliberately: `typeIntensity` is the diagonal and is a
+ * calibrated `EngineParams` field, while `SECONDARY_COST` is a population constant like
+ * `COUPLING` and `CROSS_EFFECT` beside it. Keeping them apart is what makes the spread unable
+ * to change any primary cost -- every figure the model charged before it is charged
+ * identically after -- and it keeps `objective.consequenceOf`, which asks the diagonal
+ * question "how consequential is this kind of work", reading the field that answers it.
+ */
+const rateFor = (source: LoadType, target: LoadType, params: EngineParams): number =>
+  source === target ? params.typeIntensity[source] : SECONDARY_COST[source][target]
+
+/**
+ * How much of the isolation charge a day has earned, from 1 for a day with nobody in it down
+ * to 0 for one that cleared the floor.
+ *
+ * §1.2 amended. The charge was a switch on `socialFloorHoursPerDay`: under the floor a day
+ * paid all of it, at the floor it paid none. Measured across a fortnight, that put 29 minutes
+ * of contact a day at 67 on the social bar and 30 minutes at 95 -- twenty-eight points for
+ * one minute, and a student who says hello in a corridor every day scored as having spoken to
+ * nobody for three weeks. `neighbours.socialMoves` records the same mismatch from the other
+ * side, where a fifteen-minute coffee satisfied the guard while the day went on draining.
+ *
+ * A straight line, and it introduces no number: the floor that used to be the wall is simply
+ * where the line reaches zero. Partial contact earns partial credit, which is the only thing
+ * the switch got wrong.
+ */
+function isolationShortfall(activities: readonly Activity[], params: EngineParams): number {
+  let socialHours = 0
+  for (const activity of activities) {
+    if (activity.type === 'social') socialHours += activity.hours
+  }
+
+  if (params.socialFloorHoursPerDay <= 0) return 0
+  return Math.max(0, 1 - socialHours / params.socialFloorHoursPerDay)
 }
 
 /**
@@ -133,19 +172,26 @@ export function drainForDay(
   for (const activity of day.activities) {
     if (!isDraining(activity)) continue
 
-    const residue = carryoverAt(day.activities, activity.startHour)[activity.type]
+    // All four, because an activity now charges more than the reserve it belongs to. One
+    // call per activity rather than one per target: `carryoverAt` returns the whole vector
+    // and this loop runs inside §2.1's search thousands of times per solve.
+    const residue = carryoverAt(day.activities, activity.startHour)
 
     // The block's own correction where §2.4 has enough to give it one, the area-wide
     // figure otherwise. A student whose essays run 3x over and whose lab reports land on
     // time used to pay the average of the two on both.
     const bias = activity.estimateBias ?? params.estimateBias[activity.type]
+    const size = activity.hours * activity.intensity * bias
 
-    totals[activity.type] +=
-      activity.hours *
-      activity.intensity *
-      params.typeIntensity[activity.type] *
-      bias *
-      stateMultiplier(reserves[activity.type], residue)
+    for (const type of LOAD_TYPES) {
+      const rate = rateFor(activity.type, type, params)
+      if (rate === 0) continue
+
+      // Priced at the target reserve's own level, never the activity's. §6.3's hard rule --
+      // each reserve is priced and repaid on its own level -- applies to what an hour costs a
+      // body just as much as to what it costs a head.
+      totals[type] += size * rate * stateMultiplier(reserves[type], residue[type])
+    }
   }
 
   totals.mental +=
@@ -159,14 +205,10 @@ export function drainForDay(
   // activity -- which is what makes a student who is not busy but is isolated show as
   // unwell, and it is the clearest evidence the model understands burnout rather than
   // doing bookkeeping on hours.
-  let socialHours = 0
-  for (const activity of day.activities) {
-    if (activity.type === 'social') socialHours += activity.hours
-  }
-
-  if (socialHours < params.socialFloorHoursPerDay) {
-    totals.social += params.isolationDrainPerDay * isolationLoadScale(day.activities, params)
-  }
+  totals.social +=
+    params.isolationDrainPerDay *
+    isolationLoadScale(day.activities, params) *
+    isolationShortfall(day.activities, params)
 
   return totals
 }
@@ -214,18 +256,18 @@ export function drainSources(
   for (const activity of day.activities) {
     if (!isDraining(activity)) continue
 
-    const residue = carryoverAt(day.activities, activity.startHour)[activity.type]
+    // Spread across all four exactly as `drainForDay` spreads it, so "Ethics essay, body
+    // -0.45" is a line a student can be shown. `drain.test.ts` binds the two totals.
+    const residue = carryoverAt(day.activities, activity.startHour)
     const bias = activity.estimateBias ?? params.estimateBias[activity.type]
+    const size = activity.hours * activity.intensity * bias
 
-    add(
-      activity.kind,
-      activity.type,
-      activity.hours *
-        activity.intensity *
-        params.typeIntensity[activity.type] *
-        bias *
-        stateMultiplier(reserves[activity.type], residue),
-    )
+    for (const type of LOAD_TYPES) {
+      const rate = rateFor(activity.type, type, params)
+      if (rate === 0) continue
+
+      add(activity.kind, type, size * rate * stateMultiplier(reserves[type], residue[type]))
+    }
   }
 
   add('fragmentation', 'mental', fragmentation(day.activities) * params.contextSwitchPenalty)
@@ -236,21 +278,17 @@ export function drainSources(
   )
   add('travel', 'errands', day.venueChanges * params.travelLoadPerVenueChange)
 
-  let socialHours = 0
-  for (const activity of day.activities) {
-    if (activity.type === 'social') socialHours += activity.hours
-  }
-
-  if (socialHours < params.socialFloorHoursPerDay) {
-    // Scaled exactly as `drainForDay` scales it. `drain.test.ts` binds the two: if the
-    // itemised sources stop summing to what was charged, the explanation is describing a day
-    // the projection never simulated.
-    add(
-      'isolation',
-      'social',
-      params.isolationDrainPerDay * isolationLoadScale(day.activities, params),
-    )
-  }
+  // Scaled and tapered exactly as `drainForDay` does it. `drain.test.ts` binds the two: if
+  // the itemised sources stop summing to what was charged, the explanation is describing a
+  // day the projection never simulated. `add` drops a zero, so a day that cleared the floor
+  // still shows no isolation line at all.
+  add(
+    'isolation',
+    'social',
+    params.isolationDrainPerDay *
+      isolationLoadScale(day.activities, params) *
+      isolationShortfall(day.activities, params),
+  )
 
   return [...byKind.values()]
 }

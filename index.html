@@ -6,15 +6,21 @@
          notched phone. §0 builds mobile-first at 390px and requires primary actions in
          the lower half of the viewport, which is exactly where the home indicator sits. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Codenection</title>
+    <title>Loadline</title>
 
     <!-- §11: installable to a real phone's home screen. theme-color paints the browser
          chrome to match, so an installed app does not open with a white bar above it. -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#0f172a" />
-    <!-- Without this the browser probes /favicon.ico, which is not served: a 404 on every
-         page load. The manifest icons cover the installed app; this one covers the tab. -->
-    <link rel="icon" href="/icon-192.png" />
+    <!-- Without these the browser probes /favicon.ico, which is not served: a 404 on every
+         page load. The manifest icons cover the installed app; these cover the tab.
+
+         SVG first, PNG after it. A vector favicon stays sharp on a high-DPI screen where a
+         192px bitmap scaled to 16 goes soft, and browsers that do not support one simply
+         ignore the line and take the next. Safari is the reason the PNG stays: it takes
+         neither an SVG favicon nor anything but a PNG for the home screen. -->
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
   </head>
   <body>

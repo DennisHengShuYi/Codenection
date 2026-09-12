@@ -60,7 +60,7 @@ export function SignInScreen({
   return (
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold">Codenection</h1>
+        <h1 className="text-2xl font-semibold">Loadline</h1>
         <p className="text-sm text-ink-soft">
           {creating
             ? 'Create an account and your week is kept, on any device.'

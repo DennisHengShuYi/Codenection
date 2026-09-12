@@ -16,8 +16,8 @@ async function openApp(page: Page, path = '/') {
 test('the page renders', async ({ page }) => {
   await openApp(page)
 
-  await expect(page).toHaveTitle('Codenection')
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Codenection')
+  await expect(page).toHaveTitle('Loadline')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Loadline')
 })
 
 // A declared icon that resolves. Without a rel="icon" link the browser falls back to
@@ -64,7 +64,7 @@ test('offers no Google button in a build with no backend to sign in with', async
 test('an unknown path still serves the app shell, for client-side routing', async ({ page }) => {
   await openApp(page, '/some/deep/link')
 
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Codenection')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Loadline')
 })
 
 /**
@@ -82,5 +82,5 @@ test('offers no Telegram linking to a visitor with no account', async ({ page })
   await openApp(page)
 
   await expect(page.getByRole('button', { name: /link telegram/i })).toHaveCount(0)
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Codenection')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Loadline')
 })

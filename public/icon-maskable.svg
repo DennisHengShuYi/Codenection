@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Loadline">
+  <!--
+    The same mark as `icon.svg`, pulled inside a maskable icon's safe zone.
+
+    Android crops a `maskable` icon to whatever shape the launcher uses -- a circle, a
+    squircle, a rounded square -- and only the centre 80% is guaranteed to survive. The tab
+    icon runs its bar well past the ring on purpose, and that overhang is precisely what
+    would be cropped off, leaving a minus sign in a circle on somebody's home screen.
+
+    So this variant scales the whole mark about its centre until the bar's own end caps sit
+    inside a circle of radius 24 -- comfortably within the 25.6 the safe zone guarantees --
+    and the PNGs in the manifest are rendered from THIS file rather than from `icon.svg`.
+
+    Two files rather than one shape that compromises for both: a tab favicon is never masked,
+    so shrinking the tab icon to suit a launcher would cost legibility at 16px for nothing.
+  -->
+  <rect width="64" height="64" fill="#0f172a" />
+  <g transform="translate(32 32) scale(0.787) translate(-32 -32)">
+    <circle cx="32" cy="32" r="19" fill="none" stroke="#10b981" stroke-width="7" />
+    <line x1="5" y1="32" x2="59" y2="32" stroke="#10b981" stroke-width="7" stroke-linecap="round" />
+  </g>
+</svg>

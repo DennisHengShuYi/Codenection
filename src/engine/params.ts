@@ -111,9 +111,31 @@ const uniform = (value: number): Reserves => ({
 })
 
 export const DEFAULT_PARAMS: EngineParams = {
-  // Mental time is the most expensive hour a student spends, errands the least. This
-  // ordering is what stops a day of laundry reading like a day of exam revision.
-  typeIntensity: { mental: 1.0, physical: 0.8, social: 0.6, errands: 0.5 },
+  /*
+   * How TIRING an hour of each kind of load is -- and only that, since `objective.CONSEQUENCE`
+   * took the other question away.
+   *
+   * Errands least and mental high is the ordering that stops a day of laundry reading like a
+   * day of exam revision, and it is unchanged. Physical is the one that moved, from 0.8 to
+   * 1.3, and it moved because 0.8 was answering the question that now lives in the optimizer:
+   * a missed gym session IS less consequential than a missed essay, but an hour of hard
+   * training is plainly not less depleting than an hour of reading. The model charged five
+   * hours of hard exercise 4.00 against five hours of study's 5.00, which no athlete would
+   * recognise, and against the recovery a night pays a body it never bit -- five hours of hard
+   * training EVERY day for three weeks left the body bar at 83, and one hour a day took it
+   * from 80 up to 97.
+   *
+   * 1.6 rather than 1.3, and measured across the range rather than reasoned to. At 1.3 five
+   * hours of hard training a day still left a body at 70 after three weeks, which is the same
+   * complaint one step smaller. At 1.6: an hour a day leaves 94, two hours 87, three hours 79,
+   * and five hours a day floors it -- which is what three weeks of that would actually do to
+   * somebody. An hour of hard exertion is now the most expensive hour in the table, which is
+   * what it is.
+   *
+   * The per-block `intensity` field is what separates a gentle walk from a session within
+   * that, which is what it is for.
+   */
+  typeIntensity: { mental: 1.0, physical: 1.6, social: 0.6, errands: 0.5 },
 
   // Sleep returns nothing to the social reserve, and that zero is load-bearing rather
   // than a rounding-down. §5.2 prescribes *a person* when social reserve is low, and
@@ -121,7 +143,23 @@ export const DEFAULT_PARAMS: EngineParams = {
   // an isolated student recover by sleeping -- measured at 20 to 65 over a fortnight of
   // seeing nobody -- which makes the app's answer to loneliness an early night and
   // quietly erases the isolation signal the engine exists to surface.
-  kSleep: { mental: 6.0, physical: 7.0, social: 0, errands: 2.0 },
+  /*
+   * Physical is 3.0 rather than 7.0, and the cut is a correction rather than a tuning knob.
+   *
+   * At 7.0 sleep repaid a body more than it repaid a mind, which nothing in §6 or the rulings
+   * argues for and which made the body bar unreadable: only exercise is typed physical, so a
+   * fortnight of ten-hour study days took it from 92 UP to 100 while every other bar fell.
+   * `SECONDARY_COST` gave desk work a body cost, and against 21 points a night that drain was
+   * noise -- the bar moved to 97 and still said nothing. Fourteen to one is not a gap a drain
+   * can close.
+   *
+   * Measured across the whole workload range at 7.0, 5.0, 3.0 and 2.0: the spread between the
+   * lightest possible fortnight and the heaviest is 3 points at 7.0 and 6 at 3.0. Below that
+   * it keeps widening, but a body that a fortnight of desk work takes to 90 is claiming more
+   * about sedentary harm than this model has any evidence for, and sleep genuinely is how a
+   * body is repaid.
+   */
+  kSleep: { mental: 6.0, physical: 3.0, social: 0, errands: 2.0 },
 
   /**
    * §6.1 amended: what a night SHORT of the baseline costs, per hour short, as drain.
@@ -219,6 +257,48 @@ export const CARRYOVER_HALF_LIFE_HOURS: Readonly<Record<keyof CrossEffect, numbe
  *
  * The diagonal is zero: a reserve must not compound its own deficit.
  */
+/**
+ * §6.4 amended: what an hour of one kind of load costs the OTHER three reserves.
+ *
+ * The drain was one-hot -- `totals[activity.type]`, one bar and exactly one -- so a reserve
+ * was touched only if the day happened to contain an activity carrying its own type. Only
+ * exercise is typed physical, so ten hours at a desk cost a body nothing: measured, a
+ * fortnight of ten-hour study days took the body bar from 92 UP to 100 while the study bar
+ * fell to 16, because sleep repaid it 21 points a night against a drain that could never
+ * fire. The same held for errands, which drifted from 81 to 83 across the worst week a
+ * student could have.
+ *
+ * The one-hot assumption was the bug, not the coefficients. Nothing a person does costs
+ * exactly one thing: three hours hunched at a desk costs a body, and errands are walking,
+ * carrying and queueing.
+ *
+ * The diagonal is zero because `typeIntensity` is the diagonal, and keeping the two apart is
+ * what makes this change unable to alter any primary cost -- every figure the model charged
+ * before it is charged identically after.
+ *
+ * Small, and mostly zero, for the reason §6.3 exists. Four separately priced reserves is the
+ * claim that a student can be socially fine and mentally destroyed; reserves that all drain
+ * together are one number wearing four hats. Nothing here exceeds a fifth of the primary.
+ *
+ * The two empty rows are an answer rather than an omission. Exercise and draining social
+ * obligations do cost a head, and the model already says so through `CROSS_EFFECT` -- as a
+ * residue on the hours that follow, which is the shape that effect actually has. Charging
+ * them here as well would be one claim counted twice. Sitting is the other shape: it costs a
+ * body *while it happens*, which is what this table is for.
+ */
+export const SECONDARY_COST: CouplingMatrix = {
+  // Sitting still and concentrating. Stiffness and fatigue, not a workout.
+  mental: { mental: 0, physical: 0.15, social: 0, errands: 0 },
+  // Empty by design -- see above. `CROSS_EFFECT.hardExercise` carries what a session costs a
+  // head, and it carries it as the residue it is.
+  physical: { mental: 0, physical: 0, social: 0, errands: 0 },
+  // Walking, carrying and queueing, plus the remembering and deciding that come with them.
+  errands: { mental: 0.1, physical: 0.2, social: 0, errands: 0 },
+  // Empty by design -- `CROSS_EFFECT.socialDraining` already prices what an obligation costs
+  // a head afterwards.
+  social: { mental: 0, physical: 0, social: 0, errands: 0 },
+}
+
 export const COUPLING: CouplingMatrix = {
   mental: { mental: 0, physical: 0.02, social: 0.04, errands: 0.02 },
   physical: { mental: 0.12, physical: 0, social: 0.02, errands: 0.04 },

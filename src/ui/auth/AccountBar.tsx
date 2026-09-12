@@ -12,12 +12,27 @@ import { Avatar } from './Avatar'
  * action inside the scrolling body instead of the pinned action bar every other sheet uses
  * (§0.2's lower-half-primary rule) -- `RoomShell` now renders that button into `Sheet`'s
  * `actions` and this component is identity display only.
+ *
+ * This then followed it into that bar rather than staying behind in the body, where it read
+ * as one more setting among the radios and could scroll out of sight while the button that
+ * signs that very account out stayed pinned. A label and the action it qualifies belong on
+ * one line.
  */
-export function AccountBar({ session }: { session: Session }) {
+export function AccountBar({
+  session,
+  /** Placement is the caller's, since this sits in a scrolling body in one sheet and in a
+   *  pinned action bar in another, and only the caller knows which. */
+  className = '',
+}: {
+  session: Session
+  className?: string
+}) {
   return (
-    <div className="flex items-center gap-2 text-xs text-ink-soft">
+    <div className={`flex items-center gap-2 text-xs text-ink-soft ${className}`}>
       <Avatar email={session.email} name={session.name} avatarUrl={session.avatarUrl} />
-      {/* truncate: a long Google display name must not overflow a 390px screen. */}
+      {/* truncate, and `min-w-0` on the row above it: a flex item will not shrink below its
+          content without it, so a long Google display name would push Sign out off a 390px
+          screen instead of ellipsing. */}
       <span className="truncate">{session.name ?? session.email}</span>
     </div>
   )

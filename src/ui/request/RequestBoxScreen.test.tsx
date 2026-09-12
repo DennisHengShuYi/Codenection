@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_PARAMS, HORIZON_DAYS } from '../../engine'
@@ -305,10 +305,12 @@ describe('correcting or discarding the ask', () => {
     setup()
     await read()
 
-    await userEvent.selectOptions(screen.getByTestId(/^when-hour-/), '9')
+    // A clock rather than a list of twenty-five: the chip's time is an `<input type="time">`
+    // now, and blank on it is the "Any time" that used to be its first option.
+    fireEvent.change(screen.getByTestId(/^when-hour-/), { target: { value: '09:00' } })
 
     // The price is recomputed from the corrected item: what survives is the correction.
-    await waitFor(() => expect(screen.getByTestId(/^when-hour-/)).toHaveValue('9'))
+    await waitFor(() => expect(screen.getByTestId(/^when-hour-/)).toHaveValue('09:00'))
   })
 
   it('clears the price with the ask when it is discarded', async () => {

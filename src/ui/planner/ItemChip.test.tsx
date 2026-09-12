@@ -262,10 +262,10 @@ describe('the chip saying when', () => {
     expect(screen.getByRole('option', { name: /day 3/i })).toBeInTheDocument()
   })
 
-  it('shows the stated time', () => {
+  it('shows the stated time on a clock', () => {
     setup({ deadlineDay: 2, startHour: 9 })
 
-    expect(screen.getByTestId('when-hour-a')).toHaveValue('9')
+    expect(screen.getByTestId('when-hour-a')).toHaveValue('09:00')
   })
 
   it('lets the day be corrected on the calendar', () => {
@@ -284,10 +284,10 @@ describe('the chip saying when', () => {
     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ deadlineDay: 3 }))
   })
 
-  it('lets the time be corrected', async () => {
+  it('lets the time be corrected', () => {
     const props = setup({ deadlineDay: 2, startHour: 9 })
 
-    await userEvent.selectOptions(screen.getByTestId('when-hour-a'), '14')
+    fireEvent.change(screen.getByTestId('when-hour-a'), { target: { value: '14:00' } })
 
     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ startHour: 14 }))
   })
@@ -297,12 +297,20 @@ describe('the chip saying when', () => {
    * no hour, and forcing one would pin it -- taking away the optimizer's freedom to place
    * it, which is the whole reason the week can be rebalanced at all.
    */
-  it('lets the time be given back to the app', async () => {
+  it('lets the time be given back to the app', () => {
     const props = setup({ deadlineDay: 2, startHour: 9 })
 
-    await userEvent.selectOptions(screen.getByTestId('when-hour-a'), '')
+    // Blank is the answer now, where it used to be the first of twenty-five options. The
+    // help line beside the field says so, so it is not a thing to be discovered.
+    fireEvent.change(screen.getByTestId('when-hour-a'), { target: { value: '' } })
 
     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ startHour: null }))
+  })
+
+  it('says so in words, rather than leaving blank to be discovered', () => {
+    setup({ deadlineDay: 2, startHour: 9 })
+
+    expect(screen.getByText(/blank for any time/i)).toBeVisible()
   })
 
   /**
@@ -347,16 +355,16 @@ describe('an item that repeats', () => {
 
   /** The hour is still the student's to see and correct: "every Tuesday" says which days,
    *  never what time. */
-  it('keeps the time editable on a repeating item', async () => {
+  it('keeps the time editable on a repeating item', () => {
     const props = setup({
       deadlineDay: null,
       startHour: 9,
       repeat: { weekdays: [2], untilDay: null },
     })
 
-    expect(screen.getByTestId('when-hour-a')).toHaveValue('9')
+    expect(screen.getByTestId('when-hour-a')).toHaveValue('09:00')
 
-    await userEvent.selectOptions(screen.getByTestId('when-hour-a'), '10')
+    fireEvent.change(screen.getByTestId('when-hour-a'), { target: { value: '10:00' } })
     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({ startHour: 10 }))
   })
 })

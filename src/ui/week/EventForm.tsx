@@ -306,7 +306,9 @@ export function EventForm({
           <Field label="Starts at" error={errors.startHour}>
             <HourPicker
               value={draft.startHour}
-              onChange={(startHour) => setDraft({ ...draft, startHour })}
+              /* Never null here: this picker is not `optional`, so it only ever reports a
+                 real hour. A block on the week has to start somewhere. */
+              onChange={(startHour) => setDraft({ ...draft, startHour: startHour ?? draft.startHour })}
             />
           </Field>
 

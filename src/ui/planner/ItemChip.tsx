@@ -4,6 +4,7 @@ import { BLOCK_KINDS, LOAD_TYPES, type ActivityKind, type LoadType } from '../..
 import { Button } from '../kit/Button'
 import type { Schedule } from '../../optimizer'
 import { DayPicker } from '../week/DayPicker'
+import { HourPicker } from '../week/HourPicker'
 import { CARD_TONES } from '../kit/Card'
 import { Field } from '../kit/Field'
 import { BLOCK_KIND_LABELS, LOAD_TYPE_LABELS } from '../kit/labels'
@@ -20,10 +21,6 @@ import { saysWhen } from './when'
  * `ACTIVITY_KINDS` by `engine/types.test.ts`.
  */
 const SELECTABLE_KINDS = BLOCK_KINDS
-
-/** Every hour of the day, offered as a real clock rather than a free-text box: a typed
- *  "half nine" is a parsing problem the student would have to solve twice. */
-const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
 
 /** Ruling 40's whole vocabulary needs names a student reads, and `Date.getUTCDay`'s ordering is
  *  what `expandRecurring` matches against -- so this is that order, not a prettier one. */
@@ -135,28 +132,19 @@ export function ItemChip({
           onChange={(deadlineDay) => onChange({ ...item, deadlineDay })}
         />
 
-        <Field label="Time">
-          <select
+        {/* A clock, and blank for "any time".
+            This was a `<select>` whose first option was "Any time" followed by every hour of
+            the day -- twenty-five rows to say one of two things. "Any time" is a real answer
+            and had to stay sayable, which is why the list survived the day's move to a
+            calendar; an empty time input says it just as well, and the help line says so in
+            words rather than leaving somebody to discover it. */}
+        <Field label="Time" help="Blank for any time">
+          <HourPicker
+            optional
             data-testid={`when-hour-${item.id}`}
-            value={item.startHour === null ? '' : String(item.startHour)}
-            onChange={(event) =>
-              onChange({
-                ...item,
-                startHour: event.target.value === '' ? null : Number(event.target.value),
-              })
-            }
-            className="min-h-11 rounded border border-line bg-surface px-2 py-1 text-sm text-ink"
-          >
-            {/* "Any time" is a real answer, not a missing one: an essay due Friday has a day
-                and no hour, and pinning one would take away the freedom the rebalancer needs
-                to place it. Stating an hour is what pins a block (Ruling 43). */}
-            <option value="">Any time</option>
-            {HOURS.map((hour) => (
-              <option key={hour} value={String(hour)}>
-                {String(hour).padStart(2, '0')}:00
-              </option>
-            ))}
-          </select>
+            value={item.startHour}
+            onChange={(startHour) => onChange({ ...item, startHour })}
+          />
         </Field>
 
         <Button variant="quiet" size="sm" className="ml-auto" onClick={() => onRemove(item.id)}>

@@ -150,3 +150,71 @@ describe('the hours it offers', () => {
     expect(input).toHaveValue('02:00')
   })
 })
+
+/**
+ * "Any time" as a real answer, said by leaving the clock blank.
+ *
+ * `ItemChip`'s time was a `<select>` whose first option was "Any time" -- which is a genuine
+ * third answer (an essay due Friday has a day and no hour, and pinning one takes away the
+ * freedom the rebalancer needs) and the reason that control could not simply become a clock.
+ * A time input can be empty, so it can: blank means any time, exactly as `DayPicker`'s
+ * `optional` means no day.
+ *
+ * Only where the caller says so. A block on the week must start somewhere, and a form that
+ * let its hour be cleared would be offering a state the model cannot hold.
+ */
+describe('an hour that need not be given', () => {
+  const optional = (onChange = vi.fn(), start: number | null = 9) => {
+    function Optional() {
+      const [hour, setHour] = useState<number | null>(start)
+
+      return (
+        <Field label="Time">
+          <HourPicker
+            optional
+            value={hour}
+            onChange={(next) => {
+              setHour(next)
+              onChange(next)
+            }}
+          />
+        </Field>
+      )
+    }
+
+    render(<Optional />)
+
+    return { onChange, input: screen.getByLabelText('Time') }
+  }
+
+  it('shows nothing at all when no hour was given', () => {
+    const { input } = optional(vi.fn(), null)
+
+    expect(input).toHaveValue('')
+  })
+
+  it('gives the hour back to the app when the field is cleared', () => {
+    const { onChange, input } = optional()
+
+    fireEvent.change(input, { target: { value: '' } })
+
+    expect(onChange).toHaveBeenCalledWith(null)
+  })
+
+  it('still reports a real hour', () => {
+    const { onChange, input } = optional()
+
+    fireEvent.change(input, { target: { value: '14:00' } })
+
+    expect(onChange).toHaveBeenLastCalledWith(14)
+  })
+
+  /** The required form must not offer a state the week cannot hold. */
+  it('says nothing when a required hour is cleared', () => {
+    const { onChange, input } = pick()
+
+    fireEvent.change(input, { target: { value: '' } })
+
+    expect(onChange).not.toHaveBeenCalled()
+  })
+})

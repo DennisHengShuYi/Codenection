@@ -349,3 +349,60 @@ describe('what beginConnect says when it cannot', () => {
     expect(outcome.ok).toBe(true)
   })
 })
+
+/**
+ * A refusal the student can act on, rather than one sentence for every failure.
+ *
+ * `readCalendar` threw a bare Error on any non-ok response and the screen turned it into "I
+ * could not read your calendar just now. Try again in a moment." That is right for Google
+ * being briefly unwell and wrong for the two failures where trying again is not what fixes
+ * it: a grant that does not carry the scope, and a deployment whose Calendar API was never
+ * switched on. The endpoint names those now, and the name has to survive the trip.
+ */
+describe('what readCalendar says when it cannot read', () => {
+  it('carries the endpoint sentence through to the caller', async () => {
+    token.mockResolvedValue('session-token')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({ message: 'Disconnect it in Settings and connect it again.' }),
+      }),
+    )
+
+    await expect(readCalendar(week())).rejects.toThrow(
+      'Disconnect it in Settings and connect it again.',
+    )
+  })
+
+  /** No sentence means the fault may simply pass, and the screen's own "try again in a
+   *  moment" is the truth. Inventing a specific reason here would be worse than silence. */
+  it('says nothing specific when the endpoint offered nothing', async () => {
+    token.mockResolvedValue('session-token')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 502, json: async () => ({}) }),
+    )
+
+    await expect(readCalendar(week())).rejects.toThrow('could not read calendar')
+  })
+
+  /** A body that is not JSON at all -- an HTML error page from something in front of the
+   *  function -- must not become the error the student reads. */
+  it('survives a response that is not JSON', async () => {
+    token.mockResolvedValue('session-token')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        json: async () => {
+          throw new Error('not json')
+        },
+      }),
+    )
+
+    await expect(readCalendar(week())).rejects.toThrow('could not read calendar')
+  })
+})

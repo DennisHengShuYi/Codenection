@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { HORIZON_DAYS } from '../src/engine'
+import { readFailureFor } from '../src/google/readFailure'
 import { unseal } from '../src/google/secretBox'
 import { readServiceRoleKey, readSupabasePair, readSupabaseUrl } from '../src/data/serverEnv'
 import { bearerFrom, callerFrom } from '../src/data/sessionCheck'
@@ -133,7 +134,29 @@ export default async function handler(request: Request): Promise<Response> {
     { headers: { authorization: `Bearer ${accessToken}` } },
   )
 
-  if (!events.ok) return new Response('Could not read your calendar.', { status: 502 })
+  /*
+   * Google's reason, kept rather than thrown away.
+   *
+   * This was a flat 502 for every failure, so the screen said "try again in a moment" to a
+   * student whose grant was missing a scope and to one whose deployment had never had the
+   * Calendar API switched on -- two cases where trying again is not what fixes it, and
+   * nobody, including whoever has to fix the second one, could tell which had happened.
+   *
+   * `readFailureFor` is pure and in `src/`, so what an answer MEANS is decided somewhere the
+   * unit suite reaches and this file stays a fetch with a credential.
+   */
+  if (!events.ok) {
+    const failure = readFailureFor(events.status, await events.json().catch(() => null))
+
+    // JSON only where there is something to say. The screen keeps its own sentence for a
+    // fault that may simply pass, which is the honest answer there.
+    return failure.message === null
+      ? new Response('Could not read your calendar.', { status: failure.status })
+      : new Response(JSON.stringify({ message: failure.message }), {
+          status: failure.status,
+          headers: { 'content-type': 'application/json' },
+        })
+  }
 
   const body = (await events.json()) as { items?: unknown }
 

@@ -99,7 +99,26 @@ export async function readCalendar(schedule: Schedule): Promise<CalendarImport> 
     headers: { authorization: `Bearer ${token}` },
   })
 
-  if (!response.ok) throw new Error('could not read calendar')
+  /*
+   * The endpoint's own sentence where it has one.
+   *
+   * Every failure used to be a bare `Error`, and the screen turned it into "try again in a
+   * moment" -- right for Google being briefly unwell, wrong for the two failures where
+   * trying again is not what fixes it. `api/google-events.ts` names those now; this is what
+   * lets the name reach the person who pressed the button rather than dying here.
+   *
+   * Nothing invented where nothing was offered. A fault that may simply pass keeps the
+   * screen's own sentence, which is the honest answer for it.
+   */
+  if (!response.ok) {
+    const said = (await response.json().catch(() => null)) as { message?: unknown } | null
+
+    throw new Error(
+      typeof said?.message === 'string' && said.message !== ''
+        ? said.message
+        : 'could not read calendar',
+    )
+  }
 
   const body = (await response.json()) as { events?: unknown }
   const events = Array.isArray(body.events) ? body.events : []

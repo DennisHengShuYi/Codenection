@@ -235,3 +235,49 @@ describe('when connecting cannot start', () => {
     await waitFor(() => expect(screen.queryByTestId('calendar-problem')).toBeNull())
   })
 })
+
+/**
+ * A refusal the student can act on, where there is one.
+ *
+ * This screen turned every failed read into "I could not read your calendar just now. Try
+ * again in a moment." That is right for Google being briefly unwell and wrong for the two
+ * failures where trying again is not what fixes it -- a grant missing a scope, and a
+ * deployment whose Calendar API was never switched on. Both reach here as the message on the
+ * thrown error now, and telling somebody to wait when waiting cannot help is the specific
+ * thing §8.2 calls worse than saying nothing.
+ */
+describe('when the calendar cannot be read', () => {
+  const failing = (error: Error) => setup({ onRead: vi.fn().mockRejectedValue(error) })
+
+  it('shows the reason it was given', async () => {
+    failing(new Error('Disconnect it in Settings and connect it again.'))
+
+    await userEvent.click(screen.getByTestId('calendar-read'))
+
+    expect(await screen.findByTestId('calendar-problem')).toHaveTextContent(
+      'Disconnect it in Settings and connect it again.',
+    )
+  })
+
+  /** The internal wording is not a sentence to show anybody. Where that is all there is, the
+   *  screen's own "try again in a moment" is both true and the most it can honestly say. */
+  it('falls back to try again when the failure has no words for a student', async () => {
+    failing(new Error('could not read calendar'))
+
+    await userEvent.click(screen.getByTestId('calendar-read'))
+
+    expect(await screen.findByTestId('calendar-problem')).toHaveTextContent(
+      'I could not read your calendar just now. Try again in a moment.',
+    )
+  })
+
+  it('says the same for a network that simply died', async () => {
+    failing(new TypeError('Failed to fetch'))
+
+    await userEvent.click(screen.getByTestId('calendar-read'))
+
+    expect(await screen.findByTestId('calendar-problem')).toHaveTextContent(
+      'I could not read your calendar just now. Try again in a moment.',
+    )
+  })
+})

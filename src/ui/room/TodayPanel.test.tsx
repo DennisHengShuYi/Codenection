@@ -263,11 +263,24 @@ describe('what else changes in the room', () => {
     expect(body).not.toMatch(/boxes/i)
   })
 
-  it('closes again on a second press', async () => {
+  /**
+   * A dialog rather than a section unfolded in place, so the way out is the dialog's own
+   * control -- the question mark is behind the backdrop once it is open, and pressing it
+   * again is not a move a student can make.
+   */
+  it('opens as a dialog over the room, not as more panel', async () => {
     render(<TodayPanel rows={[row()]} />)
 
     await userEvent.click(screen.getByTestId('panel-help'))
+
+    expect(screen.getByRole('dialog')).toContainElement(screen.getByTestId('panel-help-body'))
+  })
+
+  it('closes from the dialog itself', async () => {
+    render(<TodayPanel rows={[row()]} />)
+
     await userEvent.click(screen.getByTestId('panel-help'))
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(screen.queryByTestId('panel-help-body')).toBeNull()
   })

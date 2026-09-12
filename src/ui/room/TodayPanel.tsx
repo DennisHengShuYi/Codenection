@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Sheet } from '../kit/Sheet'
 import type { PanelRow } from './todayRows'
 
 /** The same clock the rest of the app writes, so 9 reads as 09:00 everywhere. */
@@ -95,26 +96,27 @@ export function TodayPanel({ rows }: { rows: readonly PanelRow[] }) {
         </button>
       </div>
 
-      {/* In place, not in a sheet: the rows below already work that way, and on a phone this
-          panel IS a sheet -- a popup over it would be a sheet on a sheet. */}
+      {/* A dialog rather than a section unfolded in place. The rows expand in place because
+          each one belongs to the row above it; this belongs to the room rather than to the
+          list, and unfolding six paragraphs mid-panel pushes the day's own items off the
+          screen to answer a question about something else. */}
       {helpOpen && (
-        <div
-          data-testid="panel-help-body"
-          className="flex flex-col gap-2 rounded-lg bg-ground px-3 py-2 text-xs"
-        >
-          <p className="text-ink-soft">
-            These move for other reasons — not for what is on today.
-          </p>
+        <Sheet title="What else changes in the room" onClose={() => setHelpOpen(false)}>
+          <div data-testid="panel-help-body" className="flex flex-col gap-3 text-sm">
+            <p className="text-ink-soft">
+              These move for other reasons — not for what is on today.
+            </p>
 
-          <dl className="flex flex-col gap-2">
-            {ELSEWHERE.map((entry) => (
-              <div key={entry.what} className="flex flex-col">
-                <dt className="font-medium text-ink">{entry.what}</dt>
-                <dd className="text-ink-soft">{entry.driven}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
+            <dl className="flex flex-col gap-3">
+              {ELSEWHERE.map((entry) => (
+                <div key={entry.what} className="flex flex-col">
+                  <dt className="font-medium text-ink">{entry.what}</dt>
+                  <dd className="text-ink-soft">{entry.driven}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </Sheet>
       )}
 
       <ul data-testid="today-panel" className="flex flex-col gap-1">

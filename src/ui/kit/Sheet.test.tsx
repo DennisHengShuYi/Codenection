@@ -30,6 +30,20 @@ vi.mock('../../google/connection', () => ({
   hasCalendarConnected: () => Promise.resolve(true),
 }))
 
+/**
+ * A fortnight with no `startedOn`, which is the ordinary state of a seeded week.
+ *
+ * `DayPicker` falls back to the named days there, so these tests still drive the same
+ * control they always did -- the day NAMES this file used to pass in are now derived from
+ * the week rather than handed over, which is the whole point of the change.
+ */
+const WEEK: Schedule = {
+  items: [],
+  start: { mental: 70, physical: 70, social: 70, errands: 70 },
+  horizonDays: HORIZON_DAYS,
+  sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+}
+
 const setup = (actions?: React.ReactNode) => {
   const onClose = vi.fn()
   render(
@@ -196,7 +210,8 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         onAccept={vi.fn()}
         onBack={vi.fn()}
         onClose={vi.fn()}
-        dayLabels={['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep']}
+        schedule={WEEK}
+        today={0}
         calendar={{ today: 0, startWeekday: 5, todayLabel: '11 September 2026' }}
       />,
     )
@@ -206,7 +221,7 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
 
   it('PlannerScreen: Back and Read this are in the bar', () => {
     render(
-      <PlannerScreen onAccept={vi.fn()} onBack={vi.fn()} onClose={vi.fn()} dayLabels={['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep']}
+      <PlannerScreen onAccept={vi.fn()} onBack={vi.fn()} onClose={vi.fn()} schedule={WEEK} today={0}
         calendar={{ today: 0, startWeekday: 5, todayLabel: '11 September 2026' }} />,
     )
 
@@ -225,7 +240,6 @@ describe('every sheet in the app puts its actions in the pinned bar', () => {
         onAccept={vi.fn()}
         onBack={vi.fn()}
         onClose={vi.fn()}
-        dayLabels={['Today, Mon 8 Sep', 'Tue 9 Sep', 'Wed 10 Sep', 'Thu 11 Sep', 'Fri 12 Sep']}
         calendar={{ today: 0, startWeekday: 5, todayLabel: '11 September 2026' }}
       />,
     )

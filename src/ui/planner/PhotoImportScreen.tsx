@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Calendar, ParsedItem } from '../../ai'
 import { Button } from '../kit/Button'
 import { Field } from '../kit/Field'
+import type { Schedule } from '../../optimizer'
 import { Sheet } from '../kit/Sheet'
 import { ItemChip } from './ItemChip'
 import { saysWhen } from './when'
@@ -23,7 +24,8 @@ export function PhotoImportScreen({
   suggestRepeat = () => null,
   onBack,
   onClose,
-  dayLabels,
+  schedule,
+  today,
   calendar,
 }: {
   onAccept: (items: readonly ParsedItem[]) => void
@@ -37,7 +39,8 @@ export function PhotoImportScreen({
    *  quietly dropped the student at the chooser instead of closing. */
   onClose: () => void
   /** Ruling 43: the horizon's days in a student's words, for the chip's "when" question. */
-  dayLabels: readonly string[]
+  schedule: Schedule
+  today: number
   /** Ruling 44: which real day day 0 is, so a weekday printed on a timetable lands on that
    *  weekday rather than on a day the model guessed at. */
   calendar: Calendar
@@ -135,7 +138,8 @@ export function PhotoImportScreen({
             <ul className="flex flex-1 flex-col gap-3">
               {items.map((item) => (
                 <ItemChip
-                  dayLabels={dayLabels}
+                  schedule={schedule}
+                today={today}
                   key={item.id}
                   item={item}
                   onChange={(next) =>

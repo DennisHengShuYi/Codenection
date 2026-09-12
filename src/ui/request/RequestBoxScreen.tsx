@@ -73,7 +73,6 @@ export function RequestBoxScreen({
   onAccept,
   onBack,
   onClose,
-  dayLabels,
   calendar,
 }: {
   schedule: Schedule
@@ -110,7 +109,6 @@ export function RequestBoxScreen({
    *  quietly dropped the student at the chooser instead of closing. */
   onClose: () => void
   /** Ruling 43: the horizon's days in a student's words, for the chip's "when" question. */
-  dayLabels: readonly string[]
   /** Ruling 44: which real day the horizon's day 0 is, so "next thursday" means that thursday. */
   calendar: Calendar
 }) {
@@ -210,7 +208,8 @@ export function RequestBoxScreen({
                 being priced on it. */}
             <ul className="flex flex-col gap-3">
               <ItemChip
-                dayLabels={dayLabels}
+                schedule={schedule}
+                today={today}
                 item={item}
                 onChange={(next) => void onPrice(text, next)}
                 onRemove={() => {

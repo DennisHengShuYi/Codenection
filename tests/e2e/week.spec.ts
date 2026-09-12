@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { expectWeekStored } from './storedWeek'
+import { answerEveryChipDay } from './chipDay'
 
 /**
  * The week screen in a real browser.
@@ -47,9 +48,7 @@ async function openWeekWithLongTitleBlock(page: Page) {
   // §43: an item that does not say when it happens cannot be added, so the day is answered
   // on the chip first -- the same press a student makes. Day 2 rather than today, so what
   // lands is distinguishable from something the seed put there.
-  for (const select of await page.getByTestId(/^when-day-/).all()) {
-    await select.selectOption('2')
-  }
+  await answerEveryChipDay(page)
 
   await page.getByRole('button', { name: /add these/i }).click()
   await expect(page.getByTestId('room-scene')).toBeVisible()

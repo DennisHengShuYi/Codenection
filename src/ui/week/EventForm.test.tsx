@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_PARAMS, HORIZON_DAYS } from '../../engine'
@@ -49,6 +49,18 @@ const setup = (over: Partial<Parameters<typeof EventForm>[0]> = {}) => {
   return { onSave, onClose, onBack }
 }
 
+/**
+ * The hour, set on a clock rather than chosen from a list.
+ *
+ * "Starts at" was a `<select>` of twenty-four options and is an `<input type="time">` now
+ * (see `HourPicker`), so `selectOptions` has nothing to select. A time input is segmented --
+ * hours, then minutes -- and jsdom does not implement that editing model, so typing into it
+ * puts characters where no browser would; setting the value is what actually exercises the
+ * component.
+ */
+const startAt = (clock: string) =>
+  fireEvent.change(screen.getByLabelText('Starts at'), { target: { value: clock } })
+
 describe('adding a block by hand', () => {
   it('opens as a dialog that says it is adding', () => {
     setup()
@@ -71,7 +83,7 @@ describe('adding a block by hand', () => {
     const { onSave } = setup()
 
     await userEvent.type(screen.getByLabelText('What'), 'Gym')
-    await userEvent.selectOptions(screen.getByLabelText('Starts at'), '17')
+    startAt('17:00')
     await userEvent.clear(screen.getByLabelText('Hours'))
     await userEvent.type(screen.getByLabelText('Hours'), '1.5')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -93,7 +105,7 @@ describe('changing a block by hand', () => {
   it('hands back the changed field without losing the untouched ones', async () => {
     const { onSave } = setup({ item: item('essay', { title: 'Essay draft' }) })
 
-    await userEvent.selectOptions(screen.getByLabelText('Starts at'), '15')
+    startAt('15:00')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(onSave).toHaveBeenCalledWith(
@@ -122,7 +134,7 @@ describe('what the form says about a block the optimizer has pinned', () => {
   it('lets it be saved anyway', async () => {
     const { onSave } = setup({ item: item('lab', { title: 'Lab', fixed: true }) })
 
-    await userEvent.selectOptions(screen.getByLabelText('Starts at'), '15')
+    startAt('15:00')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(onSave).toHaveBeenCalledTimes(1)
@@ -140,7 +152,7 @@ describe('what the form says about a clash', () => {
   it('names the block it would collide with', async () => {
     setup(clashing())
 
-    await userEvent.selectOptions(screen.getByLabelText('Starts at'), '9')
+    startAt('09:00')
 
     expect(screen.getByTestId('edit-warnings')).toHaveTextContent('WIA3001 tutorial')
   })
@@ -153,7 +165,7 @@ describe('what the form says about a clash', () => {
   it('still lets it be saved, because the week really is double-booked', async () => {
     const { onSave } = setup(clashing())
 
-    await userEvent.selectOptions(screen.getByLabelText('Starts at'), '9')
+    startAt('09:00')
 
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
 

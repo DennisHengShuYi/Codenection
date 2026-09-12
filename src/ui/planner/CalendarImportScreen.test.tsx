@@ -3,6 +3,22 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { ParsedItem } from '../../ai'
 import { CalendarImportScreen } from './CalendarImportScreen'
+import { HORIZON_DAYS } from '../../engine'
+import type { Schedule } from '../../optimizer'
+
+/**
+ * A fortnight with no `startedOn`, which is the ordinary state of a seeded week.
+ *
+ * `DayPicker` falls back to the named days there, so these tests still drive the same
+ * control they always did -- the day NAMES this file used to pass in are now derived from
+ * the week rather than handed over, which is the whole point of the change.
+ */
+const WEEK: Schedule = {
+  items: [],
+  start: { mental: 70, physical: 70, social: 70, errands: 70 },
+  horizonDays: HORIZON_DAYS,
+  sleepByDay: Array.from({ length: HORIZON_DAYS }, () => 7),
+}
 
 const item = (over: Partial<ParsedItem> = {}): ParsedItem => ({
   id: 'gcal-1',
@@ -26,7 +42,8 @@ const setup = (over: Partial<Parameters<typeof CalendarImportScreen>[0]> = {}) =
     onAccept: vi.fn(),
     onBack: vi.fn(),
     onClose: vi.fn(),
-    dayLabels: ['today', 'tomorrow', 'Friday'],
+    schedule: WEEK,
+    today: 0,
     ...over,
   }
 

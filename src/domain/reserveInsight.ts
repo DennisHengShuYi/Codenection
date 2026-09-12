@@ -13,7 +13,8 @@ import {
 import type { Schedule } from '../optimizer'
 import { answeredIds, type BlockRecord } from './blockLog'
 import { describeDeficit, explainDeficit } from './deficitCause'
-import { prescribe } from './prescribe'
+import { missedSoftDeadlines } from './softDeadlines'
+import { ADVICE_KINDS, prescribe } from './prescribe'
 
 /**
  * Above this a reserve is not what limits anybody, and saying so is noise.
@@ -92,6 +93,17 @@ export interface ReserveInsight {
   readonly upcoming: UpcomingRelief | null
   /** §5.2's one concrete action, where today has room for one. */
   readonly action: { readonly title: string; readonly hours: number } | null
+  /**
+   * Why there is no action, when there is none.
+   *
+   * `prescribe` returns a bare null and says in writing that it does not distinguish its two
+   * causes, because for its caller either way there is one honest answer and it is not a
+   * suggestion. Here the difference is the entire message: "everything your reserves need is
+   * already on the plan" is the app working and worth hearing, and "there is no free stretch
+   * on today" is a different fact a student would act differently on. Told apart here rather
+   * than there, so that function keeps the shape its own docstring argues for.
+   */
+  readonly noAction: 'allInHand' | 'noRoomToday' | null
 }
 
 /**
@@ -187,8 +199,19 @@ export function reserveInsight({
           )
           .sort((a, b) => a.dayIndex - b.dayIndex || a.startHour - b.startHour)[0] ?? null)
 
+  /*
+   * Overdue things that have advice attached -- the same population `prescribe` chooses
+   * from. Non-empty with no prescription means the day had nowhere to put one; empty means
+   * there was nothing to put there in the first place.
+   */
+  const answerable = missedSoftDeadlines(schedule, today, blockLog).filter(
+    (miss) => ADVICE_KINDS[miss.type] !== undefined,
+  )
+
   return {
     notes,
+    noAction:
+      prescription !== null ? null : answerable.length === 0 ? 'allInHand' : 'noRoomToday',
     upcoming:
       upcoming === null ? null : { title: upcoming.title, dayIndex: upcoming.dayIndex },
     deficit:
@@ -300,6 +323,19 @@ export function insightLines(
     lines.push(
       `${insight.upcoming.title} ${dayNameFor(insight.upcoming.dayIndex)} is what answers that, so it is already in hand.`,
     )
+  }
+
+  if (insight.noAction === 'allInHand') {
+    lines.push(
+      'Everything your reserves need is already on the plan, so there is nothing to add today.',
+    )
+  }
+
+  if (insight.noAction === 'noRoomToday') {
+    // Not the same news, and not the same response. The first is the plan working; this is
+    // a day with no gap left in it, and what it asks for is moving something rather than
+    // adding something.
+    lines.push('There is no free stretch on today to put anything else in.')
   }
 
   if (insight.action !== null) {

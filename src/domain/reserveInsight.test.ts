@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  type ActivityKind,
   DEFICIT_THRESHOLD,
   HORIZON_DAYS,
   project,
@@ -10,6 +11,7 @@ import {
 import { DEFAULT_PARAMS } from '../engine/params'
 import { toDayInputs, type Schedule, type ScheduledItem } from '../optimizer'
 import { insightLines, reserveInsight } from './reserveInsight'
+import { RHYTHM_KINDS } from './softDeadlines'
 
 /**
  * What the Reserves sheet says beyond reading its own dial back.
@@ -328,5 +330,79 @@ describe('what is already booked for the thinnest reserve', () => {
 
   it('has nothing to point at when the reserve really is unanswered', () => {
     expect(insightOf(week(HEALTHY)).upcoming).toBeNull()
+  })
+})
+
+/**
+ * The two ways there is nothing to suggest, told apart.
+ *
+ * Both used to be silence, and silence is the fault this whole block keeps running into: a
+ * student cannot tell "everything your reserves need is already on the plan" -- which is the
+ * app working, and worth hearing -- from "we have nothing to say". `prescribe` deliberately
+ * does not distinguish them, because for its caller either way there is one honest answer
+ * and it is not a suggestion. Here the difference is the whole message.
+ */
+describe('when there is nothing to suggest', () => {
+  const parked = (kind: ActivityKind): ScheduledItem =>
+    item({
+      id: `parked-${kind}`,
+      kind,
+      type: kind === 'rest' ? 'mental' : kind === 'socialRestorative' ? 'social' : 'physical',
+      dayIndex: 10,
+      startHour: 20,
+      hours: 1,
+    })
+
+  /**
+   * Far enough in that a rhythm nobody has kept is unambiguously overdue.
+   *
+   * On day 0 nothing can be: a rhythm never confirmed is due one interval after the start of
+   * the fortnight, so the shortest of them -- rest, at a day -- only becomes late on day one.
+   */
+  const LATE = 9
+
+  /** Every rhythm answered by something already on the fortnight. */
+  const allInHand = (): Schedule => week(HEALTHY, RHYTHM_KINDS.map(parked))
+
+  /** Nothing kept up, and today with no free stretch left to put anything in. */
+  const noRoomToday = (): Schedule =>
+    week(
+      HEALTHY,
+      Array.from({ length: 16 }, (_, hour) =>
+        item({ id: `full-${hour}`, dayIndex: LATE, startHour: 8 + hour, hours: 1, fixed: true }),
+      ),
+    )
+
+  it('says the plan already covers it, rather than saying nothing', () => {
+    const lines = insightLines(insightOf(allInHand(), LATE), {
+      deficitDayLabel: null,
+      labelFor: LABEL,
+      dayNameFor: DAY,
+    }).join(' ')
+
+    expect(lines).toMatch(/already on the plan/i)
+  })
+
+  /** A different thing entirely, and a student would act differently on it. */
+  it('says the day is full when that is the reason instead', () => {
+    const lines = insightLines(insightOf(noRoomToday(), LATE), {
+      deficitDayLabel: null,
+      labelFor: LABEL,
+      dayNameFor: DAY,
+    }).join(' ')
+
+    expect(lines).toMatch(/free stretch/i)
+    expect(lines).not.toMatch(/already on the plan/i)
+  })
+
+  it('says neither when it does have something to suggest', () => {
+    const lines = insightLines(insightOf(week(HEALTHY), LATE), {
+      deficitDayLabel: null,
+      labelFor: LABEL,
+      dayNameFor: DAY,
+    }).join(' ')
+
+    expect(lines).toMatch(/worth doing/i)
+    expect(lines).not.toMatch(/already on the plan|free stretch/i)
   })
 })

@@ -86,12 +86,23 @@ if (accountId === null) fail(`No account found for ${email}. Sign up first, then
 
 const built = demoAccount(todayIso)
 const week = scatterSeed === null ? built.week : scatter(built.week, scatterSeed, DAYS_BEHIND)
-const { blockLog, profile } = built
+const { blockLog, profile, sleepNights, sleepTargetHours } = built
 
 console.log(`account   ${email}  (${accountId})`)
 console.log(`today     ${todayIso}  -> day ${DAYS_BEHIND} of the fortnight`)
 console.log(`anchor    ${week.startedOn}  (day 0)`)
-console.log(`writing   ${week.items.length} events, ${blockLog.length} answered blocks, ${profile.predictions.length} energy reports`)
+console.log(`writing   ${week.items.length} events, ${blockLog.length} answered blocks, ${profile.predictions.length} energy reports, ${sleepNights.length} nights`)
+
+// The narrowest rung of 2.4's ladder needs MIN_SAMPLES_FOR_TASK answers under one NAME, so
+// a seed that cannot reach it cannot demonstrate the feature. Said out loud rather than
+// left for somebody to discover on stage.
+const byName = new Map<string, number>()
+for (const record of blockLog) {
+  const name = record.title ?? record.blockId
+  byName.set(name, (byName.get(name) ?? 0) + 1)
+}
+const deepest = [...byName.entries()].sort((a, b) => b[1] - a[1])[0]
+console.log(`ladder    ${deepest?.[0] ?? 'nothing'} answered ${deepest?.[1] ?? 0}x (3 reaches the task rung)`)
 console.log(`scatter   ${scatterSeed === null ? 'off (tidy repeating week)' : `seed ${scatterSeed}`}`)
 
 const hours: number[] = Array.from({ length: 21 }, () => 0)
@@ -105,9 +116,19 @@ if (!commit) {
   process.exit(0)
 }
 
-const { error: stateError } = await admin
-  .from('user_state')
-  .upsert({ id: accountId, week, settings: { lowEnergyOverride: 'auto', calibration: profile } })
+const { error: stateError } = await admin.from('user_state').upsert({
+  id: accountId,
+  week,
+  settings: {
+    lowEnergyOverride: 'auto',
+    calibration: profile,
+    // Without these the sleep page has nothing to compare, `sleepReality` stays silent below
+    // three nights, and the bed draws its debt against a population norm rather than against
+    // what this student says they are aiming for.
+    sleepTargetHours,
+    sleepNights,
+  },
+})
 
 if (stateError) fail(`Could not write the week: ${stateError.message}`)
 
@@ -116,6 +137,10 @@ const { error: logError } = await admin.from('block_answers').upsert(
     account_id: accountId,
     block_id: record.blockId,
     load_type: record.type,
+    // Migration 0008's columns. Without them every answer is anonymous to the ladder, which
+    // can then only ever answer at the area level -- the level that existed before 2.4.
+    activity_kind: record.kind ?? null,
+    title: record.title ?? null,
     planned_hours: record.plannedHours,
     day_index: record.dayIndex,
     answer: record.answer,

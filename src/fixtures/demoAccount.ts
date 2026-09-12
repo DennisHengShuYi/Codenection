@@ -4,6 +4,7 @@ import { DEFAULT_PROFILE } from '../domain/calibration'
 import type { EnergyPrediction } from '../domain/predictions'
 import { HORIZON_DAYS, type ActivityKind, type LoadType } from '../engine'
 import { makeRng, type Schedule, type ScheduledItem } from '../optimizer'
+import type { SleepNight } from '../domain/sleepLog'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
@@ -53,7 +54,18 @@ const WEEKLY: ReadonlyArray<{
   { weekday: 1, title: 'Groceries', type: 'errands', kind: 'errands', startHour: 17, hours: 1, fixed: false },
   { weekday: 2, title: 'Tutorial', type: 'mental', kind: 'studyBlock', startHour: 11, hours: 2, fixed: true },
   { weekday: 2, title: 'Group project meeting', type: 'social', kind: 'socialDraining', startHour: 19, hours: 2, fixed: false },
+  /*
+   * Three times a week, and that is the point rather than realism.
+   *
+   * §2.4's narrowest rung needs `MIN_SAMPLES_FOR_TASK` answers under one NAME before it can
+   * say "you underestimate your assignment work". Every other slot here happens once a week,
+   * so in the days behind today each name has exactly one answer and the ladder can only
+   * ever reach the area level -- which is the level that existed before §2.4 and is not what
+   * a demo of §2.4 should show.
+   */
+  { weekday: 1, title: 'Assignment work', type: 'mental', kind: 'studyBlock', startHour: 14, hours: 2, fixed: false },
   { weekday: 3, title: 'Assignment work', type: 'mental', kind: 'studyBlock', startHour: 14, hours: 4, fixed: false },
+  { weekday: 5, title: 'Assignment work', type: 'mental', kind: 'studyBlock', startHour: 15, hours: 2, fixed: false },
   { weekday: 3, title: 'Laundry', type: 'errands', kind: 'errands', startHour: 18, hours: 1, fixed: false },
   { weekday: 4, title: 'Lecture', type: 'mental', kind: 'studyBlock', startHour: 9, hours: 2, fixed: true },
   { weekday: 4, title: 'Badminton', type: 'physical', kind: 'lightExercise', startHour: 17, hours: 1.5, fixed: false },
@@ -92,7 +104,26 @@ export interface DemoAccount {
   readonly week: Schedule
   readonly blockLog: readonly BlockRecord[]
   readonly profile: CalibrationProfile
+  /**
+   * The nights actually reported, which is what tells "slept eight hours" from "nobody has
+   * asked yet".
+   *
+   * Without these the sleep page has nothing to compare, `sleepReality` stays silent below
+   * three nights, and the bed draws a debt against a population norm rather than against
+   * what this student said they were aiming for.
+   */
+  readonly sleepNights: readonly SleepNight[]
+  /** What they say they are aiming for, for the shortfall to be measured against. */
+  readonly sleepTargetHours: number
 }
+
+/**
+ * Eight is the plan, six is the week. Enough nights to clear `sleepReality`'s three-night
+ * floor, and far enough below the target that the gap is worth a sentence.
+ */
+const SLEEP_TARGET_HOURS = 8
+
+const NIGHTS: readonly number[] = [6, 5.5, 6, 7, 5, 6.5, 6]
 
 /**
  * A signed-in account with a week already behind it, for testing and demonstrating the app
@@ -140,6 +171,12 @@ export function demoAccount(todayIso: string, daysBehind: number = DAYS_BEHIND):
     .map((item) => ({
       blockId: item.id,
       type: item.type,
+      // The name and the kind, which are what §2.4's narrow rungs are keyed on. Without them
+      // `paddingDetail` can only answer at the area level, however many answers there are --
+      // migration 0008 added the columns for exactly this and the fixture was still writing
+      // records that could not use them.
+      title: item.title,
+      kind: item.kind,
       plannedHours: item.hours,
       dayIndex: item.dayIndex,
       answer: answerFor(item.type),
@@ -152,7 +189,19 @@ export function demoAccount(todayIso: string, daysBehind: number = DAYS_BEHIND):
     reported: REPORTED[offset] ?? 50,
   }))
 
+  /*
+   * One per day already lived, dated rather than indexed -- `domain/sleepLog` keys nights by
+   * date because a fortnight rolls over and a day index does not survive that.
+   */
+  const sleepNights: SleepNight[] = Array.from({ length: daysBehind }, (_, offset) => ({
+    isoDate: dayAfter(anchoredOn, offset),
+    hours: NIGHTS[offset % NIGHTS.length] ?? 6,
+    answeredAt: answeredAt(anchoredOn, offset),
+  }))
+
   return {
+    sleepNights,
+    sleepTargetHours: SLEEP_TARGET_HOURS,
     week: {
       items,
       // Mid-semester rather than rested, for `umWeek`'s own reason -- "nobody opens a

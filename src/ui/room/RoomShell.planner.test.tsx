@@ -211,9 +211,13 @@ describe('RoomShell with the planner', () => {
         items: [
           {
             id: 'existing',
-            // The rules parser keeps the whole fragment as the title, so the block already
-            // in the week has to carry the same words the student types.
-            title: 'lecture tuesday',
+            // The rules parser takes the day out of the name now -- it read "tuesday" into
+            // `deadlineDay` and leaving it in the title as well made two buckets of one
+            // thing. So a block already in the week carries the name the parser would give
+            // it, which is also what makes this series detectable: "lecture tuesday" and
+            // "lecture thursday" are both "lecture", where before they were two names that
+            // could never be recognised as one class.
+            title: 'lecture',
             type: 'mental',
             kind: 'studyBlock',
             hours: 2,

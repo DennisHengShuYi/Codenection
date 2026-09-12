@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLocalRepository, type Repository } from '../../data'
+import { isoDateOf } from '../../domain/calendar'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule, ScheduledItem } from '../../optimizer'
 import { RoomShell } from './RoomShell'
@@ -14,8 +15,10 @@ import { RoomShell } from './RoomShell'
  * this card correctly stays silent when it can. Fixed work alone is not enough -- the
  * optimizer may not move it, but it may still schedule around it.
  */
+/** The student's own date, not the UTC one — see `calendar.isoDateOf`. `toISOString()` here
+ *  anchored the week a day early for the first eight hours of every local day. */
 const daysAgo = (days: number): string =>
-  new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0] as string
+  isoDateOf(new Date(Date.now() - days * 24 * 60 * 60 * 1000))
 
 const heavy = (over: Partial<ScheduledItem> = {}): ScheduledItem => ({
   id: 'b1',

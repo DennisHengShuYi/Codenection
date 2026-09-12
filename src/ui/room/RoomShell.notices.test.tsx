@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLocalRepository, DEFAULT_SETTINGS, type StoredSettings } from '../../data'
+import { isoDateOf } from '../../domain/calendar'
 import { HORIZON_DAYS } from '../../engine'
 import type { Schedule } from '../../optimizer'
 import { RoomShell } from './RoomShell'
@@ -164,8 +165,12 @@ describe('the room, with its band behind a button', () => {
  * Not shown at low energy. §1.5 is explicit that a student at 12% reserve should not be
  * handed a dashboard, and a backlog is the most dashboard-like thing in the app.
  */
+/** The student's own date, not the UTC one — see `calendar.isoDateOf`. `toISOString()` here
+ *  recorded last night under yesterday's date for the first eight hours of every local day,
+ *  so the sleep question this fixture answers stayed outstanding and the check-in card the
+ *  test expects to be absent was raised. */
 const daysAgo = (days: number): string =>
-  new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0] as string
+  isoDateOf(new Date(Date.now() - days * 24 * 60 * 60 * 1000))
 
 const lived = (): Partial<Schedule> => ({
   items: [

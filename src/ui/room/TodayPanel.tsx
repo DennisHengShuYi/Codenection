@@ -24,8 +24,48 @@ const hoursLabel = (hours: number): string =>
  * sheet below that -- which is why this component knows nothing about either. Where it sits
  * is not a property of what today contains.
  */
+/**
+ * Ruling 46, second half: the things in the room that do not come from today's list.
+ *
+ * The rows account for the objects that fill with what is on today. These move for other
+ * reasons entirely -- how the student actually is, what the fortnight forecasts, whether the
+ * day fits inside its own hours -- and none of them was named anywhere. A student watching
+ * the room darken on a day with three hours on it had no way to learn that the darkness is
+ * about the hours not fitting rather than about them.
+ *
+ * Behind a question mark rather than on the panel: they do not change with the list, and five
+ * more paragraphs above six rows would bury the thing the panel was opened for.
+ */
+const ELSEWHERE: readonly { readonly what: string; readonly driven: string }[] = [
+  {
+    what: 'The character',
+    driven:
+      'your lowest reserve, not the average — one empty reserve is the whole story however the others look',
+  },
+  {
+    what: 'The corner gauge',
+    driven: 'the average of the four, as a percentage',
+  },
+  {
+    what: 'The door',
+    driven:
+      'lit when time outside and time with people are both nearly gone — the one move that answers both',
+  },
+  {
+    what: 'The weather through the window',
+    driven:
+      'the forecast: a storm when the fortnight runs into deficit within a week, clouds when it is further off',
+  },
+  {
+    what: 'The light in the room, and how dark the window goes',
+    driven:
+      'the hours today asks for that do not fit inside it — this is the day overrunning, not you',
+  },
+]
+
 export function TodayPanel({ rows }: { rows: readonly PanelRow[] }) {
   const [openId, setOpenId] = useState<string | null>(null)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   return (
     <div className="flex flex-col gap-2">
@@ -35,11 +75,47 @@ export function TodayPanel({ rows }: { rows: readonly PanelRow[] }) {
           hours" and still has to work out that the books on the desk ARE those four hours.
           It is the same rule for every row, so repeating it six times would be noise; each
           row carries only what is particular to it. */}
-      <p data-testid="panel-intro" className="px-2 pt-1 text-xs text-ink-soft">
-        The room fills with what today asks of you — each object grows with the hours behind
-        it, and empties as you get through them. The clock on the wall shows how much of the
-        day is spoken for altogether.
-      </p>
+      <div className="flex items-start gap-2 px-2 pt-1">
+        <p data-testid="panel-intro" className="flex-1 text-xs text-ink-soft">
+          The room fills with what today asks of you — each object grows with the hours behind
+          it, and empties as you get through them. The clock on the wall shows how much of the
+          day is spoken for altogether.
+        </p>
+
+        {/* A question mark is not a word, so the name carries the question it answers. */}
+        <button
+          type="button"
+          data-testid="panel-help"
+          aria-label="What else changes in the room"
+          aria-expanded={helpOpen}
+          onClick={() => setHelpOpen(!helpOpen)}
+          className="flex size-6 shrink-0 items-center justify-center rounded-full border border-line text-xs text-ink-soft hover:bg-ground focus-visible:outline focus-visible:outline-2"
+        >
+          ?
+        </button>
+      </div>
+
+      {/* In place, not in a sheet: the rows below already work that way, and on a phone this
+          panel IS a sheet -- a popup over it would be a sheet on a sheet. */}
+      {helpOpen && (
+        <div
+          data-testid="panel-help-body"
+          className="flex flex-col gap-2 rounded-lg bg-ground px-3 py-2 text-xs"
+        >
+          <p className="text-ink-soft">
+            These move for other reasons — not for what is on today.
+          </p>
+
+          <dl className="flex flex-col gap-2">
+            {ELSEWHERE.map((entry) => (
+              <div key={entry.what} className="flex flex-col">
+                <dt className="font-medium text-ink">{entry.what}</dt>
+                <dd className="text-ink-soft">{entry.driven}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
 
       <ul data-testid="today-panel" className="flex flex-col gap-1">
       {rows.map((row) => {

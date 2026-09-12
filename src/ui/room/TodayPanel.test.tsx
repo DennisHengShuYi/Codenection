@@ -194,3 +194,81 @@ describe('the sentence above the rows', () => {
     expect(screen.getAllByTestId('panel-intro')).toHaveLength(1)
   })
 })
+
+/**
+ * The half of the room the legend never explained.
+ *
+ * The rows account for the objects that fill with today's list -- the desk, the dumbbell,
+ * the figures, the boxes, the bed. Six other things in the room move and none of them was
+ * named anywhere: the character, the corner gauge, the door, the weather through the window,
+ * and the light. A student watching the room go dark on a day with three hours on it has no
+ * way to learn that the darkness is about the hours not fitting rather than about them.
+ *
+ * Behind a question mark rather than on the panel, because these do not change with the
+ * list: putting five more paragraphs above six rows would bury the thing a student opened
+ * the panel for. Expanded in place rather than in a sheet -- the rows already established
+ * that, and on a phone the panel *is* a sheet, so a popup over it would be a sheet on a
+ * sheet.
+ */
+describe('what else changes in the room', () => {
+  it('offers a way to ask, without taking the space to answer', () => {
+    render(<TodayPanel rows={[row()]} />)
+
+    expect(screen.getByTestId('panel-help')).toBeVisible()
+    expect(screen.queryByTestId('panel-help-body')).toBeNull()
+  })
+
+  it('names it for a screen reader, since a question mark is not a word', () => {
+    render(<TodayPanel rows={[row()]} />)
+
+    expect(screen.getByTestId('panel-help')).toHaveAccessibleName(/room|else|change/i)
+  })
+
+  it('explains the rest of the room when asked', async () => {
+    render(<TodayPanel rows={[row()]} />)
+
+    await userEvent.click(screen.getByTestId('panel-help'))
+
+    const body = screen.getByTestId('panel-help-body')
+    for (const thing of [/character/i, /door/i, /window|weather/i, /light/i, /gauge|corner/i]) {
+      expect(body.textContent ?? '').toMatch(thing)
+    }
+  })
+
+  /** Each one says what moves it, not merely that it moves. A legend that lists nouns is the
+   *  state the panel was built to fix. */
+  it('says what each of them is driven by', async () => {
+    render(<TodayPanel rows={[row()]} />)
+
+    await userEvent.click(screen.getByTestId('panel-help'))
+
+    const body = screen.getByTestId('panel-help-body').textContent ?? ''
+
+    // The character reads the lowest reserve, the weather reads the first deficit day, and
+    // the light reads hours that do not fit -- three different questions, all answered.
+    expect(body).toMatch(/lowest/i)
+    expect(body).toMatch(/deficit|forecast/i)
+    expect(body).toMatch(/do not fit|does not fit|overrun|spill/i)
+  })
+
+  /** The rows already carry these, and saying them twice is how a legend becomes a wall. */
+  it('does not repeat what the rows already say', async () => {
+    render(<TodayPanel rows={[row()]} />)
+
+    await userEvent.click(screen.getByTestId('panel-help'))
+
+    const body = screen.getByTestId('panel-help-body').textContent ?? ''
+
+    expect(body).not.toMatch(/dumbbell/i)
+    expect(body).not.toMatch(/boxes/i)
+  })
+
+  it('closes again on a second press', async () => {
+    render(<TodayPanel rows={[row()]} />)
+
+    await userEvent.click(screen.getByTestId('panel-help'))
+    await userEvent.click(screen.getByTestId('panel-help'))
+
+    expect(screen.queryByTestId('panel-help-body')).toBeNull()
+  })
+})

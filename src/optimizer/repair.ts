@@ -8,19 +8,35 @@ import type { Move, Schedule, ScheduledItem } from './types'
  * The two are one category here even though they are pinned for different reasons. A class
  * cannot move because the world says so; protected rest cannot move because §5.1 says making
  * recovery structurally protected is the most important design decision in the app. Either
- * way the loose block is the one that gives.
+ * way it is the other block that gives.
  */
 const isPinned = (item: ScheduledItem): boolean => item.fixed || item.protectedRest
 
-/** Every block on this day that is already sitting on a pinned one. */
-const clashesWithPinned = (schedule: Schedule, item: ScheduledItem): ScheduledItem | null =>
-  schedule.items.find(
-    (other) =>
-      other.id !== item.id &&
-      other.dayIndex === item.dayIndex &&
-      isPinned(other) &&
-      overlaps(item, other),
-  ) ?? null
+/**
+ * Who keeps their slot when two blocks want the same hour.
+ *
+ * Pinned first, because those cannot move at all. Then the one with the least room to go
+ * anywhere else: an earlier deadline is less slack, and a block with no deadline has the most
+ * slack of all. Start hour and id only break the remaining ties, and only so that the same
+ * week always repairs the same way -- a repair a student cannot reproduce is one they cannot
+ * trust.
+ */
+const priority = (item: ScheduledItem): [number, number, number, string] => [
+  isPinned(item) ? 0 : 1,
+  item.deadlineDay ?? Number.MAX_SAFE_INTEGER,
+  item.startHour,
+  item.id,
+]
+
+const byPriority = (a: ScheduledItem, b: ScheduledItem): number => {
+  const [ap, ad, ah, ai] = priority(a)
+  const [bp, bd, bh, bi] = priority(b)
+  return ap - bp || ad - bd || ah - bh || ai.localeCompare(bi)
+}
+
+/** The first block already in place that this one would sit on. */
+const sittingOn = (placed: readonly ScheduledItem[], item: ScheduledItem): ScheduledItem | null =>
+  placed.find((other) => other.dayIndex === item.dayIndex && overlaps(item, other)) ?? null
 
 /** The days to try, nearest first, and never past a real deadline. */
 function daysToTry(item: ScheduledItem, today: number, horizonDays: number): number[] {
@@ -31,7 +47,9 @@ function daysToTry(item: ScheduledItem, today: number, horizonDays: number): num
     // Later before earlier at the same distance: a block pushed back keeps whatever
     // preparation was behind it, where one pulled forward may need work that has not
     // happened yet.
-    for (const day of distance === 0 ? [item.dayIndex] : [item.dayIndex + distance, item.dayIndex - distance]) {
+    const at = distance === 0 ? [item.dayIndex] : [item.dayIndex + distance, item.dayIndex - distance]
+
+    for (const day of at) {
       if (day < today || day > last) continue
       if (!days.includes(day)) days.push(day)
     }
@@ -48,82 +66,83 @@ export interface RepairResult {
 }
 
 /**
- * Separate the blocks that must not be on top of each other, before the search runs.
+ * Give every block on the week an hour of its own.
  *
  * `violations` counts a loose block sitting on a fixed one or on protected rest, but that
- * count is only ever a gate on candidate moves -- "no worse than you started" -- so a week
- * that arrived carrying a clash was under no pressure to lose it. The score cannot see
- * overlap at all, so a repairing move was permitted and never preferred, and a study block
- * on top of protected rest survived a full rebalance untouched.
+ * count is only ever a gate on candidate moves -- "no worse than you started" -- and the
+ * score cannot see overlap at all. So a repairing move was permitted and never preferred, and
+ * a week that arrived broken stayed broken through a full rebalance.
+ *
+ * **Two loose blocks are separated here too, and that is a narrower statement than it looks.**
+ * `constraints.ts` permits that state on purpose, and still does: the search has to be able
+ * to pass *through* a week with two movable blocks on one hour, or legal routes through the
+ * neighbourhood get cut off. Passing through it is not the same as handing it back. A
+ * calendar showing two things at 14:00 is wrong however the model feels about it, and the
+ * student is the one who has to be in two places.
  *
  * **A pass rather than a term in the objective, deliberately.** Scoring overlap would put it
  * in competition with the reserves, and a clash could then be "solved" by shoving work onto a
- * day that costs the student more. This only separates what must be separated, and leaves
- * every judgement about where work actually belongs to the search that follows it.
+ * day that costs the student more. This only ever separates; every judgement about where work
+ * belongs is left to the search around it.
  *
- * Two loose blocks overlapping is left exactly as it is: `constraints.ts` permits that state
- * on purpose, and this pass is not the thing that should overrule it.
- *
- * Pure, and deterministic -- no `Rng`. A repair the student can reproduce is a repair they
- * can trust, and there is nothing to break ties between: the nearest opening on the nearest
- * allowed day is a total order.
+ * Pure and deterministic -- no `Rng`. `priority` is a total order, so the same week always
+ * repairs the same way.
  */
-export function clearPinnedClashes(schedule: Schedule, today: number): RepairResult {
+export function clearClashes(schedule: Schedule, today: number): RepairResult {
   const moves: Move[] = []
 
-  // Rebuilt as it goes, so each placement sees the ones already made. Without it two blocks
-  // coming off the same lecture both land on the same free hour, and the pass hands the
-  // search a week with a clash it created itself.
-  let current = schedule
+  /*
+   * Placed one at a time, so each block only has to avoid the ones already down.
+   *
+   * Days already lived go down first and untouched: they are not the student's to rearrange,
+   * and the search is bounded the same way for the same reason.
+   */
+  const placed: ScheduledItem[] = schedule.items.filter((item) => item.dayIndex < today)
 
-  const loose = schedule.items
-    .filter((item) => !isPinned(item) && item.dayIndex >= today)
-    // A stable order, so the same week always repairs the same way.
-    .sort((a, b) => a.dayIndex - b.dayIndex || a.startHour - b.startHour || a.id.localeCompare(b.id))
+  const toPlace = schedule.items
+    .filter((item) => item.dayIndex >= today)
+    .sort(byPriority)
 
-  for (const item of loose) {
-    const live = current.items.find((entry) => entry.id === item.id)
-    if (live === undefined) continue
+  for (const item of toPlace) {
+    const clash = sittingOn(placed, item)
 
-    const pinned = clashesWithPinned(current, live)
-    if (pinned === null) continue
-
-    // The day without this block on it. `hourNear` reads every item as occupied, so leaving
-    // it in would have the block blocking its own opening.
-    const without: Schedule = {
-      ...current,
-      items: current.items.filter((entry) => entry.id !== live.id),
+    if (clash === null || isPinned(item)) {
+      // A pinned block never gives, even to another pinned one. Two fixed commitments at the
+      // same hour is a fact about somebody's week, not something to be tidied -- and moving
+      // either would be the app taking away a class it was told about.
+      placed.push(item)
+      continue
     }
 
-    let placed: ScheduledItem | null = null
+    const room: Schedule = { ...schedule, items: placed }
 
-    for (const day of daysToTry(live, today, current.horizonDays)) {
-      const hour = hourNear(without, day, live.hours, live.startHour)
+    let moved: ScheduledItem | null = null
+
+    for (const day of daysToTry(item, today, schedule.horizonDays)) {
+      const hour = hourNear(room, day, item.hours, item.startHour)
       if (hour === null) continue
 
-      const candidate = { ...live, dayIndex: day, startHour: hour }
-      if (clashesWithPinned(without, candidate) !== null) continue
-
-      placed = candidate
+      moved = { ...item, dayIndex: day, startHour: hour }
       break
     }
 
     // Declining beats inventing a placement. A block parked at an hour nothing checked is a
-    // worse answer than one still visibly on top of something, which the student can at
-    // least see and fix themselves.
-    if (placed === null) continue
+    // worse answer than one still visibly on top of something, which the student can at least
+    // see and fix themselves.
+    if (moved === null) {
+      placed.push(item)
+      continue
+    }
 
-    const moved = placed
-
-    current = { ...without, items: [...without.items, moved] }
+    placed.push(moved)
 
     moves.push({
       kind: 'clearClash',
       itemId: moved.id,
       description:
-        moved.dayIndex === live.dayIndex
-          ? `Moved ${moved.title} off ${pinned.title}`
-          : `Moved ${moved.title} off ${pinned.title} to another day`,
+        moved.dayIndex === item.dayIndex
+          ? `Moved ${moved.title} off ${clash.title}`
+          : `Moved ${moved.title} off ${clash.title} to another day`,
       // Never replayed -- the pass has already applied it, and it is reported rather than
       // offered. Present because `Move` is what the report reads, and a second shape for
       // "something changed" is how two lists of changes come to disagree.
@@ -131,5 +150,14 @@ export function clearPinnedClashes(schedule: Schedule, today: number): RepairRes
     })
   }
 
-  return { schedule: moves.length === 0 ? schedule : current, moves }
+  // The original order kept, so a week that changed nothing is the same object graph the
+  // caller passed in and every `toEqual` on an untouched week still means what it says.
+  if (moves.length === 0) return { schedule, moves }
+
+  const byId = new Map(placed.map((item) => [item.id, item]))
+
+  return {
+    schedule: { ...schedule, items: schedule.items.map((item) => byId.get(item.id) ?? item) },
+    moves,
+  }
 }

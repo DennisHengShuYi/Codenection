@@ -228,3 +228,43 @@ describe('a week that arrives broken', () => {
     ).toBe(false)
   })
 })
+
+/**
+ * The invariant the repair pass exists for: a rebalance hands back a calendar somebody can
+ * actually follow.
+ *
+ * Guarded on a busy fortnight rather than a two-block fixture because the pass runs *before*
+ * the climb, and nothing in `violations` or the score stops the search stacking two loose
+ * blocks again on its way through -- `constraints.ts` permits that state on purpose, so the
+ * search may pass through it. Every fixture measured comes back clean, and this is what says
+ * so out loud: if a future move ever hands one back, the answer is a second pass after the
+ * climb, and this test is where that will be argued.
+ */
+describe('the week that comes back', () => {
+  const busy = () =>
+    makeSchedule([
+      ...socialBaseline(),
+      ...Array.from({ length: 12 }, (_, n) => studyItem(`s${n}`, n % 7, 2)),
+      restItem('rest', 3, 20),
+    ])
+
+  const clashCount = (schedule: Schedule): number => {
+    let found = 0
+    for (let i = 0; i < schedule.items.length; i += 1) {
+      for (let j = i + 1; j < schedule.items.length; j += 1) {
+        const a = schedule.items[i]!
+        const b = schedule.items[j]!
+        if (a.dayIndex === b.dayIndex && overlaps(a, b)) found += 1
+      }
+    }
+    return found
+  }
+
+  it('has nothing sitting on anything else, however crowded it started', () => {
+    const before = busy()
+
+    // The fixture stacks study blocks at nine o'clock, which is what makes it worth running.
+    expect(clashCount(before)).toBeGreaterThan(0)
+    expect(clashCount(rebalance(before, DEFAULT_PARAMS, makeRng(1), 0).schedule)).toBe(0)
+  })
+})

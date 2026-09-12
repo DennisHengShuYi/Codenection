@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HORIZON_DAYS } from '../engine'
 import { overlaps } from './constraints'
-import { clearPinnedClashes } from './repair'
+import { clearClashes } from './repair'
 import type { Schedule, ScheduledItem } from './types'
 
 /**
@@ -60,14 +60,14 @@ const clashes = (schedule: Schedule): string[] => {
 /** The day a whole fortnight of tests sits on, far enough in that nothing is history. */
 const DAY = 2
 
-describe('clearPinnedClashes', () => {
+describe('clearClashes', () => {
   it('moves a block off a fixed commitment', () => {
     const before = week([
       item({ id: 'lecture', title: 'Lecture', fixed: true }),
       item({ id: 'reading', title: 'Reading' }),
     ])
 
-    const after = clearPinnedClashes(before, 0).schedule
+    const after = clearClashes(before, 0).schedule
 
     expect(clashes(after)).toEqual([])
   })
@@ -80,7 +80,7 @@ describe('clearPinnedClashes', () => {
       item({ id: 'reading', title: 'Reading' }),
     ])
 
-    expect(clashes(clearPinnedClashes(before, 0).schedule)).toEqual([])
+    expect(clashes(clearClashes(before, 0).schedule)).toEqual([])
   })
 
   /** The pinned block is the thing that must not move. Moving it would be the app taking
@@ -91,26 +91,56 @@ describe('clearPinnedClashes', () => {
       item({ id: 'reading', title: 'Reading' }),
     ])
 
-    const after = clearPinnedClashes(before, 0).schedule
+    const after = clearClashes(before, 0).schedule
 
     expect(find(after, 'lecture').startHour).toBe(14)
     expect(find(after, 'lecture').dayIndex).toBe(DAY)
   })
 
   /**
-   * Two movable blocks are left exactly as they are.
+   * Two loose blocks are separated too, and that is a narrower statement than it looks.
    *
-   * `constraints.ts` permits that state on purpose -- neither is pinned, so the search can
-   * still separate them, and this pass is not the thing that should decide it did not like
-   * the arrangement. Only blocks that must not be on top of each other are separated.
+   * `constraints.ts` permits that state on purpose and still does: the search has to be able
+   * to pass *through* a week with two movable blocks on one hour, or legal routes through the
+   * neighbourhood get cut off. Passing through it is not the same as handing it back. A
+   * calendar showing two things at 14:00 is wrong however the model feels about it, and the
+   * student is the one who would have to be in two places.
    */
-  it('leaves two loose blocks alone, which is a legal state', () => {
+  it('separates two loose blocks as well', () => {
     const before = week([
       item({ id: 'essay', title: 'Essay' }),
       item({ id: 'reading', title: 'Reading' }),
     ])
 
-    expect(clearPinnedClashes(before, 0).schedule).toEqual(before)
+    expect(clashes(clearClashes(before, 0).schedule)).toEqual([])
+  })
+
+  /** The one with the least room to go elsewhere keeps its hour. An earlier deadline is less
+   *  slack, and a block with no deadline has the most slack of all. */
+  it('makes the block with more slack give way', () => {
+    const before = week([
+      item({ id: 'essay', title: 'Essay', deadlineDay: DAY }),
+      item({ id: 'reading', title: 'Reading' }),
+    ])
+
+    const after = clearClashes(before, 0).schedule
+
+    expect(find(after, 'essay').startHour).toBe(14)
+    expect(find(after, 'essay').dayIndex).toBe(DAY)
+  })
+
+  /**
+   * Two fixed commitments at one hour are a fact about somebody's week, not something to
+   * tidy. Moving either would be the app taking away a class it was told about.
+   */
+  it('leaves two pinned blocks on top of each other', () => {
+    const before = week([
+      item({ id: 'lecture', title: 'Lecture', fixed: true }),
+      item({ id: 'lab', title: 'Lab', fixed: true }),
+    ])
+
+    expect(clearClashes(before, 0).schedule).toEqual(before)
+    expect(clearClashes(before, 0).moves).toEqual([])
   })
 
   it('stays on the same day when the day has room', () => {
@@ -119,7 +149,7 @@ describe('clearPinnedClashes', () => {
       item({ id: 'reading', title: 'Reading' }),
     ])
 
-    expect(find(clearPinnedClashes(before, 0).schedule, 'reading').dayIndex).toBe(DAY)
+    expect(find(clearClashes(before, 0).schedule, 'reading').dayIndex).toBe(DAY)
   })
 
   it('takes another day when this one is full', () => {
@@ -128,10 +158,10 @@ describe('clearPinnedClashes', () => {
       item({ id: 'reading', title: 'Reading', startHour: 9 }),
     ])
 
-    const reading = find(clearPinnedClashes(before, 0).schedule, 'reading')
+    const reading = find(clearClashes(before, 0).schedule, 'reading')
 
     expect(reading.dayIndex).not.toBe(DAY)
-    expect(clashes(clearPinnedClashes(before, 0).schedule)).toEqual([])
+    expect(clashes(clearClashes(before, 0).schedule)).toEqual([])
   })
 
   /** A deadline is a fact about the world. Clearing a clash by pushing work past one trades
@@ -142,7 +172,7 @@ describe('clearPinnedClashes', () => {
       item({ id: 'essay', title: 'Essay', startHour: 9, deadlineDay: DAY }),
     ])
 
-    expect(find(clearPinnedClashes(before, 0).schedule, 'essay').dayIndex).toBeLessThanOrEqual(DAY)
+    expect(find(clearClashes(before, 0).schedule, 'essay').dayIndex).toBeLessThanOrEqual(DAY)
   })
 
   /** Days already lived are not the student's to rearrange, and the search is bounded the
@@ -153,7 +183,7 @@ describe('clearPinnedClashes', () => {
       item({ id: 'reading', title: 'Reading', dayIndex: 1 }),
     ])
 
-    expect(clearPinnedClashes(before, 5).schedule).toEqual(before)
+    expect(clearClashes(before, 5).schedule).toEqual(before)
   })
 
   /** Declining beats inventing a placement: a block parked at an hour nothing checked is a
@@ -166,8 +196,8 @@ describe('clearPinnedClashes', () => {
       item({ id: 'reading', title: 'Reading', startHour: 9 }),
     ])
 
-    expect(find(clearPinnedClashes(before, 0).schedule, 'reading').dayIndex).toBe(DAY)
-    expect(find(clearPinnedClashes(before, 0).schedule, 'reading').startHour).toBe(9)
+    expect(find(clearClashes(before, 0).schedule, 'reading').dayIndex).toBe(DAY)
+    expect(find(clearClashes(before, 0).schedule, 'reading').startHour).toBe(9)
   })
 
   it('says what it moved, specifically enough to check', () => {
@@ -176,7 +206,7 @@ describe('clearPinnedClashes', () => {
       item({ id: 'reading', title: 'Reading' }),
     ])
 
-    const { moves } = clearPinnedClashes(before, 0)
+    const { moves } = clearClashes(before, 0)
 
     expect(moves).toHaveLength(1)
     expect(moves[0]?.itemId).toBe('reading')
@@ -185,7 +215,7 @@ describe('clearPinnedClashes', () => {
   })
 
   it('reports nothing when there was nothing to clear', () => {
-    expect(clearPinnedClashes(week([item({ id: 'essay' })]), 0).moves).toEqual([])
+    expect(clearClashes(week([item({ id: 'essay' })]), 0).moves).toEqual([])
   })
 
   it('does not touch the week it was given', () => {
@@ -195,7 +225,7 @@ describe('clearPinnedClashes', () => {
     ])
     const snapshot = JSON.stringify(before)
 
-    clearPinnedClashes(before, 0)
+    clearClashes(before, 0)
 
     expect(JSON.stringify(before)).toBe(snapshot)
   })
@@ -209,7 +239,7 @@ describe('clearPinnedClashes', () => {
       item({ id: 'essay', title: 'Essay' }),
     ])
 
-    const after = clearPinnedClashes(before, 0).schedule
+    const after = clearClashes(before, 0).schedule
 
     expect(clashes(after)).toEqual([])
   })

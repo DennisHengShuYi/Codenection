@@ -1,6 +1,6 @@
 import { summarise, type EngineParams } from '../engine'
 import { candidates, type Candidate } from './neighbours'
-import { clearPinnedClashes } from './repair'
+import { clearClashes } from './repair'
 import { ALL_PRESENT, score, toDayInputs } from './objective'
 import type { Rng } from './rng'
 import type { Move, RebalanceResult, Schedule } from './types'
@@ -119,7 +119,7 @@ export function rebalance(
    * week -- a repair can cost a point of score by breaking up a day, and the clash still has
    * to go.
    */
-  const repair = clearPinnedClashes(schedule, today)
+  const repair = clearClashes(schedule, today)
 
   const baseScore = score(repair.schedule, params)
   const attempt = climb(repair.schedule, params, rng, today)

@@ -134,6 +134,24 @@ describe('the reserves sheet', () => {
     expect(insight.textContent ?? '').not.toMatch(/body & movement/i)
   })
 
+  /**
+   * The reserve that is lowest and the thing already booked for it, in the same breath.
+   *
+   * Without this the block read as broken and was not: it named a reserve as the problem and
+   * then suggested something for a different one, because the first one's rhythm was being
+   * kept. Saying nothing about what was keeping it is what made two correct lines look like
+   * an app ignoring its own headline.
+   */
+  it('names what is already booked for the lowest reserve rather than going quiet', async () => {
+    const sheet = await openReserves()
+
+    const insight = await within(sheet).findByTestId('reserve-insight')
+
+    // The lived-in fortnight carries a standing coffee, and mental is the reserve five days
+    // of study has emptied -- so the block has something to point at either way.
+    expect(insight.textContent ?? '').toMatch(/answers that|worth doing/i)
+  })
+
   /** §6.2 is the mechanic the whole app exists to make visible, and nothing on this screen
    *  said it: the same hour of rest buys a depleted student less than a rested one. */
   it('prices rest at the level the thinnest reserve is actually on', async () => {

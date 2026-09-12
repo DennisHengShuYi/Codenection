@@ -5,12 +5,13 @@ import {
   LOAD_TYPES,
   type DayInput,
   type EngineParams,
+  type ActivityKind,
   type LoadType,
   type Projection,
   type Reserves,
 } from '../engine'
 import type { Schedule } from '../optimizer'
-import type { BlockRecord } from './blockLog'
+import { answeredIds, type BlockRecord } from './blockLog'
 import { describeDeficit, explainDeficit } from './deficitCause'
 import { prescribe } from './prescribe'
 
@@ -22,6 +23,21 @@ import { prescribe } from './prescribe'
  * complete readout, and this block exists to say the part that readout cannot.
  */
 const WORTH_COMMENTING_BELOW = 70
+
+/**
+ * What actually answers each reserve, when one is low.
+ *
+ * The same matching §5.2 makes in `prescribe`'s ADVICE, read the other way round: that says
+ * what to DO about a neglected reserve, this says what on the calendar already counts as
+ * doing it. Errands has no entry for the same reason it has no advice -- a backlog of chores
+ * is answered by clearing the chores, not by a restorative act of some other kind.
+ */
+const RESTORES: Record<LoadType, readonly ActivityKind[]> = {
+  mental: ['rest'],
+  physical: ['lightExercise', 'hardExercise'],
+  social: ['socialRestorative'],
+  errands: [],
+}
 
 /** How many of a deficit's drains are worth naming. Past two it stops being a cause and
  *  becomes a list. */
@@ -55,10 +71,25 @@ export interface InsightDeficit {
   readonly why: string
 }
 
+export interface UpcomingRelief {
+  readonly title: string
+  readonly dayIndex: number
+}
+
 export interface ReserveInsight {
   /** All four, thinnest first: the limiting one has to be read first. */
   readonly notes: readonly ReserveNote[]
   readonly deficit: InsightDeficit | null
+  /**
+   * What is already on the calendar for the thinnest reserve, soonest first, or null.
+   *
+   * The block read as broken without this and was not: People at 43 with nothing said about
+   * people, because seeing someone was booked for tomorrow and the app had therefore stopped
+   * counting it as neglected -- correctly, and silently. The silence is what made it look
+   * wrong. A student cannot tell "we have nothing to say about your lowest reserve" from "it
+   * is already handled, and here is what to do until then".
+   */
+  readonly upcoming: UpcomingRelief | null
   /** §5.2's one concrete action, where today has room for one. */
   readonly action: { readonly title: string; readonly hours: number } | null
 }
@@ -137,8 +168,29 @@ export function reserveInsight({
    */
   const prescription = prescribe(schedule, today, blockLog, reserves)
 
+  /*
+   * Unanswered, and from today onward. A block the student has already reported on is
+   * history whatever day it sits on, and a day behind them cannot be what is coming.
+   */
+  const answered = new Set(answeredIds(blockLog))
+  const thinnest = notes[0]?.type
+
+  const upcoming =
+    thinnest === undefined
+      ? null
+      : (schedule.items
+          .filter(
+            (candidate) =>
+              candidate.dayIndex >= today &&
+              !answered.has(candidate.id) &&
+              RESTORES[thinnest].includes(candidate.kind),
+          )
+          .sort((a, b) => a.dayIndex - b.dayIndex || a.startHour - b.startHour)[0] ?? null)
+
   return {
     notes,
+    upcoming:
+      upcoming === null ? null : { title: upcoming.title, dayIndex: upcoming.dayIndex },
     deficit:
       cause === null || projection.firstDeficitDay === null
         ? null
@@ -173,6 +225,7 @@ export function insightLines(
   {
     deficitDayLabel,
     labelFor,
+    dayNameFor,
   }: {
     /**
      * The crossing day as a student would say it, or null.
@@ -192,6 +245,14 @@ export function insightLines(
      * So the caller passes the names it is already drawing.
      */
     readonly labelFor: (type: LoadType) => string
+    /**
+     * A day as a student would say it -- "today", "tomorrow", "Thursday".
+     *
+     * Supplied for the reason `deficitDayLabel` is: naming a day needs the week's anchor and
+     * `today`, and a bare index is the model's own counting, off by one in the student's
+     * terms besides.
+     */
+    readonly dayNameFor: (dayIndex: number) => string
   },
 ): readonly string[] {
   const lines: string[] = []
@@ -226,9 +287,28 @@ export function insightLines(
     )
   }
 
-  if (insight.action !== null) {
+  /*
+   * What is already booked for the thinnest reserve, before the suggestion.
+   *
+   * Without this the block looked broken and was not: People at 43, and a suggestion about
+   * resting, because seeing someone was on the calendar for tomorrow and the app had
+   * therefore stopped counting it as neglected. That is right, and saying nothing about it
+   * is what made it read as the app ignoring its own headline. Named, the same two lines
+   * become an argument a student can follow: this is handled, so here is the next thing.
+   */
+  if (insight.upcoming !== null) {
     lines.push(
-      `Worth doing: ${insight.action.title.toLowerCase()} — today has about ${insight.action.hours}h free for it.`,
+      `${insight.upcoming.title} ${dayNameFor(insight.upcoming.dayIndex)} is what answers that, so it is already in hand.`,
+    )
+  }
+
+  if (insight.action !== null) {
+    // Reworded where something is already booked, because "worth doing" beside a suggestion
+    // for a different reserve reads as the app having forgotten the line above it.
+    const lead = insight.upcoming === null ? 'Worth doing' : 'Until then, worth doing'
+
+    lines.push(
+      `${lead}: ${insight.action.title.toLowerCase()} — today has about ${insight.action.hours}h free for it.`,
     )
   }
 

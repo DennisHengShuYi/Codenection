@@ -483,6 +483,15 @@ export function RoomShell({
             ? null
             : dayLabel(week, projection.firstDeficitDay, today),
         labelFor: (type) => LOAD_TYPE_LABELS[type],
+        /* Inline, and short: this name lands mid-sentence ("Coffee with Sarah tomorrow is
+           what answers that"), where `dayLabel`'s full "Tomorrow, Sat 13 Sep" reads as a
+           date stamp dropped into a clause. Same source for the days it cannot shorten. */
+        dayNameFor: (day) =>
+          day === today
+            ? 'today'
+            : day === today + 1
+              ? 'tomorrow'
+              : `on ${dayLabel(week, day, today)}`,
       },
     )
 

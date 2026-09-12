@@ -48,6 +48,10 @@ const week = (start: Reserves, items: ScheduledItem[] = []): Schedule => ({
 
 const params: EngineParams = DEFAULT_PARAMS
 
+/** The day as a student would say it. Supplied by the caller for the same reason
+ *  `deficitDayLabel` is: naming a day needs the week's anchor, which the domain has not got. */
+const DAY = (dayIndex: number): string => ['today', 'tomorrow', 'Wednesday'][dayIndex] ?? `in ${dayIndex} days`
+
 /** The names the screen showing this block is already drawing -- see `insightLines`. */
 const LABEL = (type: LoadType): string =>
   ({
@@ -208,7 +212,7 @@ describe('reserveInsight', () => {
  */
 describe('insightLines', () => {
   it('says every reserve worth commenting on, plus what it costs', () => {
-    const lines = insightLines(insightOf(week(HEALTHY)), { deficitDayLabel: null, labelFor: LABEL })
+    const lines = insightLines(insightOf(week(HEALTHY)), { deficitDayLabel: null, labelFor: LABEL, dayNameFor: DAY })
 
     expect(lines.join(' ')).toMatch(/people/i)
     expect(lines.join(' ')).toMatch(/43/)
@@ -216,7 +220,7 @@ describe('insightLines', () => {
   })
 
   it('leaves out the reserves that are not limiting anything', () => {
-    const lines = insightLines(insightOf(week(HEALTHY)), { deficitDayLabel: null, labelFor: LABEL })
+    const lines = insightLines(insightOf(week(HEALTHY)), { deficitDayLabel: null, labelFor: LABEL, dayNameFor: DAY })
 
     expect(lines.join(' ')).not.toMatch(/body & movement/i)
   })
@@ -231,7 +235,7 @@ describe('insightLines', () => {
       ),
     )
 
-    const lines = insightLines(insightOf(heavy), { deficitDayLabel: 'Thursday', labelFor: LABEL })
+    const lines = insightLines(insightOf(heavy), { deficitDayLabel: 'Thursday', labelFor: LABEL, dayNameFor: DAY })
 
     expect(lines.join(' ')).toMatch(/Thursday/)
   })
@@ -244,7 +248,7 @@ describe('insightLines', () => {
       ),
     )
 
-    const lines = insightLines(insightOf(heavy), { deficitDayLabel: null, labelFor: LABEL })
+    const lines = insightLines(insightOf(heavy), { deficitDayLabel: null, labelFor: LABEL, dayNameFor: DAY })
 
     expect(lines.join(' ')).toMatch(/deficit/i)
     expect(lines.join(' ')).not.toMatch(/day \d/i)
@@ -253,14 +257,76 @@ describe('insightLines', () => {
   it('never returns an empty block, whatever the week looks like', () => {
     const rested = week({ mental: 100, physical: 100, social: 100, errands: 100 })
 
-    expect(insightLines(insightOf(rested), { deficitDayLabel: null, labelFor: LABEL }).length).toBeGreaterThan(0)
+    expect(insightLines(insightOf(rested), { deficitDayLabel: null, labelFor: LABEL, dayNameFor: DAY }).length).toBeGreaterThan(0)
   })
 
   /** A block that only ever speaks when something is wrong teaches a student to read its
    *  presence as bad news, which is the opposite of the mirror §1.3 asks for. */
   it('says the fortnight holds, rather than going quiet, when it does', () => {
-    const lines = insightLines(insightOf(calmWeek()), { deficitDayLabel: null, labelFor: LABEL })
+    const lines = insightLines(insightOf(calmWeek()), { deficitDayLabel: null, labelFor: LABEL, dayNameFor: DAY })
 
     expect(lines.join(' ')).toMatch(/nothing in the next fortnight/i)
+  })
+})
+
+/**
+ * What is already booked for the reserve that is lowest.
+ *
+ * The block read as broken without this and was not: People at 43 with nothing suggested
+ * about people, because seeing someone was on the calendar for tomorrow and the app had
+ * therefore stopped counting it as neglected -- correctly, and silently. Silence is what
+ * made it look wrong. A student cannot tell "we have nothing to say about your lowest
+ * reserve" from "it is already handled, here is what to do until then".
+ */
+describe('what is already booked for the thinnest reserve', () => {
+  const withCoffeeTomorrow = (): Schedule =>
+    week(HEALTHY, [
+      item({
+        id: 'coffee',
+        title: 'Coffee with Sarah',
+        type: 'social',
+        kind: 'socialRestorative',
+        hours: 2,
+        dayIndex: 1,
+        startHour: 17,
+      }),
+    ])
+
+  it('finds the thing on the calendar that answers the lowest reserve', () => {
+    const insight = insightOf(withCoffeeTomorrow())
+
+    expect(insight.upcoming?.title).toBe('Coffee with Sarah')
+    expect(insight.upcoming?.dayIndex).toBe(1)
+  })
+
+  it('says so, by name and by day, rather than going quiet about it', () => {
+    const lines = insightLines(insightOf(withCoffeeTomorrow()), {
+      deficitDayLabel: null,
+      labelFor: LABEL,
+      dayNameFor: DAY,
+    }).join(' ')
+
+    expect(lines).toMatch(/Coffee with Sarah/)
+    expect(lines).toMatch(/tomorrow/)
+  })
+
+  /** Only what answers THAT reserve. An essay on tomorrow does not answer being lonely. */
+  it('ignores something booked that has nothing to do with the lowest reserve', () => {
+    const insight = insightOf(week(HEALTHY, [item({ dayIndex: 1 })]))
+
+    expect(insight.upcoming).toBeNull()
+  })
+
+  /** Days already behind them cannot be what is coming. */
+  it('ignores one that has already gone by', () => {
+    const past = week(HEALTHY, [
+      item({ id: 'coffee', type: 'social', kind: 'socialRestorative', dayIndex: 1 }),
+    ])
+
+    expect(insightOf(past, 5).upcoming).toBeNull()
+  })
+
+  it('has nothing to point at when the reserve really is unanswered', () => {
+    expect(insightOf(week(HEALTHY)).upcoming).toBeNull()
   })
 })

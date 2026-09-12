@@ -32,8 +32,8 @@ night and deliberately stores nothing. Rulings 64 to 66 record why each is shape
 Known not built, with the spec amended to say so rather than promising it: §7.2's three-day
 painter and its parameter extraction, §7.7's calibration meter, §9's Malaysia-specific holiday
 and get-outside lists, and §6.4's rolling debt. There is also no server-side quota on the
-public AI endpoints — `plan`, `draft`, `read-photo` and `micro-start` spend the Groq budget
-unauthenticated, which `api/micro-start.ts` states in place.
+public AI endpoints — `plan`, `draft`, `read-photo`, `micro-start` and `insight` spend the
+Groq budget unauthenticated, which `api/micro-start.ts` states in place.
 
 Sleep is worth reading about before changing anything near it, because four numbers that look
 alike answer different questions. `Schedule.sleepByDay[d]` is the night at the **end** of day d

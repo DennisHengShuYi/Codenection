@@ -16,6 +16,7 @@ import {
 } from '../../domain/calendar'
 import { accept, lapsed } from '../../domain/commitments'
 import { paramsFor } from '../../domain/engineParams'
+import { insightLines, reserveInsight } from '../../domain/reserveInsight'
 import { firstAction, isStuck } from '../../domain/microStart'
 import { predictionsAfter, resolvePrediction } from '../../domain/predictions'
 import { addBlock, completeItem, deferralOf, editItem, removeItem } from '../../domain/scheduleEdits'
@@ -446,6 +447,44 @@ export function RoomShell({
   // student edited the plan, not after a rebalance, not overnight. They sat under a headline
   // that had been repointed at today, and the two disagreed on screen.
   const bars = domainBars(model.reserves, projection, days, today)
+
+  /**
+   * What the Reserves sheet says beyond reading its own dial back.
+   *
+   * Derived from the projection already in hand rather than a second one: §1.5's text
+   * equivalent, the bars and this block all quote the same fortnight, and a re-derivation
+   * here would be a third chance for one screen to disagree with itself.
+   *
+   * A function rather than a value, and deliberately not a `useMemo`. This point in the
+   * component is below two early returns -- no schedule, and no anchored day -- so a hook
+   * added here would be a hook count that varies between renders, which React reports as
+   * "rendered more hooks than during the previous render" a long way from its cause. Called
+   * only from the branch that renders the sheet, so a closed sheet costs nothing, and the
+   * fresh array it returns is safe: `InsightBlock` keys its effect on the lines themselves
+   * rather than on the array's identity, so re-rendering the room does not re-ask the model.
+   */
+  const reserveInsightLines = (): readonly string[] =>
+    insightLines(
+      reserveInsight({
+        schedule: week,
+        // The reserve entering today, which is what the bars and the headline quote.
+        // `week.start` is where the fortnight opened, and the two differ by everything
+        // that has happened since.
+        reserves: model.reserves,
+        today,
+        blockLog,
+        days,
+        projection,
+        params,
+      }),
+      {
+        deficitDayLabel:
+          projection.firstDeficitDay === null
+            ? null
+            : dayLabel(week, projection.firstDeficitDay, today),
+        labelFor: (type) => LOAD_TYPE_LABELS[type],
+      },
+    )
 
   // A `const` arrow rather than a declaration, for `acceptItems`' reason below: declarations
   // hoist above the `today === null` guard, so TypeScript could not narrow the day away and
@@ -1239,6 +1278,7 @@ export function RoomShell({
           bars={bars}
           projection={projection}
           history={reportedEnergy}
+          insightLines={reserveInsightLines()}
           onClose={closeToRoom}
         />
       )}

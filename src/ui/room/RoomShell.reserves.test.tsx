@@ -110,4 +110,38 @@ describe('the reserves sheet', () => {
     // Both sides are rounded for display, so allow the rounding and nothing more.
     expect(Math.abs(headline - mean)).toBeLessThanOrEqual(1)
   })
+
+  /**
+   * What the numbers mean, which the sheet had no way of saying.
+   *
+   * §1.5's text equivalent restates every value and must keep doing exactly that -- it is
+   * the dial for a screen reader, so interpretation folded into it would be
+   * indistinguishable from a reading. So the interpretation is its own block, and this is
+   * the guard that it is actually wired to the week rather than merely written: on this
+   * fortnight mental has fallen below 50 while physical sits above 90, and a block reading
+   * the real projection has to be talking about the first of those.
+   *
+   * Asserted against the computed wording, which is what runs here: there is no
+   * `GROQ_API_KEY` in the tests, so `/api/insight` is never served and `phraseInsight`
+   * returns the domain's lines unchanged.
+   */
+  it('says what the numbers mean, from the same fortnight the bars are read off', async () => {
+    const sheet = await openReserves()
+
+    const insight = await within(sheet).findByTestId('reserve-insight')
+
+    expect(insight.textContent ?? '').toMatch(/study & thinking|thinking/i)
+    expect(insight.textContent ?? '').not.toMatch(/body & movement/i)
+  })
+
+  /** §6.2 is the mechanic the whole app exists to make visible, and nothing on this screen
+   *  said it: the same hour of rest buys a depleted student less than a rested one. */
+  it('prices rest at the level the thinnest reserve is actually on', async () => {
+    const sheet = await openReserves()
+
+    const insight = await within(sheet).findByTestId('reserve-insight')
+
+    expect(insight.textContent ?? '').toMatch(/rest/i)
+    expect(insight.textContent ?? '').toMatch(/\d+%/)
+  })
 })

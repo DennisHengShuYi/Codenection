@@ -3,6 +3,7 @@ import type { Projection } from '../../engine'
 import { CapacityDial } from '../dial/CapacityDial'
 import type { DomainBar } from '../dial/domainBars'
 import { Sheet } from '../kit/Sheet'
+import { InsightBlock } from './InsightBlock'
 
 /**
  * §1.1's reserve and §1.2's five bars, behind the room's own corner gauge.
@@ -25,6 +26,7 @@ export function ReservesSheet({
   projection,
   history,
   deficitDayLabel = null,
+  insightLines = [],
   onClose,
 }: {
   readonly capacity: number
@@ -34,6 +36,16 @@ export function ReservesSheet({
   /** Passed straight through to the dial's text equivalent, which is the one place a day
    *  index would otherwise reach the student unnamed. */
   readonly deficitDayLabel?: string | null
+  /**
+   * What the numbers mean, computed by `domain/reserveInsight` from the same projection the
+   * dial draws.
+   *
+   * Defaulted to nothing, and the block renders nothing for an empty list. A caller with no
+   * insight to give is a real state -- the sheet is rendered in tests and from places that
+   * hold the reserves without holding the week -- and it must show the dial rather than an
+   * empty heading.
+   */
+  readonly insightLines?: readonly string[]
   readonly onClose: () => void
 }) {
   return (
@@ -45,6 +57,11 @@ export function ReservesSheet({
         history={history}
         deficitDayLabel={deficitDayLabel}
       />
+
+      {/* Under the dial and under §1.5's text equivalent, never folded into it. That
+          paragraph is a restatement by design -- it IS the dial for a screen reader, so an
+          interpretation mixed in would be indistinguishable from a reading. */}
+      <InsightBlock lines={insightLines} />
     </Sheet>
   )
 }

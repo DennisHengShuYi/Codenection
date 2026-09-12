@@ -221,3 +221,61 @@ describe('scatter', () => {
     expect(moved.items.find((item) => item.id === 'homeless')?.dayIndex).toBe(DAYS_BEHIND)
   })
 })
+
+/**
+ * What a demo has to be able to show.
+ *
+ * A seeded account is only worth the features it can actually demonstrate, and three of them
+ * were unreachable: §2.4's per-task padding needs three answers under one NAME and every name
+ * appeared once; the block log carried no title or kind at all, so the ladder could only ever
+ * answer at the area level; and nothing reported a night, so the sleep page, the bed and
+ * `sleepReality` had nothing to read.
+ */
+describe('what the seeded account can demonstrate', () => {
+  const built = demoAccount('2026-09-13')
+
+  const titleOf = (blockId: string): string =>
+    built.week.items.find((item) => item.id === blockId)?.title ?? blockId
+
+  it('answers enough of one task by name for the ladder to reach its narrowest rung', () => {
+    const counts = new Map<string, number>()
+    for (const record of built.blockLog) {
+      const title = titleOf(record.blockId)
+      counts.set(title, (counts.get(title) ?? 0) + 1)
+    }
+
+    // MIN_SAMPLES_FOR_TASK. Below this the ladder falls through to the kind and the area,
+    // and "you underestimate your essays" can never be said about anything.
+    expect([...counts.values()].filter((n) => n >= 3).length).toBeGreaterThan(0)
+  })
+
+  /** The name and the kind are what the narrow rungs are keyed on. Records without them can
+   *  only ever answer at the area level, which is the level that existed before §2.4. */
+  it('carries the name and the kind on every answer', () => {
+    for (const record of built.blockLog) {
+      expect(record.title, `${record.blockId} has no title`).toBeDefined()
+      expect(record.kind, `${record.blockId} has no kind`).toBeDefined()
+    }
+  })
+
+  it('reports nights, so the sleep page has something to compare', () => {
+    expect(built.sleepNights.length).toBeGreaterThanOrEqual(3)
+  })
+
+  /** `sleepReality` says nothing below three nights and nothing at all without a target to
+   *  measure the shortfall against. */
+  it('states a target for those nights to fall short of', () => {
+    expect(built.sleepTargetHours).toBeGreaterThan(0)
+    const average =
+      built.sleepNights.reduce((sum, night) => sum + night.hours, 0) / built.sleepNights.length
+
+    expect(average).toBeLessThan(built.sleepTargetHours)
+  })
+
+  it('dates every night inside the days the student has lived', () => {
+    for (const night of built.sleepNights) {
+      expect(night.isoDate >= built.week.startedOn!).toBe(true)
+      expect(night.isoDate <= '2026-09-13').toBe(true)
+    }
+  })
+})

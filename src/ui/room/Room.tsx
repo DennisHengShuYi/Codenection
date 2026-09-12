@@ -6,7 +6,7 @@ import { Clock, Door, Light, Window } from './scene/Fixtures'
 import { Bed, Desk, Mirror, Phone } from './scene/Furniture'
 import { Clutter, Company, Dumbbell, Papers } from './scene/Loose'
 import { FLOOR_Y, PALETTE } from './scene/palette'
-import { Ceiling, Floor, Wall } from './scene/Walls'
+import { Ceiling, CEILING_DEPTH, CEILING_DEPTH_NARROW, Floor, Wall } from './scene/Walls'
 import { useNarrowViewport } from '../useNarrowViewport'
 
 /**
@@ -48,9 +48,20 @@ export type RoomFrame = 'inline' | 'fill'
  * solid `surface` disc under the ring rather than the old `surface/90`: the room's wall is a
  * mid-brown and a translucent disc let it through, which is what left the number sitting at
  * roughly the contrast of the wall behind it.
+ *
+ * `top-1` on a phone and `top-3` from `sm` up, so the gauge sits inside the ceiling bar at
+ * every width. That bar is drawn in viewBox units and shrinks with the screen while these
+ * 44 pixels do not, so the two came apart as the screen narrowed -- measured at 4.2px of
+ * overhang at 390 and 13.5px at 320. `CEILING_DEPTH_NARROW` carries most of the fix and this
+ * carries the rest: at 320px even a bar deep enough to hold 12px + 44px would reach down
+ * over the clock.
+ *
+ * Not a smaller gauge on narrow, which was the other way to make it fit. 44px is the minimum
+ * touch target and `ReserveGauge` is drawn to fill exactly that, so shrinking it would trade
+ * a layout problem for an accessibility one.
  */
 const GAUGE_BOX =
-  'absolute right-3 top-3 z-10 grid h-11 w-11 place-items-center rounded-full bg-surface shadow'
+  'absolute right-3 top-1 sm:top-3 z-10 grid h-11 w-11 place-items-center rounded-full bg-surface shadow'
 
 export function Room({
   model,
@@ -174,7 +185,7 @@ export function Room({
 
         {/* Overhead last: the ceiling presses over everything, and the lamp's glow has to
             fall on the room rather than under it. */}
-        <Ceiling />
+        <Ceiling depth={narrow ? CEILING_DEPTH_NARROW : CEILING_DEPTH} />
         <Light level={state.lightLevel} />
       </svg>
 

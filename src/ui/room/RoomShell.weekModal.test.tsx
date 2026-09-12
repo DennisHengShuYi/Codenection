@@ -11,7 +11,7 @@ import { RoomShell } from './RoomShell'
  * gauge.
  *
  * Two faults were being fixed. The week was the only destination in the app that was a
- * PAGE -- it replaced the room, carried its own "Codenection" title bar and its own
+ * PAGE -- it replaced the room, carried its own "Loadline" title bar and its own
  * Settings button, and needed a "Back to the room" link to undo itself, while every other
  * destination was a sheet you dismissed. And it ended in a full dashboard -- dial, trend
  * line, five bars -- underneath a calendar, which is not what a student opening "the week"
@@ -87,7 +87,7 @@ describe('the week, as a sheet over the room', () => {
 
     const sheet = await screen.findByRole('dialog', { name: /the week/i })
 
-    expect(within(sheet).queryByText('Codenection')).toBeNull()
+    expect(within(sheet).queryByText('Loadline')).toBeNull()
     expect(within(sheet).queryByTestId('open-settings')).toBeNull()
     expect(within(sheet).queryByTestId('week-back')).toBeNull()
   })

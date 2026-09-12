@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from './App'
@@ -56,6 +56,27 @@ describe('App, signed in', () => {
     await waitFor(() => expect(screen.getByTestId('open-settings')).toBeVisible())
     await userEvent.click(screen.getByTestId('open-settings'))
     await waitFor(() => expect(screen.getByText('student@um.edu.my')).toBeVisible())
+  })
+
+  /**
+   * Who you are sits in the pinned bar, on the same line as Sign out.
+   *
+   * It used to float in the scrolling body between the interface radios and the Telegram
+   * card, where it read as another setting rather than as a label on the action beside it --
+   * and on a short sheet it could scroll out of view while the button that signs that very
+   * account out stayed pinned. The two belong together: one says who, the other acts on them.
+   */
+  it('puts who is signed in on the same row as sign out', async () => {
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByTestId('open-settings')).toBeVisible())
+    await userEvent.click(screen.getByTestId('open-settings'))
+
+    const bar = await screen.findByTestId('sheet-actions')
+
+    expect(within(bar).getByText('student@um.edu.my')).toBeVisible()
+    expect(within(bar).getByTestId('avatar')).toBeVisible()
+    expect(within(bar).getByRole('button', { name: /sign out/i })).toBeVisible()
   })
 
   // The preview label must not appear for somebody whose week genuinely is being kept.

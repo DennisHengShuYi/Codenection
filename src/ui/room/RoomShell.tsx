@@ -312,10 +312,10 @@ export function RoomShell({
   /*
    * Asked again each time the calendar way is opened.
    *
-   * Returning from Google is a full page load, so the answer at mount would usually be right
-   * -- but disconnecting happens on another screen entirely, and a student who withdrew the
-   * grant in settings and came straight here would be offered a Read button for a permission
-   * that no longer exists.
+   * Returning from Google is a full page load, so the answer at mount would usually be
+   * right -- but disconnecting happens on another screen entirely, and a student who
+   * withdrew the grant in settings and came straight here would be offered a Read button
+   * for a permission that no longer exists.
    */
   const onCalendarWay = view.kind === 'add' && view.way === 'calendar'
 
@@ -1448,9 +1448,16 @@ export function RoomShell({
           // scrolling body -- the same place every other sheet puts its actions.
           actions={
             session !== null ? (
-              <Button variant="quiet" onClick={onSignOut}>
-                Sign out
-              </Button>
+              <>
+                {/* `mr-auto` to the far left of the bar, the way `Sheet` places its own Back
+                    control, so the name labels the row and Sign out keeps the right-hand
+                    side every other sheet commits from. `min-w-0` so a long name ellipses
+                    rather than pushing the button off a narrow screen. */}
+                <AccountBar session={session} className="mr-auto min-w-0" />
+                <Button variant="quiet" onClick={onSignOut}>
+                  Sign out
+                </Button>
+              </>
             ) : undefined
           }
         >
@@ -1464,7 +1471,6 @@ export function RoomShell({
 
             {session !== null ? (
               <>
-                <AccountBar session={session} />
                 <LinkTelegram />
                 {/* Beside the Telegram unlink, and for the same reason: a standing grant
                     over somebody's calendar needs a way back that is in this app, not
@@ -1568,7 +1574,7 @@ export function RoomShell({
       >
         {/* The room screen has no visible title -- the room is the title. The heading stays
             for the document outline and for anyone navigating by heading. */}
-        <h1 className="sr-only">Codenection</h1>
+        <h1 className="sr-only">Loadline</h1>
 
         <Room
           model={model}

@@ -79,8 +79,31 @@ describe('project', () => {
   // The regression this file's diagnostic run exposed: a student whose mental reserve
   // empties on day 7 while physical stays at 70 averages 35 and would report no deficit
   // at all. §2.1's floor principle has to hold across reserves, not only across days.
+  /**
+   * Built on a student who sees somebody every day, which is what keeps the mean high enough
+   * for this test to mean anything.
+   *
+   * It used to run on `heavy` alone, and that worked only because work could charge one
+   * reserve. `SECONDARY_COST` made a nine-hour study day cost a body too, and the bare
+   * fixture no longer has a healthy mean to be fooled by -- three of its four reserves now
+   * fall, taking the mean to 25 and making the first assertion fail for the most misleading
+   * possible reason: the model getting *better* at noticing the week.
+   *
+   * Daily contact restores the case. The student's social reserve sits at 95 because they
+   * have seen a friend every evening, so the dial reads a comfortable 49 while their mental
+   * reserve is at zero and has been in deficit since day three. That is the failure §2.1's
+   * floor principle exists to catch, stated more sharply than the original fixture stated it.
+   */
   it('reports a deficit when one reserve empties, even while the mean looks fine', () => {
-    const result = project(healthy, horizon(heavy), DEFAULT_PARAMS)
+    const sociableButDrowning = horizon((dayIndex) => ({
+      ...heavy(dayIndex),
+      activities: [
+        ...heavy(dayIndex).activities,
+        { kind: 'socialRestorative' as const, type: 'social' as const, hours: 2, intensity: 1, startHour: 19 },
+      ],
+    }))
+
+    const result = project(healthy, sociableButDrowning, DEFAULT_PARAMS)
 
     expect(result.worstOverall).toBeGreaterThan(30)
     expect(result.worstFloor).toBeLessThan(1)
@@ -352,6 +375,69 @@ describe('workload is visible in the projection', () => {
     // And that shared level is a real middle, not either end.
     expect(fromAbove).toBeGreaterThan(50)
     expect(fromAbove).toBeLessThan(100)
+  })
+
+  /**
+   * The body bar has to answer to a week spent at a desk.
+   *
+   * It was the last of the four that could not: only exercise is typed physical, so a
+   * fortnight of ten-hour study days took it from 92 UP to 100 while every other bar fell.
+   * `SECONDARY_COST` gave it a drain, and measured on its own that was not nearly enough --
+   * 1.5 points a day against the 21 that `kSleep.physical` repaid it, so the bar settled at
+   * 97 and still told a student nothing.
+   *
+   * Fourteen to one is not a gap a drain can close, and 7.0 was the highest recovery rate of
+   * the four -- sleep repaying a body more than it repaid a mind, which nothing in §6 or the
+   * rulings argues for. Cutting it to 3.0 is the correction; the drain and the brake together
+   * are what give the bar a range, exactly as they did for the study bar.
+   *
+   * Stated as a visible margin rather than a figure. A bar that moves three points between
+   * the lightest fortnight possible and the heaviest is one a student cannot read, which is
+   * the failure this guards against -- not any particular number.
+   */
+  it('separates a fortnight at a desk from a fortnight of nothing, on the body bar', () => {
+    const deskBound = fortnightOf(10).central.at(-1)!.physical
+    const empty = fortnightOf(0).central.at(-1)!.physical
+
+    expect(deskBound).toBeLessThan(empty)
+    expect(empty - deskBound).toBeGreaterThanOrEqual(5)
+  })
+
+  /**
+   * Five hours of hard training a day has to empty a body, and it did not.
+   *
+   * `typeIntensity.physical` was 0.8 against mental's 1.0 -- studying charged as the more
+   * depleting hour -- so five hours of hard exercise every day for three weeks settled the
+   * body bar at 83 and one hour a day took it from 80 UP to 97. The number was answering
+   * `objective.consequenceOf`'s question ("how bad is it to be late with this") rather than
+   * this one ("how tiring is an hour of it"), and the two disagree for exercise in a way they
+   * do not for study against laundry.
+   *
+   * The desk comparison is the half that must not move with it. Sitting is genuinely less
+   * depleting than training, so a fortnight at a desk has to stay far milder than a fortnight
+   * in a gym -- if both ended up on the floor the split would have traded one wrong answer
+   * for another.
+   */
+  it('empties a body on a fortnight of hard training, but not on one at a desk', () => {
+    const training = (dayIndex: number, hours: number): DayInput =>
+      day(dayIndex, {
+        activities: [
+          { kind: 'hardExercise' as const, type: 'physical' as const, hours, intensity: 1, startHour: 9 },
+          { kind: 'socialRestorative' as const, type: 'social' as const, hours: 2, intensity: 1, startHour: 19 },
+        ],
+        sleepHours: 8,
+      })
+
+    const bodyAfter = (hours: number): number =>
+      project(healthy, Array.from({ length: 21 }, (_, d) => training(d, hours)), DEFAULT_PARAMS)
+        .central.at(-1)!.physical
+
+    expect(bodyAfter(5)).toBeLessThan(60)
+    expect(bodyAfter(8)).toBeLessThan(10)
+    // An hour a day is training a body can absorb, not a week that wrecks one.
+    expect(bodyAfter(1)).toBeGreaterThan(80)
+    // And ten hours at a desk stays what it is: tiring, nowhere near training.
+    expect(fortnightOf(10).central.at(-1)!.physical).toBeGreaterThan(80)
   })
 
   /**

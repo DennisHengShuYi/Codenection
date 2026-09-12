@@ -1,4 +1,10 @@
-import { DEFAULT_SLEEP_HOURS, summarise, type DayInput, type EngineParams } from '../engine'
+import {
+  DEFAULT_SLEEP_HOURS,
+  summarise,
+  type DayInput,
+  type EngineParams,
+  type LoadType,
+} from '../engine'
 import { DAY_END_HOUR } from './gaps'
 import { modeOf, type Mode } from './mode'
 import type { Schedule, ScheduledItem } from './types'
@@ -33,6 +39,30 @@ export const DEFICIT_AREA_WEIGHT = 0.001
 export const DEADLINE_PRESSURE_WEIGHT = 0.008
 
 /**
+ * What it costs to be LATE with a kind of work -- which is not what it costs to do it.
+ *
+ * These were `engine.typeIntensity` until that number was asked both questions at once and
+ * got one of them wrong. The comment that used to stand here said the two were different
+ * questions and that they "happen to rank load types the same way", which held for study
+ * against laundry -- heavier and more consequential together -- and broke completely for
+ * exercise. An hour of hard training is MORE depleting than an hour of study and a missed
+ * session is LESS consequential than a missed essay, so one figure could only ever serve one
+ * of them. It was serving this one, and the drain quietly inherited it: five hours of hard
+ * exercise a day for three weeks left a body at 83.
+ *
+ * So `typeIntensity` keeps the drain -- the question its name asks -- and the consequence
+ * side moves here, carrying the original figures unchanged so nothing the solver ranks moves.
+ * It belongs here anyway, for the reason stated on `DEFICIT_DAY_WEIGHT` above: this is a
+ * property of how a schedule is scored, not of how a student's reserves behave.
+ */
+export const CONSEQUENCE: Record<LoadType, number> = {
+  mental: 1.0,
+  physical: 0.8,
+  social: 0.6,
+  errands: 0.5,
+}
+
+/**
  * How much it would cost to leave this piece of work until the last moment.
  *
  * Derived, never asked for. Ruling 20 is explicit that no student should be made to rank their
@@ -40,14 +70,8 @@ export const DEADLINE_PRESSURE_WEIGHT = 0.008
  * once they have. This reads the two things the app already knows: what kind of load it is,
  * and how big it is. Four hours of final-year project and four hours of laundry stop being
  * interchangeable without anybody being asked which they care about.
- *
- * `typeIntensity` appears here as well as in drain, and the two are different questions:
- * there it is how tiring the work is, here it is what it costs to be late with it. That
- * they happen to rank load types the same way is a fact about study being both heavier and
- * more consequential than laundry, not a double count of one effect.
  */
-const consequenceOf = (item: ScheduledItem, params: EngineParams): number =>
-  params.typeIntensity[item.type] * item.hours
+const consequenceOf = (item: ScheduledItem): number => CONSEQUENCE[item.type] * item.hours
 
 /**
  * Ruling 20's missing term: what it costs to defer work toward its own deadline.
@@ -76,7 +100,7 @@ const consequenceOf = (item: ScheduledItem, params: EngineParams): number =>
  */
 const NO_BUFFER_LEFT_DAYS = 1
 
-function deadlinePressure(schedule: Schedule, params: EngineParams): number {
+function deadlinePressure(schedule: Schedule): number {
   let total = 0
 
   for (const item of schedule.items) {
@@ -85,7 +109,7 @@ function deadlinePressure(schedule: Schedule, params: EngineParams): number {
     const buffer = Math.max(0, item.deadlineDay - item.dayIndex)
     if (buffer > NO_BUFFER_LEFT_DAYS) continue
 
-    total += consequenceOf(item, params) * (NO_BUFFER_LEFT_DAYS + 1 - buffer)
+    total += consequenceOf(item) * (NO_BUFFER_LEFT_DAYS + 1 - buffer)
   }
 
   return total
@@ -152,7 +176,7 @@ export const MAX_NEGLECT = 3
  * charged, and charging them twice would double-count one effect -- dated work would look
  * twice as urgent as it is, which is the opposite of what this is for.
  */
-function neglectPressure(schedule: Schedule, params: EngineParams): number {
+function neglectPressure(schedule: Schedule): number {
   let total = 0
 
   for (const item of schedule.items) {
@@ -165,7 +189,7 @@ function neglectPressure(schedule: Schedule, params: EngineParams): number {
     if (buffer > NO_BUFFER_LEFT_DAYS) continue
 
     const pressure = Math.min(NO_BUFFER_LEFT_DAYS + 1 - buffer, MAX_NEGLECT)
-    total += consequenceOf(item, params) * pressure
+    total += consequenceOf(item) * pressure
   }
 
   return total
@@ -472,8 +496,8 @@ export function score(schedule: Schedule, params: EngineParams): number {
     DEFICIT_DAY_WEIGHT * projection.deficitDays -
     weights.fragmentation * fragmentationOf(byDay) -
     weights.deficitArea * projection.deficitArea -
-    DEADLINE_PRESSURE_WEIGHT * deadlinePressure(schedule, params) -
-    NEGLECT_PRESSURE_WEIGHT * neglectPressure(schedule, params) -
+    DEADLINE_PRESSURE_WEIGHT * deadlinePressure(schedule) -
+    NEGLECT_PRESSURE_WEIGHT * neglectPressure(schedule) -
     DAILY_LOAD_WEIGHT * dailyLoad(byDay) -
     NIGHT_HOURS_WEIGHT * nightHours(schedule)
   )

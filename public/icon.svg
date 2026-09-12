@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Loadline">
+  <!--
+    The Plimsoll line, which is where the name comes from.
+
+    A ship carries a mark on its hull showing how deep it may legally sit in the water. Load
+    it past that line and it is still floating, still looks fine, and is no longer safe. That
+    is the whole argument of this app in one symbol, so the icon is the mark itself rather
+    than a metaphor for it.
+
+    Drawn for 16px first, because that is the size it is actually read at: two shapes, both
+    heavy, and nothing that survives only at 512. The mark fills about seven tenths of the
+    square -- a smaller one looked correct at 512 and turned to a faint smudge in a tab.
+
+    The bar deliberately runs past the ring. That overhang is the whole difference between
+    the load line and a minus sign in a circle, which is what this collapses to the moment
+    the bar stops at the edge.
+
+    Colours are the ones the app already uses: slate-900 is `theme-color` in index.html, so
+    the tab, the installed app's chrome and this icon are one piece.
+  -->
+  <rect width="64" height="64" fill="#0f172a" />
+  <circle cx="32" cy="32" r="19" fill="none" stroke="#10b981" stroke-width="7" />
+  <line x1="5" y1="32" x2="59" y2="32" stroke="#10b981" stroke-width="7" stroke-linecap="round" />
+</svg>

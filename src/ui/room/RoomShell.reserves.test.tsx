@@ -91,11 +91,25 @@ describe('the reserves sheet', () => {
   it('reads each bar off the reserve entering today, not the one the week opened with', async () => {
     const sheet = await openReserves()
 
-    // Five days of seven-hour study on six hours' sleep. Mental cannot still be at its
-    // opening 70, and physical -- spent on nothing, repaid every night -- cannot still be
-    // below it.
+    /*
+     * Five days of seven-hour study on six hours' sleep, read as a move away from the opening
+     * week in two directions at once.
+     *
+     * The bug is that every bar reports `schedule.start`, so it shows exactly `OPENING` --
+     * and the sharpest thing that can be said about this fortnight is that the two bars have
+     * gone opposite ways from it. Mental has fallen a long way; physical has been repaid past
+     * where it began. One frozen number cannot produce both, which is the whole claim.
+     *
+     * Asserted against `OPENING` rather than a chosen threshold because the thresholds kept
+     * having to move for reasons that had nothing to do with this test. Physical read 90 while
+     * studying cost a body nothing, 85 once `SECONDARY_COST` gave desk work a cost, and 74
+     * once `kSleep.physical` came down from 7.0 to 3.0 -- three numbers for one unchanged
+     * claim. The direction is the claim.
+     */
+    const OPENING = 70
+
     expect(barValue(sheet, 'mental')).toBeLessThan(50)
-    expect(barValue(sheet, 'physical')).toBeGreaterThan(90)
+    expect(barValue(sheet, 'physical')).toBeGreaterThan(OPENING)
   })
 
   it('shows a headline that is the mean of the bars beneath it', async () => {

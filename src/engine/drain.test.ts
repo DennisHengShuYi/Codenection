@@ -269,6 +269,192 @@ describe('a block that carries its own estimate bias', () => {
  * to the total, or they have drifted and the explanation is describing a day the model did
  * not simulate.
  */
+/**
+ * §6.4 amended: an hour costs more than one thing.
+ *
+ * `drainForDay` charged `totals[activity.type]`, one bar and exactly one, so a reserve was
+ * only ever touched if the day contained an activity carrying its own type. Only exercise is
+ * typed physical, so ten hours at a desk cost a student's body nothing at all -- measured, a
+ * fortnight of ten-hour study days took the body bar from 92 UP to 100 while the study bar
+ * fell to 16, because sleep repaid it 21 points a night against a drain that could not fire.
+ *
+ * The one-hot assumption is the bug rather than the coefficients. Three hours hunched at a
+ * desk costs a body; errands are walking, carrying and queueing, and cost one too. So the
+ * rate becomes a row instead of a number.
+ *
+ * Deliberately small away from the diagonal. Four separately priced reserves is §6.3's whole
+ * claim -- a student can be socially fine and mentally destroyed and the app has to show it --
+ * and reserves that all drain together are one number wearing four hats. `SECONDARY_COST` is
+ * a fifth of the primary at most, and zero wherever there is no story to tell.
+ */
+describe('an activity costs more than its own reserve', () => {
+  const deskDay = day({ activities: [study(9, 10)] })
+
+  it('charges a body for a long day at a desk', () => {
+    expect(drainForDay(deskDay, healthy, DEFAULT_PARAMS).physical).toBeGreaterThan(0)
+  })
+
+  it('charges errands to the body and the head as well as to the errands bar', () => {
+    const chores = day({
+      activities: [{ kind: 'errands', type: 'errands', hours: 4, intensity: 1, startHour: 10 }],
+    })
+    const drained = drainForDay(chores, healthy, DEFAULT_PARAMS)
+
+    expect(drained.errands).toBeGreaterThan(0)
+    expect(drained.physical).toBeGreaterThan(0)
+    expect(drained.mental).toBeGreaterThan(0)
+  })
+
+  /**
+   * The guard that keeps four reserves worth having. If a secondary cost ever approached its
+   * primary, every bar would move with every other and §6.3's separate pricing would be
+   * decorative.
+   */
+  it('never charges another reserve more than a fraction of the one it belongs to', () => {
+    const drained = drainForDay(deskDay, healthy, DEFAULT_PARAMS)
+
+    expect(drained.physical).toBeLessThan(drained.mental / 3)
+  })
+
+  /** Silence where there is no evidence, rather than a small invented number everywhere.
+   *  Studying does not cost a student their friendships. */
+  it('leaves a reserve alone when the activity has nothing to do with it', () => {
+    // Social carries the isolation charge on any day under the floor, so this reads the
+    // secondary cost through a day that had contact and therefore no isolation line.
+    const withContact = day({
+      activities: [
+        study(9, 10),
+        { kind: 'socialRestorative', type: 'social', hours: 2, intensity: 1, startHour: 20 },
+      ],
+    })
+
+    expect(drainForDay(withContact, healthy, DEFAULT_PARAMS).social).toBe(0)
+  })
+
+  /** Recovery is still recovery. The spread must not turn a rest block into a cost on some
+   *  other bar, which is the quiet way this change could undo §5.1. */
+  it('spreads nothing at all from rest or from seeing people', () => {
+    const restful = day({
+      activities: [
+        { kind: 'rest', type: 'mental', hours: 2, intensity: 1, startHour: 20 },
+        { kind: 'socialRestorative', type: 'social', hours: 2, intensity: 1, startHour: 17 },
+      ],
+    })
+    const drained = drainForDay(restful, healthy, DEFAULT_PARAMS)
+
+    expect(drained.mental).toBe(0)
+    expect(drained.physical).toBe(0)
+    expect(drained.errands).toBe(0)
+  })
+})
+
+/**
+ * §6.4 amended: an hour of hard exertion is more tiring than an hour of reading.
+ *
+ * `typeIntensity` put physical at 0.8 against mental's 1.0, so the model charged five hours
+ * of hard training 4.00 against five hours of study's 5.00 -- studying rated as the more
+ * depleting of the two, per hour, each on its own reserve. Against the recovery a night's
+ * sleep pays a body that never bit: measured, five hours of hard exercise EVERY day for
+ * three weeks settled the body bar at 83, and one hour a day took it from 80 up to 97.
+ *
+ * The 0.8 was not wrong so much as answering a different question. One number was serving
+ * both "how tiring is an hour of this" here and "how bad is it to be late with this" in
+ * `objective.consequenceOf`, and those agree for study against laundry -- study is both
+ * heavier and more consequential -- while for exercise they point opposite ways. An hour of
+ * training is more depleting than an hour of study; a missed session is less consequential
+ * than a missed essay. `objective.CONSEQUENCE` is the second number, and it keeps the old
+ * figures, so nothing the solver ranks changes.
+ */
+describe('what an hour of each kind of load costs', () => {
+  const forHours = (activity: Activity, of: 'mental' | 'physical'): number =>
+    drainForDay(day({ activities: [activity] }), healthy, DEFAULT_PARAMS)[of]
+
+  const training = (hours: number): Activity => ({
+    kind: 'hardExercise',
+    type: 'physical',
+    hours,
+    intensity: 1,
+    startHour: 9,
+  })
+
+  it('charges hard exercise more per hour than study, each on its own reserve', () => {
+    expect(forHours(training(5), 'physical')).toBeGreaterThan(forHours(study(9, 5), 'mental'))
+  })
+
+  /** Per hour and on its own reserve, which is the only comparison that means anything here.
+   *  Comparing a body against a mind outright would be the single-number reading §6.3 exists
+   *  to refuse -- the two are not denominated in the same thing. */
+  it('scales with the hours, so a long session costs a long session', () => {
+    const oneHour = forHours(training(1), 'physical')
+
+    expect(forHours(training(5), 'physical')).toBeCloseTo(oneHour * 5, 6)
+  })
+})
+
+/**
+ * §1.2 amended: a quarter of an hour with somebody is a quarter of an hour, not nothing.
+ *
+ * The isolation charge was a switch on `socialFloorHoursPerDay` -- under half an hour you
+ * paid all of it, at half an hour you paid none -- so one minute of difference moved the
+ * social bar 28 points across a fortnight: 29 minutes a day settled at 67 and 30 minutes at
+ * 95. A student who says hello in a corridor every day was scored as though they had spoken
+ * to nobody for three weeks.
+ *
+ * `neighbours.socialMoves` already names this as a known mismatch in its own comment -- "a
+ * fifteen-minute coffee satisfies this guard while the day goes on draining" -- and it is
+ * worse in the other direction, because at the floor the drain stops completely.
+ *
+ * A straight line between the two ends, which introduces no number: the floor that was the
+ * wall is now the point the line reaches zero.
+ */
+describe('isolation is charged in proportion to how short the day fell', () => {
+  const contact = (hours: number): DayInput =>
+    day({
+      activities: [
+        study(9, 4),
+        ...(hours === 0
+          ? []
+          : [
+              {
+                kind: 'socialRestorative' as const,
+                type: 'social' as const,
+                hours,
+                intensity: 1,
+                startHour: 18,
+              },
+            ]),
+      ],
+    })
+
+  const isolationOn = (hours: number): number =>
+    drainForDay(contact(hours), healthy, DEFAULT_PARAMS).social
+
+  const floor = DEFAULT_PARAMS.socialFloorHoursPerDay
+
+  it('charges the whole thing on a day with nobody in it', () => {
+    expect(isolationOn(0)).toBeGreaterThan(0)
+  })
+
+  it('charges nothing once the day clears the floor', () => {
+    expect(isolationOn(floor)).toBe(0)
+    expect(isolationOn(floor * 4)).toBe(0)
+  })
+
+  /** The point of the change: half the floor costs half the charge, rather than all of it. */
+  it('charges half for half the floor', () => {
+    expect(isolationOn(floor / 2)).toBeCloseTo(isolationOn(0) / 2, 6)
+  })
+
+  /** No step anywhere along it. A minute either side of the floor used to be worth 28 points
+   *  on the bar across a fortnight. */
+  it('has no cliff at the floor itself', () => {
+    const justUnder = isolationOn(floor - 0.01)
+
+    expect(justUnder).toBeGreaterThan(0)
+    expect(justUnder).toBeLessThan(isolationOn(0) / 10)
+  })
+})
+
 describe('drainSources', () => {
   const day = (activities: Activity[], over: Partial<DayInput> = {}): DayInput => ({
     dayIndex: 0,
@@ -375,14 +561,28 @@ describe('drainSources', () => {
     expect(sources.some((source) => source.source === 'studyBlock')).toBe(true)
   })
 
-  it('gathers repeated work of one kind into a single line', () => {
+  /**
+   * One line per kind *per bar*, which is what gathering has always meant here -- the key is
+   * `kind:type`, not `kind`.
+   *
+   * It read as one line full stop while an activity could only ever charge one reserve. Study
+   * now also costs a body (`SECONDARY_COST`), so two morning-and-afternoon study blocks
+   * produce two lines: "studyBlock, study" and "studyBlock, body". Asserting the pair
+   * separately says the thing this test was always about -- the two blocks were added
+   * together rather than listed twice -- and says it about both bars instead of silently
+   * about whichever one happened to exist.
+   */
+  it('gathers repeated work of one kind into a single line per reserve', () => {
     const sources = drainSources(
       day([study(2), { ...study(2), startHour: 14 }]),
       rested,
       DEFAULT_PARAMS,
     )
+    const studyLines = sources.filter((source) => source.source === 'studyBlock')
 
-    expect(sources.filter((source) => source.source === 'studyBlock')).toHaveLength(1)
+    expect(studyLines.filter((source) => source.type === 'mental')).toHaveLength(1)
+    expect(studyLines.filter((source) => source.type === 'physical')).toHaveLength(1)
+    expect(studyLines).toHaveLength(2)
   })
 
   it('keeps the day-level charges apart from the work itself', () => {

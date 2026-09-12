@@ -152,6 +152,7 @@ export function AddSheet({
       <PhotoImportScreen
         schedule={schedule}
         today={today}
+        vocabulary={vocabulary}
         calendar={calendar}
         suggestRepeat={(item) => suggestRepeat(item, schedule)}
         onAccept={(items) => {
@@ -169,8 +170,8 @@ export function AddSheet({
       <PlannerScreen
         schedule={schedule}
         today={today}
-        calendar={calendar}
         vocabulary={vocabulary}
+        calendar={calendar}
         suggestRepeat={(item) => suggestRepeat(item, schedule)}
         onAccept={(items) => {
           onAcceptItems(items)
@@ -187,6 +188,7 @@ export function AddSheet({
       <CalendarImportScreen
         schedule={schedule}
         today={today}
+        vocabulary={vocabulary}
         connected={calendarConnected}
         // Ruling 63: the outcome is returned to the screen rather than discarded. This was
         // `void beginConnect()`, which sent a refusal to the browser console and a missing

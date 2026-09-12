@@ -2,6 +2,7 @@ import { WEEKDAY_NAMES } from '../../domain/calendar'
 import type { ParsedItem } from '../../ai'
 import { BLOCK_KINDS, LOAD_TYPES, type ActivityKind, type LoadType } from '../../engine'
 import { Button } from '../kit/Button'
+import type { KnownTitle } from '../../domain/titleVocabulary'
 import type { Schedule } from '../../optimizer'
 import { DayPicker } from '../week/DayPicker'
 import { HourPicker } from '../week/HourPicker'
@@ -32,6 +33,7 @@ export function ItemChip({
   onRemove,
   schedule,
   today,
+  vocabulary = [],
 }: {
   item: ParsedItem
   onChange: (next: ParsedItem) => void
@@ -52,6 +54,20 @@ export function ItemChip({
   schedule: Schedule
   /** For naming "Today" and "Tomorrow" on that fallback, which a date alone cannot say. */
   today: number
+  /**
+   * The names this student already uses, offered while they correct one.
+   *
+   * §2.4's narrow rungs group answers by title, so "gym" and "Gym session" are two buckets
+   * neither of which ever fills -- and Reality Check needs three answers under the SAME name
+   * before it can pad that particular work. `EventForm` has offered these since that landed;
+   * the chip did not, which is the half a student actually meets. Every one of the four ways
+   * in produces chips, and correcting a name by hand is exactly where a second spelling gets
+   * typed.
+   *
+   * Defaulted, because a student with no history has none to offer and an empty list is the
+   * honest answer rather than a missing prop.
+   */
+  vocabulary?: readonly KnownTitle[]
 }) {
   // A list item, not `Card` -- `Card` renders a `<div>`, and this always sits inside the
   // screens' `<ul>` of chips, where a `<div>` would be invalid list markup. `CARD_TONES` is
@@ -65,14 +81,29 @@ export function ItemChip({
       }`}
     >
       <Field label="What">
+        {/* A native `<datalist>`, as on the manual form. The browser filters as they type,
+            announces it, and works on a phone keyboard -- none of which a hand-rolled list
+            gets for free. The field stays a plain text box, so a name that is genuinely new
+            needs no escape hatch. */}
         <input
+          list={`known-${item.id}`}
           value={item.title}
           onChange={(event) => onChange({ ...item, title: event.target.value })}
           className="rounded border border-line bg-surface px-2 py-1 text-sm text-ink"
         />
       </Field>
 
-      <div className="flex flex-wrap items-end gap-2">
+      {/* Outside the field, because `Field` clones a single child to attach its label. */}
+      <datalist id={`known-${item.id}`}>
+        {vocabulary.map((known) => (
+          <option key={known.title} value={known.title} />
+        ))}
+      </datalist>
+
+      {/* `items-start`, not `items-end`. The fields are different heights the moment one
+          of them carries a help line -- "Blank for any time" pushed the Time label clear of
+          the others and it read as belonging to nothing. Labels line up instead. */}
+      <div className="flex flex-wrap items-start gap-2">
         <Field label="Kind">
           <select
             value={item.type}
@@ -101,6 +132,13 @@ export function ItemChip({
           </select>
         </Field>
 
+      </div>
+
+      {/* The three that answer "when and how much", on a row of their own.
+          One row of six wrapped wherever the sheet happened to end, so Time landed alone
+          under a half-empty line and read as unrelated to the day beside it. Two rows that
+          MEAN something -- what it is, then when it is -- wrap the same way at every width. */}
+      <div className="flex flex-wrap items-start gap-2">
         <Field label="Hours">
           <input
             type="number"
@@ -147,9 +185,6 @@ export function ItemChip({
           />
         </Field>
 
-        <Button variant="quiet" size="sm" className="ml-auto" onClick={() => onRemove(item.id)}>
-          Remove
-        </Button>
       </div>
 
       {/* §5.1's boundary, drawn where the student can see it. A pinned block is one the
@@ -203,6 +238,15 @@ export function ItemChip({
           Not sure about this one — check it before adding.
         </p>
       )}
+
+      {/* Last, after everything it would remove. It sat in the middle of the field row,
+          beside Time -- on the way to the hour for a thumb, and reading as one more field
+          rather than as the one control that throws the row away. */}
+      <div className="flex justify-end">
+        <Button variant="quiet" size="sm" onClick={() => onRemove(item.id)}>
+          Remove
+        </Button>
+      </div>
     </li>
   )
 }

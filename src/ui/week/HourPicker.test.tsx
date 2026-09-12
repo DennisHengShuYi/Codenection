@@ -21,8 +21,16 @@ import { HourPicker } from './HourPicker'
  * the prop between characters, and the test ends up asserting against the hour it started
  * with. This is how a consumer holds it, so it is how the test holds it.
  */
-function Harness({ start = 9, onChange }: { start?: number; onChange: (hour: number) => void }) {
-  const [hour, setHour] = useState(start)
+function Harness({
+  start = 9,
+  onChange,
+}: {
+  start?: number
+  onChange: (hour: number | null) => void
+}) {
+  // `HourPicker` reports `number | null` so an optional one can say "any time"; this harness
+  // drives the required form, where null never arrives, but the types have to admit it.
+  const [hour, setHour] = useState<number | null>(start)
 
   return (
     <Field label="Starts at">

@@ -7,6 +7,7 @@ import type { SleepNight } from '../../domain/sleepLog'
 import type { BlockRecord } from '../../domain/blockLog'
 import { priceRequest, type RequestCost } from '../../domain/requestCost'
 import type { EngineParams } from '../../engine'
+import type { KnownTitle } from '../../domain/titleVocabulary'
 import type { Schedule } from '../../optimizer'
 import { Button } from '../kit/Button'
 import { LOAD_TYPE_LABELS } from '../kit/labels'
@@ -74,6 +75,7 @@ export function RequestBoxScreen({
   onBack,
   onClose,
   calendar,
+  vocabulary = [],
 }: {
   schedule: Schedule
   /** §2.4's calibrated params -- the student's own measured estimate bias, not the
@@ -111,6 +113,14 @@ export function RequestBoxScreen({
   /** Ruling 43: the horizon's days in a student's words, for the chip's "when" question. */
   /** Ruling 44: which real day the horizon's day 0 is, so "next thursday" means that thursday. */
   calendar: Calendar
+  /**
+   * The names this student already uses, forwarded to the chip.
+   *
+   * §2.4's narrow rungs group answers by title, and Reality Check needs three answers under
+   * the SAME name before it can pad that particular work. Correcting a name by hand is where
+   * a second spelling gets typed, so the names in use are offered there.
+   */
+  vocabulary?: readonly KnownTitle[]
 }) {
   const [text, setText] = useState('')
   const [item, setItem] = useState<ParsedItem | null>(null)
@@ -210,6 +220,7 @@ export function RequestBoxScreen({
               <ItemChip
                 schedule={schedule}
                 today={today}
+                vocabulary={vocabulary}
                 item={item}
                 onChange={(next) => void onPrice(text, next)}
                 onRemove={() => {

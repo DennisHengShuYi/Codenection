@@ -838,7 +838,7 @@ commit — a green build on stale tests only proves the code still does what it 
     mechanical as the count check. When a line reads wrongly the fault is upstream, in
     `domain/reserveInsight`, not in a prompt.
 
-14. **Make the same activity reuse the same name** ([#71](https://github.com/DennisHengShuYi/Codenection/issues/71)).
+14. **Make the same activity reuse the same name** 
     §2.4's ladder groups answers by title, so the name is the key the learning is stored under: a
     student who writes `badminton`, `Badminton`, `badminton w sam` and `bball` has four buckets,
     none of which reaches the three answers Reality Check needs, and the app falls back to a number

@@ -5,7 +5,6 @@ import {
   LOAD_TYPES,
   type DayInput,
   type EngineParams,
-  type ActivityKind,
   type LoadType,
   type Projection,
   type Reserves,
@@ -13,8 +12,10 @@ import {
 import type { Schedule } from '../optimizer'
 import { answeredIds, type BlockRecord } from './blockLog'
 import { describeDeficit, explainDeficit } from './deficitCause'
-import { missedSoftDeadlines } from './softDeadlines'
-import { ADVICE_KINDS, prescribe } from './prescribe'
+/* `RESTORES` and the window live in `prescribe` now. Both files need them, and one shared
+   definition of "already covered" is what keeps this sheet from contradicting itself between
+   the line naming a booked event and the advice underneath it. */
+import { COVERED_WITHIN_DAYS, firstUncovered, prescribe, RESTORES } from './prescribe'
 
 /**
  * Above this a reserve is not what limits anybody, and saying so is noise.
@@ -24,21 +25,6 @@ import { ADVICE_KINDS, prescribe } from './prescribe'
  * complete readout, and this block exists to say the part that readout cannot.
  */
 const WORTH_COMMENTING_BELOW = 70
-
-/**
- * What actually answers each reserve, when one is low.
- *
- * The same matching §5.2 makes in `prescribe`'s ADVICE, read the other way round: that says
- * what to DO about a neglected reserve, this says what on the calendar already counts as
- * doing it. Errands has no entry for the same reason it has no advice -- a backlog of chores
- * is answered by clearing the chores, not by a restorative act of some other kind.
- */
-const RESTORES: Record<LoadType, readonly ActivityKind[]> = {
-  mental: ['rest'],
-  physical: ['lightExercise', 'hardExercise'],
-  social: ['socialRestorative'],
-  errands: [],
-}
 
 /** How many of a deficit's drains are worth naming. Past two it stops being a cause and
  *  becomes a list. */
@@ -181,8 +167,13 @@ export function reserveInsight({
   const prescription = prescribe(schedule, today, blockLog, reserves)
 
   /*
-   * Unanswered, and from today onward. A block the student has already reported on is
-   * history whatever day it sits on, and a day behind them cannot be what is coming.
+   * Unanswered, from today onward, and inside the window the advice itself counts.
+   *
+   * A block the student has already reported on is history whatever day it sits on, and a day
+   * behind them cannot be what is coming. The far edge is `prescribe`'s, deliberately shared:
+   * this line and the advice under it must agree about what "already covered" means, or the
+   * sheet names a coffee twelve days out as answering the reserve in one sentence and tells
+   * the student to go and message somebody in the next.
    */
   const answered = new Set(answeredIds(blockLog))
   const thinnest = notes[0]?.type
@@ -194,24 +185,30 @@ export function reserveInsight({
           .filter(
             (candidate) =>
               candidate.dayIndex >= today &&
+              candidate.dayIndex <= today + COVERED_WITHIN_DAYS &&
               !answered.has(candidate.id) &&
               RESTORES[thinnest].includes(candidate.kind),
           )
           .sort((a, b) => a.dayIndex - b.dayIndex || a.startHour - b.startHour)[0] ?? null)
 
   /*
-   * Overdue things that have advice attached -- the same population `prescribe` chooses
-   * from. Non-empty with no prescription means the day had nowhere to put one; empty means
-   * there was nothing to put there in the first place.
+   * Which of the two silences this is.
+   *
+   * `prescribe` returning nothing means one of two quite different things, and a student acts
+   * differently on each: either every reserve it can speak for is already covered -- the plan
+   * working -- or something still needs answering and today has no free stretch to put it in,
+   * which asks them to move something rather than add something.
+   *
+   * Read from the same `firstUncovered` the prescription itself walks, so the two can never
+   * disagree about which case this is. It used to be read from the overdue rhythm list, which
+   * stopped being what decides the advice.
    */
-  const answerable = missedSoftDeadlines(schedule, today, blockLog).filter(
-    (miss) => ADVICE_KINDS[miss.type] !== undefined,
-  )
+  const uncovered = firstUncovered(schedule, today, blockLog, reserves)
 
   return {
     notes,
     noAction:
-      prescription !== null ? null : answerable.length === 0 ? 'allInHand' : 'noRoomToday',
+      prescription !== null ? null : uncovered === null ? 'allInHand' : 'noRoomToday',
     upcoming:
       upcoming === null ? null : { title: upcoming.title, dayIndex: upcoming.dayIndex },
     deficit:

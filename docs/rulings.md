@@ -458,3 +458,65 @@ line from the code that does the first.
 `src/domain/sleepEnough.ts` — the estimator; `src/engine/params.ts` — why the population
 figure is nine rather than eight (it leaves room to learn downward); `src/engine/recovery.ts`
 — where the ceiling binds
+
+## Ruling 70
+
+**A measured reserve outranks a rhythm clock, so the Reserves sheet's advice follows the bars
+and the clocks no longer decide it.**
+
+Reported from the sheet: an empty calendar, People as the thinnest bar, and the advice reading
+"stop and do nothing, no screen" for three days running. Measured day by day on a fresh
+fortnight:
+
+```
+day 1: overdue=[rest]                                 -> Stop and do nothing
+day 2: overdue=[rest]                                 -> Stop and do nothing
+day 3: overdue=[rest, lightExercise]                  -> Stop and do nothing
+day 4: overdue=[rest, walk, hardExercise, seeSomeone] -> Message someone you like
+```
+
+`SOFT_DEADLINE_INTERVALS` gives rest a one-day clock and company a four-day one, and a rhythm
+never confirmed is due one interval after the fortnight starts. So on any fresh week rest is
+the only overdue thing until day four and wins by default, whatever the bars say. The reserve
+ordering added earlier could not help: it was a tie-break among things already overdue, and for
+three days there was only one.
+
+The clocks lost the argument because **a clock is a guess at whether a reserve is depleted and
+the bar is the measurement of it**. Consulting both means measuring one thing twice and letting
+the worse measure win. That is the same "two answers to one question" fault the earlier ruling
+on this file already records, arriving from the other direction.
+
+What replaces them is `firstUncovered`: walk the reserves thinnest first, step over any with no
+advice to give (errands, deliberately), and take the first whose need is not already booked.
+
+Two decisions inside that, both taken explicitly rather than defaulted:
+
+**No level gate.** A bar at 99 against three at 100 still produces advice. A floor was
+considered -- below 70, say nothing -- and rejected, because it would have left the reported
+screen reading exactly as it did.
+
+**`COVERED_WITHIN_DAYS = 2`.** "Already covered" used to mean anything of that kind scheduled
+anywhere at or after today, which searched the whole 21-day horizon: one coffee eleven days out
+silenced the advice for a reserve that would keep falling for all eleven. Two days is the span
+over which a booking is plausibly the reason not to add something else today.
+
+`domain/reserveInsight` reads the same window and the same `firstUncovered`. That is not tidying:
+the sheet prints "X on Friday is what answers that, so it is already in hand" directly above the
+advice, and two windows would let it name an event as answering a reserve in one sentence and
+tell the student to go and do that very thing in the next. Its two silences are told apart by
+`firstUncovered` too -- nothing uncovered is the plan working, something uncovered with no
+prescription is a day too full to hold one, and a student acts differently on each.
+
+The Telegram doors keep the days-late ordering, because they call `prescribe` without a
+projection and their two call sites must agree with each other or a tapped button re-derives a
+different suggestion from the one it offered. The bot and the app can therefore now suggest
+different things on the same day. That is a real divergence and is recorded rather than hidden.
+
+The accepted cost: with the clocks gone the sheet nearly always has something to say, because a
+bar with nothing booked within two days is the normal state of an empty calendar. Advice that
+is always present reads less like a signal. The honest place to revisit that is the wording, not
+by quietly reintroducing a clock.
+
+`src/domain/prescribe.ts` -- `firstUncovered`, `COVERED_WITHIN_DAYS` and `RESTORES`, which moved
+here from `reserveInsight` because both files need one definition; `src/domain/reserveInsight.ts`
+-- the shared window and the two silences

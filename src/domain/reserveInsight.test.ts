@@ -10,6 +10,7 @@ import {
 } from '../engine'
 import { DEFAULT_PARAMS } from '../engine/params'
 import { toDayInputs, type Schedule, type ScheduledItem } from '../optimizer'
+import { COVERED_WITHIN_DAYS } from './prescribe'
 import { insightLines, reserveInsight } from './reserveInsight'
 import { RHYTHM_KINDS } from './softDeadlines'
 
@@ -330,6 +331,45 @@ describe('what is already booked for the thinnest reserve', () => {
 
   it('has nothing to point at when the reserve really is unanswered', () => {
     expect(insightOf(week(HEALTHY)).upcoming).toBeNull()
+  })
+
+  /**
+   * Far enough out that it answers nothing now.
+   *
+   * This line and the advice below it have to share one definition of "already covered", or
+   * the sheet contradicts itself in two consecutive sentences: a coffee twelve days away
+   * announced as answering the reserve, directly above advice to go and message somebody.
+   * `prescribe.COVERED_WITHIN_DAYS` is that one definition and this reads it.
+   */
+  it('ignores one booked further out than the advice counts', () => {
+    const farOff = week(HEALTHY, [
+      item({
+        id: 'coffee',
+        title: 'Coffee with Sarah',
+        type: 'social',
+        kind: 'socialRestorative',
+        dayIndex: COVERED_WITHIN_DAYS + 1,
+        startHour: 17,
+      }),
+    ])
+
+    expect(insightOf(farOff).upcoming).toBeNull()
+  })
+
+  /** The boundary itself still counts, so the window is inclusive at both ends. */
+  it('still points at one booked exactly at the edge of the window', () => {
+    const atEdge = week(HEALTHY, [
+      item({
+        id: 'coffee',
+        title: 'Coffee with Sarah',
+        type: 'social',
+        kind: 'socialRestorative',
+        dayIndex: COVERED_WITHIN_DAYS,
+        startHour: 17,
+      }),
+    ])
+
+    expect(insightOf(atEdge).upcoming?.title).toBe('Coffee with Sarah')
   })
 })
 

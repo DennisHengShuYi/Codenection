@@ -67,11 +67,26 @@ export function CalendarImportScreen({
       const outcome = await onRead()
       setItems(outcome.items.map((item) => ({ ...item, repeat: item.repeat ?? suggestRepeat(item) })))
       setSkipped(outcome.skipped)
-    } catch {
-      // A network that died, a grant Google has stopped honouring, an unmigrated database.
-      // All the same thing to a student, and all recoverable by trying again -- so this says
-      // that rather than describing the inside of the system.
-      setProblem('I could not read your calendar just now. Try again in a moment.')
+    } catch (failure) {
+      /*
+       * The reason where there is one, "try again" where there is not.
+       *
+       * Every failure used to become the sentence below, which is right for a network that
+       * died or for Google being briefly unwell -- and wrong for the two the endpoint can
+       * now name: a grant that does not carry the scope, and a deployment whose Calendar API
+       * was never switched on. For both, trying again is not what fixes it, and telling
+       * somebody to wait when waiting cannot help is worse than saying nothing.
+       *
+       * Only a sentence written for a student is shown. `could not read calendar` is this
+       * app's own internal wording and a `TypeError` is the browser's, so anything that did
+       * not come from the endpoint falls through to the honest general answer.
+       */
+      const said = failure instanceof Error ? failure.message : ''
+      const forAStudent = said !== '' && said !== 'could not read calendar' && said.includes(' ') && /[.!?]$/.test(said)
+
+      setProblem(
+        forAStudent ? said : 'I could not read your calendar just now. Try again in a moment.',
+      )
     } finally {
       setReading(false)
     }

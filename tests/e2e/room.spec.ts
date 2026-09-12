@@ -183,9 +183,20 @@ for (const [width, height] of VIEWPORTS) {
     // passes on a button painted under something else; `elementFromPoint` does not -- and
     // this is the check that caught `Waiting` widening the row until its own box reached
     // across the gauge and swallowed the press meant for it.
+    //
+    // Each one is scrolled into its row first, which is a real change to what this asserts
+    // and is worth saying out loud. The row used to WRAP: seven controls came to three rows
+    // at 360px, and since the bar paints the ceiling's colour across its whole height, 180px
+    // of solid brown sat over the drawing -- the character, the door and the bed were behind
+    // the buttons, and nothing in this file noticed because nothing overflowed. It is one row
+    // that scrolls now, so at 320px `The week` starts beyond the row's right edge. What still
+    // has to hold is that every control is REACHABLE and that nothing is painted over it,
+    // which is what this loop asks; what no longer holds is that all five are on screen at
+    // once at every width, which was never the property that mattered.
     for (const id of ['open-settings', 'open-week', 'open-notices', 'open-add', 'room-gauge']) {
       const control = page.getByTestId(id)
       await expect(control).toBeVisible()
+      await control.scrollIntoViewIfNeeded()
 
       const box = await control.boundingBox()
       expect(box, `${id} has no box at ${width}px`).not.toBeNull()
@@ -194,6 +205,12 @@ for (const [width, height] of VIEWPORTS) {
       const topmost = await controlAt(page, box!.x + box!.width / 2, box!.y + box!.height / 2)
       expect(topmost, `${id} is covered at ${width}px`).toBe(id)
     }
+
+    // The bar stays the depth of one control, whatever is in it. This is the assertion the
+    // wrapped row would have failed, and the reason the room came back.
+    const bar = await page.getByTestId('room-bar').boundingBox()
+    expect(bar, 'no control bar to measure').not.toBeNull()
+    expect(bar!.height, `the control bar has wrapped at ${width}px`).toBeLessThan(80)
   })
 }
 

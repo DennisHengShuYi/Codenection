@@ -944,7 +944,10 @@ export function RoomShell({
                           type="button"
                           data-testid={`open-block-${one.id}`}
                           onClick={() => setView(toBlock(one.id))}
-                          className="self-start text-xs text-ink-soft underline"
+                          /* A real control, at a real size. It was 39x16 -- under half the
+                             height a finger can reliably hit, on the page a student reaches
+                             for when they have things to answer. */
+                          className="-mx-2 flex min-h-11 items-center self-start px-2 text-xs text-ink-soft underline"
                         >
                           Open it
                         </button>
@@ -1446,14 +1449,25 @@ export function RoomShell({
 
         {/* One control row across the top of the room, packed to the left: `Settings`, then
             `The week`, then `Waiting`, then `+`.
-            
-            Three things keep it out of the gauge's way, and the fourth control is what made
-            all three necessary -- at 320px the row is wider than the screen. `pr-14` holds
-            the corner open, `flex-wrap` puts the overflow on a second line rather than
-            pushing it under the gauge, and the container itself takes no pointer events, so
-            even where its empty box reaches across the gauge it cannot swallow the press.
-            That last one is not belt and braces: the row's transparent box intercepting the
-            gauge is exactly how `dial.spec.ts` failed at 320 and 390. */}
+
+            Two things keep it out of the gauge's way, and the seven controls are what made
+            both necessary -- at 320px the row is far wider than the screen. `pr-16` holds
+            the corner open, and the container itself takes no pointer events, so even where
+            its empty box reaches across the gauge it cannot swallow the press. That second
+            one is not belt and braces: the row's transparent box intercepting the gauge is
+            exactly how `dial.spec.ts` failed at 320 and 390.
+
+            **One row that scrolls, where it used to wrap.** Wrapping was the earlier answer
+            and it was measured only as "nothing overflows": at 360px the seven controls came
+            to THREE rows, and this bar paints the ceiling's colour across its whole height,
+            so 180px of solid brown sat over the drawing. What was left of the room was the
+            top of a bookstack and a table edge above an empty floor -- the character, the
+            door and the bed were all behind the buttons, and four viewport tests passed on
+            it, because nothing overflowed.
+
+            The scrolling box is INSIDE the padded container rather than being the container,
+            so it ends where `pr-16` ends: a button can never scroll under the gauge, which
+            would be a control that cannot be pressed and looks like one that can. */}
         <div data-testid="room-bar"
           /**
            * The controls sit INSIDE the ceiling, which means the bar has to carry the
@@ -1469,7 +1483,21 @@ export function RoomShell({
            * still reads above it, and a bar of controls floating on a wall read worse.
            */
           style={{ backgroundColor: PALETTE.ink }}
-          className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-center gap-2.5 px-3 py-3 pr-16 [&>*]:pointer-events-auto">
+          className="pointer-events-none absolute inset-x-0 top-0 px-3 py-3 pr-16">
+          {/* The edge says there is more, so a half-cut button reads as a row that scrolls
+              rather than as one that broke. Ink to transparent, because the bar already
+              paints the ceiling's colour and anything else would be a second edge. */}
+          <div
+            aria-hidden="true"
+            style={{ backgroundImage: `linear-gradient(to left, ${PALETTE.ink}, transparent)` }}
+            className="pointer-events-none absolute inset-y-0 right-16 w-6"
+          />
+
+          {/* `shrink-0` on every child, or the row compresses the buttons to illegibility
+              instead of scrolling. The scrollbar is hidden because this is a control strip on
+              a touch screen, not a document: a horizontal bar under the buttons would sit on
+              the ceiling and read as part of the drawing. */}
+          <div className="pointer-events-auto flex items-center gap-2.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
           {settingsButton}
           {/*
             First in the row, and outside `!lowEnergy` -- both deliberate.
@@ -1534,6 +1562,7 @@ export function RoomShell({
           <Button data-testid="open-add" aria-label="Add something" onClick={() => setView(toAdd())}>
             +
           </Button>
+          </div>
         </div>
 
         {/* Ruling 46: the panel, floating over the wall from 768px up.
@@ -1548,6 +1577,13 @@ export function RoomShell({
           room is full-bleed there and a panel over it would cover the character, which
           Ruling 55 and four viewport tests forbid.
 
+          Wider than the 16rem it started at, and wider again from 1024px. Each row is two
+          columns -- what the object means, and the hours behind it -- and at 16rem both were
+          wrapping mid-phrase: "nothing / today" under "People", "easing / off" under a "4 /
+          hours" that had itself broken in half. Every row was legible and none of them read
+          as a sentence. At 768 the panel still starts well clear of the character, which is
+          the thing Ruling 55 protects.
+
           It starts below the brown at the top, which is the taller of two things and neither
           is a fixed number of pixels. `Ceiling` draws 34 of the viewBox's 260 units and hangs
           7 more below it in blocks, so the brown really ends at 41/260 -- 15.8% of the
@@ -1561,7 +1597,7 @@ export function RoomShell({
       <aside
         data-testid="today-panel-floating"
         aria-label="Today"
-        className="pointer-events-none absolute bottom-3 right-3 top-[max(17%,5.5rem)] hidden w-64 overflow-y-auto rounded-2xl border border-line bg-surface/90 p-2 shadow-lg backdrop-blur-sm md:block [&>*]:pointer-events-auto"
+        className="pointer-events-none absolute bottom-3 right-3 top-[max(17%,5.5rem)] hidden w-72 overflow-y-auto rounded-2xl border border-line bg-surface/90 p-2 shadow-lg backdrop-blur-sm md:block lg:w-80 [&>*]:pointer-events-auto"
       >
         <TodayPanel rows={panelRows} />
       </aside>

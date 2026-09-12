@@ -11,6 +11,7 @@ import { NightBand, type NightOnDay } from './NightBand'
 import { dayLabel } from '../../domain/calendar'
 import { LOAD_TYPE_LABELS } from '../kit/labels'
 import type { EnergyPrediction } from '../../domain/predictions'
+import type { SleepNight } from '../../domain/sleepLog'
 import { scheduleView, type LoadBand } from '../../domain/scheduleView'
 import { PushToCalendar } from './PushToCalendar'
 
@@ -146,6 +147,16 @@ export function WeekScreen(props: {
    * the log and not for these.
    */
   readonly predictions?: readonly EnergyPrediction[]
+  /**
+   * §8b's reported nights, for how much sleep is enough for this student.
+   *
+   * `reportedNights` rather than `nights`, which on this component already means the night
+   * bands it DRAWS. These are the log the model learns from -- a different thing entirely,
+   * and one letter of difference would be a trap.
+   *
+   * Threaded for `predictions`' reason: the week grid and the room must not run two models.
+   */
+  readonly reportedNights?: readonly SleepNight[]
 }) {
   const {
     schedule,
@@ -159,11 +170,12 @@ export function WeekScreen(props: {
     onAddBlock,
     blockLog = [],
     predictions = [],
+    reportedNights = [],
     nights,
   } = props
   const [openDay, setOpenDay] = useState<number | null>(null)
 
-  const cells = scheduleView({ schedule, today, blockLog, predictions })
+  const cells = scheduleView({ schedule, today, blockLog, predictions, nights: reportedNights })
 
   /**
    * Fixed load is the baseline everything else is measured against, so a week with none is
@@ -206,7 +218,7 @@ export function WeekScreen(props: {
    * Computed from the same projection that produced the mark, so the sentence cannot
    * describe a day the model did not simulate -- see `domain/deficitCause`.
    */
-  const params = paramsFor(outcomesFrom(blockLog), predictions)
+  const params = paramsFor(outcomesFrom(blockLog), predictions, reportedNights)
   const days = toDayInputs(schedule, checkedInDays(blockLog, today, schedule.horizonDays))
   const projection = project(schedule.start, days, params)
   const cause =
@@ -306,7 +318,19 @@ export function WeekScreen(props: {
         })}
       </ul>
 
-      <div className="flex flex-col gap-2">
+      {/*
+        Pinned to the foot of the sheet's own scroll box.
+
+        §0.2 wants the primary action in the lower half on mobile, and on a phone this sat
+        under twenty-one day cells: a student had to scroll a fortnight to reach the one
+        button the screen exists for. Sticky rather than moved into the sheet's action bar
+        because the report, the note and the calendar write all belong with it, and a
+        four-element action bar is not an action bar.
+
+        The negative margins let the bar span the sheet's padding, so the grid scrolls
+        under a full-width edge rather than appearing to pass through a floating card.
+      */}
+      <div className="sticky -bottom-4 -mx-5 -mb-4 flex flex-col gap-2 border-t border-line bg-surface px-5 pb-4 pt-3">
         <Button data-testid="rebalance" onClick={onRebalance} disabled={working}>
           {working ? 'Working…' : 'Rebalance'}
         </Button>

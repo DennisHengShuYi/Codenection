@@ -78,7 +78,13 @@ export function TodayPanel({ rows }: { rows: readonly PanelRow[] }) {
           It is the same rule for every row, so repeating it six times would be noise; each
           row carries only what is particular to it. */}
       <div className="flex items-start gap-2 px-2 pt-1">
-        <p data-testid="panel-intro" className="flex-1 text-xs text-ink-soft">
+        {/* Dropped a little below the button's top edge rather than level with it. The
+            help button is a 24px circle and this is 12px text, so aligning the two at the
+            top sets the first line against the circle's shoulder and reads as a collision.
+            Starting the sentence just under it lets the question mark sit clear in the
+            corner, where it looks like an affordance rather than the paragraph's first
+            character. */}
+        <p data-testid="panel-intro" className="flex-1 pt-1.5 text-xs text-ink-soft">
           The room fills with what today asks of you — each object grows with the hours behind
           it, and empties as you get through them. The clock on the wall shows how much of the
           day is spoken for altogether.
@@ -88,12 +94,27 @@ export function TodayPanel({ rows }: { rows: readonly PanelRow[] }) {
         <button
           type="button"
           data-testid="panel-help"
-          aria-label="What else changes in the room"
+          /* Named so it cannot be confused with a form field. "What else changes in the
+             room" reads better and collides: Playwright's `getByLabel('What')` matches an
+             accessible name by substring, so this button answered to the add form's own
+             "What" box and four browser tests failed on a strict-mode violation, at four
+             widths, a long way from the button that caused it. */
+          aria-label="Other things that change in the room"
           aria-expanded={helpOpen}
           onClick={() => setHelpOpen(!helpOpen)}
-          className="flex size-6 shrink-0 items-center justify-center rounded-full border border-line text-xs text-ink-soft hover:bg-ground focus-visible:outline focus-visible:outline-2"
+          /* 44px of hit area around a 24px ring. §0.2's touch minimum is about the
+             finger, not the drawing -- shrinking the ring to match the target would make
+             the question mark shout, and growing the ring to 44 would make it a button
+             competing with the rows underneath. Negative margin so the larger target does
+             not push the paragraph beside it around. */
+          className="-m-2.5 flex size-11 shrink-0 items-center justify-center rounded-full text-ink-soft hover:bg-ground focus-visible:outline focus-visible:outline-2"
         >
-          ?
+          <span
+            aria-hidden="true"
+            className="flex size-6 items-center justify-center rounded-full border border-line text-xs"
+          >
+            ?
+          </span>
         </button>
       </div>
 
@@ -109,7 +130,7 @@ export function TodayPanel({ rows }: { rows: readonly PanelRow[] }) {
           box. Nothing in the sheet was wrong; it was being measured against the wrong box. */}
       {helpOpen &&
         createPortal(
-          <Sheet title="What else changes in the room" onClose={() => setHelpOpen(false)}>
+          <Sheet title="Other things that change in the room" onClose={() => setHelpOpen(false)}>
             <div data-testid="panel-help-body" className="flex flex-col gap-3 text-sm">
               <p className="text-ink-soft">
                 These move for other reasons — not for what is on today.
@@ -145,7 +166,13 @@ export function TodayPanel({ rows }: { rows: readonly PanelRow[] }) {
               onClick={() => setOpenId(open ? null : row.id)}
               className="flex w-full min-h-11 items-baseline justify-between gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-ground focus-visible:outline focus-visible:outline-2"
             >
-              <span className="flex flex-col">
+              {/* The left column is the one that gives.
+                  It used to be the other way round: the reading was `shrink-0`, so "nothing
+                  recorded before this week" held its full width, squeezed the label to about
+                  forty pixels -- one word per line -- and still ran past the edge of the
+                  floating panel on a tablet. `min-w-0` is what lets a flex child shrink
+                  below its own content at all, whatever the parent says. */}
+              <span className="flex min-w-0 flex-col">
                 <span className="text-sm font-medium text-ink">{row.label}</span>
                 <span className="text-xs text-ink-soft">{row.meaning}</span>
               </span>
@@ -159,7 +186,12 @@ export function TodayPanel({ rows }: { rows: readonly PanelRow[] }) {
                   behind it is a claim, the same rule `DomainBarList` applies to its glyph. And
                   words rather than an arrow, because up means "more load" here and "more
                   reserve" two taps away, which are opposite news. */}
-              <span className="flex shrink-0 flex-col items-end">
+              {/* Its own content width, up to a cap.
+                  Free to shrink, it took whatever the label left it -- about fifty pixels --
+                  and broke "4 hours" into "4 / hours" and "easing off" into "easing / off".
+                  Every row was legible and none of them read as a sentence. The cap is what
+                  keeps the Bed's long reading from going back to squeezing the label. */}
+              <span className="flex max-w-[45%] shrink-0 flex-col items-end text-right">
                 {/* Counted where counting is the honest measure -- a box is one errand, not
                     half an hour of one -- and timed everywhere else. */}
                 <span className="text-sm tabular-nums text-ink-soft">

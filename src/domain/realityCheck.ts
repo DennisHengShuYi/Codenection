@@ -79,14 +79,26 @@ export function biasLine(outcomes: readonly BlockOutcome[], type: LoadType): str
 /**
  * How much evidence each rung of the ladder needs before it speaks.
  *
- * Narrower buckets fill more slowly, so each rung asks for more than the one below it --
- * replacing a working correction with a narrower claim should need more behind it than
- * making the first one. The type level stays at `MIN_SAMPLES` for the opposite reason: it is
- * the safety net, and raising it would leave a new student with no correction at all while
- * the narrow buckets fill.
+ * The same three everywhere, which is a change of mind and worth recording as one. These
+ * used to climb -- four for a kind, five for a task -- on the argument that replacing a
+ * working correction with a narrower claim should need more behind it than making the first
+ * one. That reasoning was sound and the consequence was not: a student who had done one
+ * specific thing four times was still being told a number about their whole area of life,
+ * and the narrow buckets that would have said something true about them took most of a
+ * semester to fill.
+ *
+ * So the narrowest bucket with three answers wins, and the rungs below it catch what has
+ * fewer. One or two answers about a task is not a bucket; it falls to that task's kind,
+ * which is the same evidence read one step wider rather than none at all.
+ *
+ * Three is `MIN_SAMPLES_TO_SPEAK`, which `evidence.ts` argues for in its own right: under
+ * three a correction is noise presented as insight, which §8.2 forbids. The trade accepted
+ * here is that a narrow figure from three answers is noisier than one from five. It is also
+ * about the work in front of the student rather than about a category they were sorted
+ * into, and that is what makes it worth acting on.
  */
-const MIN_SAMPLES_FOR_KIND = 4
-const MIN_SAMPLES_FOR_TASK = 5
+const MIN_SAMPLES_FOR_KIND = MIN_SAMPLES
+const MIN_SAMPLES_FOR_TASK = MIN_SAMPLES
 
 /** What the ladder needs to know about the block being priced. */
 export interface TaskLike {

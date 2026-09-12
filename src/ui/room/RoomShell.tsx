@@ -1467,7 +1467,16 @@ export function RoomShell({
 
             The scrolling box is INSIDE the padded container rather than being the container,
             so it ends where `pr-16` ends: a button can never scroll under the gauge, which
-            would be a control that cannot be pressed and looks like one that can. */}
+            would be a control that cannot be pressed and looks like one that can.
+
+            **Along the bottom on a phone, in the ceiling from 768px up.** §0.2 wants primary
+            actions in the lower half on mobile, and at the top of a phone screen this row was
+            as far from the thumb as the screen allows. The foot of the stage is also the one
+            part of it with nothing in it: the drawing is top-aligned so its slack collects
+            below, which is the same clear floor the preview banner was already put on. The
+            corner is only held open at the top, because that is the only place the gauge
+            shares this line -- on a phone the row gets those 64px back, and four controls fit
+            before it scrolls instead of three. */}
         <div data-testid="room-bar"
           /**
            * The controls sit INSIDE the ceiling, which means the bar has to carry the
@@ -1483,14 +1492,14 @@ export function RoomShell({
            * still reads above it, and a bar of controls floating on a wall read worse.
            */
           style={{ backgroundColor: PALETTE.ink }}
-          className="pointer-events-none absolute inset-x-0 top-0 px-3 py-3 pr-16">
+          className="pointer-events-none absolute inset-x-0 bottom-0 px-3 py-3 md:bottom-auto md:top-0 md:pr-16">
           {/* The edge says there is more, so a half-cut button reads as a row that scrolls
               rather than as one that broke. Ink to transparent, because the bar already
               paints the ceiling's colour and anything else would be a second edge. */}
           <div
             aria-hidden="true"
             style={{ backgroundImage: `linear-gradient(to left, ${PALETTE.ink}, transparent)` }}
-            className="pointer-events-none absolute inset-y-0 right-16 w-6"
+            className="pointer-events-none absolute inset-y-0 right-3 w-6 md:right-16"
           />
 
           {/* `shrink-0` on every child, or the row compresses the buttons to illegibility
@@ -1611,9 +1620,16 @@ export function RoomShell({
             of the character, and this banner is 108px tall, so directly under the controls
             it lands on the character's face -- which `room.spec.ts` hit-tests at four
             viewports. The foot of the stage is clear of the drawing's subject at every
-            width. */}
+            width, because the drawing is top-aligned and the slack collects below it. That
+            is also what makes room for the control row down there on a phone, which is why
+            this now sits above it rather than at the very bottom. */}
+        {/* Above the control row on a phone, where that row now is. The 5rem is the row's
+            own height plus the gap -- one control at 44px inside `py-3`, which is 68 -- and it
+            is a real coupling rather than a magic number: a second line of controls would
+            slide under this banner, which is why `responsive.spec.ts` asserts the row stays
+            one line. */}
         {session === null && (
-          <div className="absolute inset-x-2 bottom-2">
+          <div className="absolute inset-x-2 bottom-20 md:bottom-2">
             <PreviewBanner onSignIn={onSignIn} />
           </div>
         )}

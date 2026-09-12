@@ -64,10 +64,17 @@ async function show(page: Page, path: string) {
 const clipped = () =>
   [...document.querySelectorAll('body *')]
     .filter((el) => {
-      for (let node = el.parentElement; node; node = node.parentElement) {
+      // The element ITSELF as well as its ancestors, and that is not a loosening. Chrome
+      // reports an `<svg>` root's rect as the union of what it contains, and the room draws
+      // its walls and floor far past the viewBox on purpose so a letterboxed stage fills
+      // with floor rather than with a void. At 360px that makes `room-scene` measure 421px
+      // wide inside a 360px stage while clipping every pixel of the difference -- a number
+      // about the drawing's geometry, not about anything a student cannot reach.
+      for (let node: Element | null = el; node; node = node.parentElement) {
+        if (node.tagName.toLowerCase() === 'svg') return false
+        if (node === el) continue
         const overflowX = getComputedStyle(node).overflowX
         if (overflowX === 'auto' || overflowX === 'scroll') return false
-        if (node.tagName.toLowerCase() === 'svg') return false
       }
       const box = el.getBoundingClientRect()
       if (box.width === 0 && box.height === 0) return false
@@ -133,8 +140,56 @@ test('the room is not hidden behind its own controls on a phone', async ({ page 
 
   const character = await page.getByTestId('room-character').boundingBox()
   expect(character, 'no character to find').not.toBeNull()
-  expect(character!.y, 'the character is behind the control bar').toBeGreaterThan(
-    bar!.y + bar!.height,
+
+  // Asked as "do these two boxes touch" rather than "is one above the other", because the
+  // row is along the FOOT on a phone and inside the ceiling from 768px up. Either way the
+  // thing §1.3 puts at the centre of the room must not be behind it.
+  const overlaps =
+    bar!.x < character!.x + character!.width &&
+    bar!.x + bar!.width > character!.x &&
+    bar!.y < character!.y + character!.height &&
+    bar!.y + bar!.height > character!.y
+
+  expect(overlaps, 'the control row is painted over the character').toBe(false)
+})
+
+/**
+ * §0.2 wants primary actions in the lower half on mobile, and on a phone this row was as far
+ * from the thumb as the screen allows. It stays in the ceiling on a tablet, where the room is
+ * wide enough to hold both it and the floating panel.
+ */
+test('the controls are within reach of a thumb on a phone', async ({ page }) => {
+  await page.setViewportSize(PHONE)
+  await enterAsGuest(page)
+
+  const bar = await page.getByTestId('room-bar').boundingBox()
+  expect(bar, 'no control bar to measure').not.toBeNull()
+  expect(bar!.y, 'the control row is in the upper half of a phone screen').toBeGreaterThan(
+    PHONE.height / 2,
+  )
+})
+
+test('the controls stay in the ceiling on a tablet', async ({ page }) => {
+  await page.setViewportSize(TABLET)
+  await enterAsGuest(page)
+
+  const bar = await page.getByTestId('room-bar').boundingBox()
+  expect(bar, 'no control bar to measure').not.toBeNull()
+  expect(bar!.y, 'the control row has left the ceiling').toBeLessThan(8)
+})
+
+/** The banner says the week is only on this device, which is worth nothing if the controls
+ *  are sitting on top of it. */
+test('the preview banner is clear of the controls on a phone', async ({ page }) => {
+  await page.setViewportSize(PHONE)
+  await enterAsGuest(page)
+
+  const bar = await page.getByTestId('room-bar').boundingBox()
+  const banner = await page.getByTestId('preview-banner').boundingBox()
+  expect(bar && banner, 'nothing to measure').toBeTruthy()
+
+  expect(banner!.y + banner!.height, 'the controls cover the preview banner').toBeLessThanOrEqual(
+    bar!.y + 1,
   )
 })
 

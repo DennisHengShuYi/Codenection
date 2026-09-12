@@ -1,5 +1,6 @@
 import { summarise, type EngineParams } from '../engine'
 import { candidates, type Candidate } from './neighbours'
+import { clearPinnedClashes } from './repair'
 import { ALL_PRESENT, score, toDayInputs } from './objective'
 import type { Rng } from './rng'
 import type { Move, RebalanceResult, Schedule } from './types'
@@ -104,16 +105,34 @@ export function rebalance(
   rng: Rng,
   today: number,
 ): RebalanceResult {
-  const baseScore = score(schedule, params)
-  const attempt = climb(schedule, params, rng, today)
+  /*
+   * A week that arrived broken, put right before anything is scored on it.
+   *
+   * `violations` counts a loose block sitting on a fixed one or on protected rest, but that
+   * count is only ever a gate on candidate moves -- "no worse than you started" -- and the
+   * score cannot see overlap at all. So a repairing move was permitted and never preferred,
+   * and a study block on top of protected rest survived a full rebalance untouched, which
+   * §5.1 makes the worst version of this bug.
+   *
+   * Ahead of the climb rather than inside the objective, so it cannot be traded against the
+   * reserves: see `repair.ts`. It is also why the comparison below starts from the repaired
+   * week -- a repair can cost a point of score by breaking up a day, and the clash still has
+   * to go.
+   */
+  const repair = clearPinnedClashes(schedule, today)
+
+  const baseScore = score(repair.schedule, params)
+  const attempt = climb(repair.schedule, params, rng, today)
   const improved = score(attempt.schedule, params) > baseScore + EPSILON
 
-  const best = improved ? attempt.schedule : schedule
+  const best = improved ? attempt.schedule : repair.schedule
 
   return {
     schedule: best,
+    // The week the student actually had, so §2.1's one-tap undo puts the clash back with
+    // everything else. Undo means "as it was", not "as it was once we had tidied it".
     before: schedule,
-    moves: improved ? attempt.moves : [],
+    moves: [...repair.moves, ...(improved ? attempt.moves : [])],
     evaluations: attempt.evaluations + 2,
     worstBefore: worstOf(schedule, params),
     worstAfter: worstOf(best, params),

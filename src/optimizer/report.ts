@@ -85,6 +85,15 @@ const PHRASES: readonly {
     would: 'reorder',
     object: (n) => `${plural(n, 'block')} within its day`,
   },
+  {
+    // First in the sentence would be wrong -- this is housekeeping, not the point of the
+    // rebalance -- but it must be in it. A block that changed day without being mentioned is
+    // exactly the reshuffle §2.1 says a student will not act on because they cannot see it.
+    kind: 'clearClash',
+    did: 'took',
+    would: 'take',
+    object: (n) => `${plural(n, 'block')} off something it was sitting on`,
+  },
 ]
 
 /** The "moved 20 things, batched 3 errands and ..." half, in whichever tense was asked for. */

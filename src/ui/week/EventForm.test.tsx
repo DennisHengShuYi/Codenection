@@ -381,12 +381,19 @@ describe('names offered while typing', () => {
 })
 
 /**
- * What the app will quietly do to this estimate, said before it is added.
+ * What the app will quietly do to this estimate, asked at the moment of saving.
  *
  * §2.4 pads a student's hours silently and is explicit that they need not know the parameter
  * exists -- the alternative is asking them to be more realistic, which does not work. But
- * "need not know" is not "must not be told", and the moment a figure is being typed is the
- * one moment the correction is about something in front of them.
+ * "need not know" is not "must not be told", and a correction to the figure they are about
+ * to commit to is theirs to accept or refuse.
+ *
+ * Moved off the form itself, where it sat under the fields as a standing sentence about a
+ * title half-typed. Two things were wrong with that. It appeared and disappeared as the name
+ * was typed, which reads as the app reacting to keystrokes rather than to the work; and it
+ * was one more thing to take in on a form already carrying a day, an hour, a deadline and a
+ * warning. As a question at the point of saving it is asked once, about a block that is
+ * finished, and it needs an answer before anything is written.
  *
  * It quotes the rung that actually applies to this block, not the area average: the app
  * charges `paddingForItem`, and a line quoting anything else would describe a correction it
@@ -407,84 +414,95 @@ describe('what it will do with the hours you typed', () => {
   const overran = (title: string, count: number) =>
     Array.from({ length: count }, () => answered(title, 4))
 
-  it('says what it will allow for, once it has measured this work', async () => {
+  /** The form is for describing the block. The correction is a question about it, and a
+   *  question asked while somebody is still typing the answer is an interruption. */
+  it('says nothing while the block is still being written', async () => {
     setup({ blockLog: overran('WIA3001 essay', 5) })
 
     await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+
+    expect(screen.queryByTestId('bias-line')).toBeNull()
+    expect(screen.queryByTestId('padding-ask')).toBeNull()
+  })
+
+  it('asks on the way out, naming the work it has measured', async () => {
+    setup({ blockLog: overran('WIA3001 essay', 5) })
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+    await userEvent.click(screen.getByTestId('save-block'))
 
     expect(await screen.findByTestId('bias-line')).toHaveTextContent(/WIA3001 essay/i)
   })
 
   /**
-   * Offered, not applied.
+   * Asked, not applied.
    *
    * §2.4 pads behind the student, which is right for a model and wrong for a calendar: an
    * hour the app privately thinks is two is an hour the student still plans their evening
-   * around. The offer puts the corrected figure where they can accept it, and accepting
-   * writes it into the block -- so the calendar says what the work will actually take.
+   * around. This puts the corrected figure where they can accept it, and accepting writes it
+   * into the block -- so the calendar says what the work will actually take.
    *
    * Accepting must also stop the model padding it again, or taking the app's advice would
    * cost more than ignoring it. That is `paddedHours`, and `domain/estimateBias` honours it.
    */
-  it('offers the corrected hours rather than applying them', async () => {
-    setup({ blockLog: overran('WIA3001 essay', 5) })
+  it('saves nothing until the question is answered', async () => {
+    const props = setup({ blockLog: overran('WIA3001 essay', 5) })
 
     await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+    await userEvent.click(screen.getByTestId('save-block'))
 
     // A fresh block starts at one hour, and this history runs 1.5x over.
     expect(await screen.findByTestId('use-padded-hours')).toHaveTextContent(/1\.5/)
-    // Untouched until the student says so.
-    expect(screen.getByLabelText('Hours')).toHaveValue(1)
+    expect(props.onSave).not.toHaveBeenCalled()
   })
 
   it('writes the corrected figure into the block when it is accepted', async () => {
     const props = setup({ blockLog: overran('WIA3001 essay', 5) })
 
     await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
-    await userEvent.click(await screen.findByTestId('use-padded-hours'))
     await userEvent.click(screen.getByTestId('save-block'))
+    await userEvent.click(await screen.findByTestId('use-padded-hours'))
 
     expect(props.onSave).toHaveBeenCalledWith(
       expect.objectContaining({ hours: 1.5, paddedHours: true }),
     )
   })
 
-  it('stops offering once it has been taken', async () => {
-    setup({ blockLog: overran('WIA3001 essay', 5) })
-
-    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
-    await userEvent.click(await screen.findByTestId('use-padded-hours'))
-
-    expect(screen.queryByTestId('use-padded-hours')).toBeNull()
-  })
-
-  /** Typing over the figure is a new estimate, and a new estimate has not been corrected. */
-  it('offers again when the student types their own hours over it', async () => {
-    setup({ blockLog: overran('WIA3001 essay', 5) })
-
-    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
-    await userEvent.click(await screen.findByTestId('use-padded-hours'))
-    await userEvent.clear(screen.getByLabelText('Hours'))
-    await userEvent.type(screen.getByLabelText('Hours'), '2')
-
-    expect(await screen.findByTestId('use-padded-hours')).toBeVisible()
-  })
-
-  it('saves the hours the student typed when the offer is left alone', async () => {
+  /** Refusing is a real answer and saves what they typed. The model still pads it behind
+   *  them, which is §2.4 working -- what they refused is the change to their calendar. */
+  it('saves the hours they typed when they decline', async () => {
     const props = setup({ blockLog: overran('WIA3001 essay', 5) })
 
     await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
     await userEvent.click(screen.getByTestId('save-block'))
+    await userEvent.click(await screen.findByTestId('keep-typed-hours'))
 
     expect(props.onSave).toHaveBeenCalledWith(
       expect.objectContaining({ hours: 1, paddedHours: false }),
     )
   })
 
-  it('says nothing before anything has been typed', () => {
-    setup({ blockLog: overran('WIA3001 essay', 5) })
+  /** Asked once. A second question on the way out of the first is a dialog that will not let
+   *  somebody leave. */
+  it('does not ask again about a figure it has already corrected', async () => {
+    const props = setup({ blockLog: overran('WIA3001 essay', 5) })
 
-    expect(screen.queryByTestId('bias-line')).toBeNull()
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+    await userEvent.click(screen.getByTestId('save-block'))
+    await userEvent.click(await screen.findByTestId('use-padded-hours'))
+
+    expect(screen.queryByTestId('padding-ask')).toBeNull()
+    expect(props.onSave).toHaveBeenCalledTimes(1)
+  })
+
+  it('saves straight out when there is nothing to correct', async () => {
+    const props = setup()
+
+    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
+    await userEvent.click(screen.getByTestId('save-block'))
+
+    expect(screen.queryByTestId('padding-ask')).toBeNull()
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ hours: 1 }))
   })
 
   /**
@@ -498,29 +516,23 @@ describe('what it will do with the hours you typed', () => {
     // No word in common with "WIA3001 essay", so containment finds no family and the task
     // rung has nothing -- which is the fall-through this is about.
     await userEvent.type(screen.getByLabelText('What'), 'Revision')
+    await userEvent.click(screen.getByTestId('save-block'))
 
     expect(await screen.findByTestId('bias-line')).toHaveTextContent(/studying/i)
   })
 
   /** Silence takes all three rungs failing, which is the ladder's whole point: an unmeasured
    *  task falls to its kind, an unmeasured kind to its area, and only work with nothing
-   *  behind it at any level gets no line. */
-  it('says nothing about work it has never measured at any level', async () => {
+   *  behind it at any level is saved without a question. */
+  it('asks nothing about work it has never measured at any level', async () => {
     setup({ blockLog: overran('WIA3001 essay', 5) })
 
     await userEvent.type(screen.getByLabelText('What'), 'Climbing')
     // Kind sets the area of life, Detail sets the activity -- the two middle rungs.
     await userEvent.selectOptions(screen.getByLabelText('Kind'), 'physical')
     await userEvent.selectOptions(screen.getByLabelText('Detail'), 'hardExercise')
+    await userEvent.click(screen.getByTestId('save-block'))
 
-    expect(screen.queryByTestId('bias-line')).toBeNull()
-  })
-
-  it('says nothing at all without history', async () => {
-    setup()
-
-    await userEvent.type(screen.getByLabelText('What'), 'WIA3001 essay')
-
-    expect(screen.queryByTestId('bias-line')).toBeNull()
+    expect(screen.queryByTestId('padding-ask')).toBeNull()
   })
 })

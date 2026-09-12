@@ -88,7 +88,7 @@ export const effectiveDeadline = (item: ScheduledItem): number | null =>
  * block did not happen, and crediting it would let a student satisfy the model by admitting
  * they skipped something.
  */
-const confirmedIds = (blockLog: readonly BlockRecord[]): ReadonlySet<string> =>
+export const confirmedIds = (blockLog: readonly BlockRecord[]): ReadonlySet<string> =>
   new Set(blockLog.filter((entry) => entry.answer !== 'didnt').map((entry) => entry.blockId))
 
 /**

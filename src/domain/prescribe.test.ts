@@ -37,14 +37,22 @@ const TYPE_OF: Record<string, 'mental' | 'physical' | 'social'> = {
   socialRestorative: 'social',
 }
 
+/** Far enough past every interval that an absent rhythm is unambiguously overdue. */
+const LATE = 9
+
 /**
- * Parked at the far end of the horizon.
+ * Parked tomorrow, which is what "this need is already being met" now means.
  *
- * Enough to stop a rhythm reading as absent -- `missedSoftDeadlines` only reports one with
- * nothing scheduled at or after today -- while never eating the gap on today, which is a
- * separate thing several of these tests measure.
+ * It used to sit at the far end of the horizon, and under the old rule that counted: a
+ * rhythm read as kept if anything of its kind was scheduled anywhere at or after today. That
+ * let one coffee eleven days out silence the advice for a reserve falling all eleven of them,
+ * so `COVERED_WITHIN_DAYS` narrowed it to two -- and these fixtures had to move with it or
+ * stop meaning what their own names say.
+ *
+ * Still never eats the gap on today, which is a separate thing several of these tests
+ * measure: it is a different day, and late in the evening besides.
  */
-const PARKED_DAY = HORIZON_DAYS - 1
+const PARKED_DAY = LATE + 1
 
 const parked = (kind: BlockKind): ScheduledItem =>
   item({ id: kind, kind, type: TYPE_OF[kind] ?? 'mental', dayIndex: PARKED_DAY, startHour: 20, hours: 1 })
@@ -62,9 +70,6 @@ const onlyNeglecting = (kind: BlockKind, over: Partial<Schedule> = {}): Schedule
 /** Everything kept up, so nothing is overdue at all. */
 const keepingUp = (over: Partial<Schedule> = {}): Schedule =>
   week({ ...over, items: [...RHYTHM_KINDS.map(parked), ...(over.items ?? [])] })
-
-/** Far enough past every interval that an absent rhythm is unambiguously overdue. */
-const LATE = 9
 
 describe('freeSlotOn', () => {
   it('reports a usable slot when the day is empty', () => {
@@ -282,11 +287,14 @@ describe('prescribe', () => {
  * lines were right and they were answering different questions -- the first asks which
  * reserve is lowest, the second asked only which rhythm had gone longest unkept.
  *
- * This does NOT reinstate reserve-driven prescribing, which the docstring above records
- * being deliberately removed: what is neglected still comes entirely from
- * `missedSoftDeadlines`, and a reserve can never conjure a prescription for a rhythm that
- * is being kept. It breaks the tie among things already overdue, which is the one place a
- * reserve level says something the rhythm cannot.
+ * These cases were written when the reserve was only a TIE-BREAK among things the clocks had
+ * already called overdue. It decides outright now (Ruling 70), so they read as a subset of the
+ * walk below rather than as a separate rule -- and they still earn their place, because each
+ * one pins a reserve beating a rhythm that had gone unkept longer.
+ *
+ * What survives untouched is the conviction underneath: a reserve cannot conjure advice for a
+ * need already being met. Only the test for "met" moved, from a clock not yet expired to
+ * something actually in the diary within `COVERED_WITHIN_DAYS`.
  */
 describe('which neglect to answer first', () => {
   const bothNeglected = (over: Partial<Schedule> = {}): Schedule =>
@@ -401,5 +409,111 @@ describe('walking down the reserves', () => {
    *  other, so the days-late ordering has to survive untouched underneath. */
   it('falls back to the most overdue when it is given no reserves at all', () => {
     expect(prescribe(restAndMovingOverdue(), LATE, [])?.type).toBe('mental')
+  })
+})
+
+/**
+ * The bars decide, and the rhythm clocks no longer do.
+ *
+ * Reported from the Reserves sheet: an empty calendar, People as the thinnest bar, and the
+ * advice reading "stop and do nothing" for three days running. Measured day by day, rest's
+ * clock is the shortest of them -- one day, against four for seeing somebody -- so on a fresh
+ * fortnight rest won by default until day four whatever the bars said.
+ *
+ * The clocks are gone from this path because a clock is a GUESS at whether a reserve is
+ * depleted and the bar is the MEASUREMENT. Keeping both meant measuring one thing twice and
+ * letting the worse measure win, which is the same "two answers to one question" fault the
+ * docstrings above already record about reserves and rhythms disagreeing on one screen.
+ *
+ * What replaces them is the student's own question: which bar is lowest, and is anything
+ * already booked for it.
+ */
+describe('the bars, walked lowest first', () => {
+  /** The reported case exactly: nothing on the calendar and nothing overdue yet. */
+  const EARLY = 1
+
+  /**
+   * The reported screen, in one case: 99 against three 100s, on day one, with nothing booked.
+   *
+   * A single point of difference is enough, which is a decision rather than an oversight. The
+   * alternative -- a level below which the app says nothing at all -- was considered and
+   * rejected, because it would have left this exact screen reading "stop and do nothing".
+   */
+  it('answers the thinnest bar before any rhythm has gone overdue', () => {
+    const prescription = prescribe(week(), EARLY, [], {
+      mental: 100,
+      physical: 100,
+      social: 99,
+      errands: 100,
+    })
+
+    expect(prescription?.type).toBe('social')
+  })
+
+  describe('a bar with something already booked for it', () => {
+    const socialOn = (dayIndex: number): Schedule =>
+      week({
+        items: [
+          item({ id: 'coffee', kind: 'socialRestorative', type: 'social', dayIndex, startHour: 20, hours: 1 }),
+        ],
+      })
+
+    const thinnestIsSocial = { mental: 80, physical: 70, social: 43, errands: 90 }
+
+    it('steps past it to the next bar down', () => {
+      expect(prescribe(socialOn(EARLY + 1), EARLY, [], thinnestIsSocial)?.type).toBe('physical')
+    })
+
+    /** The boundary, where a `<` written as `<=` silently widens the window by a day. */
+    it('counts something booked exactly two days out', () => {
+      expect(prescribe(socialOn(EARLY + 2), EARLY, [], thinnestIsSocial)?.type).toBe('physical')
+    })
+
+    /**
+     * Three days out is not answering anything now.
+     *
+     * The window matters as much as the walk. Searching the whole fortnight -- which is what
+     * "is this rhythm scheduled" used to mean -- let one coffee twelve days away silence the
+     * advice for a reserve that would keep falling for those twelve days.
+     */
+    it('does not count something booked three days out', () => {
+      expect(prescribe(socialOn(EARLY + 3), EARLY, [], thinnestIsSocial)?.type).toBe('social')
+    })
+
+    /** Today itself counts. A thing booked for this afternoon is as booked as it gets. */
+    it('counts something booked for today', () => {
+      expect(prescribe(socialOn(EARLY), EARLY, [], thinnestIsSocial)?.type).toBe('physical')
+    })
+  })
+
+  /**
+   * Every bar covered is the one state that genuinely has nothing to add, and it is what the
+   * sheet's "already on the plan" sentence now means.
+   */
+  it('says nothing when every bar it can advise for is covered', () => {
+    const covered = week({
+      items: [
+        item({ id: 'coffee', kind: 'socialRestorative', type: 'social', dayIndex: EARLY, startHour: 20, hours: 1 }),
+        item({ id: 'walk', kind: 'lightExercise', type: 'physical', dayIndex: EARLY, startHour: 19, hours: 1 }),
+        item({ id: 'off', kind: 'rest', type: 'mental', dayIndex: EARLY, startHour: 18, hours: 1 }),
+      ],
+    })
+
+    expect(
+      prescribe(covered, EARLY, [], { mental: 40, physical: 41, social: 42, errands: 43 }),
+    ).toBeNull()
+  })
+
+  /** Life admin still has no advice to give, so a thin one is stepped over rather than
+   *  ending the walk -- the same rule as before, now inside the bar order. */
+  it('steps over the thinnest bar when it has no advice to give', () => {
+    const prescription = prescribe(week(), EARLY, [], {
+      mental: 90,
+      physical: 44,
+      social: 80,
+      errands: 12,
+    })
+
+    expect(prescription?.type).toBe('physical')
   })
 })

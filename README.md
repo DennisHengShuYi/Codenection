@@ -2,8 +2,8 @@
 
 **Team:** Lei Wing Teng, Ang Li Jia, Dennis Heng Shu Yi<br>
 **Problem Statement:** Stress & Workload Manager<br>
-**Video Presentation:** [Unlisted YouTube link]<br>
-**Presentation Slides:** [Public link]
+**Video Presentation:** https://youtu.be/LTmmwobTGsg<br>
+**Presentation Slides:** https://canva.link/ulysrnacg0t9lh6
 
 ---
 

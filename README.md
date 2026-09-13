@@ -340,7 +340,7 @@ honest version of an ideation board for a build this size:
 
 ## 3. Design & Prototype
 
-**UI Prototype:** https://codenection-xi.vercel.app/
+**UI Prototype:** https://codenection-xi.vercel.app/ <br>
 **UI Mockup:** https://canva.link/h505vq1q93yw2d8
 
 ![The room](docs/screens/room.png)

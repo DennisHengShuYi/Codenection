@@ -333,16 +333,14 @@ honest version of an ideation board for a build this size:
 
 | Date | Mentor | Feedback Received | What Was Changed |
 |---|---|---|---|
-| 2026-09-11 | [Mentor name] | The direction is stronger than the other teams', who are mostly building planners and are not actually addressing burnout. Advice: lean as hard as possible into burnout *prevention* specifically. | Taken as the organising principle for the whole README rather than a tweak. The feature list now opens with the model — the forecast, the efficiency curve, carryover — before any screen is described, so the first thing a reader meets is the burnout mechanic rather than another task list. The comparison table in §1 was sharpened to say exactly this: every tool named tracks and reports, none of them forecasts. |
-| 2026-09-11 | [Mentor name] | She expected at least one team to bring a genuine prediction model, and nobody has. | Foregrounded rather than assumed. "We compute a reserve for every future day" is now the first bullet of the feature set, and "it forecasts, every comparable tool reports" is item 2 in §4. §5 gained a full engine walkthrough with the actual equations and coefficients, so the model can be checked rather than taken on trust. |
-| 2026-09-11 | [Mentor name] | Called it novel that the model learns from what the student actually did — if it schedules 2 hours for an assignment and the student takes 10, it should learn from that. | This existed as Reality Check but was buried in one line. It is now a headline: a full feature bullet, and item 3 in §4. We also made the framing honest about direction — the correction is about the student overestimating what they can get through, which is what makes a planned timetable unfollowable, and it only ever pads *upward*. |
-| 2026-09-11 | [Mentor name] | On hearing that Micro-Start was designed for task paralysis and ADHD students: that angle is very different from what other teams have, and worth leaning into as a niche. | Micro-Start's feature entry was rewritten to lead with task paralysis rather than describing generic step-splitting, and to say why the one-rung-at-a-time design follows from it. We also surfaced that paralysis is detectable in the model itself — rising mental drain against flat completion — so the app can offer it before being asked. Stated as a design stance, not a clinical claim, since we have not tested with a clinical population. |
+| 2026-09-11 | Varsha Selvakumar | The direction is stronger than the other teams', who are mostly building planners and are not actually addressing burnout. Advice: lean as hard as possible into burnout *prevention* specifically. | Taken as the organising principle for the whole README rather than a tweak. The feature list now opens with the model — the forecast, the efficiency curve, carryover — before any screen is described, so the first thing a reader meets is the burnout mechanic rather than another task list. The comparison table in §1 was sharpened to say exactly this: every tool named tracks and reports, none of them forecasts. |
+| 2026-09-11 | Varsha Selvakumar | She expected at least one team to bring a genuine prediction model, and nobody has. | Foregrounded rather than assumed. "We compute a reserve for every future day" is now the first bullet of the feature set, and "it forecasts, every comparable tool reports" is item 2 in §4. §5 gained a full engine walkthrough with the actual equations and coefficients, so the model can be checked rather than taken on trust. |
+| 2026-09-11 | Varsha Selvakumar | Called it novel that the model learns from what the student actually did — if it schedules 2 hours for an assignment and the student takes 10, it should learn from that. | This existed as Reality Check but was buried in one line. It is now a headline: a full feature bullet, and item 3 in §4. We also made the framing honest about direction — the correction is about the student overestimating what they can get through, which is what makes a planned timetable unfollowable, and it only ever pads *upward*. |
+| 2026-09-11 | Varsha Selvakumar | On hearing that Micro-Start was designed for task paralysis and ADHD students: that angle is very different from what other teams have, and worth leaning into as a niche. | Micro-Start's feature entry was rewritten to lead with task paralysis rather than describing generic step-splitting, and to say why the one-rung-at-a-time design follows from it. We also surfaced that paralysis is detectable in the model itself — rising mental drain against flat completion — so the app can offer it before being asked. Stated as a design stance, not a clinical claim, since we have not tested with a clinical population. |
 
 ## 3. Design & Prototype
 
-**UI Prototype:** [Public link — check that it opens in an incognito window]
-
-> Replace with real screenshots from the deployed app.
+**UI Prototype:** https://codenection-xi.vercel.app/
 
 ![The room](docs/screens/room.png)
 *The room with the dial in the corner. Nothing needs tapping to read it: the ceiling presses
@@ -751,7 +749,7 @@ commit — a green build on stale tests only proves the code still does what it 
   Google Calendar import and push, Micro-Start, the Rest button, the request box, the sleep page,
   low-energy mode, accounts, and the Telegram channel.
 
-**What we plan to build during the building phase**, kept deliberately narrow:
+**What we plan to build during the building phase**:
 
 1. **Refine the front end.** Three things, in order of how much they cost a first-time reader.
    `RoomShell.tsx` is 1,824 lines against the 800-line ceiling we hold ourselves to, and the

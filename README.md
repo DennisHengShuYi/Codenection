@@ -341,6 +341,7 @@ honest version of an ideation board for a build this size:
 ## 3. Design & Prototype
 
 **UI Prototype:** https://codenection-xi.vercel.app/
+**UI Mockup:** https://canva.link/h505vq1q93yw2d8
 
 ![The room](docs/screens/room.png)
 *The room with the dial in the corner. Nothing needs tapping to read it: the ceiling presses
